@@ -1,0 +1,58 @@
+name: Utatane
+options:
+  bundleIdPrefix: dev.utatane
+  deploymentTarget:
+    macOS: "14.0"
+  generateEmptyDirectories: true
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+
+packages:
+  UtataneKit:
+    path: packages
+
+targets:
+  Utatane:
+    type: application
+    platform: macOS
+    sources:
+      - path: apps/Utatane/Sources
+      - path: apps/Utatane/Resources
+        buildPhase: resources
+    info:
+      path: apps/Utatane/Info.plist
+      properties:
+        CFBundleDisplayName: Utatane
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
+        NSHumanReadableCopyright: ""
+        NSPrincipalClass: NSApplication
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.utatane.app
+        PRODUCT_NAME: Utatane
+        GENERATE_INFOPLIST_FILE: NO
+        CODE_SIGN_STYLE: Automatic
+    dependencies:
+      - package: UtataneKit
+        product: UtataneCore
+      - package: UtataneKit
+        product: UtataneBalloon
+      - package: UtataneKit
+        product: UtataneGhostKit
+      - package: UtataneKit
+        product: UtataneShell
+      - package: UtataneKit
+        product: UtataneRuntime
+      - package: UtataneKit
+        product: UtataneSakuraScript
+      - package: UtataneKit
+        product: UtatanePlatformMacOS
+    scheme:
+      gatherCoverageData: true

@@ -1,0 +1,30 @@
+min_version = "2026.2.3"
+
+[tools]
+xcodegen = "2.46.0"
+swiftformat = "0.62.1"
+
+[tasks.generate]
+description = "Generate Utatane.xcodeproj"
+run = "xcodegen generate"
+
+[tasks.build]
+description = "Build the macOS app"
+depends = ["generate"]
+run = "xcodebuild -project Utatane.xcodeproj -scheme Utatane -configuration Debug -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO build"
+
+[tasks.test]
+description = "Run package tests"
+run = "swift test --package-path packages"
+
+[tasks.format]
+description = "Format Swift sources"
+run = "swiftformat apps packages"
+
+[tasks.lint]
+description = "Check Swift formatting"
+run = "swiftformat apps packages --lint"
+
+[tasks.check]
+description = "Run all local checks"
+depends = ["lint", "test", "build"]

@@ -1,0 +1,24 @@
+{
+  "configurations": [
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:utatane}/packages",
+      "name": "Debug utatane-satori-convert (packages)",
+      "target": "utatane-satori-convert",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug utatane-satori-convert (packages)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:utatane}/packages",
+      "name": "Release utatane-satori-convert (packages)",
+      "target": "utatane-satori-convert",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release utatane-satori-convert (packages)"
+    }
+  ]
+}
