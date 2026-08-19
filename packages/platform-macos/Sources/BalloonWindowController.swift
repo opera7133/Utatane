@@ -37,14 +37,23 @@ public final class BalloonWindowController {
         presentations[scope]?.window.frame
     }
 
+    func isTextScrollable(scope: Int) -> Bool {
+        presentations[scope]?.contentView.isTextScrollable ?? false
+    }
+
+    func isTextAtBottom(scope: Int) -> Bool {
+        presentations[scope]?.contentView.isTextAtBottom ?? false
+    }
+
     public func show(
         balloon: BalloonDefinition,
         text: String,
         scope: Int = 0,
         speaker: BalloonSpeaker = .sakura,
+        style: Int = 0,
         near surfaceFrame: NSRect
     ) throws {
-        let imageURL = try balloonLoader.imageURL(speaker: speaker, in: balloon)
+        let imageURL = try balloonLoader.imageURL(speaker: speaker, style: style, in: balloon)
         let image = try imageLoader.loadUsingTopLeftTransparency(imageURL)
         let arrowImage = balloonLoader.arrowImageURL(index: 1, in: balloon)
             .flatMap { try? imageLoader.loadUsingTopLeftTransparency($0) }
@@ -159,6 +168,7 @@ private final class BalloonContentView: NSView {
     }
 
     private let textView: InteractiveTextView
+    private let scrollView: NSScrollView
     private let arrowView: NSImageView?
     private let textFont: NSFont
     private let textColor: NSColor
@@ -171,6 +181,21 @@ private final class BalloonContentView: NSView {
     var isWaitingForClick: Bool {
         get { arrowView?.isHidden == false }
         set { arrowView?.isHidden = !newValue }
+    }
+
+    var isTextScrollable: Bool {
+        guard let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer
+        else { return false }
+        return layoutManager.usedRect(for: textContainer).height > scrollView.contentSize.height
+    }
+
+    var isTextAtBottom: Bool {
+        guard let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer
+        else { return true }
+        let textBottom = layoutManager.usedRect(for: textContainer).maxY
+        return scrollView.documentVisibleRect.maxY >= textBottom - 1
     }
 
     override var isFlipped: Bool {
@@ -189,6 +214,7 @@ private final class BalloonContentView: NSView {
         text: String
     ) {
         textView = InteractiveTextView(frame: .zero)
+        scrollView = NSScrollView(frame: .zero)
         arrowView = arrowImage.map(NSImageView.init(image:))
         textFont = .systemFont(ofSize: CGFloat(balloon.fontHeight))
         textColor = NSColor(
@@ -211,15 +237,34 @@ private final class BalloonContentView: NSView {
         textView.textContainerInset = .zero
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainer?.lineBreakMode = .byWordWrapping
+        textView.isVerticallyResizable = true
+        textView.minSize = NSSize(width: 0, height: textFrame(for: balloon, imageSize: image.size).height)
+        textView.autoresizingMask = [.width]
+        textView.maxSize = NSSize(
+            width: CGFloat.greatestFiniteMagnitude,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: textFrame(for: balloon, imageSize: image.size).width,
+            height: CGFloat.greatestFiniteMagnitude
+        )
         textView.delegate = textView
-        textView.frame = textFrame(for: balloon, imageSize: image.size)
+        let textFrame = textFrame(for: balloon, imageSize: image.size)
+        textView.frame = NSRect(origin: .zero, size: textFrame.size)
         textView.onBackgroundClick = { [weak self] in
             self?.onClick?()
         }
         textView.onLinkClick = { [weak self] id, arguments in
             self?.onLinkClick?(id, arguments)
         }
-        addSubview(textView)
+        scrollView.frame = textFrame
+        scrollView.drawsBackground = false
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.borderType = .noBorder
+        scrollView.documentView = textView
+        addSubview(scrollView)
         update(text: text, links: [])
 
         if let arrowView {
@@ -319,6 +364,10 @@ private final class BalloonContentView: NSView {
         }
         textView.argumentsByID = argumentsByID
         textView.textStorage?.setAttributedString(attributedText)
+        textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+        if attributedText.length > 0 {
+            textView.scrollRangeToVisible(NSRange(location: attributedText.length, length: 0))
+        }
     }
 
     private func resolvedCoordinate(_ value: Int, extent: CGFloat, itemExtent _: CGFloat) -> CGFloat {

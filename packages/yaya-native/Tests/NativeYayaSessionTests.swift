@@ -1,0 +1,55 @@
+import Foundation
+import Testing
+import UtataneShiori
+@testable import UtataneYayaNative
+
+@Test func `native YAYA loads Emily and answers OnBoot`() throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let masterURL = repositoryRoot
+        .appendingPathComponent("Content/Local/Ghosts/emily4/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: masterURL.path) else {
+        return
+    }
+
+    let session = try NativeYayaSession(masterDirectoryURL: masterURL)
+    var headers = ShioriHeaders()
+    headers.append(name: "Charset", value: "UTF-8")
+    headers.append(name: "Sender", value: "Utatane")
+    headers.append(name: "SecurityLevel", value: "local")
+    headers.append(name: "ID", value: "OnBoot")
+    for index in 0 ..< 8 {
+        headers.append(name: "Reference\(index)", value: "")
+    }
+
+    let response = try session.request(ShioriRequest(method: "GET", headers: headers))
+    #expect(response.statusCode == 200)
+    #expect(response.value?.contains("\\h") == true)
+    #expect(response.value?.hasSuffix("\\e") == true)
+}
+
+@Test func `native YAYA personality maps boot to SakuraScript`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let masterURL = repositoryRoot
+        .appendingPathComponent("Content/Local/Ghosts/emily4/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: masterURL.path) else {
+        return
+    }
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    let script = try await engine.handle(event: .boot)
+
+    #expect(script?.rawValue.contains("\\h") == true)
+    #expect(script?.rawValue.hasSuffix("\\e") == true)
+
+    let randomTalk = try await engine.handle(event: .randomTalk)
+    #expect(randomTalk?.rawValue.isEmpty == false)
+    #expect(randomTalk?.rawValue.hasSuffix("\\e") == true)
+}

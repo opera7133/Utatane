@@ -31,10 +31,16 @@ public actor GhostSession {
         return try await personalityEngine.handle(event: event)
     }
 
-    public func stop() async throws -> SakuraScript? {
+    public func stop(reason: GhostStopReason = .close) async throws -> SakuraScript? {
         guard state == .running else { return nil }
         state = .stopped
-        return try await personalityEngine.handle(event: .close)
+        let event: GhostEvent = switch reason {
+        case .close:
+            .close
+        case let .ghostChanging(name):
+            .ghostChanging(name: name)
+        }
+        return try await personalityEngine.handle(event: event)
     }
 
     public func variable(forKey key: String) async throws -> String? {

@@ -39,3 +39,15 @@ func `converts inline full width surface numbers and close command`() {
 
     #expect(result.catalog.close == ["\\0\\s[0]またね\\0\\s[24]おやすみ\\e"])
 }
+
+@Test
+func `converts ghost changing dialogue separately from close`() {
+    let source = """
+    ＊OnGhostChanging
+    ：（０）交代するね
+    """
+
+    let result = SatoriDictionaryConverter().convert(source: source)
+
+    #expect(result.catalog.ghostChanging == ["\\0\\s[0]交代するね\\e"])
+}

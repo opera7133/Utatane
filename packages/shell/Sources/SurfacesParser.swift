@@ -155,6 +155,22 @@ public struct SurfacesParser: Sendable {
         guard let key = fields.first else { return }
         let values = Array(fields.dropFirst())
 
+        if key.hasPrefix("element"),
+           let elementID = Int(key.dropFirst("element".count)),
+           values.count >= 4,
+           let x = Int(values[2]),
+           let y = Int(values[3])
+        {
+            builder.elements[elementID] = SurfaceElement(
+                id: elementID,
+                method: values[0],
+                filename: values[1],
+                x: x,
+                y: y
+            )
+            return
+        }
+
         if key.hasPrefix("collision"),
            let collisionID = Int(key.dropFirst("collision".count)),
            values.count >= 5,
@@ -207,12 +223,14 @@ private enum Block {
 
 private struct SurfaceBuilder {
     let id: Int
+    var elements: [Int: SurfaceElement] = [:]
     var collisions: [Int: SurfaceCollision] = [:]
     var animations: [Int: AnimationBuilder] = [:]
 
     func build() -> SurfaceDefinition {
         SurfaceDefinition(
             id: id,
+            elements: elements.values.sorted { $0.id < $1.id },
             collisions: collisions.values.sorted { $0.id < $1.id },
             animations: animations.values.map { $0.build() }.sorted { $0.id < $1.id }
         )

@@ -10,6 +10,7 @@ public final class SurfaceWindowController {
     private var defaultSurfaceIDs: [Int: Int] = [:]
 
     public var onMouseClick: (@MainActor (Int, String?) -> Void)?
+    public var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
 
     public init(positionStore: WindowPositionStore = WindowPositionStore()) {
         self.positionStore = positionStore
@@ -35,6 +36,22 @@ public final class SurfaceWindowController {
 
     public func show(shell: ShellDefinition, surfaceID: Int) throws {
         try show(shell: shell, scope: 0, surfaceID: surfaceID)
+    }
+
+    public func show(shell: ShellDefinition, defaultSurfaceIDs: [Int: Int]) throws {
+        hideAll()
+        self.shell = shell
+        self.defaultSurfaceIDs = defaultSurfaceIDs
+
+        for (scope, surfaceID) in defaultSurfaceIDs.sorted(by: { $0.key < $1.key }) {
+            do {
+                let character = characterController(for: scope)
+                try character.show(shell: shell, surfaceID: surfaceID)
+                placeInitialWindow(for: scope)
+            } catch where scope != 0 {
+                continue
+            }
+        }
     }
 
     public func show(shell: ShellDefinition, scope: Int, surfaceID: Int) throws {
@@ -96,6 +113,9 @@ public final class SurfaceWindowController {
         character.onMouseClick = { [weak self] region in
             self?.onMouseClick?(scope, region)
         }
+        character.contextMenuItems = { [weak self] in
+            self?.contextMenuItems?() ?? []
+        }
         characters[scope] = character
         return character
     }
@@ -130,7 +150,7 @@ public final class SurfaceWindowController {
         character.setOrigin(
             NSPoint(
                 x: max(visibleFrame.minX, x),
-                y: visibleFrame.minY + margin
+                y: visibleFrame.minY
             )
         )
     }
@@ -158,6 +178,7 @@ private final class CharacterSurfaceController {
     private var isAnimating = false
 
     var onMouseClick: (@MainActor (String?) -> Void)?
+    var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
 
     init(scope: Int, positionStore: WindowPositionStore) {
         self.scope = scope
@@ -245,9 +266,18 @@ private final class CharacterSurfaceController {
     }
 
     private func render(surfaceID: Int, shell: ShellDefinition) throws -> (image: NSImage, view: SurfaceImageView) {
-        let surface = try shellLoader.loadSurface(id: surfaceID, from: shell.directory)
-        let image = try imageLoader.load(surface)
         let definition = shell.surfaces[surfaceID]
+        let image: NSImage
+        do {
+            let surface = try shellLoader.loadSurface(id: surfaceID, from: shell.directory)
+            image = try imageLoader.load(surface)
+        } catch let error as ShellError {
+            guard case .missingSurface = error,
+                  let elements = definition?.elements,
+                  !elements.isEmpty
+            else { throw error }
+            image = try render(elements: elements, shellDirectory: shell.directory)
+        }
         let imageView = SurfaceImageView(frame: NSRect(origin: .zero, size: image.size))
         imageView.image = image
         imageView.imageAlignment = .alignCenter
@@ -256,11 +286,38 @@ private final class CharacterSurfaceController {
         imageView.onMouseClick = { [weak self] region in
             self?.onMouseClick?(region)
         }
+        imageView.contextMenuItems = { [weak self] in
+            self?.contextMenuItems?() ?? []
+        }
         return (image, imageView)
     }
 
+    private func render(elements: [SurfaceElement], shellDirectory: URL) throws -> NSImage {
+        guard let first = elements.first else {
+            throw ShellError.missingSurface(id: -1, directory: shellDirectory)
+        }
+        var result = try imageLoader.load(
+            shellLoader.loadElement(filename: first.filename, from: shellDirectory)
+        )
+        for element in elements.dropFirst() where element.method.lowercased() == "overlay" {
+            let overlay = try imageLoader.load(
+                shellLoader.loadElement(filename: element.filename, from: shellDirectory)
+            )
+            result = imageLoader.composite(
+                base: result,
+                overlay: overlay,
+                x: element.x,
+                y: element.y
+            )
+        }
+        return result
+    }
+
     private func makeWindow() -> NSWindow {
-        let window = FloatingContentWindow(title: "Ghost Surface \(scope)") { [positionStore, scope] origin in
+        let window = FloatingContentWindow(
+            title: "Ghost Surface \(scope)",
+            placementPolicy: .desktopBottom
+        ) { [positionStore, scope] origin in
             positionStore.save(origin, for: .surface, scope: scope)
         }
         window.backgroundColor = .clear
@@ -345,6 +402,7 @@ private final class CharacterSurfaceController {
 private final class SurfaceImageView: NSImageView {
     var collisions: [SurfaceCollision] = []
     var onMouseClick: ((String?) -> Void)?
+    var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
 
     override var mouseDownCanMoveWindow: Bool {
         true
@@ -357,5 +415,11 @@ private final class SurfaceImageView: NSImageView {
         let region = collisions.first { $0.contains(x: surfaceX, y: surfaceY) }?.name
         onMouseClick?(region)
         super.mouseUp(with: event)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        guard let contextMenuItems else { return nil }
+        let items = contextMenuItems()
+        return items.isEmpty ? nil : SurfaceContextMenuBuilder().build(from: items)
     }
 }

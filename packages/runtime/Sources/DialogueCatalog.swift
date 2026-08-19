@@ -5,6 +5,7 @@ import UtataneSakuraScript
 public struct DialogueCatalog: Codable, Sendable, Equatable {
     public let boot: [String]
     public let close: [String]
+    public let ghostChanging: [String]
     public let randomTalk: [String]
     public let mouseClick: [String: [String]]
     public let choices: [String: [String]]
@@ -12,12 +13,14 @@ public struct DialogueCatalog: Codable, Sendable, Equatable {
     public init(
         boot: [String] = [],
         close: [String] = [],
+        ghostChanging: [String] = [],
         randomTalk: [String] = [],
         mouseClick: [String: [String]] = [:],
         choices: [String: [String]] = [:]
     ) {
         self.boot = boot
         self.close = close
+        self.ghostChanging = ghostChanging
         self.randomTalk = randomTalk
         self.mouseClick = mouseClick
         self.choices = choices
@@ -29,9 +32,11 @@ public struct DialogueCatalog: Codable, Sendable, Equatable {
             boot
         case .close:
             close
+        case .ghostChanging:
+            ghostChanging.isEmpty ? close : ghostChanging
         case .randomTalk:
             randomTalk
-        case let .mouseClick(region):
+        case let .mouseClick(_, region):
             if let region, let scripts = mouseClick[region] {
                 scripts
             } else {
@@ -40,6 +45,25 @@ public struct DialogueCatalog: Codable, Sendable, Equatable {
         case let .choice(id, _):
             choices[id] ?? []
         }
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case boot
+        case close
+        case ghostChanging
+        case randomTalk
+        case mouseClick
+        case choices
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        boot = try container.decodeIfPresent([String].self, forKey: .boot) ?? []
+        close = try container.decodeIfPresent([String].self, forKey: .close) ?? []
+        ghostChanging = try container.decodeIfPresent([String].self, forKey: .ghostChanging) ?? []
+        randomTalk = try container.decodeIfPresent([String].self, forKey: .randomTalk) ?? []
+        mouseClick = try container.decodeIfPresent([String: [String]].self, forKey: .mouseClick) ?? [:]
+        choices = try container.decodeIfPresent([String: [String]].self, forKey: .choices) ?? [:]
     }
 }
 
@@ -79,9 +103,15 @@ public actor DialoguePersonalityEngine: PersonalityEngine {
     }
 
     private func applyArguments(to source: String, event: GhostEvent) -> String {
-        guard case let .choice(_, arguments) = event else { return source }
-        return arguments.enumerated().reduce(source) { result, entry in
-            result.replacingOccurrences(of: "{{argument\(entry.offset)}}", with: entry.element)
+        switch event {
+        case let .choice(_, arguments):
+            arguments.enumerated().reduce(source) { result, entry in
+                result.replacingOccurrences(of: "{{argument\(entry.offset)}}", with: entry.element)
+            }
+        case let .ghostChanging(name):
+            source.replacingOccurrences(of: "{{ghostName}}", with: name ?? "")
+        default:
+            source
         }
     }
 }

@@ -5,6 +5,7 @@ public enum ShellError: LocalizedError, Equatable {
     case missingFile(URL)
     case unsupportedTextEncoding(URL)
     case missingSurface(id: Int, directory: URL)
+    case missingElement(filename: String, directory: URL)
 
     public var errorDescription: String? {
         switch self {
@@ -14,6 +15,8 @@ public enum ShellError: LocalizedError, Equatable {
             "文字コードを判定できない: \(url.path)"
         case let .missingSurface(id, directory):
             "surface\(id)が見つからない: \(directory.path)"
+        case let .missingElement(filename, directory):
+            "Surface要素\(filename)が見つからない: \(directory.path)"
         }
     }
 }
@@ -78,6 +81,27 @@ public struct ShellLoader: Sendable {
         }
 
         throw ShellError.missingSurface(id: id, directory: shellDirectory)
+    }
+
+    public func loadElement(filename: String, from shellDirectory: URL) throws -> SurfaceAsset {
+        let root = shellDirectory.standardizedFileURL.resolvingSymlinksInPath()
+        let imageURL = shellDirectory
+            .appending(path: filename, directoryHint: .notDirectory)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        guard imageURL.pathExtension.lowercased() == "png",
+              imageURL.path.hasPrefix(root.path + "/"),
+              FileManager.default.fileExists(atPath: imageURL.path)
+        else {
+            throw ShellError.missingElement(filename: filename, directory: shellDirectory)
+        }
+
+        let maskURL = imageURL.deletingPathExtension().appendingPathExtension("pna")
+        return SurfaceAsset(
+            id: -1,
+            imageURL: imageURL,
+            alphaMaskURL: FileManager.default.fileExists(atPath: maskURL.path) ? maskURL : nil
+        )
     }
 
     private func readText(from url: URL) throws -> String {

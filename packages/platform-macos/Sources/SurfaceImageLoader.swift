@@ -37,7 +37,7 @@ struct SurfaceImageLoader {
         overlay.draw(
             in: NSRect(
                 x: CGFloat(x),
-                y: CGFloat(-y),
+                y: base.size.height - CGFloat(y) - overlay.size.height,
                 width: overlay.size.width,
                 height: overlay.size.height
             ),

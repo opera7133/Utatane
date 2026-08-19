@@ -43,6 +43,8 @@ targets:
       - package: UtataneKit
         product: UtataneCore
       - package: UtataneKit
+        product: UtataneContent
+      - package: UtataneKit
         product: UtataneBalloon
       - package: UtataneKit
         product: UtataneGhostKit
@@ -54,5 +56,7 @@ targets:
         product: UtataneSakuraScript
       - package: UtataneKit
         product: UtatanePlatformMacOS
+      - package: UtataneKit
+        product: UtataneYayaNative
     scheme:
       gatherCoverageData: true

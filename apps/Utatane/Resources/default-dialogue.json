@@ -5,6 +5,9 @@
   "close": [
     "\\0またね。\\e"
   ],
+  "ghostChanging": [
+    "\\0{{ghostName}}に交代するね。\\e"
+  ],
   "randomTalk": [
     "\\0\\cランダムトークのイベントを受け取ったよ。\\n\\q[選択肢A,OnDemoChoice,A]\\q[選択肢B,OnDemoChoice,B]\\_a[OnDemoAnchor,詳細]アンカーも押せる\\_a\\e"
   ],

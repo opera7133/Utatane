@@ -61,9 +61,16 @@ enum FloatingWindowKind: String {
 
 final class FloatingContentWindow: NSWindow, NSWindowDelegate {
     private let onMove: (NSPoint) -> Void
+    private let placementPolicy: FloatingWindowPlacementPolicy
+    private var isApplyingConstraint = false
 
-    init(title: String, onMove: @escaping (NSPoint) -> Void) {
+    init(
+        title: String,
+        placementPolicy: FloatingWindowPlacementPolicy = .free,
+        onMove: @escaping (NSPoint) -> Void
+    ) {
         self.onMove = onMove
+        self.placementPolicy = placementPolicy
         super.init(
             contentRect: .zero,
             styleMask: [.borderless],
@@ -84,6 +91,45 @@ final class FloatingContentWindow: NSWindow, NSWindowDelegate {
     }
 
     func windowDidMove(_ notification: Notification) {
+        applyPlacementConstraint()
         onMove(frame.origin)
+    }
+
+    private func applyPlacementConstraint() {
+        guard !isApplyingConstraint,
+              let constrainedOrigin = placementPolicy.constrainedOrigin(
+                  for: frame,
+                  visibleFrames: NSScreen.screens.map(\.visibleFrame)
+              ),
+              constrainedOrigin != frame.origin
+        else { return }
+        isApplyingConstraint = true
+        setFrameOrigin(constrainedOrigin)
+        isApplyingConstraint = false
+    }
+}
+
+enum FloatingWindowPlacementPolicy {
+    case free
+    case desktopBottom
+
+    func constrainedOrigin(for frame: NSRect, visibleFrames: [NSRect]) -> NSPoint? {
+        guard self == .desktopBottom, !visibleFrames.isEmpty else { return nil }
+        let screen = visibleFrames.max { lhs, rhs in
+            lhs.intersection(frame).area < rhs.intersection(frame).area
+        } ?? visibleFrames[0]
+        return NSPoint(
+            x: min(
+                max(frame.origin.x, screen.minX),
+                max(screen.minX, screen.maxX - frame.width)
+            ),
+            y: screen.minY
+        )
+    }
+}
+
+private extension NSRect {
+    var area: CGFloat {
+        isNull ? 0 : width * height
     }
 }

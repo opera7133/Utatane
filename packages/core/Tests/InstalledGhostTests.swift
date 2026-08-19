@@ -13,4 +13,9 @@ func `installed ghost identity is its directory`() {
     )
 
     #expect(ghost.id == directory)
+    #expect(ghost.shells == [InstalledShell(name: "master", directory: shellDirectory)])
+    #expect(ghost.characters == [
+        InstalledGhostCharacter(scope: 0, defaultSurfaceID: 0),
+        InstalledGhostCharacter(scope: 1, defaultSurfaceID: 10)
+    ])
 }

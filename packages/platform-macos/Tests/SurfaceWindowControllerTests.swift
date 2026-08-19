@@ -37,6 +37,41 @@ func `shows scopes in separate side by side windows`() throws {
 
 @Test
 @MainActor
+func `renders a virtual surface from ordered elements`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    try makePNG(width: 40, height: 80).write(
+        to: directory.appending(path: "surface0000.png", directoryHint: .notDirectory)
+    )
+    try makePNG(width: 10, height: 12).write(
+        to: directory.appending(path: "element0005.png", directoryHint: .notDirectory)
+    )
+    let definition = SurfaceDefinition(
+        id: 5,
+        elements: [
+            SurfaceElement(id: 0, method: "overlay", filename: "surface0000.png", x: 0, y: 0),
+            SurfaceElement(id: 1, method: "overlay", filename: "element0005.png", x: 8, y: 10)
+        ],
+        collisions: [],
+        animations: []
+    )
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    let shell = ShellDefinition(directory: directory, surfaces: [5: definition])
+
+    try controller.show(shell: shell, scope: 0, surfaceID: 5)
+    defer { controller.hideAll() }
+
+    #expect(controller.surfaceID(for: 0) == 5)
+    #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 40, height: 80))
+}
+
+@Test
+@MainActor
 func `restores a saved floating window position`() {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
@@ -54,8 +89,35 @@ func `restores a saved floating window position`() {
 }
 
 @Test
+func `surface placement stays on the desktop bottom and inside its screen`() {
+    let screen = NSRect(x: 100, y: 40, width: 800, height: 600)
+    let frame = NSRect(x: 850, y: 400, width: 200, height: 300)
+
+    let origin = FloatingWindowPlacementPolicy.desktopBottom.constrainedOrigin(
+        for: frame,
+        visibleFrames: [screen]
+    )
+
+    #expect(origin == NSPoint(x: 700, y: 40))
+}
+
+@Test
+func `surface placement chooses the screen with the largest overlap`() {
+    let left = NSRect(x: 0, y: 0, width: 500, height: 500)
+    let right = NSRect(x: 500, y: 30, width: 700, height: 600)
+    let frame = NSRect(x: 600, y: 200, width: 200, height: 300)
+
+    let origin = FloatingWindowPlacementPolicy.desktopBottom.constrainedOrigin(
+        for: frame,
+        visibleFrames: [left, right]
+    )
+
+    #expect(origin == NSPoint(x: 600, y: 30))
+}
+
+@Test
 @MainActor
-func `keeps both speaker balloons until a completed dialogue is clicked`() async throws {
+func `keeps every speaker balloon until a completed dialogue is clicked`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
     let directory = FileManager.default.temporaryDirectory
@@ -69,6 +131,9 @@ func `keeps both speaker balloons until a completed dialogue is clicked`() async
     try makePNG(width: 20, height: 30).write(
         to: directory.appending(path: "surface0010.png", directoryHint: .notDirectory)
     )
+    try makePNG(width: 25, height: 35).write(
+        to: directory.appending(path: "surface0200.png", directoryHint: .notDirectory)
+    )
     let balloonImage = try makePNG(width: 120, height: 80)
     try balloonImage.write(to: directory.appending(path: "balloons0.png", directoryHint: .notDirectory))
     try balloonImage.write(to: directory.appending(path: "balloonk0.png", directoryHint: .notDirectory))
@@ -77,6 +142,7 @@ func `keeps both speaker balloons until a completed dialogue is clicked`() async
     let shell = ShellDefinition(directory: directory, surfaces: [:])
     try surfaceController.show(shell: shell, scope: 0, surfaceID: 0)
     try surfaceController.show(shell: shell, scope: 1, surfaceID: 10)
+    try surfaceController.show(shell: shell, scope: 2, surfaceID: 200)
     defer { surfaceController.hideAll() }
 
     let balloonController = BalloonWindowController(positionStore: positionStore)
@@ -95,16 +161,84 @@ func `keeps both speaker balloons until a completed dialogue is clicked`() async
         fontColor: BalloonColor(red: 0, green: 0, blue: 0)
     )
 
-    player.play(
-        SakuraScript(rawValue: "\\0Sakura\\1Kero\\e"),
+    await player.playAndWait(
+        SakuraScript(rawValue: "\\0Sakura\\1Kero\\p[2]Charlie\\e"),
         balloon: balloon,
         characterDelayMilliseconds: 0
     )
-    try await Task.sleep(for: .milliseconds(50))
-    #expect(balloonController.visibleScopes == [0, 1])
+    #expect(balloonController.visibleScopes == [0, 1, 2])
 
     player.advance()
     #expect(balloonController.visibleScopes.isEmpty)
+}
+
+@Test
+@MainActor
+func `does not show a balloon until its scope has text`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    for surfaceID in [0, 5, 10] {
+        try makePNG(width: 30, height: 40).write(
+            to: directory.appending(
+                path: String(format: "surface%04d.png", surfaceID),
+                directoryHint: .notDirectory
+            )
+        )
+    }
+    let balloonImage = try makePNG(width: 120, height: 80)
+    try balloonImage.write(to: directory.appending(path: "balloons0.png"))
+    try balloonImage.write(to: directory.appending(path: "balloonk0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        defaultSurfaceIDs: [0: 0, 1: 10]
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    let balloon = makeBalloon(directory: directory)
+
+    await player.playAndWait(
+        SakuraScript(rawValue: "\\u\\s[10]\\h\\s[5]hello\\e"),
+        balloon: balloon,
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(balloonController.visibleScopes == [0])
+}
+
+@Test
+@MainActor
+func `long balloon text scrolls and follows its bottom`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 160, height: 100).write(
+        to: directory.appending(path: "balloons0.png", directoryHint: .notDirectory)
+    )
+
+    let controller = BalloonWindowController(positionStore: positionStore)
+    try controller.show(
+        balloon: makeBalloon(directory: directory),
+        text: (0 ..< 20).map { "line \($0)" }.joined(separator: "\n"),
+        near: NSRect(x: 500, y: 100, width: 40, height: 80)
+    )
+    defer { controller.hideAll() }
+
+    #expect(controller.isTextScrollable(scope: 0))
+    #expect(controller.isTextAtBottom(scope: 0))
 }
 
 @Test
@@ -157,7 +291,9 @@ func `dismisses balloons and resets surfaces after the post dialogue delay`() as
         balloon: balloon,
         characterDelayMilliseconds: 0
     )
-    try await Task.sleep(for: .milliseconds(300))
+    for _ in 0 ..< 100 where !balloonController.visibleScopes.isEmpty {
+        try await Task.sleep(for: .milliseconds(20))
+    }
 
     #expect(balloonController.visibleScopes.isEmpty)
     #expect(surfaceController.surfaceID(for: 0) == 0)
@@ -184,6 +320,19 @@ private func makePNG(width: Int, height: Int) throws -> Data {
         }
     }
     return try #require(bitmap.representation(using: .png, properties: [:]))
+}
+
+private func makeBalloon(directory: URL) -> BalloonDefinition {
+    BalloonDefinition(
+        directory: directory,
+        name: "test",
+        originX: 4,
+        originY: 4,
+        wordWrapPointX: -4,
+        wordWrapPointY: -4,
+        fontHeight: 14,
+        fontColor: BalloonColor(red: 0, green: 0, blue: 0)
+    )
 }
 
 @MainActor

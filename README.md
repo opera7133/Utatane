@@ -25,6 +25,9 @@ packages/sakura-script       SakuraScript のトークン定義と解析
 packages/ghost-kit           ゴースト、Shell、素材の読み込み
 packages/shell               surfaces.txt、当たり判定、アニメーション定義
 packages/runtime             セッション、ユースケース、人格エンジンの境界
+packages/shiori              SHIORI/3.0 のリクエスト・レスポンスモデル
+packages/yaya                Swift製YAYA解析器・互換性監査・比較用評価器
+packages/yaya-native         macOS向けに移植した本家YAYAとSwiftアダプター
 packages/platform-macos      AppKit / SwiftUI による表示と入力
 packages/satori-converter    Satori辞書から静的なセリフを抽出する開発用CLI
 ```
@@ -39,15 +42,20 @@ core <- runtime <- ghost-kit
 
 sakura-script <- runtime
 balloon --------------------> platform-macos
+shiori <- yaya
 
 balloon / ghost-kit / runtime / platform-macos <- apps/Utatane
 ```
 
 まずは、既存ゴーストから利用可能な Shell・バルーン素材と変換済みのセリフデータを読み込み、Utatane 内蔵の最小ランタイムで表示する。既存の Windows DLL を直接実行することは初期スコープに含めない。
 
-開発用コンテンツは `Content/Local` に置く。このディレクトリは Git の対象外で、Debug ビルドでは `Content/Local/Ghosts` からゴースト、`Content/Local/Balloons` からバルーンを検出する。現在はSakuraとKeroのsurfaceとバルーンをscope別のウィンドウで表示し、それぞれのPNA透過、矩形当たり判定、`sometimes`のoverlayアニメーションを処理する。キャラクターとバルーンはドラッグで移動でき、位置は次回起動時に復元される。SakuraScriptの話者・scopeごとのsurface・改行・ウェイト・クリック待ち・選択肢・アンカー・クリア・終了を解釈してバルーンへ逐次表示できる。話者を切り替えても各バルーンは会話終了まで残り、終了後にどちらかをクリックすると両方閉じる。再生中のクリックによる早送りとクリック待ちの再開、リンクのイベントIDと引数の通知、アプリ画面から再生停止もできる。
+開発用コンテンツは `Content/Local` に置く。このディレクトリは Git の対象外で、Debug ビルドでは `Content/Local/Ghosts` からゴースト、`Content/Local/Balloons` からバルーンを検出する。Ghostの`descript.txt`にあるSakura、Kero、`char2`以降のdefault surfaceを読み、全scopeを別ウィンドウで表示する。各scopeのPNA透過、矩形当たり判定、`sometimes`のoverlayアニメーションを処理する。キャラクターとバルーンはドラッグで移動でき、位置は次回起動時に復元される。SakuraScriptの話者・scopeごとのsurface・改行・ウェイト・クリック待ち・選択肢・アンカー・クリア・終了を解釈してバルーンへ逐次表示できる。scope 2以降の専用バルーン画像がなければKero側、Sakura側の画像へフォールバックする。話者を切り替えても各バルーンは会話終了まで残り、終了後にどれかをクリックするとすべて閉じる。再生中のクリックによる早送りとクリック待ちの再開、リンクのイベントIDと引数の通知、アプリ画面から再生停止もできる。
 
-会話終了から10秒経過するとバルーンを自動的に閉じ、各キャラクターを起動時のsurfaceへ戻す。ゴースト一覧の選択を変えると現在のセッションを停止して選択先を起動する。ゴースト固有の変数は `~/Library/Application Support/Utatane/State/<ghost>/variables.json` に保存する。
+会話終了から10秒経過するとバルーンを自動的に閉じ、各キャラクターを起動時のsurfaceへ戻す。ゴースト一覧の選択を変えると`ghostChanging`、アプリ終了時には`close`のトークを最後まで再生し、1秒待ってから切り替えまたは終了する。`ghostChanging`がない変換済みセリフは`close`へフォールバックする。ゴースト固有の変数は `~/Library/Application Support/Utatane/State/<ghost>/variables.json` に保存する。
+
+キャラクターを右クリックすると、インストール済みゴースト、Shell、バルーンの切り替え、ランダムトーク、バルーンを閉じる操作、アプリ終了を選べる。選択したShellとバルーンはゴーストごとに保存される。メニュー表示にはmacOS標準の`NSMenu`を使い、SSPの`menu_background`画像によるスキン表示はまだ行わない。
+
+キャラクターはドラッグ中も使用中の画面の下端へ密着し、左右の画面外へ移動しない。メイン画面または右クリックメニューの「NARをインストール」から、ゴースト、Shell、バルーンを追加できる。同名コンテンツは上書きせず、危険なアーカイブ内パス、シンボリックリンク、過大なアーカイブは拒否する。
 
 セリフは `DialoguePersonalityEngine` が読み、`GhostSession` を通して起動、ランダムトーク、surfaceクリック、選択肢イベントに応答する。Debugビルドでは、ゴーストのディレクトリ名に対応する `Content/Local/Converted/<ghost>.json` があればアプリ内の `default-dialogue.json` より優先する。
 
@@ -61,9 +69,34 @@ swift run --package-path packages utatane-satori-convert \
 
 今後の実装順と対応範囲は [実装計画](Docs/implementation-plan.md) を参照。
 
-機能が独立してきたら、`shell`、`balloon`、`sstp`、`network-update`、`headlines`、`shiori`、`yaya`、`saori`、`animation`、`ai`、`mcp` などを SwiftPM ターゲットとして追加する。最初から空のターゲットは作らない。
+機能が独立してきたら、`sstp`、`network-update`、`headlines`、`saori`、`animation`、`ai`、`mcp` などを SwiftPM ターゲットとして追加する。`shiori`と`yaya`は互換エンジンの着手に合わせて追加済み。最初から空のターゲットは作らない。
 
 人格エンジンは `PersonalityEngine`、キャラクター表示は将来レンダラー用プロトコルを境界にして、簡易セリフ再生から YAYA / SHIORI、通常の surface 表示から Spine などへ差し替えられるようにする。
+
+`UtataneShiori`は`GhostEvent`を`OnBoot`、`OnClose`、`OnGhostChanging`、`OnMouseClick`、`OnSecondChange`、選択肢IDのSHIORI/3.0リクエストへ変換する。`UtataneYayaNative`は本家YAYAの`500`ブランチをmacOS/Apple Silicon向けに移植し、Wineを介さず複数のYAYA VMをSHIORIで呼び出せる。Emilyで実物の辞書をロードし、`OnBoot`の200応答とSakuraScriptを受け取る統合テストまで通している。
+
+アプリは`ghost/master/yaya.txt`または`yaya_config.txt`を検出するとネイティブYAYAを人格エンジンとして選ぶ。ロードに失敗した場合だけ従来の変換済みJSONへフォールバックする。起動、終了、ゴースト切り替え、ランダムトーク、キャラクターごとのマウスクリック、選択肢をSHIORIへ変換し、返された`Value`をそのままSakuraScriptプレイヤーへ渡す。
+
+`UtataneYaya`のSwift製実装は削除せず、設定と辞書の監査、ASTの調査、ネイティブ版との比較に利用する。コメント、行継続、ヒアドキュメントを含む字句解析と、式・関数・条件分岐・選択・ループのAST、および主要なシステム関数を実行する比較用評価器を含む。
+
+設定、時計、稼働時間、永続変数、ファイル操作は`YayaRuntimeEnvironment`越しに取得する。標準のmacOS実装はテキストストリームのopen/read/write/close、削除、改名、列挙、属性取得を提供する。任意のファイルパスはゴーストのmasterディレクトリ以下に制限し、親参照やシンボリックリンクを解決した結果がルート外なら拒否する。アプリが明示した変数保存先だけは別の信頼済みパスとして扱う。評価器はWineやWindows DLLを直接扱わない。`LOADLIB / REQUESTLIB / UNLOADLIB`は未対応能力として監査に残し、将来必要になった場合も任意の外部アダプターとして分離する。
+
+YAYA辞書全体の互換性は、次のCLIでまとめて確認できる。`#define / #globaldefine`を辞書順に展開し、最初の問題で止まらずファイルごとの字句・構文問題を一覧にする。さらに全ASTの関数呼び出しを走査し、ユーザー定義関数と実装済みシステム関数のどちらにも解決できない呼び出しを、参照数の多い順で集計する。
+
+```sh
+swift run --package-path packages utatane-yaya-audit \
+  Content/Local/Ghosts/emily4/ghost/master
+```
+
+Emilyでは33辞書すべてが文ASTまで解析できることを確認済み。システム関数の初回集計は61種類・554呼び出しで、文字列・配列・正規表現・設定・時計・永続変数・ファイル・文字幅変換をまとめて実装した後は7種類・16呼び出し。残りは配列デリミタ、動的な変数名、関数置換型正規表現、FMO、DLL関連になる。未対応関数が残る通常監査は終了コード1を返す。
+
+全辞書を結合して実際の関数を評価する場合は`--entry`を使う。複数指定した順に同じ評価器で実行する。Emilyは`load`後の`OnBoot`がSakuraScript文字列を返すところまで互換テスト済み。
+
+```sh
+swift run --package-path packages utatane-yaya-audit \
+  Content/Local/Ghosts/emily4/ghost/master \
+  --entry load --entry OnBoot
+```
 
 ### ツールチェーン
 
@@ -104,4 +137,6 @@ moon は現状では使用しない。単一言語・単一アプリで SwiftPM 
 
 ## ライセンス
 
-YAYAのみBSD-3-Clause
+取り込んだYAYA公開ソースはBSD-3-Clause。`packages/yaya-native`にUTF-8化したforkとライセンスを保持し、ローカルのゴースト素材は配布物へ自動では含めない。Windows限定のFMOとDLLロードはmacOS版では提供しない。
+
+現在のvendorコピーを保守用forkとgit submoduleへ移す手順は[Docs/yaya-fork-submodule.md](Docs/yaya-fork-submodule.md)にまとめている。

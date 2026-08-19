@@ -37,6 +37,7 @@ public enum SatoriDictionaryConverterError: LocalizedError {
 public struct SatoriDictionaryConverter: Sendable {
     private static let bootEntryNames: Set<String> = ["通常起動", "OnBoot"]
     private static let closeEntryNames: Set<String> = ["終了", "OnClose"]
+    private static let ghostChangingEntryNames: Set<String> = ["ゴースト切り替え", "OnGhostChanging"]
     private static let randomTalkEntryNames: Set<String> = ["", "通常トーク", "PCトーク", "アニメトーク"]
 
     public init() {}
@@ -120,6 +121,7 @@ public struct SatoriDictionaryConverter: Sendable {
     private func makeResult(entries: [Entry], sourceFileCount: Int) -> SatoriConversionResult {
         var boot: [String] = []
         var close: [String] = []
+        var ghostChanging: [String] = []
         var randomTalk: [String] = []
         var choices: [String: [String]] = [:]
         var convertedEntryCount = 0
@@ -139,6 +141,8 @@ public struct SatoriDictionaryConverter: Sendable {
                 boot.append(script)
             } else if Self.closeEntryNames.contains(entry.name) {
                 close.append(script)
+            } else if Self.ghostChangingEntryNames.contains(entry.name) {
+                ghostChanging.append(script)
             } else if Self.randomTalkEntryNames.contains(entry.name) {
                 randomTalk.append(script)
             } else {
@@ -150,6 +154,7 @@ public struct SatoriDictionaryConverter: Sendable {
             catalog: DialogueCatalog(
                 boot: boot,
                 close: close,
+                ghostChanging: ghostChanging,
                 randomTalk: randomTalk,
                 choices: choices
             ),

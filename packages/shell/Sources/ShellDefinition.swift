@@ -25,13 +25,36 @@ public struct ShellDefinition: Sendable, Equatable {
 
 public struct SurfaceDefinition: Sendable, Equatable {
     public let id: Int
+    public let elements: [SurfaceElement]
     public let collisions: [SurfaceCollision]
     public let animations: [SurfaceAnimation]
 
-    public init(id: Int, collisions: [SurfaceCollision], animations: [SurfaceAnimation]) {
+    public init(
+        id: Int,
+        elements: [SurfaceElement] = [],
+        collisions: [SurfaceCollision],
+        animations: [SurfaceAnimation]
+    ) {
         self.id = id
+        self.elements = elements
         self.collisions = collisions
         self.animations = animations
+    }
+}
+
+public struct SurfaceElement: Sendable, Equatable {
+    public let id: Int
+    public let method: String
+    public let filename: String
+    public let x: Int
+    public let y: Int
+
+    public init(id: Int, method: String, filename: String, x: Int, y: Int) {
+        self.id = id
+        self.method = method
+        self.filename = filename
+        self.x = x
+        self.y = y
     }
 }
 

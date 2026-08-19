@@ -8,6 +8,8 @@ func `parses collisions and animation patterns`() throws {
 
     surface0
     {
+    element0,overlay,surface0000.png,0,0
+    element1,overlay,face.png,10,20
     animation0.interval,sometimes
     animation0.pattern1,overlay,1000,100,3,4
     animation0.pattern2,overlay,-1,200,0,0
@@ -19,6 +21,9 @@ func `parses collisions and animation patterns`() throws {
     let collision = try #require(surface.collisions.first)
     let animation = try #require(surface.animations.first)
 
+    #expect(surface.elements.map(\.filename) == ["surface0000.png", "face.png"])
+    #expect(surface.elements.last?.x == 10)
+    #expect(surface.elements.last?.y == 20)
     #expect(collision.name == "Head")
     #expect(collision.contains(x: 20, y: 30))
     #expect(!collision.contains(x: 9, y: 30))

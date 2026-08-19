@@ -19,6 +19,26 @@
       "target": "utatane-satori-convert",
       "configuration": "release",
       "preLaunchTask": "swift: Build Release utatane-satori-convert (packages)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:utatane}/packages",
+      "name": "Debug utatane-yaya-audit (packages)",
+      "target": "utatane-yaya-audit",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug utatane-yaya-audit (packages)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:utatane}/packages",
+      "name": "Release utatane-yaya-audit (packages)",
+      "target": "utatane-yaya-audit",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release utatane-yaya-audit (packages)"
     }
   ]
 }

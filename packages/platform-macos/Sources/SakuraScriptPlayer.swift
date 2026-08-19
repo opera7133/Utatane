@@ -14,6 +14,8 @@ public final class SakuraScriptPlayer {
     private var advanceRequested = false
     private var isWaitingForClick = false
     private var isPlaybackComplete = false
+    private var defaultBalloonSurfaceIDs: [Int: Int] = [:]
+    private var playbackContinuation: CheckedContinuation<Void, Never>?
 
     public var onError: (@MainActor (Error) -> Void)?
     public var onChoice: (@MainActor (String, [String]) -> Void)?
@@ -39,6 +41,7 @@ public final class SakuraScriptPlayer {
         balloon: BalloonDefinition,
         characterDelayMilliseconds: Int = 50
     ) {
+        finishPlaybackWait()
         playbackTask?.cancel()
         dismissalTask?.cancel()
         fastForwardRequested = false
@@ -59,6 +62,31 @@ public final class SakuraScriptPlayer {
         }
     }
 
+    public func playAndWait(
+        _ script: SakuraScript,
+        balloon: BalloonDefinition,
+        characterDelayMilliseconds: Int = 50
+    ) async {
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                play(
+                    script,
+                    balloon: balloon,
+                    characterDelayMilliseconds: characterDelayMilliseconds
+                )
+                playbackContinuation = continuation
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.cancel()
+            }
+        }
+    }
+
+    public func configure(defaultBalloonSurfaceIDs: [Int: Int]) {
+        self.defaultBalloonSurfaceIDs = defaultBalloonSurfaceIDs
+    }
+
     public func cancel() {
         playbackTask?.cancel()
         dismissalTask?.cancel()
@@ -71,6 +99,7 @@ public final class SakuraScriptPlayer {
         balloonWindowController.setWaitingForClick(false)
         balloonWindowController.hideAll()
         surfaceWindowController.resetToDefaultSurfaces()
+        finishPlaybackWait()
     }
 
     public func advance() {
@@ -94,14 +123,13 @@ public final class SakuraScriptPlayer {
         var textByScope: [Int: String] = [:]
         var linksByScope: [Int: [BalloonTextLink]] = [:]
         var anchorsByScope: [Int: ActiveAnchor] = [:]
+        var activatedScopes = Set<Int>()
         defer {
             isWaitingForClick = false
             balloonWindowController.setWaitingForClick(false)
         }
 
         do {
-            try activate(scope: scope, balloon: balloon, text: "", links: [])
-
             for token in tokens {
                 guard !Task.isCancelled else { return }
                 switch token {
@@ -109,6 +137,13 @@ public final class SakuraScriptPlayer {
                     for character in text {
                         guard !Task.isCancelled else { return }
                         textByScope[scope, default: ""].append(character)
+                        try activateIfNeeded(
+                            scope: scope,
+                            balloon: balloon,
+                            text: textByScope[scope, default: ""],
+                            links: linksByScope[scope, default: []],
+                            activatedScopes: &activatedScopes
+                        )
                         updateContent(
                             scope: scope,
                             text: textByScope[scope, default: ""],
@@ -121,18 +156,19 @@ public final class SakuraScriptPlayer {
                     fastForwardRequested = false
                 case let .scope(newScope):
                     scope = newScope
-                    try activate(
-                        scope: scope,
-                        balloon: balloon,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []]
-                    )
                 case let .surface(surfaceID):
                     try surfaceWindowController.changeSurface(scope: scope, to: surfaceID)
                 case let .namedSurface(identifier):
                     try surfaceWindowController.changeSurface(scope: scope, named: identifier)
                 case .lineBreak:
                     textByScope[scope, default: ""].append("\n")
+                    try activateIfNeeded(
+                        scope: scope,
+                        balloon: balloon,
+                        text: textByScope[scope, default: ""],
+                        links: linksByScope[scope, default: []],
+                        activatedScopes: &activatedScopes
+                    )
                     updateContent(
                         scope: scope,
                         text: textByScope[scope, default: ""],
@@ -161,12 +197,6 @@ public final class SakuraScriptPlayer {
                         linksByScope.removeAll()
                         anchorsByScope.removeAll()
                     }
-                    try activate(
-                        scope: scope,
-                        balloon: balloon,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []]
-                    )
                 case let .choice(label, id, arguments):
                     if let last = textByScope[scope]?.last, last != "\n" {
                         textByScope[scope, default: ""].append("\n")
@@ -181,6 +211,13 @@ public final class SakuraScriptPlayer {
                         )
                     )
                     textByScope[scope, default: ""].append("\n")
+                    try activateIfNeeded(
+                        scope: scope,
+                        balloon: balloon,
+                        text: textByScope[scope, default: ""],
+                        links: linksByScope[scope, default: []],
+                        activatedScopes: &activatedScopes
+                    )
                     updateContent(
                         scope: scope,
                         text: textByScope[scope, default: ""],
@@ -235,15 +272,31 @@ public final class SakuraScriptPlayer {
         guard let surfaceFrame = surfaceWindowController.windowFrame(for: scope)
             ?? surfaceWindowController.windowFrame
         else { return }
-        let speaker: BalloonSpeaker = scope == 1 ? .kero : .sakura
+        let speaker: BalloonSpeaker = switch scope {
+        case 0: .sakura
+        case 1: .kero
+        default: .character(scope: scope)
+        }
         try balloonWindowController.show(
             balloon: balloon,
             text: text,
             scope: scope,
             speaker: speaker,
+            style: defaultBalloonSurfaceIDs[scope] ?? 0,
             near: surfaceFrame
         )
         updateContent(scope: scope, text: text, links: links)
+    }
+
+    private func activateIfNeeded(
+        scope: Int,
+        balloon: BalloonDefinition,
+        text: String,
+        links: [BalloonTextLink],
+        activatedScopes: inout Set<Int>
+    ) throws {
+        guard activatedScopes.insert(scope).inserted else { return }
+        try activate(scope: scope, balloon: balloon, text: text, links: links)
     }
 
     private func updateContent(scope: Int, text: String, links: [BalloonTextLink]) {
@@ -255,6 +308,7 @@ public final class SakuraScriptPlayer {
         isPlaybackComplete = true
         isWaitingForClick = false
         balloonWindowController.setWaitingForClick(false)
+        finishPlaybackWait()
         dismissalTask?.cancel()
         dismissalTask = Task { [weak self] in
             guard let self else { return }
@@ -265,6 +319,11 @@ public final class SakuraScriptPlayer {
             }
             dismissCompletedDialogue()
         }
+    }
+
+    private func finishPlaybackWait() {
+        playbackContinuation?.resume()
+        playbackContinuation = nil
     }
 
     private func dismissCompletedDialogue() {

@@ -92,18 +92,17 @@ public struct BalloonLoader: Sendable {
         style: Int = 0,
         in balloon: BalloonDefinition
     ) throws -> URL {
-        let url = balloon.directory.appending(
-            path: "balloon\(speaker.filenameMarker)\(style).png",
-            directoryHint: .notDirectory
-        )
-        guard FileManager.default.fileExists(atPath: url.path) else {
-            throw BalloonError.missingImage(
-                speaker: speaker.filenameMarker,
-                style: style,
-                directory: balloon.directory
-            )
+        for imageName in speaker.imageNames(style: style) {
+            let url = balloon.directory.appending(path: imageName, directoryHint: .notDirectory)
+            if FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
         }
-        return url
+        throw BalloonError.missingImage(
+            speaker: speaker.description,
+            style: style,
+            directory: balloon.directory
+        )
     }
 
     private func integer(

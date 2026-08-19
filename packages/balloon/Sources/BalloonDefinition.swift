@@ -55,14 +55,31 @@ public struct BalloonColor: Sendable, Equatable {
     }
 }
 
-public enum BalloonSpeaker: Sendable {
+public enum BalloonSpeaker: Sendable, Equatable {
     case sakura
     case kero
+    case character(scope: Int)
 
-    var filenameMarker: String {
+    var description: String {
         switch self {
-        case .sakura: "s"
-        case .kero: "k"
+        case .sakura: "sakura"
+        case .kero: "kero"
+        case let .character(scope): "scope \(scope)"
+        }
+    }
+
+    func imageNames(style: Int) -> [String] {
+        switch self {
+        case .sakura:
+            ["balloons\(style).png"]
+        case .kero:
+            ["balloonk\(style).png", "balloons\(style).png"]
+        case let .character(scope):
+            [
+                "balloonp\(scope)def\(style).png",
+                "balloonk\(style).png",
+                "balloons\(style).png"
+            ]
         }
     }
 }
