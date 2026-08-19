@@ -23,7 +23,7 @@ Windows向けDLLの直接実行や、Windows固有のFMOには対応していま
 2. ZIPを展開し、`Utatane.app`を「アプリケーション」フォルダへ移動する
 3. Utataneを起動する
 
-現在のpre-releaseは未署名です。macOSに起動を止められた場合は、Utataneを一度起動したあと「システム設定」→「プライバシーとセキュリティ」から実行を許可してください。将来の配布ではDeveloper IDによる署名とnotarizationを予定しています。
+現在のpre-releaseは未署名です。macOSに起動を止められた場合は、Utataneを一度起動したあと「システム設定」→「プライバシーとセキュリティ」から実行を許可してください。（または、アプリケーションのディレクトリで`sudo xattr -rc Utatane.app`を実行）
 
 ## 最初のゴーストを追加する
 
