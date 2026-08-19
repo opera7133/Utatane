@@ -39,6 +39,26 @@
       "target": "utatane-yaya-audit",
       "configuration": "release",
       "preLaunchTask": "swift: Build Release utatane-yaya-audit (packages)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:utatane}/packages",
+      "name": "Debug utatane-mcp (packages)",
+      "target": "utatane-mcp",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug utatane-mcp (packages)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:utatane}/packages",
+      "name": "Release utatane-mcp (packages)",
+      "target": "utatane-mcp",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release utatane-mcp (packages)"
     }
   ]
 }

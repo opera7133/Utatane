@@ -920,6 +920,13 @@ private struct UtataneRootView: View {
     }
 
     private func handleSSTP(_ request: SSTPRequest) async -> SSTPResponse {
+        if let command = request.value(for: "Command") {
+            return handleMCPBridgeCommand(
+                command,
+                ghostID: request.value(for: "Ghost-ID"),
+                script: request.value(for: "Script")
+            )
+        }
         guard let activeSession = session, let activeBalloon = balloon else {
             return SSTPResponse(statusCode: 503, reason: "Service Unavailable")
         }
@@ -938,6 +945,92 @@ private struct UtataneRootView: View {
         guard let script else { return SSTPResponse(statusCode: 204, reason: "No Content") }
         scriptPlayer.play(script, balloon: activeBalloon)
         return SSTPResponse(script: script.rawValue)
+    }
+
+    private func handleMCPBridgeCommand(
+        _ command: String,
+        ghostID: String?,
+        script: String?
+    ) -> SSTPResponse {
+        switch command {
+        case "GetActiveGhostList":
+            return jsonSSTPResponse(activeGhostDescriptions())
+        case "GetExpressionTable":
+            guard let ghostID,
+                  let shell = activeShell(for: ghostID),
+                  let definition = try? shellLoader.load(from: shell.directory)
+            else { return SSTPResponse(statusCode: 404, reason: "Ghost Not Found") }
+            let imageIDs = (try? FileManager.default.contentsOfDirectory(atPath: shell.directory.path))?
+                .compactMap(surfaceID(fromImageFilename:)) ?? []
+            let aliases = definition.surfaceAliases.flatMap { scope, entries in
+                entries.map { name, surfaces in
+                    ["scope": scope, "name": name, "surfaces": surfaces] as [String: Any]
+                }
+            }
+            return jsonSSTPResponse([
+                "ghost_id": ghostID,
+                "shell": shell.name,
+                "surfaces": Array(Set(definition.surfaces.keys).union(imageIDs)).sorted(),
+                "aliases": aliases
+            ])
+        case "SakuraScript":
+            guard let script else { return SSTPResponse(statusCode: 400, reason: "Script Required") }
+            let sakuraScript = SakuraScript(rawValue: script.replacingOccurrences(of: "\\n", with: "\n"))
+            if let ghostID, ghostID != currentGhost?.rootDirectory.lastPathComponent {
+                guard let runtime = calledGhosts.values.first(where: {
+                    $0.ghost.rootDirectory.lastPathComponent == ghostID
+                }) else { return SSTPResponse(statusCode: 404, reason: "Ghost Not Found") }
+                runtime.player.play(sakuraScript, balloon: runtime.balloon)
+            } else if let balloon {
+                scriptPlayer.play(sakuraScript, balloon: balloon)
+            } else {
+                return SSTPResponse(statusCode: 503, reason: "Service Unavailable")
+            }
+            return SSTPResponse(statusCode: 204, reason: "No Content")
+        default:
+            return SSTPResponse(statusCode: 400, reason: "Unknown Command")
+        }
+    }
+
+    private func activeGhostDescriptions() -> [[String: Any]] {
+        var ghosts: [(InstalledGhost, InstalledShell?, BalloonDefinition?)] = []
+        if let currentGhost {
+            ghosts.append((currentGhost, selectedShell, balloon))
+        }
+        ghosts.append(contentsOf: calledGhosts.values.map { ($0.ghost, $0.shell, $0.balloon) })
+        return ghosts.map { ghost, shell, balloon in
+            [
+                "id": ghost.rootDirectory.lastPathComponent,
+                "name": ghost.name,
+                "sakura_name": ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                "kero_name": ghost.characters.first(where: { $0.scope == 1 })?.name ?? "",
+                "shell": shell?.name ?? "",
+                "balloon": balloon?.name ?? ""
+            ]
+        }
+    }
+
+    private func activeShell(for ghostID: String) -> InstalledShell? {
+        if currentGhost?.rootDirectory.lastPathComponent == ghostID {
+            return selectedShell
+        }
+        return calledGhosts.values.first {
+            $0.ghost.rootDirectory.lastPathComponent == ghostID
+        }?.shell
+    }
+
+    private func jsonSSTPResponse(_ object: Any) -> SSTPResponse {
+        guard JSONSerialization.isValidJSONObject(object),
+              let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]),
+              let json = String(data: data, encoding: .utf8)
+        else { return SSTPResponse(statusCode: 500, reason: "Serialization Error") }
+        return SSTPResponse(script: json)
+    }
+
+    private func surfaceID(fromImageFilename filename: String) -> Int? {
+        let name = filename.lowercased()
+        guard name.hasPrefix("surface"), name.hasSuffix(".png") else { return nil }
+        return Int(name.dropFirst("surface".count).dropLast(".png".count))
     }
 
     private func installNars(from urls: [URL]) {

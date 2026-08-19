@@ -68,6 +68,28 @@ mise run test
 
 cloneするときに`--recurse-submodules`を指定した場合、最初のsubmodule更新は不要です。
 
+## MCPサーバー
+
+配布版のUtataneには、起動中のゴーストをAIクライアントから操作するstdio形式のMCPサーバーが同梱されています。Utataneを「アプリケーション」フォルダへ置いた場合は、MCPクライアントへ次のように登録します。
+
+```json
+{
+  "mcpServers": {
+    "utatane": {
+      "command": "/Applications/Utatane.app/Contents/Helpers/utatane-mcp"
+    }
+  }
+}
+```
+
+Utataneを先に起動しておく必要があります。`get_active_ghost_list`、`get_expression_table`、`SakuraScript`の3ツールが利用できます。接続はlocalhostのSSTP over HTTPだけを使用します。
+
+ソースからMCPサーバーだけをビルドする場合は、次を実行し、生成された実行ファイルの絶対パスを`command`へ指定します。
+
+```sh
+swift build --package-path packages -c release --product utatane-mcp
+```
+
 ## 開発用コンテンツ
 
 Debugビルドでは、次の場所にローカルコンテンツを配置できます。

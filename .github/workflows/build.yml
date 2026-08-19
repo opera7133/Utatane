@@ -41,6 +41,26 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             build
 
+      - name: Build universal MCP server
+        run: |
+          swift build \
+            --package-path packages \
+            --configuration release \
+            --arch arm64 \
+            --arch x86_64 \
+            --product utatane-mcp
+
+      - name: Embed MCP server
+        run: |
+          mkdir -p build/Build/Products/Release/Utatane.app/Contents/Helpers
+          cp \
+            packages/.build/apple/Products/Release/utatane-mcp \
+            build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
+          chmod 755 build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
+          lipo \
+            build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp \
+            -verify_arch arm64 x86_64
+
       - name: Package
         run: |
           mkdir -p dist

@@ -17,7 +17,8 @@ let package = Package(
         .library(name: "UtataneShiori", targets: ["UtataneShiori"]),
         .library(name: "UtataneYayaNative", targets: ["UtataneYayaNative"]),
         .library(name: "UtataneSatoriNative", targets: ["UtataneSatoriNative"]),
-        .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"])
+        .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"]),
+        .executable(name: "utatane-mcp", targets: ["UtataneMCP"])
     ],
     targets: [
         .target(
@@ -49,6 +50,10 @@ let package = Package(
         .target(
             name: "UtataneNetwork",
             path: "network/Sources"
+        ),
+        .executableTarget(
+            name: "UtataneMCP",
+            path: "mcp-server/Sources"
         ),
         .target(
             name: "UtataneShell",
@@ -207,6 +212,11 @@ let package = Package(
             name: "UtataneNetworkTests",
             dependencies: ["UtataneNetwork"],
             path: "network/Tests"
+        ),
+        .testTarget(
+            name: "UtataneMCPTests",
+            dependencies: ["UtataneMCP"],
+            path: "mcp-server/Tests"
         ),
         .testTarget(
             name: "UtataneShellTests",
