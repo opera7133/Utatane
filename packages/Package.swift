@@ -15,13 +15,9 @@ let package = Package(
         .library(name: "UtataneShell", targets: ["UtataneShell"]),
         .library(name: "UtataneRuntime", targets: ["UtataneRuntime"]),
         .library(name: "UtataneShiori", targets: ["UtataneShiori"]),
-        .library(name: "UtataneYaya", targets: ["UtataneYaya"]),
         .library(name: "UtataneYayaNative", targets: ["UtataneYayaNative"]),
         .library(name: "UtataneSatoriNative", targets: ["UtataneSatoriNative"]),
-        .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"]),
-        .library(name: "UtataneSatoriConverter", targets: ["UtataneSatoriConverter"]),
-        .executable(name: "utatane-satori-convert", targets: ["UtataneSatoriConvertCLI"]),
-        .executable(name: "utatane-yaya-audit", targets: ["UtataneYayaAuditCLI"])
+        .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"])
     ],
     targets: [
         .target(
@@ -71,19 +67,9 @@ let package = Package(
             path: "platform-macos/Sources"
         ),
         .target(
-            name: "UtataneSatoriConverter",
-            dependencies: ["UtataneRuntime"],
-            path: "satori-converter/Sources"
-        ),
-        .target(
             name: "UtataneShiori",
             dependencies: ["UtataneCore"],
             path: "shiori/Sources"
-        ),
-        .target(
-            name: "UtataneYaya",
-            dependencies: ["UtataneShiori"],
-            path: "yaya/Sources"
         ),
         .target(
             name: "CYayaNative",
@@ -192,16 +178,6 @@ let package = Package(
             ],
             path: "satori-native/Sources/UtataneSatoriNative"
         ),
-        .executableTarget(
-            name: "UtataneSatoriConvertCLI",
-            dependencies: ["UtataneSatoriConverter"],
-            path: "satori-converter/CLI"
-        ),
-        .executableTarget(
-            name: "UtataneYayaAuditCLI",
-            dependencies: ["UtataneYaya"],
-            path: "yaya/CLI"
-        ),
         .testTarget(
             name: "UtataneBalloonTests",
             dependencies: ["UtataneBalloon"],
@@ -248,19 +224,9 @@ let package = Package(
             path: "platform-macos/Tests"
         ),
         .testTarget(
-            name: "UtataneSatoriConverterTests",
-            dependencies: ["UtataneSatoriConverter"],
-            path: "satori-converter/Tests"
-        ),
-        .testTarget(
             name: "UtataneShioriTests",
             dependencies: ["UtataneCore", "UtataneShiori"],
             path: "shiori/Tests"
-        ),
-        .testTarget(
-            name: "UtataneYayaTests",
-            dependencies: ["UtataneYaya"],
-            path: "yaya/Tests"
         ),
         .testTarget(
             name: "UtataneYayaNativeTests",

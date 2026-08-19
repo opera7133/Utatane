@@ -7,7 +7,8 @@ public final class SakuraScriptPlayer {
     private let parser = SakuraScriptParser()
     private let surfaceWindowController: SurfaceWindowController
     private let balloonWindowController: BalloonWindowController
-    private let postDialogueDismissalMilliseconds: Int
+    private var characterDelayMilliseconds = 50
+    private var postDialogueDismissalMilliseconds: Int
     private var playbackTask: Task<Void, Never>?
     private var dismissalTask: Task<Void, Never>?
     private var fastForwardRequested = false
@@ -44,7 +45,7 @@ public final class SakuraScriptPlayer {
     public func play(
         _ script: SakuraScript,
         balloon: BalloonDefinition,
-        characterDelayMilliseconds: Int = 50
+        characterDelayMilliseconds: Int? = nil
     ) {
         finishPlaybackWait()
         playbackTask?.cancel()
@@ -56,11 +57,12 @@ public final class SakuraScriptPlayer {
         balloonWindowController.hideAll()
         balloonWindowController.setWaitingForClick(false)
         let tokens = parser.parse(script)
+        let effectiveCharacterDelay = characterDelayMilliseconds ?? self.characterDelayMilliseconds
         playbackTask = Task { [weak self] in
             await self?.run(
                 tokens,
                 balloon: balloon,
-                characterDelayMilliseconds: characterDelayMilliseconds
+                characterDelayMilliseconds: effectiveCharacterDelay
             )
             guard !Task.isCancelled else { return }
             self?.playbackDidFinish()
@@ -70,7 +72,7 @@ public final class SakuraScriptPlayer {
     public func playAndWait(
         _ script: SakuraScript,
         balloon: BalloonDefinition,
-        characterDelayMilliseconds: Int = 50
+        characterDelayMilliseconds: Int? = nil
     ) async {
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
@@ -90,6 +92,14 @@ public final class SakuraScriptPlayer {
 
     public func configure(defaultBalloonSurfaceIDs: [Int: Int]) {
         self.defaultBalloonSurfaceIDs = defaultBalloonSurfaceIDs
+    }
+
+    public func configurePlayback(
+        characterDelayMilliseconds: Int,
+        postDialogueDismissalMilliseconds: Int
+    ) {
+        self.characterDelayMilliseconds = max(0, characterDelayMilliseconds)
+        self.postDialogueDismissalMilliseconds = max(0, postDialogueDismissalMilliseconds)
     }
 
     public func cancel() {

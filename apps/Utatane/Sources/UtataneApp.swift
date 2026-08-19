@@ -26,7 +26,7 @@ struct UtataneApp: App {
     private let scriptPlayer: SakuraScriptPlayer
     private let selectionStore: ContentSelectionStore
     private let sstpServer: SSTPServer
-    @StateObject private var networkSettings: NetworkSettingsStore
+    @StateObject private var networkSettings: UtataneSettingsStore
 
     init() {
         let positionStore = WindowPositionStore()
@@ -42,7 +42,7 @@ struct UtataneApp: App {
         balloonLoader = BalloonLoader()
         selectionStore = ContentSelectionStore()
         sstpServer = SSTPServer()
-        _networkSettings = StateObject(wrappedValue: NetworkSettingsStore())
+        _networkSettings = StateObject(wrappedValue: UtataneSettingsStore())
         scriptPlayer = SakuraScriptPlayer(
             surfaceWindowController: surfaceWindowController,
             balloonWindowController: balloonWindowController
@@ -70,6 +70,37 @@ struct UtataneApp: App {
                 headlinesDirectory: ContentRoot.headlinesDirectory
             )
         }
+        .commands {
+            CommandGroup(replacing: .appInfo) {
+                Button("Utataneについて") {
+                    showAboutPanel()
+                }
+            }
+        }
+    }
+
+    private func showAboutPanel() {
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.alignment = .center
+        let credits = NSAttributedString(
+            string: "macOS向け伺か互換ベースウェア",
+            attributes: [
+                .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .paragraphStyle: paragraph
+            ]
+        )
+        var options: [NSApplication.AboutPanelOptionKey: Any] = [
+            .applicationName: "Utatane",
+            .applicationVersion: "バージョン \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-")",
+            .version: "ビルド \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-")",
+            .credits: credits
+        ]
+        if let applicationIcon = NSApplication.shared.applicationIconImage {
+            options[.applicationIcon] = applicationIcon
+        }
+        NSApplication.shared.orderFrontStandardAboutPanel(options: options)
+        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 }
 
@@ -82,7 +113,7 @@ private struct UtataneRootView: View {
     let scriptPlayer: SakuraScriptPlayer
     let selectionStore: ContentSelectionStore
     let sstpServer: SSTPServer
-    @ObservedObject var networkSettings: NetworkSettingsStore
+    @ObservedObject var networkSettings: UtataneSettingsStore
     let applicationDelegate: UtataneApplicationDelegate
 
     @Environment(\.openSettings) private var openSettings
@@ -99,6 +130,7 @@ private struct UtataneRootView: View {
     @State private var isEnteringRSSURL = false
     @State private var rssURLText = ""
     @State private var installedHeadlines: [InstalledHeadline] = []
+    @State private var debugWindow: NSWindow?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -141,12 +173,25 @@ private struct UtataneRootView: View {
                 $0.rootDirectory.lastPathComponent == selectionStore.ghostDirectoryName
             }
             selectedGhostID = selectedGhostID ?? restoredGhost?.id ?? model.ghosts.first?.id
+            configurePlayback()
             do {
                 try sstpServer.start { request in
                     await handleSSTP(request)
                 }
             } catch {
                 previewError = error.localizedDescription
+            }
+        }
+        .task(id: "\(networkSettings.characterDelayMilliseconds)-\(networkSettings.dialogueDismissalSeconds)") {
+            configurePlayback()
+        }
+        .task(id: networkSettings.randomTalkIntervalMinutes) {
+            let interval = networkSettings.randomTalkIntervalMinutes
+            guard interval > 0 else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(interval * 60))
+                guard !Task.isCancelled else { return }
+                sendEvent(.randomTalk)
             }
         }
         .task(id: selectedGhostID) {
@@ -206,6 +251,15 @@ private struct UtataneRootView: View {
             scriptPlayer.cancel()
             sstpServer.stop()
         }
+        .background {
+            DebugWindowReader { window in
+                debugWindow = window
+                updateDebugWindowVisibility()
+            }
+        }
+        .onChange(of: networkSettings.showsDebugWindow) {
+            updateDebugWindowVisibility()
+        }
     }
 
     private func sendEvent(_ event: GhostEvent) {
@@ -250,6 +304,10 @@ private struct UtataneRootView: View {
         session = nil
         balloon = nil
         currentGhost = ghost
+        networkSettings.activateGhost(
+            directoryName: ghost.rootDirectory.lastPathComponent,
+            displayName: ghost.name
+        )
         surfaceWindowController.setPositionContentID(ghost.id)
         balloonWindowController.setPositionContentID(ghost.id)
         selectionStore.ghostDirectoryName = ghost.rootDirectory.lastPathComponent
@@ -470,10 +528,36 @@ private struct UtataneRootView: View {
                         .action(title: "URLを指定して取得…", handler: { isEnteringRSSURL = true })
                     ]
                 ),
-                .action(title: "設定…", handler: { openSettings() }),
+                .action(
+                    title: "設定",
+                    handler: {
+                            networkSettings.selectedPane = .general
+                            openSettings()
+                    }
+                ),
+                .action(title: "デバッグ画面を表示", handler: {
+                    networkSettings.showsDebugWindow = true
+                    updateDebugWindowVisibility()
+                }),
                 .separator,
                 .action(title: "Utataneを終了", handler: { NSApplication.shared.terminate(nil) })
             ]
+        }
+    }
+
+    private func configurePlayback() {
+        scriptPlayer.configurePlayback(
+            characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
+            postDialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000
+        )
+    }
+
+    private func updateDebugWindowVisibility() {
+        guard let debugWindow else { return }
+        if networkSettings.showsDebugWindow {
+            debugWindow.makeKeyAndOrderFront(nil)
+        } else {
+            debugWindow.orderOut(nil)
         }
     }
 
@@ -752,6 +836,40 @@ private enum AppError: LocalizedError {
         switch self {
         case let .missingResource(name):
             "アプリ内リソースが見つからない: \(name)"
+        }
+    }
+}
+
+private struct DebugWindowReader: NSViewRepresentable {
+    let onWindowAvailable: @MainActor (NSWindow) -> Void
+
+    func makeNSView(context _: Context) -> DebugWindowReaderView {
+        DebugWindowReaderView(onWindowAvailable: onWindowAvailable)
+    }
+
+    func updateNSView(_ nsView: DebugWindowReaderView, context _: Context) {
+        nsView.onWindowAvailable = onWindowAvailable
+    }
+}
+
+private final class DebugWindowReaderView: NSView {
+    var onWindowAvailable: @MainActor (NSWindow) -> Void
+
+    init(onWindowAvailable: @escaping @MainActor (NSWindow) -> Void) {
+        self.onWindowAvailable = onWindowAvailable
+        super.init(frame: .zero)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window else { return }
+        Task { @MainActor [onWindowAvailable] in
+            onWindowAvailable(window)
         }
     }
 }
