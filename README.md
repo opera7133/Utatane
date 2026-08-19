@@ -1,6 +1,6 @@
 # Utatane
 
-Utataneは、伺か（デスクトップマスコット）をmacOSで動かすための本体アプリです。
+Utataneは、伺かをmacOSで動かすための本体アプリです。
 
 現在は開発中です。既存のゴーストとの互換性を少しずつ広げていますが、SSPのすべての機能にはまだ対応していません。
 
@@ -17,13 +17,39 @@ Utataneは、伺か（デスクトップマスコット）をmacOSで動かす�
 
 Windows向けDLLの直接実行や、Windows固有のFMOには対応していません。ゴーストによっては表示や動作に互換性の問題があります。
 
-## 必要な環境
+## インストール
+
+1. [Releases](../../releases)から最新のpre-releaseにある`Utatane-macOS.zip`をダウンロードする
+2. ZIPを展開し、`Utatane.app`を「アプリケーション」フォルダへ移動する
+3. Utataneを起動する
+
+現在のpre-releaseは未署名です。macOSに起動を止められた場合は、Utataneを一度起動したあと「システム設定」→「プライバシーとセキュリティ」から実行を許可してください。将来の配布ではDeveloper IDによる署名とnotarizationを予定しています。
+
+## 最初のゴーストを追加する
+
+Utataneにはゴーストやバルーンを同梱していません。初回起動時に表示される案内から、次のいずれかを選べます。
+
+- 配布されているゴーストのNARをインストールする
+- 展開済みのSSPフォルダから`ghost`と`balloon`を取り込む
+- UtataneのコンテンツフォルダをFinderで表示する
+
+SSPから取り込む場合は、SSP本体のZIPを別途ダウンロードして展開し、そのフォルダを「SSPフォルダから取り込む」で選択してください。同名のコンテンツは上書きしません。
+
+インストールしたコンテンツは次の場所に保存されます。
+
+```text
+~/Library/Application Support/Utatane/Ghosts
+~/Library/Application Support/Utatane/Balloons
+~/Library/Application Support/Utatane/Headline
+```
+
+## ソースからビルド
+
+必要な環境:
 
 - macOS 14以降
 - Xcode 26以降
 - [mise](https://mise.jdx.dev/)
-
-## ビルド
 
 ```sh
 git submodule update --init --recursive
@@ -42,7 +68,7 @@ mise run test
 
 cloneするときに`--recurse-submodules`を指定した場合、最初のsubmodule更新は不要です。
 
-## ゴーストを試す
+## 開発用コンテンツ
 
 Debugビルドでは、次の場所にローカルコンテンツを配置できます。
 
@@ -52,7 +78,7 @@ Content/Local/Balloons/     バルーン
 Content/Local/Headline/     HEADLINEモジュール
 ```
 
-アプリ起動後は、キャラクターの右クリックメニューからNARをインストールすることもできます。
+アプリ起動後は、初回案内またはキャラクターの右クリックメニューからNARをインストールすることもできます。
 
 ## リポジトリ構成
 
@@ -62,8 +88,6 @@ packages/           パーサー、ランタイム、表示、人格エンジン
 Content/Local/      開発用のローカルコンテンツ
 Design/             デザイン素材
 ```
-
-Xcodeプロジェクトは`project.yml`からXcodeGenで生成します。`Utatane.xcodeproj`は生成物のため、Gitには含めません。
 
 ## ライセンス
 

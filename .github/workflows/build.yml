@@ -1,0 +1,71 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Test
+        run: swift test --package-path packages
+
+      - name: Generate Xcode project
+        run: xcodegen generate
+
+      - name: Build universal app
+        run: |
+          xcodebuild \
+            -project Utatane.xcodeproj \
+            -scheme Utatane \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath build \
+            ARCHS='arm64 x86_64' \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          ditto -c -k --keepParent \
+            build/Build/Products/Release/Utatane.app \
+            dist/Utatane-macOS.zip
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Utatane-macOS
+          path: dist/Utatane-macOS.zip
+          retention-days: 14
+
+      - name: Publish pre-release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/Utatane-macOS.zip --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" \
+              dist/Utatane-macOS.zip \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes \
+              --prerelease
+          fi

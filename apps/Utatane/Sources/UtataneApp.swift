@@ -8,8 +8,8 @@ import UtataneGhostKit
 import UtataneNetwork
 import UtatanePlatformMacOS
 import UtataneRuntime
-import UtataneSatoriNative
 import UtataneSakuraScript
+import UtataneSatoriNative
 import UtataneShell
 import UtataneYayaNative
 
@@ -131,43 +131,56 @@ private struct UtataneRootView: View {
     @State private var rssURLText = ""
     @State private var installedHeadlines: [InstalledHeadline] = []
     @State private var debugWindow: NSWindow?
+    @State private var showsOnboarding = false
+    @State private var isImportingSSPDirectory = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            GhostListView(model: model, selection: $selectedGhostID)
-            Divider()
-            HStack {
-                Text("クリック判定")
-                Spacer()
-                Text(lastClickedRegion ?? "未検出")
-                    .foregroundStyle(.secondary)
-                Button("ゆっくり再生") {
-                    surfaceWindowController.playAnimation(
-                        id: 0,
-                        minimumFrameDurationMilliseconds: 3000
-                    )
-                }
-                Button("ランダムトーク") {
-                    sendEvent(.randomTalk)
-                }
-                .disabled(session == nil)
-                Button("進む") {
-                    scriptPlayer.advance()
-                }
-                Button("停止") {
-                    scriptPlayer.cancel()
-                }
-                Button("NARをインストール") {
-                    isImportingNar = true
+        Group {
+            if showsOnboarding {
+                WelcomeView(
+                    installNar: { isImportingNar = true },
+                    importSSP: { isImportingSSPDirectory = true },
+                    showContentFolder: showContentFolder
+                )
+            } else {
+                VStack(spacing: 0) {
+                    GhostListView(model: model, selection: $selectedGhostID)
+                    Divider()
+                    HStack {
+                        Text("クリック判定")
+                        Spacer()
+                        Text(lastClickedRegion ?? "未検出")
+                            .foregroundStyle(.secondary)
+                        Button("ゆっくり再生") {
+                            surfaceWindowController.playAnimation(
+                                id: 0,
+                                minimumFrameDurationMilliseconds: 3000
+                            )
+                        }
+                        Button("ランダムトーク") {
+                            sendEvent(.randomTalk)
+                        }
+                        .disabled(session == nil)
+                        Button("進む") {
+                            scriptPlayer.advance()
+                        }
+                        Button("停止") {
+                            scriptPlayer.cancel()
+                        }
+                        Button("NARをインストール") {
+                            isImportingNar = true
+                        }
+                    }
+                    .padding(12)
                 }
             }
-            .padding(12)
         }
         .task {
             applicationDelegate.onTerminationRequest = {
                 requestApplicationTermination()
             }
             await model.load()
+            showsOnboarding = model.ghosts.isEmpty
             reloadHeadlines()
             let restoredGhost = model.ghosts.first {
                 $0.rootDirectory.lastPathComponent == selectionStore.ghostDirectoryName
@@ -225,8 +238,21 @@ private struct UtataneRootView: View {
                 }
             }
         }
+        .fileImporter(
+            isPresented: $isImportingSSPDirectory,
+            allowedContentTypes: [.folder]
+        ) { result in
+            switch result {
+            case let .success(url):
+                importSSPContents(from: url)
+            case let .failure(error):
+                if !error.isUserCancelledFileImport {
+                    previewError = error.localizedDescription
+                }
+            }
+        }
         .alert(
-            "プレビューを表示できなかった",
+            "エラー",
             isPresented: Binding(
                 get: { previewError != nil },
                 set: {
@@ -258,6 +284,9 @@ private struct UtataneRootView: View {
             }
         }
         .onChange(of: networkSettings.showsDebugWindow) {
+            updateDebugWindowVisibility()
+        }
+        .onChange(of: showsOnboarding) {
             updateDebugWindowVisibility()
         }
     }
@@ -531,8 +560,8 @@ private struct UtataneRootView: View {
                 .action(
                     title: "設定",
                     handler: {
-                            networkSettings.selectedPane = .general
-                            openSettings()
+                        networkSettings.selectedPane = .general
+                        openSettings()
                     }
                 ),
                 .action(title: "デバッグ画面を表示", handler: {
@@ -554,7 +583,7 @@ private struct UtataneRootView: View {
 
     private func updateDebugWindowVisibility() {
         guard let debugWindow else { return }
-        if networkSettings.showsDebugWindow {
+        if showsOnboarding || networkSettings.showsDebugWindow {
             debugWindow.makeKeyAndOrderFront(nil)
         } else {
             debugWindow.orderOut(nil)
@@ -602,7 +631,9 @@ private struct UtataneRootView: View {
                     session: updateSession,
                     balloon: updateBalloon
                 )
-                if !handled { previewError = error.localizedDescription }
+                if !handled {
+                    previewError = error.localizedDescription
+                }
             }
         }
     }
@@ -647,7 +678,9 @@ private struct UtataneRootView: View {
                 session: rssSession,
                 balloon: rssBalloon
             )
-            if !handled { previewError = error.localizedDescription }
+            if !handled {
+                previewError = error.localizedDescription
+            }
         }
     }
 
@@ -723,6 +756,11 @@ private struct UtataneRootView: View {
                     installedItems.append(contentsOf: result.items)
                 }
                 await model.load()
+                if selectedGhostID == nil {
+                    selectedGhostID = model.ghosts.first?.id
+                }
+                showsOnboarding = model.ghosts.isEmpty
+                updateDebugWindowVisibility()
                 if let refreshedGhost = model.ghosts.first(where: {
                     $0.id.standardizedFileURL == selectedGhostID?.standardizedFileURL
                 }) {
@@ -735,9 +773,9 @@ private struct UtataneRootView: View {
                 let separator = "\u{1}"
                 _ = await playInstallationEvent(
                     .shiori(id: "OnInstallCompleteEx", references: [
-                        0: installedItems.map { $0.type.rawValue }.joined(separator: separator),
+                        0: installedItems.map(\.type.rawValue).joined(separator: separator),
                         1: installedItems.map(\.name).joined(separator: separator),
-                        2: installedItems.map { $0.url.lastPathComponent }.joined(separator: separator)
+                        2: installedItems.map(\.url.lastPathComponent).joined(separator: separator)
                     ]),
                     session: installSession,
                     balloon: installBalloon
@@ -752,6 +790,47 @@ private struct UtataneRootView: View {
                     previewError = error.localizedDescription
                 }
             }
+        }
+    }
+
+    private func importSSPContents(from url: URL) {
+        Task {
+            let hasSecurityScope = url.startAccessingSecurityScopedResource()
+            defer {
+                if hasSecurityScope {
+                    url.stopAccessingSecurityScopedResource()
+                }
+            }
+            do {
+                _ = try await Task.detached {
+                    try SSPContentImporter().importContents(
+                        from: url,
+                        ghostsDirectory: ContentRoot.ghostsDirectory,
+                        balloonsDirectory: ContentRoot.balloonsDirectory
+                    )
+                }.value
+                await model.load()
+                installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonsDirectory)
+                if selectedGhostID == nil {
+                    selectedGhostID = model.ghosts.first?.id
+                }
+                showsOnboarding = model.ghosts.isEmpty
+                updateDebugWindowVisibility()
+            } catch {
+                previewError = error.localizedDescription
+            }
+        }
+    }
+
+    private func showContentFolder() {
+        do {
+            try FileManager.default.createDirectory(
+                at: ContentRoot.contentDirectory,
+                withIntermediateDirectories: true
+            )
+            NSWorkspace.shared.open(ContentRoot.contentDirectory)
+        } catch {
+            previewError = error.localizedDescription
         }
     }
 
@@ -840,6 +919,47 @@ private enum AppError: LocalizedError {
     }
 }
 
+private struct WelcomeView: View {
+    let installNar: () -> Void
+    let importSSP: () -> Void
+    let showContentFolder: () -> Void
+
+    var body: some View {
+        VStack(spacing: 22) {
+            Image(nsImage: NSApplication.shared.applicationIconImage)
+                .resizable()
+                .scaledToFit()
+                .frame(width: 88, height: 88)
+
+            VStack(spacing: 8) {
+                Text("Utataneへようこそ")
+                    .font(.title.bold())
+                Text("表示するゴーストがまだありません。NARをインストールするか、\n展開済みのSSPフォルダからゴーストとバルーンを取り込んでください。")
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            VStack(spacing: 10) {
+                Button("NARをインストール…", action: installNar)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                Button("SSPフォルダから取り込む…", action: importSSP)
+                    .controlSize(.large)
+                Button("コンテンツフォルダをFinderで表示", action: showContentFolder)
+                    .buttonStyle(.link)
+            }
+
+            Text("SSP本体をZIPから展開したあと、そのフォルダを選択できます。")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(36)
+        .frame(minWidth: 520, minHeight: 430)
+    }
+}
+
 private struct DebugWindowReader: NSViewRepresentable {
     let onWindowAvailable: @MainActor (NSWindow) -> Void
 
@@ -875,6 +995,13 @@ private final class DebugWindowReaderView: NSView {
 }
 
 private enum ContentRoot {
+    static var contentDirectory: URL {
+        FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        )[0].appending(path: "Utatane", directoryHint: .isDirectory)
+    }
+
     static func variableStoreURL(for ghost: InstalledGhost) -> URL {
         FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -917,10 +1044,7 @@ private enum ContentRoot {
             }
         #endif
 
-        return FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        )[0].appending(path: "Utatane/Ghosts", directoryHint: .isDirectory)
+        return contentDirectory.appending(path: "Ghosts", directoryHint: .isDirectory)
     }
 
     static var balloonsDirectory: URL {
@@ -938,10 +1062,7 @@ private enum ContentRoot {
             }
         #endif
 
-        return FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        )[0].appending(path: "Utatane/Balloons", directoryHint: .isDirectory)
+        return contentDirectory.appending(path: "Balloons", directoryHint: .isDirectory)
     }
 
     static var headlinesDirectory: URL {
@@ -959,10 +1080,7 @@ private enum ContentRoot {
             }
         #endif
 
-        return FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        )[0].appending(path: "Utatane/Headline", directoryHint: .isDirectory)
+        return contentDirectory.appending(path: "Headline", directoryHint: .isDirectory)
     }
 
     private static var repositoryRoot: URL {
