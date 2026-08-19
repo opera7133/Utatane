@@ -68,6 +68,7 @@ func `loads the installed twin shell surfaces`(shellDirectoryName: String) throw
         path: "Content/Local/Ghosts/twin/shell/\(shellDirectoryName)",
         directoryHint: .isDirectory
     )
+    guard FileManager.default.fileExists(atPath: shellDirectory.path) else { return }
     let loader = ShellLoader()
     let shell = try loader.load(from: shellDirectory)
     #expect(shell.usesSelfAlpha)
@@ -86,10 +87,12 @@ func `renders both installed twin characters with default bindings`() throws {
         .deletingLastPathComponent()
         .deletingLastPathComponent()
         .deletingLastPathComponent()
-    let shell = try ShellLoader().load(from: repositoryRoot.appending(
+    let shellDirectory = repositoryRoot.appending(
         path: "Content/Local/Ghosts/twin/shell/master",
         directoryHint: .isDirectory
-    ))
+    )
+    guard FileManager.default.fileExists(atPath: shellDirectory.path) else { return }
+    let shell = try ShellLoader().load(from: shellDirectory)
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
     let controller = SurfaceWindowController(positionStore: positionStore)
