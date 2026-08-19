@@ -18,6 +18,8 @@ final class UtataneSettingsStore: ObservableObject {
         static let randomTalkIntervalMinutes = "talk.randomTalkIntervalMinutes"
         static let dialogueDismissalSeconds = "balloon.dialogueDismissalSeconds"
         static let showsDebugWindow = "debug.showsWindow"
+        static let wineExecutablePath = "windowsShiori.wineExecutablePath"
+        static let winePrefixPath = "windowsShiori.winePrefixPath"
     }
 
     @Published var automaticHeadlineRefresh: Bool {
@@ -48,6 +50,12 @@ final class UtataneSettingsStore: ObservableObject {
     @Published var showsDebugWindow: Bool {
         didSet { defaults.set(showsDebugWindow, forKey: Key.showsDebugWindow) }
     }
+    @Published var wineExecutablePath: String {
+        didSet { defaults.set(wineExecutablePath, forKey: Key.wineExecutablePath) }
+    }
+    @Published var winePrefixPath: String {
+        didSet { defaults.set(winePrefixPath, forKey: Key.winePrefixPath) }
+    }
     @Published var selectedPane: Pane = .general
     @Published private(set) var activeGhostName: String?
 
@@ -70,6 +78,8 @@ final class UtataneSettingsStore: ObservableObject {
             fallback: 10
         )
         showsDebugWindow = defaults.bool(forKey: Key.showsDebugWindow)
+        wineExecutablePath = defaults.string(forKey: Key.wineExecutablePath) ?? ""
+        winePrefixPath = defaults.string(forKey: Key.winePrefixPath) ?? ""
     }
 
     private static func positiveValue(_ value: Int, fallback: Int) -> Int {
@@ -213,6 +223,13 @@ struct UtataneSettingsView: View {
                 Section("開発用") {
                     Toggle("デバッグ画面を表示", isOn: $settings.showsDebugWindow)
                     Text("ゴースト一覧、クリック判定、再生操作を表示する。通常の利用では非表示でよい。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("Windows SHIORI") {
+                    TextField("Wine実行ファイル", text: $settings.wineExecutablePath)
+                    TextField("WINEPREFIX", text: $settings.winePrefixPath)
+                    Text("両方を設定した場合だけMateriaのFIRSTを起動する。32-bit Windowsアプリを実行できるWineと、専用のprefixを指定する。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

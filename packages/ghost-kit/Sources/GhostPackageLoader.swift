@@ -40,7 +40,8 @@ public struct GhostPackageLoader: Sendable {
             rootDirectory: rootDirectory,
             defaultShellDirectory: shellDirectory,
             shells: shells,
-            characters: characters(from: metadata)
+            characters: characters(from: metadata),
+            shioriFilename: metadata["shiori"]
         )
     }
 

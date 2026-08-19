@@ -17,6 +17,7 @@ func `loads and names every installed shell with master as default`() throws {
     }
     try Data("""
     name,Test Ghost
+    shiori,first.dll
     sakura.name,Emily
     sakura.seriko.defaultsurface,1
     sakura.balloon.defaultsurface,2
@@ -40,6 +41,7 @@ func `loads and names every installed shell with master as default`() throws {
     #expect(ghost.name == "Test Ghost")
     #expect(ghost.defaultShellDirectory.standardizedFileURL == master.standardizedFileURL)
     #expect(ghost.shells.map(\.name) == ["Default Shell", "Alternate Shell"])
+    #expect(ghost.shioriFilename == "first.dll")
     #expect(ghost.characters == [
         InstalledGhostCharacter(
             scope: 0,

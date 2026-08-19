@@ -15,6 +15,7 @@ let package = Package(
         .library(name: "UtataneShell", targets: ["UtataneShell"]),
         .library(name: "UtataneRuntime", targets: ["UtataneRuntime"]),
         .library(name: "UtataneShiori", targets: ["UtataneShiori"]),
+        .library(name: "UtataneWindowsShiori", targets: ["UtataneWindowsShiori"]),
         .library(name: "UtataneYayaNative", targets: ["UtataneYayaNative"]),
         .library(name: "UtataneSatoriNative", targets: ["UtataneSatoriNative"]),
         .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"]),
@@ -75,6 +76,16 @@ let package = Package(
             name: "UtataneShiori",
             dependencies: ["UtataneCore"],
             path: "shiori/Sources"
+        ),
+        .target(
+            name: "UtataneWindowsShiori",
+            dependencies: [
+                "UtataneCore",
+                "UtataneRuntime",
+                "UtataneSakuraScript",
+                "UtataneShiori"
+            ],
+            path: "windows-shiori/Sources"
         ),
         .target(
             name: "CYayaNative",
@@ -237,6 +248,11 @@ let package = Package(
             name: "UtataneShioriTests",
             dependencies: ["UtataneCore", "UtataneShiori"],
             path: "shiori/Tests"
+        ),
+        .testTarget(
+            name: "UtataneWindowsShioriTests",
+            dependencies: ["UtataneWindowsShiori"],
+            path: "windows-shiori/Tests"
         ),
         .testTarget(
             name: "UtataneYayaNativeTests",

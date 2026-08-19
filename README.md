@@ -13,9 +13,10 @@ Utataneは、伺かをmacOSで動かすための本体アプリです。
 - キャラクターの位置やゴーストごとの設定の保存
 - NARからのインストール
 - YAYA / SATORIを使うゴーストのネイティブ実行
+- MateriaのFIRSTを設定したWine経由で実行（開発用）
 - SSTP (over HTTP)、RSSへの対応
 
-Windows向けDLLの直接実行や、Windows固有のFMOには対応していません。プラグインもDLLやexeを扱うものについては対応していません。ゴーストによっては表示や動作に互換性の問題があります。
+一般のWindows向けDLLの直接実行や、Windows固有のFMOには対応していません。プラグインもDLLやexeを扱うものについては対応していません。ゴーストによっては表示や動作に互換性の問題があります。
 
 ## インストール
 
@@ -42,6 +43,45 @@ SSPから取り込む場合は、SSP本体のZIPを別途ダウンロードし�
 ~/Library/Application Support/Utatane/Balloons
 ~/Library/Application Support/Utatane/Headline
 ```
+
+<details>
+<summary>元祖さくらとうにゅを追加する</summary>
+
+これは一般のWindowsゴースト互換機能ではなく、Materiaに付属するFIRST専用の実験的な機能です（~~動くとは言っていない~~）。32-bit Windowsアプリを実行できるWine環境と、正規に入手したMateria一式が必要です。
+
+1. Utataneを一度起動し、右クリックメニューからコンテンツフォルダをFinderで開く
+2. 元の`materia.exe`を次の場所へコピーする
+
+   ```text
+   ~/Library/Application Support/Utatane/Compatibility/Materia/materia.exe
+   ```
+
+3. Materiaに付属するFIRSTを、次の構成になるようコピーする
+
+   ```text
+   ~/Library/Application Support/Utatane/Ghosts/first/
+   ├── ghost/master/first.dll
+   └── shell/master/
+   ```
+
+4. 必要なバルーンも`~/Library/Application Support/Utatane/Balloons/`へコピーする
+5. Utataneの「設定 → 詳細 → Windows SHIORI」で、Wine実行ファイルと専用のWINEPREFIXを指定する
+6. ゴースト一覧からFIRSTを選択する
+
+配布版にはUtatane側のWindows SHIORIホストが同梱され、初回利用時に`Compatibility/Materia/Host/`へ自動配置されるため、ホストを手動で置く必要はありません。Wine実行ファイルはWindows exeのパスを引数として受け取れるものを指定してください。他のWindowsアプリと状態や終了処理が干渉しないよう、WINEPREFIXはFIRST専用にすることを推奨します。
+
+ソースからのDebugビルドでは、ローカル検証データを次のように配置します。
+
+```text
+Content/Local/
+├── materia.exe
+├── Ghosts/first/
+└── MateriaBridge/materia.exe
+```
+
+最後の`MateriaBridge/materia.exe`は、`tools/materia-shiori-host/README.md`の手順でビルドします。
+
+</details>
 
 ## ソースからビルド
 

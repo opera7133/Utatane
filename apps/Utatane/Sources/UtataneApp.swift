@@ -11,6 +11,7 @@ import UtataneRuntime
 import UtataneSakuraScript
 import UtataneSatoriNative
 import UtataneShell
+import UtataneWindowsShiori
 import UtataneYayaNative
 
 @main
@@ -367,6 +368,12 @@ private struct UtataneRootView: View {
 
     private func transition(to ghost: InstalledGhost, forceReload: Bool = false) async {
         guard forceReload || currentGhost?.id != ghost.id else { return }
+        if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),
+           ContentRoot.materiaFirstConfiguration(for: ghost) == nil
+        {
+            previewError = AppError.windowsShioriUnavailable.localizedDescription
+            return
+        }
         if let called = calledGhosts.removeValue(forKey: ghost.id) {
             await called.stop()
         }
@@ -452,7 +459,10 @@ private struct UtataneRootView: View {
                 sendEvent(.shiori(id: "OnSurfaceRestore", references: [:]))
             }
             scriptPlayer.onChoice = { id, arguments in
-                if let url = URL(string: id), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) {
+                if ["configuration", "configurationdialog"].contains(id.lowercased()) {
+                    networkSettings.selectedPane = .advanced
+                    openSettings()
+                } else if let url = URL(string: id), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) {
                     NSWorkspace.shared.open(url)
                 } else if id.caseInsensitiveCompare("CANCEL_NOTALK") == .orderedSame {
                     scriptPlayer.cancel()
@@ -498,6 +508,13 @@ private struct UtataneRootView: View {
            let engine = try? NativeSatoriPersonalityEngine(masterDirectoryURL: masterDirectory)
         {
             return engine
+        }
+        if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),
+           let configuration = ContentRoot.materiaFirstConfiguration(for: ghost)
+        {
+            return MateriaFirstPersonalityEngine(configuration: configuration)
+        } else if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename) {
+            throw AppError.windowsShioriUnavailable
         }
 
         guard let dialogueURL = ContentRoot.dialogueURL(for: ghost) else {
@@ -1227,11 +1244,14 @@ private extension Error {
 
 enum AppError: LocalizedError {
     case missingResource(String)
+    case windowsShioriUnavailable
 
     var errorDescription: String? {
         switch self {
         case let .missingResource(name):
             "アプリ内リソースが見つからない: \(name)"
+        case .windowsShioriUnavailable:
+            "FIRSTを起動するには、Wine設定とMateriaの互換ファイルが必要。READMEの追加手順を確認して"
         }
     }
 }
@@ -1320,7 +1340,14 @@ enum ContentRoot {
     }
 
     static func prepareDirectories() throws {
-        for directory in [contentDirectory, ghostsDirectory, balloonsDirectory, headlinesDirectory] {
+        for directory in [
+            contentDirectory,
+            ghostsDirectory,
+            balloonsDirectory,
+            headlinesDirectory,
+            materiaCompatibilityDirectory,
+            materiaHostDirectory
+        ] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
     }
@@ -1352,6 +1379,73 @@ enum ContentRoot {
         return Bundle.main.url(forResource: "default-dialogue", withExtension: "json")
     }
 
+    static func materiaFirstConfiguration(
+        for ghost: InstalledGhost
+    ) -> WindowsShioriProcessConfiguration? {
+        guard let shioriFilename = ghost.shioriFilename else { return nil }
+        let environment = ProcessInfo.processInfo.environment
+        let fileManager = FileManager.default
+
+        let wineExecutableURL: URL
+        let winePrefixURL: URL
+        let hostExecutableURL: URL
+        let materiaExecutableURL: URL
+
+        let defaults = UserDefaults.standard
+        guard let winePath = environment["UTATANE_WINE_EXECUTABLE"]
+            ?? defaults.string(forKey: "windowsShiori.wineExecutablePath"),
+            !winePath.isEmpty,
+            let prefixPath = environment["UTATANE_WINE_PREFIX"]
+            ?? defaults.string(forKey: "windowsShiori.winePrefixPath"),
+            !prefixPath.isEmpty
+        else { return nil }
+        wineExecutableURL = URL(filePath: winePath, directoryHint: .notDirectory)
+        winePrefixURL = URL(filePath: prefixPath, directoryHint: .isDirectory)
+
+        #if DEBUG
+            let local = repositoryRoot.appending(path: "Content/Local", directoryHint: .isDirectory)
+            hostExecutableURL = environment["UTATANE_MATERIA_HOST"].map {
+                URL(filePath: $0, directoryHint: .notDirectory)
+            } ?? local.appending(path: "MateriaBridge/materia.exe", directoryHint: .notDirectory)
+            materiaExecutableURL = environment["UTATANE_MATERIA_EXE"].map {
+                URL(filePath: $0, directoryHint: .notDirectory)
+            } ?? local.appending(path: "materia.exe", directoryHint: .notDirectory)
+        #else
+            if let hostPath = environment["UTATANE_MATERIA_HOST"] {
+                hostExecutableURL = URL(filePath: hostPath, directoryHint: .notDirectory)
+            } else if let bundledHost = Bundle.main.url(
+                forResource: "materia",
+                withExtension: "exe",
+                subdirectory: "MateriaHost"
+            ) ?? Bundle.main.url(forResource: "materia", withExtension: "exe"),
+                let installedHost = installMateriaHost(from: bundledHost)
+            {
+                hostExecutableURL = installedHost
+            } else {
+                return nil
+            }
+            materiaExecutableURL = environment["UTATANE_MATERIA_EXE"].map {
+                URL(filePath: $0, directoryHint: .notDirectory)
+            } ?? materiaCompatibilityDirectory.appending(
+                path: "materia.exe",
+                directoryHint: .notDirectory
+            )
+        #endif
+
+        let shioriDLLURL = ghost.rootDirectory
+            .appending(path: "ghost/master", directoryHint: .isDirectory)
+            .appending(path: shioriFilename, directoryHint: .notDirectory)
+        let required = [wineExecutableURL, winePrefixURL, hostExecutableURL, materiaExecutableURL, shioriDLLURL]
+        guard required.allSatisfy({ fileManager.fileExists(atPath: $0.path) }) else { return nil }
+        return WindowsShioriProcessConfiguration(
+            wineExecutableURL: wineExecutableURL,
+            winePrefixURL: winePrefixURL,
+            hostExecutableURL: hostExecutableURL,
+            materiaExecutableURL: materiaExecutableURL,
+            shioriDLLURL: shioriDLLURL
+        )
+    }
+
     static var ghostsDirectory: URL {
         if let override = ProcessInfo.processInfo.environment["UTATANE_GHOSTS_ROOT"] {
             return URL(filePath: override, directoryHint: .isDirectory)
@@ -1368,6 +1462,37 @@ enum ContentRoot {
         #endif
 
         return contentDirectory.appending(path: "Ghosts", directoryHint: .isDirectory)
+    }
+
+    static var materiaCompatibilityDirectory: URL {
+        contentDirectory.appending(
+            path: "Compatibility/Materia",
+            directoryHint: .isDirectory
+        )
+    }
+
+    static var materiaHostDirectory: URL {
+        materiaCompatibilityDirectory.appending(path: "Host", directoryHint: .isDirectory)
+    }
+
+    private static func installMateriaHost(from bundledURL: URL) -> URL? {
+        let destination = materiaHostDirectory.appending(
+            path: "materia.exe",
+            directoryHint: .notDirectory
+        )
+        do {
+            try FileManager.default.createDirectory(
+                at: materiaHostDirectory,
+                withIntermediateDirectories: true
+            )
+            let bundledData = try Data(contentsOf: bundledURL)
+            if (try? Data(contentsOf: destination)) != bundledData {
+                try bundledData.write(to: destination, options: .atomic)
+            }
+            return destination
+        } catch {
+            return nil
+        }
     }
 
     static var balloonsDirectory: URL {
@@ -1406,7 +1531,7 @@ enum ContentRoot {
         return contentDirectory.appending(path: "Headline", directoryHint: .isDirectory)
     }
 
-    private static var repositoryRoot: URL {
+    static var repositoryRoot: URL {
         URL(filePath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()

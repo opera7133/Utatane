@@ -19,11 +19,20 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install build tools
+        run: brew install xcodegen zig
 
       - name: Test
         run: swift test --package-path packages
+
+      - name: Build Materia SHIORI host
+        run: |
+          mkdir -p apps/Utatane/Resources/MateriaHost
+          zig cc \
+            -target x86-windows-gnu \
+            -Os \
+            tools/materia-shiori-host/main.c \
+            -o apps/Utatane/Resources/MateriaHost/materia.exe
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -49,6 +58,12 @@ jobs:
             --arch arm64 \
             --arch x86_64 \
             --product utatane-mcp
+
+      - name: Verify Materia SHIORI host
+        run: |
+          test -f build/Build/Products/Release/Utatane.app/Contents/Resources/materia.exe
+          file build/Build/Products/Release/Utatane.app/Contents/Resources/materia.exe \
+            | grep -q "PE32 executable"
 
       - name: Embed MCP server
         run: |

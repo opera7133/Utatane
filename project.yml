@@ -65,5 +65,7 @@ targets:
         product: UtataneYayaNative
       - package: UtataneKit
         product: UtataneSatoriNative
+      - package: UtataneKit
+        product: UtataneWindowsShiori
     scheme:
       gatherCoverageData: true
