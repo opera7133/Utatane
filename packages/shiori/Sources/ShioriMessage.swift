@@ -78,6 +78,16 @@ public struct ShioriResponse: Equatable, Sendable {
         headers["Value"]
     }
 
+    public var referenceValues: [Int: String] {
+        Dictionary(uniqueKeysWithValues: headers.entries.compactMap { header in
+            guard header.name.count > 9,
+                  header.name.lowercased().hasPrefix("reference"),
+                  let index = Int(header.name.dropFirst(9))
+            else { return nil }
+            return (index, header.value)
+        })
+    }
+
     public func serialized() -> String {
         serialize(startLine: "\(version) \(statusCode) \(reasonPhrase)", headers: headers)
     }

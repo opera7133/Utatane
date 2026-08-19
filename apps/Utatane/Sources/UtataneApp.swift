@@ -133,6 +133,7 @@ private struct UtataneRootView: View {
     @State private var debugWindow: NSWindow?
     @State private var showsOnboarding = false
     @State private var isImportingSSPDirectory = false
+    @State private var calledGhosts: [URL: CalledGhostRuntime] = [:]
 
     var body: some View {
         Group {
@@ -295,9 +296,11 @@ private struct UtataneRootView: View {
         guard let session, let balloon else { return }
         Task {
             do {
-                if let script = try await session.handle(event: event) {
+                guard let response = try await session.response(for: event) else { return }
+                if let script = response.script {
                     scriptPlayer.play(script, balloon: balloon)
                 }
+                forwardCommunication(from: currentGhost, response: response)
             } catch {
                 previewError = error.localizedDescription
             }
@@ -306,6 +309,9 @@ private struct UtataneRootView: View {
 
     private func transition(to ghost: InstalledGhost, forceReload: Bool = false) async {
         guard forceReload || currentGhost?.id != ghost.id else { return }
+        if let called = calledGhosts.removeValue(forKey: ghost.id) {
+            await called.stop()
+        }
         await closeCurrentGhost(reason: .ghostChanging(name: ghost.name))
         guard !Task.isCancelled else { return }
         await activate(ghost)
@@ -499,7 +505,7 @@ private struct UtataneRootView: View {
         surfaceWindowController.contextMenuItems = {
             [
                 .submenu(
-                    title: "ゴースト",
+                    title: "ゴースト切り替え",
                     items: model.ghosts.map { ghost in
                         .action(
                             title: ghost.name,
@@ -508,6 +514,7 @@ private struct UtataneRootView: View {
                         )
                     }
                 ),
+                callGhostMenu(),
                 .submenu(
                     title: "Shell",
                     items: (currentGhost?.shells ?? []).map { shell in
@@ -572,6 +579,155 @@ private struct UtataneRootView: View {
                 .action(title: "Utataneを終了", handler: { NSApplication.shared.terminate(nil) })
             ]
         }
+        for runtime in calledGhosts.values {
+            runtime.contextMenuItems = { calledGhostContextMenu(for: runtime) }
+        }
+    }
+
+    private func callGhostMenu() -> SurfaceContextMenuItem {
+        .submenu(
+            title: "ゴーストを呼ぶ",
+            items: model.ghosts.filter { ghost in
+                ghost.id != currentGhost?.id && calledGhosts[ghost.id] == nil
+            }.map { ghost in
+                .action(title: ghost.name, handler: { call(ghost) })
+            }
+        )
+    }
+
+    private func calledGhostContextMenu(for runtime: CalledGhostRuntime) -> [SurfaceContextMenuItem] {
+        [
+            .submenu(
+                title: "ゴースト切り替え",
+                items: model.ghosts.map { ghost in
+                    .action(
+                        title: ghost.name,
+                        isSelected: ghost.id == selectedGhostID,
+                        handler: { selectedGhostID = ghost.id }
+                    )
+                }
+            ),
+            callGhostMenu(),
+            .submenu(
+                title: "Shell",
+                items: runtime.ghost.shells.map { shell in
+                    .action(
+                        title: shell.name,
+                        isSelected: shell.id == runtime.shell.id,
+                        handler: {
+                            runtime.select(shell: shell)
+                            configureContextMenu()
+                        }
+                    )
+                }
+            ),
+            .submenu(
+                title: "バルーン",
+                items: installedBalloons.map { balloon in
+                    .action(
+                        title: balloon.name,
+                        isSelected: balloon.directory == runtime.balloon.directory,
+                        handler: {
+                            runtime.select(balloon: balloon)
+                            configureContextMenu()
+                        }
+                    )
+                }
+            ),
+            .separator,
+            .action(title: "ランダムトーク", handler: { runtime.send(.randomTalk) }),
+            .action(title: "このゴーストを閉じる", handler: { dismissCalledGhost(runtime.ghost) }),
+            .action(title: "設定", handler: {
+                networkSettings.selectedPane = .general
+                openSettings()
+            }),
+            .separator,
+            .action(title: "Utataneを終了", handler: { NSApplication.shared.terminate(nil) })
+        ]
+    }
+
+    private func call(_ ghost: InstalledGhost) {
+        guard let caller = currentGhost, calledGhosts[ghost.id] == nil else { return }
+        Task {
+            do {
+                sendEvent(.shiori(id: "OnGhostCalling", references: [
+                    0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                    1: "manual",
+                    2: ghost.name,
+                    3: ghost.rootDirectory.path
+                ]))
+                let runtime = try CalledGhostRuntime(
+                    ghost: ghost,
+                    balloons: installedBalloons,
+                    shellLoader: shellLoader,
+                    selectionStore: selectionStore,
+                    personalityEngine: personalityEngine(for: ghost),
+                    characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
+                    dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000
+                )
+                runtime.onError = { previewError = $0.localizedDescription }
+                runtime.onNarDrop = { installNars(from: $0) }
+                runtime.onCommunication = { target, sentence in
+                    deliverCommunication(from: ghost, target: target, sentence: sentence)
+                }
+                calledGhosts[ghost.id] = runtime
+                configureContextMenu()
+                let startupScript = try await runtime.start(caller: caller) ?? ""
+                sendEvent(.shiori(id: "OnGhostCallComplete", references: [
+                    0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                    1: startupScript,
+                    2: ghost.name,
+                    3: ghost.rootDirectory.path,
+                    7: runtime.shell.name
+                ]))
+            } catch {
+                calledGhosts[ghost.id] = nil
+                configureContextMenu()
+                previewError = error.localizedDescription
+            }
+        }
+    }
+
+    private func dismissCalledGhost(_ ghost: InstalledGhost) {
+        guard let runtime = calledGhosts.removeValue(forKey: ghost.id) else { return }
+        configureContextMenu()
+        Task {
+            await runtime.stop()
+            sendEvent(.shiori(id: "OnOtherGhostClosed", references: [
+                0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                1: ghost.name,
+                2: ghost.rootDirectory.path
+            ]))
+        }
+    }
+
+    private func forwardCommunication(from sender: InstalledGhost?, response: PersonalityResponse) {
+        guard let sender,
+              let target = response.references[0], !target.isEmpty,
+              let sentence = response.references[1], !sentence.isEmpty else { return }
+        deliverCommunication(from: sender, target: target, sentence: sentence)
+    }
+
+    private func deliverCommunication(from sender: InstalledGhost, target: String, sentence: String) {
+        if let currentGhost, ghost(currentGhost, matches: target), let session, let balloon {
+            Task {
+                guard let response = try? await session.response(for: .shiori(
+                    id: "OnCommunicate",
+                    references: [0: sender.name, 1: sentence]
+                )) else { return }
+                if let script = response.script {
+                    scriptPlayer.play(script, balloon: balloon)
+                }
+            }
+            return
+        }
+        guard let runtime = calledGhosts.values.first(where: { ghost($0.ghost, matches: target) }) else { return }
+        Task { _ = await runtime.communicate(from: sender.name, sentence: sentence) }
+    }
+
+    private func ghost(_ ghost: InstalledGhost, matches target: String) -> Bool {
+        ghost.name.caseInsensitiveCompare(target) == .orderedSame
+            || ghost.characters.contains { $0.name?.caseInsensitiveCompare(target) == .orderedSame }
     }
 
     private func configurePlayback() {
@@ -579,6 +735,12 @@ private struct UtataneRootView: View {
             characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
             postDialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000
         )
+        for runtime in calledGhosts.values {
+            runtime.configurePlayback(
+                characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
+                dismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000
+            )
+        }
     }
 
     private func updateDebugWindowVisibility() {
@@ -865,6 +1027,10 @@ private struct UtataneRootView: View {
 
     private func requestApplicationTermination() {
         Task {
+            for runtime in calledGhosts.values {
+                await runtime.stop()
+            }
+            calledGhosts.removeAll()
             await closeCurrentGhost(reason: .close)
             scriptPlayer.cancel()
             surfaceWindowController.hideAll()
@@ -908,7 +1074,7 @@ private extension Error {
     }
 }
 
-private enum AppError: LocalizedError {
+enum AppError: LocalizedError {
     case missingResource(String)
 
     var errorDescription: String? {
@@ -994,7 +1160,7 @@ private final class DebugWindowReaderView: NSView {
     }
 }
 
-private enum ContentRoot {
+enum ContentRoot {
     static var contentDirectory: URL {
         FileManager.default.urls(
             for: .applicationSupportDirectory,

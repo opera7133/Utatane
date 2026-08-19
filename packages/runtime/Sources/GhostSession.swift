@@ -20,15 +20,20 @@ public actor GhostSession {
         self.variableStore = variableStore
     }
 
-    public func start() async throws -> SakuraScript? {
+    public func start(event: GhostEvent = .boot) async throws -> SakuraScript? {
         guard state == .inactive else { return nil }
         state = .running
-        return try await personalityEngine.handle(event: .boot)
+        return try await personalityEngine.handle(event: event)
     }
 
     public func handle(event: GhostEvent) async throws -> SakuraScript? {
         guard state == .running else { return nil }
         return try await personalityEngine.handle(event: event)
+    }
+
+    public func response(for event: GhostEvent) async throws -> PersonalityResponse? {
+        guard state == .running else { return nil }
+        return try await personalityEngine.response(for: event)
     }
 
     public func stop(reason: GhostStopReason = .close) async throws -> SakuraScript? {

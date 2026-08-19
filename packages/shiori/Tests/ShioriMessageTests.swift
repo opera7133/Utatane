@@ -12,6 +12,15 @@ import Testing
     #expect(request.serialized() == source)
 }
 
+@Test
+func `extracts numbered response references`() throws {
+    let response = try ShioriMessageParser.parseResponse(
+        "SHIORI/3.0 200 OK\r\nReference0: Emily\r\nreference1: hello\r\nX-Test: ignored\r\n\r\n"
+    )
+
+    #expect(response.referenceValues == [0: "Emily", 1: "hello"])
+}
+
 @Test func `parses response value and reason phrase`() throws {
     let source = "SHIORI/3.0 200 OK\r\nSender: YAYA\r\nValue: hello\r\n\r\n"
     let response = try ShioriMessageParser.parseResponse(source)

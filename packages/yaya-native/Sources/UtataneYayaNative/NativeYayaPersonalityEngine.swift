@@ -34,6 +34,10 @@ public actor NativeYayaPersonalityEngine: PersonalityEngine {
     }
 
     public func handle(event: GhostEvent) async throws -> SakuraScript? {
+        try await response(for: event).script
+    }
+
+    public func response(for event: GhostEvent) async throws -> PersonalityResponse {
         var context = ShioriEventContext()
         if case let .mouseClick(scope, _) = event {
             context.scope = scope
@@ -51,7 +55,7 @@ public actor NativeYayaPersonalityEngine: PersonalityEngine {
                 response.reasonPhrase
             )
         }
-        guard let value = response.value, !value.isEmpty else { return nil }
-        return SakuraScript(rawValue: value)
+        let script = response.value.flatMap { $0.isEmpty ? nil : SakuraScript(rawValue: $0) }
+        return PersonalityResponse(script: script, references: response.referenceValues)
     }
 }

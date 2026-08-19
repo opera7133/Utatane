@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import UtataneCore
+import UtataneSakuraScript
 @testable import UtataneRuntime
 
 @Test
@@ -27,6 +28,25 @@ func `catalog maps events and substitutes choice arguments`() async throws {
         try await engine.handle(event: .choice(id: "OnChoice", arguments: ["B"]))?.rawValue
             == "selected B"
     )
+}
+
+@Test
+func `session can start with a ghost call event`() async throws {
+    let engine = RecordingPersonalityEngine()
+    let session = GhostSession(personalityEngine: engine)
+
+    _ = try await session.start(event: .shiori(id: "OnGhostCalled", references: [0: "caller"]))
+
+    #expect(await engine.lastEvent == .shiori(id: "OnGhostCalled", references: [0: "caller"]))
+}
+
+private actor RecordingPersonalityEngine: PersonalityEngine {
+    private(set) var lastEvent: GhostEvent?
+
+    func handle(event: GhostEvent) async throws -> SakuraScript? {
+        lastEvent = event
+        return nil
+    }
 }
 
 @Test

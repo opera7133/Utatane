@@ -30,6 +30,10 @@ public actor NativeSatoriPersonalityEngine: PersonalityEngine {
     }
 
     public func handle(event: GhostEvent) async throws -> SakuraScript? {
+        try await response(for: event).script
+    }
+
+    public func response(for event: GhostEvent) async throws -> PersonalityResponse {
         let requestEvent: GhostEvent
         if case let .choice(id, arguments) = event, !id.hasPrefix("On") {
             var references = Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
@@ -53,7 +57,7 @@ public actor NativeSatoriPersonalityEngine: PersonalityEngine {
         guard (200 ..< 300).contains(response.statusCode) else {
             throw NativeSatoriPersonalityError.unsuccessfulResponse(response.statusCode, response.reasonPhrase)
         }
-        guard let value = response.value, !value.isEmpty else { return nil }
-        return SakuraScript(rawValue: value)
+        let script = response.value.flatMap { $0.isEmpty ? nil : SakuraScript(rawValue: $0) }
+        return PersonalityResponse(script: script, references: response.referenceValues)
     }
 }
