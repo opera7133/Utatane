@@ -102,6 +102,27 @@ final class CalledGhostRuntime {
         }
     }
 
+    func sendSecondChange(references: [Int: String]) {
+        let canTalk = !player.isDialogueActive
+        var references = references
+        references[3] = canTalk ? "1" : "0"
+        Task {
+            do {
+                guard let response = try await session.response(for: .shiori(
+                    id: "OnSecondChange",
+                    references: references
+                )) else { return }
+                guard canTalk else { return }
+                if let script = response.script {
+                    player.play(script, balloon: balloon)
+                }
+                forwardCommunication(response)
+            } catch {
+                onError?(error)
+            }
+        }
+    }
+
     func communicate(from sender: String, sentence: String) async -> PersonalityResponse? {
         let response = try? await session.response(for: .shiori(
             id: "OnCommunicate",

@@ -208,6 +208,13 @@ private struct UtataneRootView: View {
                 sendEvent(.randomTalk)
             }
         }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(1))
+                guard !Task.isCancelled else { return }
+                sendSecondChange()
+            }
+        }
         .task(id: selectedGhostID) {
             guard let selectedGhostID,
                   let ghost = model.ghosts.first(where: { $0.id == selectedGhostID })
@@ -305,6 +312,56 @@ private struct UtataneRootView: View {
                 previewError = error.localizedDescription
             }
         }
+    }
+
+    private func sendSecondChange() {
+        let references = secondChangeReferences(for: surfaceWindowController)
+        if let session {
+            let canTalk = !scriptPlayer.isDialogueActive
+            var primaryReferences = references
+            primaryReferences[3] = canTalk ? "1" : "0"
+            Task {
+                do {
+                    guard let response = try await session.response(for: .shiori(
+                        id: "OnSecondChange",
+                        references: primaryReferences
+                    )) else { return }
+                    guard canTalk else { return }
+                    if let script = response.script, let balloon {
+                        scriptPlayer.play(script, balloon: balloon)
+                    }
+                    forwardCommunication(from: currentGhost, response: response)
+                } catch {
+                    previewError = error.localizedDescription
+                }
+            }
+        }
+        for runtime in calledGhosts.values {
+            runtime.sendSecondChange(references: secondChangeReferences(for: runtime.surfaceController))
+        }
+    }
+
+    private func secondChangeReferences(for controller: SurfaceWindowController) -> [Int: String] {
+        let frames = controller.visibleScopes.compactMap { controller.windowFrame(for: $0) }
+        let isClipped = frames.contains { frame in
+            !NSScreen.screens.contains { $0.visibleFrame.contains(frame) }
+        }
+        let otherControllers = [surfaceWindowController] + calledGhosts.values.map(\.surfaceController)
+        let otherFrames = otherControllers.filter { $0 !== controller }.flatMap { other in
+            other.visibleScopes.compactMap { other.windowFrame(for: $0) }
+        }
+        let isOverlapping = frames.contains { frame in
+            otherFrames.contains { $0.intersects(frame) }
+        }
+        return [
+            0: String(Int(ProcessInfo.processInfo.systemUptime / 3600)),
+            1: isClipped ? "1" : "0",
+            2: isOverlapping ? "1" : "0",
+            4: String(Int(CGEventSource.secondsSinceLastEventType(
+                .combinedSessionState,
+                eventType: .null
+            )))
+        ]
     }
 
     private func transition(to ghost: InstalledGhost, forceReload: Bool = false) async {

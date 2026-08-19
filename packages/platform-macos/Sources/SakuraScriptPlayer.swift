@@ -25,6 +25,10 @@ public final class SakuraScriptPlayer {
     public var onDialogueDismissed: (@MainActor () -> Void)?
     public var onPlaybackFinished: (@MainActor () -> Void)?
 
+    public var isDialogueActive: Bool {
+        playbackTask != nil || isPlaybackComplete
+    }
+
     public init(
         surfaceWindowController: SurfaceWindowController,
         balloonWindowController: BalloonWindowController,
