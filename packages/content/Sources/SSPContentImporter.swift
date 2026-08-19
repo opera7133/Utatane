@@ -50,7 +50,7 @@ public struct SSPContentImporter: Sendable {
             throw SSPContentImportError.missingContentDirectories
         }
 
-        let ghosts = try contentDirectories(in: ghostSource)
+        let ghosts = try contentDirectories(in: ghostSource).filter(isGhostPackage)
         let balloons = try contentDirectories(in: balloonSource)
         guard !ghosts.isEmpty || !balloons.isEmpty else {
             throw SSPContentImportError.noContent
@@ -144,6 +144,13 @@ public struct SSPContentImporter: Sendable {
                 throw SSPContentImportError.unsafeItem(url)
             }
         }
+    }
+
+    private func isGhostPackage(_ directory: URL) -> Bool {
+        FileManager.default.fileExists(atPath: directory.appending(
+            path: "ghost/master/descript.txt",
+            directoryHint: .notDirectory
+        ).path)
     }
 
     private func installCopy(from source: URL, to destination: URL) throws {

@@ -14,6 +14,26 @@ import Testing
 
     let entries = try HeadlineCatalog().load(from: root)
     #expect(entries.count == 2)
-    #expect(entries.contains { if case .rss = $0.kind { true } else { false } })
-    #expect(entries.contains { if case .legacyDLL = $0.kind { true } else { false } })
+    #expect(entries.contains {
+        if case .rss = $0.kind {
+            true
+        } else {
+            false
+        }
+    })
+    #expect(entries.contains {
+        if case .legacyDLL = $0.kind {
+            true
+        } else {
+            false
+        }
+    })
+}
+
+@Test func `a missing headline directory is an empty catalog`() throws {
+    let root = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString)
+        .appending(path: "Headline")
+
+    #expect(try HeadlineCatalog().load(from: root).isEmpty)
 }

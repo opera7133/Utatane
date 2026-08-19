@@ -29,6 +29,7 @@ struct UtataneApp: App {
     @StateObject private var networkSettings: UtataneSettingsStore
 
     init() {
+        try? ContentRoot.prepareDirectories()
         let positionStore = WindowPositionStore()
         let surfaceWindowController = SurfaceWindowController(positionStore: positionStore)
         let balloonWindowController = BalloonWindowController(positionStore: positionStore)
@@ -1316,6 +1317,12 @@ enum ContentRoot {
             for: .applicationSupportDirectory,
             in: .userDomainMask
         )[0].appending(path: "Utatane", directoryHint: .isDirectory)
+    }
+
+    static func prepareDirectories() throws {
+        for directory in [contentDirectory, ghostsDirectory, balloonsDirectory, headlinesDirectory] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
     }
 
     static func variableStoreURL(for ghost: InstalledGhost) -> URL {

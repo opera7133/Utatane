@@ -23,6 +23,7 @@ public struct HeadlineCatalog: Sendable {
     public init() {}
 
     public func load(from root: URL) throws -> [InstalledHeadline] {
+        guard FileManager.default.fileExists(atPath: root.path) else { return [] }
         let directories = try FileManager.default.contentsOfDirectory(
             at: root,
             includingPropertiesForKeys: [.isDirectoryKey],

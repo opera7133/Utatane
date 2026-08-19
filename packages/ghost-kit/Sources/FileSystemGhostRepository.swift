@@ -22,7 +22,7 @@ public struct FileSystemGhostRepository: GhostRepository {
                 options: [.skipsHiddenFiles]
             )
             .filter { try $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true }
-            .map { try packageLoader.loadGhost(at: $0) }
+            .compactMap { try? packageLoader.loadGhost(at: $0) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 }

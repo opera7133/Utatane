@@ -10,6 +10,7 @@ import Testing
     defer { try? FileManager.default.removeItem(at: temporary) }
 
     try createFile(at: source.appending(path: "ghost/emily/ghost/master/yaya.txt"))
+    try createFile(at: source.appending(path: "ghost/emily/ghost/master/descript.txt"))
     try createFile(at: source.appending(path: "balloon/origin/balloons0.png"))
 
     let result = try SSPContentImporter().importContents(
@@ -21,6 +22,25 @@ import Testing
     #expect(result.importedItemCount == 2)
     #expect(FileManager.default.fileExists(atPath: ghosts.appending(path: "emily/ghost/master/yaya.txt").path))
     #expect(FileManager.default.fileExists(atPath: balloons.appending(path: "origin/balloons0.png").path))
+}
+
+@Test func `ignores SSP helper directories that are not ghosts`() throws {
+    let temporary = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let source = temporary.appending(path: "SSP")
+    let ghosts = temporary.appending(path: "Utatane/Ghosts")
+    defer { try? FileManager.default.removeItem(at: temporary) }
+
+    try createFile(at: source.appending(path: "ghost/emily/ghost/master/descript.txt"))
+    try createFile(at: source.appending(path: "ghost/key_Librarian/descript.txt"))
+
+    let result = try SSPContentImporter().importContents(
+        from: source,
+        ghostsDirectory: ghosts,
+        balloonsDirectory: temporary.appending(path: "Balloons")
+    )
+
+    #expect(result.ghostDirectories.map(\.lastPathComponent) == ["emily"])
+    #expect(!FileManager.default.fileExists(atPath: ghosts.appending(path: "key_Librarian").path))
 }
 
 @Test func `accepts a directory containing one SSP root directory`() throws {
