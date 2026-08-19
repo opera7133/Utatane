@@ -4,15 +4,21 @@ public struct ShellDefinition: Sendable, Equatable {
     public let directory: URL
     public let surfaces: [Int: SurfaceDefinition]
     public let surfaceAliases: [Int: [String: [Int]]]
+    public let usesSelfAlpha: Bool
+    public let defaultBindGroups: [Int: Set<Int>]
 
     public init(
         directory: URL,
         surfaces: [Int: SurfaceDefinition],
-        surfaceAliases: [Int: [String: [Int]]] = [:]
+        surfaceAliases: [Int: [String: [Int]]] = [:],
+        usesSelfAlpha: Bool = false,
+        defaultBindGroups: [Int: Set<Int>] = [:]
     ) {
         self.directory = directory
         self.surfaces = surfaces
         self.surfaceAliases = surfaceAliases
+        self.usesSelfAlpha = usesSelfAlpha
+        self.defaultBindGroups = defaultBindGroups
     }
 
     public func resolveSurface(_ identifier: String, scope: Int) -> Int? {
@@ -65,19 +71,54 @@ public struct SurfaceCollision: Sendable, Equatable {
     public let right: Int
     public let bottom: Int
     public let name: String
+    public let polygon: [SurfacePoint]
 
-    public init(id: Int, left: Int, top: Int, right: Int, bottom: Int, name: String) {
+    public init(
+        id: Int,
+        left: Int,
+        top: Int,
+        right: Int,
+        bottom: Int,
+        name: String,
+        polygon: [SurfacePoint] = []
+    ) {
         self.id = id
         self.left = left
         self.top = top
         self.right = right
         self.bottom = bottom
         self.name = name
+        self.polygon = polygon
     }
 
     public func contains(x: Int, y: Int) -> Bool {
-        (min(left, right) ... max(left, right)).contains(x)
+        if polygon.count >= 3 {
+            var inside = false
+            var previous = polygon.count - 1
+            for current in polygon.indices {
+                let a = polygon[current]
+                let b = polygon[previous]
+                if (a.y > y) != (b.y > y),
+                   Double(x) < Double(b.x - a.x) * Double(y - a.y) / Double(b.y - a.y) + Double(a.x)
+                {
+                    inside.toggle()
+                }
+                previous = current
+            }
+            return inside
+        }
+        return (min(left, right) ... max(left, right)).contains(x)
             && (min(top, bottom) ... max(top, bottom)).contains(y)
+    }
+}
+
+public struct SurfacePoint: Sendable, Equatable {
+    public let x: Int
+    public let y: Int
+
+    public init(x: Int, y: Int) {
+        self.x = x
+        self.y = y
     }
 }
 

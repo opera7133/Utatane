@@ -122,11 +122,28 @@ public struct SakuraScriptParser: Sendable {
                     } else {
                         tokens.append(.anchorEnd)
                     }
+                } else if index < characters.count, characters[index] == "?" {
+                    index += 1
+                    tokens.append(.unknown("\\_?"))
                 } else {
                     tokens.append(.unknown(readUnknown(command: command, in: characters, index: &index)))
                 }
             case "c":
                 tokens.append(.clear)
+            case "!":
+                if let argument = bracketArgument(in: characters, index: &index) {
+                    let arguments = splitArguments(argument)
+                    if arguments.count >= 2, arguments[0].lowercased() == "embed" {
+                        tokens.append(.embeddedEvent(
+                            id: arguments[1],
+                            arguments: Array(arguments.dropFirst(2))
+                        ))
+                    } else {
+                        tokens.append(.unknown("\\![\(argument)]"))
+                    }
+                } else {
+                    tokens.append(.unknown("\\!"))
+                }
             case "e":
                 tokens.append(.end)
                 flushText()

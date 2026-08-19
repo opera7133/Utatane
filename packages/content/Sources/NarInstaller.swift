@@ -4,25 +4,44 @@ public enum NarContentType: String, Sendable, Equatable {
     case ghost
     case balloon
     case shell
+    case headline
 }
 
 public struct NarInstallationRoots: Sendable, Equatable {
     public let ghostsDirectory: URL
     public let balloonsDirectory: URL
+    public let headlinesDirectory: URL
 
-    public init(ghostsDirectory: URL, balloonsDirectory: URL) {
+    public init(ghostsDirectory: URL, balloonsDirectory: URL, headlinesDirectory: URL? = nil) {
         self.ghostsDirectory = ghostsDirectory
         self.balloonsDirectory = balloonsDirectory
+        self.headlinesDirectory = headlinesDirectory ?? ghostsDirectory.deletingLastPathComponent().appending(
+            path: "Headline", directoryHint: .isDirectory
+        )
     }
 }
 
 public struct NarInstallResult: Sendable, Equatable {
     public let primaryType: NarContentType
-    public let installedURLs: [URL]
+    public let items: [NarInstalledItem]
 
-    public init(primaryType: NarContentType, installedURLs: [URL]) {
+    public var installedURLs: [URL] { items.map(\.url) }
+
+    public init(primaryType: NarContentType, items: [NarInstalledItem]) {
         self.primaryType = primaryType
-        self.installedURLs = installedURLs
+        self.items = items
+    }
+}
+
+public struct NarInstalledItem: Sendable, Equatable {
+    public let type: NarContentType
+    public let name: String
+    public let url: URL
+
+    public init(type: NarContentType, name: String, url: URL) {
+        self.type = type
+        self.name = name
+        self.url = url
     }
 }
 
@@ -118,13 +137,14 @@ public struct NarInstaller: Sendable {
         let directoryName = try validatedDirectoryName(metadata["directory"] ?? "")
         let sourceRoot = installURL.deletingLastPathComponent()
 
-        var operations: [(source: URL, destination: URL)] = []
+        var operations: [(source: URL, destination: URL, type: NarContentType, name: String)] = []
+        let primaryName = metadata["name"] ?? directoryName
         switch contentType {
         case .ghost:
             operations.append((sourceRoot, roots.ghostsDirectory.appending(
                 path: directoryName,
                 directoryHint: .isDirectory
-            )))
+            ), .ghost, primaryName))
             if let sourceName = metadata["balloon.source.directory"],
                let balloonName = metadata["balloon.directory"]
             {
@@ -137,18 +157,23 @@ public struct NarInstaller: Sendable {
                 operations.append((balloonSource, roots.balloonsDirectory.appending(
                     path: safeBalloonName,
                     directoryHint: .isDirectory
-                )))
+                ), .balloon, metadata["balloon.name"] ?? safeBalloonName))
             }
         case .balloon:
             operations.append((sourceRoot, roots.balloonsDirectory.appending(
                 path: directoryName,
                 directoryHint: .isDirectory
-            )))
+            ), .balloon, primaryName))
         case .shell:
             guard let selectedGhostDirectory else { throw NarInstallError.shellRequiresGhost }
             operations.append((sourceRoot, selectedGhostDirectory
                     .appending(path: "shell", directoryHint: .isDirectory)
-                    .appending(path: directoryName, directoryHint: .isDirectory)))
+                    .appending(path: directoryName, directoryHint: .isDirectory), .shell, primaryName))
+        case .headline:
+            operations.append((sourceRoot, roots.headlinesDirectory.appending(
+                path: directoryName,
+                directoryHint: .isDirectory
+            ), .headline, primaryName))
         }
 
         for operation in operations where fileManager.fileExists(atPath: operation.destination.path) {
@@ -167,7 +192,12 @@ public struct NarInstaller: Sendable {
             }
             throw error
         }
-        return NarInstallResult(primaryType: contentType, installedURLs: installedURLs)
+        return NarInstallResult(
+            primaryType: contentType,
+            items: zip(operations, installedURLs).map { operation, url in
+                NarInstalledItem(type: operation.type, name: operation.name, url: url)
+            }
+        )
     }
 
     func validate(entries: [String]) throws {

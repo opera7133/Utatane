@@ -5,6 +5,28 @@ import UtataneBalloon
 import UtataneSakuraScript
 import UtataneShell
 
+@Test func `chooses interaction cursors from collision regions`() {
+    #expect(SurfaceCursorStyle(region: nil) == .arrow)
+    #expect(SurfaceCursorStyle(region: "Head") == .openHand)
+    #expect(SurfaceCursorStyle(region: "Ear1") == .openHand)
+    #expect(SurfaceCursorStyle(region: "hair") == .openHand)
+    #expect(SurfaceCursorStyle(region: "Mouth") == .pointingHand)
+    #expect(SurfaceCursorStyle(region: "MenuButton") == .pointingHand)
+}
+
+@Test func `accepts only NAR files dropped on a surface`() {
+    let urls = [
+        URL(filePath: "/tmp/ghost.nar"),
+        URL(filePath: "/tmp/SHELL.NAR"),
+        URL(filePath: "/tmp/readme.txt"),
+        URL(filePath: "/tmp/not-a-nar")
+    ]
+
+    #expect(SurfaceDropPayload.narURLs(from: urls).map(\.lastPathComponent) == [
+        "ghost.nar", "SHELL.NAR"
+    ])
+}
+
 @Test
 @MainActor
 func `shows scopes in separate side by side windows`() throws {
@@ -33,6 +55,51 @@ func `shows scopes in separate side by side windows`() throws {
     #expect(controller.visibleScopes == [0, 1])
     #expect(keroFrame.maxX < sakuraFrame.minX)
     #expect(keroFrame.minY == sakuraFrame.minY)
+}
+
+@Test(arguments: ["master", "master2nd"])
+func `loads the installed twin shell surfaces`(shellDirectoryName: String) throws {
+    let repositoryRoot = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let shellDirectory = repositoryRoot.appending(
+        path: "Content/Local/Ghosts/twin/shell/\(shellDirectoryName)",
+        directoryHint: .isDirectory
+    )
+    let loader = ShellLoader()
+    let shell = try loader.load(from: shellDirectory)
+    #expect(shell.usesSelfAlpha)
+    for surfaceID in [0, 10] {
+        let hasImage = (try? loader.loadSurface(id: surfaceID, from: shellDirectory)) != nil
+        let hasComposite = shell.surfaces[surfaceID]?.elements.isEmpty == false
+        #expect(hasImage || hasComposite)
+    }
+}
+
+@Test
+@MainActor
+func `renders both installed twin characters with default bindings`() throws {
+    let repositoryRoot = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let shell = try ShellLoader().load(from: repositoryRoot.appending(
+        path: "Content/Local/Ghosts/twin/shell/master",
+        directoryHint: .isDirectory
+    ))
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    defer { controller.hideAll() }
+
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 5, 1: 10000])
+
+    #expect(controller.visibleScopes == [0, 1])
+    #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 244, height: 450))
+    #expect(controller.windowFrame(for: 1)?.size == NSSize(width: 244, height: 450))
 }
 
 @Test
@@ -72,6 +139,57 @@ func `renders a virtual surface from ordered elements`() throws {
 
 @Test
 @MainActor
+func `embedded event can restore a hidden surface`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    for surfaceID in [0, 5] {
+        try makePNG(width: 40, height: 80).write(
+            to: directory.appending(path: "surface\(surfaceID).png")
+        )
+    }
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: BalloonWindowController(positionStore: positionStore)
+    )
+    player.onEmbeddedEvent = { id, arguments in
+        #expect(id == "OnCallSurface")
+        #expect(arguments == ["5"])
+        return SakuraScript(rawValue: "\\s[5]")
+    }
+    let balloon = BalloonDefinition(
+        directory: directory,
+        name: "test",
+        originX: 0,
+        originY: 0,
+        wordWrapPointX: 0,
+        wordWrapPointY: 0,
+        fontHeight: 14,
+        fontColor: BalloonColor(red: 0, green: 0, blue: 0)
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: "\\s[-1]\\![embed,OnCallSurface,5]\\e"),
+        balloon: balloon,
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(surfaceController.visibleScopes == [0])
+    #expect(surfaceController.surfaceID(for: 0) == 5)
+}
+
+@Test
+@MainActor
 func `restores a saved floating window position`() {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
@@ -86,6 +204,38 @@ func `restores a saved floating window position`() {
         screens: []
     )
     #expect(restored == expected)
+}
+
+@Test
+@MainActor
+func `keeps floating window positions separate for each ghost`() {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let ghostA = URL(filePath: "/ghosts/a", directoryHint: .isDirectory)
+    let ghostB = URL(filePath: "/ghosts/b", directoryHint: .isDirectory)
+
+    positionStore.setContentID(ghostA)
+    positionStore.save(NSPoint(x: 100, y: 200), for: .surface, scope: 0)
+    positionStore.setContentID(ghostB)
+    positionStore.save(NSPoint(x: 300, y: 400), for: .surface, scope: 0)
+
+    positionStore.setContentID(ghostA)
+    let ghostAOrigin = positionStore.restoredOrigin(
+        for: .surface,
+        scope: 0,
+        windowSize: NSSize(width: 50, height: 50),
+        screens: []
+    )
+    positionStore.setContentID(ghostB)
+    let ghostBOrigin = positionStore.restoredOrigin(
+        for: .surface,
+        scope: 0,
+        windowSize: NSSize(width: 50, height: 50),
+        screens: []
+    )
+
+    #expect(ghostAOrigin == NSPoint(x: 100, y: 200))
+    #expect(ghostBOrigin == NSPoint(x: 300, y: 400))
 }
 
 @Test
@@ -243,7 +393,7 @@ func `long balloon text scrolls and follows its bottom`() throws {
 
 @Test
 @MainActor
-func `dismisses balloons and resets surfaces after the post dialogue delay`() async throws {
+func `dismisses balloons without discarding dialogue surfaces`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
     let directory = FileManager.default.temporaryDirectory
@@ -291,13 +441,16 @@ func `dismisses balloons and resets surfaces after the post dialogue delay`() as
         balloon: balloon,
         characterDelayMilliseconds: 0
     )
+    for _ in 0 ..< 100 where surfaceController.surfaceID(for: 0) != 1 {
+        try await Task.sleep(for: .milliseconds(10))
+    }
     for _ in 0 ..< 100 where !balloonController.visibleScopes.isEmpty {
         try await Task.sleep(for: .milliseconds(20))
     }
 
     #expect(balloonController.visibleScopes.isEmpty)
-    #expect(surfaceController.surfaceID(for: 0) == 0)
-    #expect(surfaceController.surfaceID(for: 1) == 10)
+    #expect(surfaceController.surfaceID(for: 0) == 1)
+    #expect(surfaceController.surfaceID(for: 1) == 11)
 }
 
 private func makePNG(width: Int, height: Int) throws -> Data {

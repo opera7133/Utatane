@@ -19,6 +19,10 @@ public final class SakuraScriptPlayer {
 
     public var onError: (@MainActor (Error) -> Void)?
     public var onChoice: (@MainActor (String, [String]) -> Void)?
+    public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
+    public var onDialogueContent: (@MainActor () -> Void)?
+    public var onDialogueDismissed: (@MainActor () -> Void)?
+    public var onPlaybackFinished: (@MainActor () -> Void)?
 
     public init(
         surfaceWindowController: SurfaceWindowController,
@@ -32,6 +36,7 @@ public final class SakuraScriptPlayer {
             self?.advance()
         }
         balloonWindowController.onLinkClick = { [weak self] id, arguments in
+            self?.cancel()
             self?.onChoice?(id, arguments)
         }
     }
@@ -98,7 +103,6 @@ public final class SakuraScriptPlayer {
         isPlaybackComplete = false
         balloonWindowController.setWaitingForClick(false)
         balloonWindowController.hideAll()
-        surfaceWindowController.resetToDefaultSurfaces()
         finishPlaybackWait()
     }
 
@@ -130,8 +134,10 @@ public final class SakuraScriptPlayer {
         }
 
         do {
-            for token in tokens {
+            var pendingTokens = tokens
+            while !pendingTokens.isEmpty {
                 guard !Task.isCancelled else { return }
+                let token = pendingTokens.removeFirst()
                 switch token {
                 case let .text(text):
                     for character in text {
@@ -198,9 +204,6 @@ public final class SakuraScriptPlayer {
                         anchorsByScope.removeAll()
                     }
                 case let .choice(label, id, arguments):
-                    if let last = textByScope[scope]?.last, last != "\n" {
-                        textByScope[scope, default: ""].append("\n")
-                    }
                     let start = textByScope[scope, default: ""].utf16.count
                     textByScope[scope, default: ""].append(label)
                     linksByScope[scope, default: []].append(
@@ -210,7 +213,6 @@ public final class SakuraScriptPlayer {
                             arguments: arguments
                         )
                     )
-                    textByScope[scope, default: ""].append("\n")
                     try activateIfNeeded(
                         scope: scope,
                         balloon: balloon,
@@ -245,6 +247,10 @@ public final class SakuraScriptPlayer {
                         text: textByScope[scope, default: ""],
                         links: linksByScope[scope, default: []]
                     )
+                case let .embeddedEvent(id, arguments):
+                    if let embeddedScript = await onEmbeddedEvent?(id, arguments) {
+                        pendingTokens.insert(contentsOf: parser.parse(embeddedScript), at: 0)
+                    }
                 case .clear:
                     textByScope[scope] = ""
                     linksByScope[scope] = []
@@ -295,7 +301,9 @@ public final class SakuraScriptPlayer {
         links: [BalloonTextLink],
         activatedScopes: inout Set<Int>
     ) throws {
+        guard text.contains(where: { !$0.isWhitespace }) else { return }
         guard activatedScopes.insert(scope).inserted else { return }
+        onDialogueContent?()
         try activate(scope: scope, balloon: balloon, text: text, links: links)
     }
 
@@ -309,6 +317,7 @@ public final class SakuraScriptPlayer {
         isWaitingForClick = false
         balloonWindowController.setWaitingForClick(false)
         finishPlaybackWait()
+        onPlaybackFinished?()
         dismissalTask?.cancel()
         dismissalTask = Task { [weak self] in
             guard let self else { return }
@@ -329,9 +338,12 @@ public final class SakuraScriptPlayer {
     private func dismissCompletedDialogue() {
         dismissalTask?.cancel()
         dismissalTask = nil
+        let hadVisibleDialogue = !balloonWindowController.visibleScopes.isEmpty
         balloonWindowController.hideAll()
-        surfaceWindowController.resetToDefaultSurfaces()
         isPlaybackComplete = false
+        if hadVisibleDialogue {
+            onDialogueDismissed?()
+        }
     }
 
     private func sleep(milliseconds: Int) async throws {

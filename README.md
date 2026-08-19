@@ -8,6 +8,7 @@ Xcode 26以降と [mise](https://mise.jdx.dev/) が必要。
 
 ```sh
 mise install
+git submodule update --init --recursive
 mise run generate
 mise run build
 mise run test
@@ -28,6 +29,7 @@ packages/runtime             セッション、ユースケース、人格エン
 packages/shiori              SHIORI/3.0 のリクエスト・レスポンスモデル
 packages/yaya                Swift製YAYA解析器・互換性監査・比較用評価器
 packages/yaya-native         macOS向けに移植した本家YAYAとSwiftアダプター
+packages/satori-native       macOS向けに移植した本家SATORIとSwiftアダプター
 packages/platform-macos      AppKit / SwiftUI による表示と入力
 packages/satori-converter    Satori辞書から静的なセリフを抽出する開発用CLI
 ```
@@ -66,8 +68,6 @@ swift run --package-path packages utatane-satori-convert \
   Content/Local/Ghosts/memory-na/ghost/master \
   Content/Local/Converted/memory-na.json
 ```
-
-今後の実装順と対応範囲は [実装計画](Docs/implementation-plan.md) を参照。
 
 機能が独立してきたら、`sstp`、`network-update`、`headlines`、`saori`、`animation`、`ai`、`mcp` などを SwiftPM ターゲットとして追加する。`shiori`と`yaya`は互換エンジンの着手に合わせて追加済み。最初から空のターゲットは作らない。
 
@@ -137,6 +137,6 @@ moon は現状では使用しない。単一言語・単一アプリで SwiftPM 
 
 ## ライセンス
 
-取り込んだYAYA公開ソースはBSD-3-Clause。`packages/yaya-native`にUTF-8化したforkとライセンスを保持し、ローカルのゴースト素材は配布物へ自動では含めない。Windows限定のFMOとDLLロードはmacOS版では提供しない。
+YAYA公開ソースはBSD-3-Clauseで、macOS移植forkを`packages/yaya-native/Sources/CYayaNative/Vendor/YAYA`のsubmoduleとして固定する。SATORI公開ソースは`packages/satori-native/Sources/CSatoriNative/Vendor`のsubmoduleとして固定する。ローカルのゴースト素材は配布物へ自動では含めない。Windows限定のFMOとDLLロードはmacOS版では提供しない。
 
-現在のvendorコピーを保守用forkとgit submoduleへ移す手順は[Docs/yaya-fork-submodule.md](Docs/yaya-fork-submodule.md)にまとめている。
+submoduleを含めてcloneする場合は`git clone --recurse-submodules`を使う。既存cloneでは`git submodule update --init --recursive`を実行する。

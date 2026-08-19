@@ -27,6 +27,12 @@ public final class BalloonWindowController {
         self.positionStore = positionStore
     }
 
+    public func setPositionContentID(_ contentID: URL?) {
+        hideAll()
+        presentations.removeAll()
+        positionStore.setContentID(contentID)
+    }
+
     public var visibleScopes: [Int] {
         presentations.compactMap { scope, presentation in
             presentation.window.isVisible ? scope : nil
@@ -350,19 +356,20 @@ private final class BalloonContentView: NSView {
                 .foregroundColor: textColor
             ]
         )
-        var argumentsByID: [String: [String]] = [:]
-        for link in links where NSMaxRange(link.range) <= attributedText.length {
+        var linkTargets: [String: BalloonTextLink] = [:]
+        for (index, link) in links.enumerated() where NSMaxRange(link.range) <= attributedText.length {
+            let token = "utatane-link-\(index)"
             attributedText.addAttributes(
                 [
-                    .link: link.id,
+                    .link: token,
                     .foregroundColor: NSColor.linkColor,
                     .underlineStyle: NSUnderlineStyle.single.rawValue
                 ],
                 range: link.range
             )
-            argumentsByID[link.id] = link.arguments
+            linkTargets[token] = link
         }
-        textView.argumentsByID = argumentsByID
+        textView.linkTargets = linkTargets
         textView.textStorage?.setAttributedString(attributedText)
         textView.layoutManager?.ensureLayout(for: textView.textContainer!)
         if attributedText.length > 0 {
@@ -377,7 +384,7 @@ private final class BalloonContentView: NSView {
 }
 
 private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
-    var argumentsByID: [String: [String]] = [:]
+    var linkTargets: [String: BalloonTextLink] = [:]
     var onBackgroundClick: (() -> Void)?
     var onLinkClick: ((String, [String]) -> Void)?
     private var dragStartMouseLocation: NSPoint?
@@ -419,17 +426,25 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
         }
         guard !didDrag else { return }
         let point = convert(event.locationInWindow, from: nil)
-        if let id = balloonTextLinkID(at: point, in: self) {
-            onLinkClick?(id, argumentsByID[id] ?? [])
+        if let token = balloonTextLinkID(at: point, in: self) {
+            activateLink(token)
             return
         }
         onBackgroundClick?()
     }
 
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
-        guard let id = link as? String else { return false }
-        onLinkClick?(id, argumentsByID[id] ?? [])
+        guard let token = link as? String else { return false }
+        activateLink(token)
         return true
+    }
+
+    private func activateLink(_ token: String) {
+        if let target = linkTargets[token] {
+            onLinkClick?(target.id, target.arguments)
+        } else {
+            onLinkClick?(token, [])
+        }
     }
 }
 

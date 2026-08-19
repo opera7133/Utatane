@@ -190,6 +190,39 @@ public struct SurfacesParser: Sendable {
             return
         }
 
+        if key.hasPrefix("collisionex"),
+           let collisionID = Int(key.dropFirst("collisionex".count)),
+           values.count >= 6
+        {
+            let name = values[0]
+            let shape = values[1].lowercased()
+            let coordinates = values.dropFirst(2).compactMap(Int.init)
+            if shape == "rect", coordinates.count >= 4 {
+                builder.collisions[collisionID] = SurfaceCollision(
+                    id: collisionID,
+                    left: coordinates[0],
+                    top: coordinates[1],
+                    right: coordinates[2],
+                    bottom: coordinates[3],
+                    name: name
+                )
+            } else if shape == "polygon", coordinates.count >= 6, coordinates.count.isMultiple(of: 2) {
+                let points = stride(from: 0, to: coordinates.count, by: 2).map {
+                    SurfacePoint(x: coordinates[$0], y: coordinates[$0 + 1])
+                }
+                builder.collisions[collisionID] = SurfaceCollision(
+                    id: collisionID,
+                    left: points.map(\.x).min() ?? 0,
+                    top: points.map(\.y).min() ?? 0,
+                    right: points.map(\.x).max() ?? 0,
+                    bottom: points.map(\.y).max() ?? 0,
+                    name: name,
+                    polygon: points
+                )
+            }
+            return
+        }
+
         guard key.hasPrefix("animation") else { return }
         let animationKey = key.dropFirst("animation".count).split(separator: ".", maxSplits: 1)
         guard animationKey.count == 2, let animationID = Int(animationKey[0]) else { return }
@@ -199,10 +232,12 @@ public struct SurfacesParser: Sendable {
             animation.interval = values.first
         } else if animationKey[1].hasPrefix("pattern"),
                   let order = Int(animationKey[1].dropFirst("pattern".count)),
-                  values.count >= 3,
-                  let surfaceID = Int(values[1]),
-                  let wait = Int(values[2])
+                  values.count >= 2,
+                  let surfaceID = Int(values[1])
         {
+            // SERIKO's stop pattern has no wait field:
+            // animation101.pattern0,stop,100
+            let wait = values.count > 2 ? Int(values[2]) ?? 0 : 0
             animation.patterns[order] = SurfaceAnimationPattern(
                 order: order,
                 method: values[0],

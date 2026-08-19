@@ -29,21 +29,30 @@ public struct DialogueCatalog: Codable, Sendable, Equatable {
     public func scripts(for event: GhostEvent) -> [String] {
         switch event {
         case .boot:
-            boot
+            return boot
         case .close:
-            close
+            return close
         case .ghostChanging:
-            ghostChanging.isEmpty ? close : ghostChanging
+            return ghostChanging.isEmpty ? close : ghostChanging
         case .randomTalk:
-            randomTalk
+            return randomTalk
         case let .mouseClick(_, region):
             if let region, let scripts = mouseClick[region] {
-                scripts
+                return scripts
             } else {
-                mouseClick["*"] ?? []
+                return mouseClick["*"] ?? []
             }
+        case let .mouse(event):
+            guard case .click = event.kind else { return [] }
+            if let region = event.region, let scripts = mouseClick[region] {
+                return scripts
+            } else {
+                return mouseClick["*"] ?? []
+            }
+        case .shiori:
+            return []
         case let .choice(id, _):
-            choices[id] ?? []
+            return choices[id] ?? []
         }
     }
 

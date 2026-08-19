@@ -57,3 +57,23 @@ func `parses choices anchors and quoted arguments`() {
         .anchorEnd
     ])
 }
+
+@Test
+func `parses embedded SHIORI events`() {
+    #expect(SakuraScriptParser().parse(#"\![embed,OnCallSurface,5]"#) == [
+        .embeddedEvent(id: "OnCallSurface", arguments: ["5"])
+    ])
+}
+
+@Test
+func `consumes anchor display marker without leaking question marks`() {
+    let tokens = SakuraScriptParser().parse(#"\_a[https://example.test/]\_?News\_?\_a"#)
+
+    #expect(tokens == [
+        .anchorStart(id: "https://example.test/", arguments: []),
+        .unknown("\\_?"),
+        .text("News"),
+        .unknown("\\_?"),
+        .anchorEnd
+    ])
+}

@@ -6,11 +6,25 @@ import UtataneCore
 struct SurfaceImageLoader {
     private let context = CIContext()
 
-    func load(_ surface: SurfaceAsset) throws -> NSImage {
+    func load(_ surface: SurfaceAsset, usesSelfAlpha: Bool = false) throws -> NSImage {
         guard let inputImage = CIImage(contentsOf: surface.imageURL) else {
             throw SurfaceImageError.invalidImage(surface.imageURL)
         }
         guard let alphaMaskURL = surface.alphaMaskURL else {
+            if usesSelfAlpha {
+                guard let source = NSImage(contentsOf: surface.imageURL),
+                      let representation = source.representations
+                        .compactMap({ $0 as? NSBitmapImageRep })
+                        .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh })
+                else {
+                    throw SurfaceImageError.invalidImage(surface.imageURL)
+                }
+                let pixelSize = NSSize(width: representation.pixelsWide, height: representation.pixelsHigh)
+                representation.size = pixelSize
+                let image = NSImage(size: pixelSize)
+                image.addRepresentation(representation)
+                return image
+            }
             return try loadUsingTopLeftTransparency(surface.imageURL)
         }
         guard let maskImage = CIImage(contentsOf: alphaMaskURL) else {
@@ -100,7 +114,10 @@ struct SurfaceImageLoader {
         let width = representation.pixelsWide
         let height = representation.pixelsHigh
         let bytesPerRow = representation.bytesPerRow
-        let keyOffset = (height - 1) * bytesPerRow
+        // NSBitmapImageRep uses y == 0 for the image's top row. The previous
+        // implementation sampled the bottom-left pixel, which left YAYA's
+        // bright-green marker visible for one animation frame.
+        let keyOffset = 0
         let key = (pixels[keyOffset], pixels[keyOffset + 1], pixels[keyOffset + 2])
 
         for row in 0 ..< height {
@@ -110,6 +127,11 @@ struct SurfaceImageLoader {
                    pixels[offset + 1] == key.1,
                    pixels[offset + 2] == key.2
                 {
+                    // Avoid chroma-key color bleeding back in when AppKit
+                    // interpolates small animation overlays.
+                    pixels[offset] = 0
+                    pixels[offset + 1] = 0
+                    pixels[offset + 2] = 0
                     pixels[offset + 3] = 0
                 }
             }

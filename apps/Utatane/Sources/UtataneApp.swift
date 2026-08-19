@@ -5,8 +5,10 @@ import UtataneBalloon
 import UtataneContent
 import UtataneCore
 import UtataneGhostKit
+import UtataneNetwork
 import UtatanePlatformMacOS
 import UtataneRuntime
+import UtataneSatoriNative
 import UtataneSakuraScript
 import UtataneShell
 import UtataneYayaNative
@@ -19,9 +21,12 @@ struct UtataneApp: App {
     private let model: GhostListModel
     private let shellLoader: ShellLoader
     private let surfaceWindowController: SurfaceWindowController
+    private let balloonWindowController: BalloonWindowController
     private let balloonLoader: BalloonLoader
     private let scriptPlayer: SakuraScriptPlayer
     private let selectionStore: ContentSelectionStore
+    private let sstpServer: SSTPServer
+    @StateObject private var networkSettings: NetworkSettingsStore
 
     init() {
         let positionStore = WindowPositionStore()
@@ -33,8 +38,11 @@ struct UtataneApp: App {
         model = GhostListModel(loadGhosts: LoadInstalledGhosts(repository: repository))
         shellLoader = ShellLoader()
         self.surfaceWindowController = surfaceWindowController
+        self.balloonWindowController = balloonWindowController
         balloonLoader = BalloonLoader()
         selectionStore = ContentSelectionStore()
+        sstpServer = SSTPServer()
+        _networkSettings = StateObject(wrappedValue: NetworkSettingsStore())
         scriptPlayer = SakuraScriptPlayer(
             surfaceWindowController: surfaceWindowController,
             balloonWindowController: balloonWindowController
@@ -47,10 +55,19 @@ struct UtataneApp: App {
                 model: model,
                 shellLoader: shellLoader,
                 surfaceWindowController: surfaceWindowController,
+                balloonWindowController: balloonWindowController,
                 balloonLoader: balloonLoader,
                 scriptPlayer: scriptPlayer,
                 selectionStore: selectionStore,
+                sstpServer: sstpServer,
+                networkSettings: networkSettings,
                 applicationDelegate: applicationDelegate
+            )
+        }
+        Settings {
+            UtataneSettingsView(
+                settings: networkSettings,
+                headlinesDirectory: ContentRoot.headlinesDirectory
             )
         }
     }
@@ -60,10 +77,15 @@ private struct UtataneRootView: View {
     let model: GhostListModel
     let shellLoader: ShellLoader
     let surfaceWindowController: SurfaceWindowController
+    let balloonWindowController: BalloonWindowController
     let balloonLoader: BalloonLoader
     let scriptPlayer: SakuraScriptPlayer
     let selectionStore: ContentSelectionStore
+    let sstpServer: SSTPServer
+    @ObservedObject var networkSettings: NetworkSettingsStore
     let applicationDelegate: UtataneApplicationDelegate
+
+    @Environment(\.openSettings) private var openSettings
 
     @State private var previewError: String?
     @State private var lastClickedRegion: String?
@@ -74,6 +96,9 @@ private struct UtataneRootView: View {
     @State private var selectedShell: InstalledShell?
     @State private var installedBalloons: [BalloonDefinition] = []
     @State private var isImportingNar = false
+    @State private var isEnteringRSSURL = false
+    @State private var rssURLText = ""
+    @State private var installedHeadlines: [InstalledHeadline] = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -111,16 +136,36 @@ private struct UtataneRootView: View {
                 requestApplicationTermination()
             }
             await model.load()
+            reloadHeadlines()
             let restoredGhost = model.ghosts.first {
                 $0.rootDirectory.lastPathComponent == selectionStore.ghostDirectoryName
             }
             selectedGhostID = selectedGhostID ?? restoredGhost?.id ?? model.ghosts.first?.id
+            do {
+                try sstpServer.start { request in
+                    await handleSSTP(request)
+                }
+            } catch {
+                previewError = error.localizedDescription
+            }
         }
         .task(id: selectedGhostID) {
             guard let selectedGhostID,
                   let ghost = model.ghosts.first(where: { $0.id == selectedGhostID })
             else { return }
             await transition(to: ghost)
+        }
+        .task(id: "\(networkSettings.automaticHeadlineRefresh)-\(networkSettings.headlineRefreshIntervalMinutes)") {
+            guard networkSettings.automaticHeadlineRefresh else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(networkSettings.headlineRefreshIntervalMinutes * 60))
+                guard !Task.isCancelled else { return }
+                for headline in installedHeadlines {
+                    if case let .rss(feedURL) = headline.kind {
+                        await fetchRSS(url: feedURL)
+                    }
+                }
+            }
         }
         .fileImporter(
             isPresented: $isImportingNar,
@@ -150,8 +195,16 @@ private struct UtataneRootView: View {
         } message: {
             Text(previewError ?? "")
         }
+        .alert("RSS/Atomを取得", isPresented: $isEnteringRSSURL) {
+            TextField("https://example.com/feed.xml", text: $rssURLText)
+            Button("取得") { fetchRSS() }
+            Button("キャンセル", role: .cancel) {}
+        } message: {
+            Text("RSSまたはAtomフィードのURL")
+        }
         .onDisappear {
             scriptPlayer.cancel()
+            sstpServer.stop()
         }
     }
 
@@ -193,9 +246,12 @@ private struct UtataneRootView: View {
     private func activate(_ ghost: InstalledGhost) async {
         scriptPlayer.cancel()
         surfaceWindowController.hideAll()
+        surfaceWindowController.setPresentationHidden(true)
         session = nil
         balloon = nil
         currentGhost = ghost
+        surfaceWindowController.setPositionContentID(ghost.id)
+        balloonWindowController.setPositionContentID(ghost.id)
         selectionStore.ghostDirectoryName = ghost.rootDirectory.lastPathComponent
 
         do {
@@ -212,7 +268,15 @@ private struct UtataneRootView: View {
             try show(shell: shellChoice)
             surfaceWindowController.onMouseClick = { scope, region in
                 lastClickedRegion = "scope \(scope): \(region ?? "範囲外")"
-                sendEvent(.mouseClick(scope: scope, region: region))
+            }
+            surfaceWindowController.onMouseEvent = { event in
+                if case .click = event.kind {
+                    lastClickedRegion = "scope \(event.scope): \(event.region ?? "範囲外")"
+                }
+                sendEvent(.mouse(event))
+            }
+            surfaceWindowController.onNarDrop = { _, urls in
+                installNars(from: urls)
             }
 
             installedBalloons = try balloonLoader.loadInstalled(
@@ -227,8 +291,32 @@ private struct UtataneRootView: View {
             scriptPlayer.onError = { error in
                 previewError = error.localizedDescription
             }
+            scriptPlayer.onDialogueContent = {
+                surfaceWindowController.setPresentationHidden(false)
+            }
+            scriptPlayer.onPlaybackFinished = {
+                surfaceWindowController.setPresentationHidden(false)
+            }
+            scriptPlayer.onDialogueDismissed = {
+                sendEvent(.shiori(id: "OnSurfaceRestore", references: [:]))
+            }
             scriptPlayer.onChoice = { id, arguments in
-                sendEvent(.choice(id: id, arguments: arguments))
+                if let url = URL(string: id), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) {
+                    NSWorkspace.shared.open(url)
+                } else if id.caseInsensitiveCompare("CANCEL_NOTALK") == .orderedSame {
+                    scriptPlayer.cancel()
+                } else {
+                    sendEvent(.choice(id: id, arguments: arguments))
+                }
+            }
+            scriptPlayer.onEmbeddedEvent = { id, arguments in
+                guard let embeddedSession = session else { return nil }
+                return try? await embeddedSession.handle(event: .shiori(
+                    id: id,
+                    references: Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
+                        ($0.offset, $0.element)
+                    })
+                ))
             }
 
             let ghostSession = try GhostSession(
@@ -252,6 +340,11 @@ private struct UtataneRootView: View {
         )
         if NativeYayaPersonalityEngine.supports(masterDirectoryURL: masterDirectory),
            let engine = try? NativeYayaPersonalityEngine(masterDirectoryURL: masterDirectory)
+        {
+            return engine
+        }
+        if NativeSatoriPersonalityEngine.supports(masterDirectoryURL: masterDirectory),
+           let engine = try? NativeSatoriPersonalityEngine(masterDirectoryURL: masterDirectory)
         {
             return engine
         }
@@ -291,6 +384,13 @@ private struct UtataneRootView: View {
     private func select(shell: InstalledShell) {
         do {
             try show(shell: shell)
+            sendEvent(.shiori(
+                id: "OnShellChanged",
+                references: [
+                    0: shell.name,
+                    1: shell.directory.lastPathComponent
+                ]
+            ))
         } catch {
             previewError = error.localizedDescription
         }
@@ -349,6 +449,28 @@ private struct UtataneRootView: View {
                 ),
                 .action(title: "バルーンを閉じる", handler: { scriptPlayer.cancel() }),
                 .action(title: "NARをインストール…", handler: { isImportingNar = true }),
+                .action(
+                    title: "ネットワーク更新",
+                    isEnabled: currentGhost != nil && session != nil,
+                    handler: { updateCurrentGhost() }
+                ),
+                .submenu(
+                    title: "RSS / ヘッドライン",
+                    items: installedHeadlines.map { headline in
+                        switch headline.kind {
+                        case let .rss(feedURL):
+                            .action(title: headline.name, handler: {
+                                Task { await fetchRSS(url: feedURL) }
+                            })
+                        case .legacyDLL:
+                            .action(title: "\(headline.name)（DLL未対応）", isEnabled: false, handler: {})
+                        }
+                    } + [
+                        .separator,
+                        .action(title: "URLを指定して取得…", handler: { isEnteringRSSURL = true })
+                    ]
+                ),
+                .action(title: "設定…", handler: { openSettings() }),
                 .separator,
                 .action(title: "Utataneを終了", handler: { NSApplication.shared.terminate(nil) })
             ]
@@ -356,42 +478,225 @@ private struct UtataneRootView: View {
     }
 
     private func installNar(from url: URL) {
-        let hasSecurityScope = url.startAccessingSecurityScopedResource()
+        installNars(from: [url])
+    }
+
+    private func updateCurrentGhost() {
+        guard let ghost = currentGhost, let updateSession = session, let updateBalloon = balloon else { return }
+        Task {
+            do {
+                _ = await playInstallationEvent(
+                    .shiori(id: "OnUpdateBegin", references: [:]),
+                    session: updateSession,
+                    balloon: updateBalloon
+                )
+                let homeURL: URL
+                if let configured = GhostNetworkUpdater.homeURL(in: ghost.rootDirectory) {
+                    homeURL = configured
+                } else if let value = try await updateSession.handle(event: .shiori(id: "On_homeurl", references: [:])),
+                          let configured = URL(string: value.rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+                {
+                    homeURL = configured
+                } else {
+                    throw GhostNetworkUpdateError.invalidHomeURL
+                }
+                let result = try await GhostNetworkUpdater().update(
+                    rootDirectory: ghost.rootDirectory,
+                    homeURL: homeURL
+                )
+                _ = await playInstallationEvent(
+                    .shiori(id: "OnUpdateComplete", references: [
+                        0: result.changedFiles.isEmpty ? "none" : "changed",
+                        1: String(result.changedFiles.count)
+                    ]),
+                    session: updateSession,
+                    balloon: updateBalloon
+                )
+            } catch {
+                let handled = await playInstallationEvent(
+                    .shiori(id: "OnUpdateFailure", references: [0: "download"]),
+                    session: updateSession,
+                    balloon: updateBalloon
+                )
+                if !handled { previewError = error.localizedDescription }
+            }
+        }
+    }
+
+    private func fetchRSS() {
+        guard let url = URL(string: rssURLText) else {
+            previewError = "RSS/AtomのURLが不正"
+            return
+        }
+        Task { await fetchRSS(url: url) }
+    }
+
+    private func fetchRSS(url: URL) async {
+        guard let rssSession = session, let rssBalloon = balloon else { return }
+        do {
+            let siteName = url.host ?? "RSS"
+            _ = await playInstallationEvent(
+                .shiori(id: "OnRSSBegin", references: [0: siteName, 1: url.absoluteString]),
+                session: rssSession,
+                balloon: rssBalloon
+            )
+            let feed = try await RSSFeedClient().fetch(url)
+            var references: [Int: String] = [
+                0: sanitizeNetworkText(feed.title),
+                1: feed.link
+            ]
+            for (index, item) in feed.items.prefix(50).enumerated() {
+                references[index + 2] = [
+                    sanitizeNetworkText(item.title), item.link,
+                    sanitizeNetworkText(item.published), sanitizeNetworkText(item.author),
+                    sanitizeNetworkText(item.summary)
+                ].joined(separator: "\u{1}")
+            }
+            _ = await playInstallationEvent(
+                .shiori(id: "OnRSSComplete", references: references),
+                session: rssSession,
+                balloon: rssBalloon
+            )
+        } catch {
+            let handled = await playInstallationEvent(
+                .shiori(id: "OnRSSFailure", references: [0: "can't analyze"]),
+                session: rssSession,
+                balloon: rssBalloon
+            )
+            if !handled { previewError = error.localizedDescription }
+        }
+    }
+
+    private func reloadHeadlines() {
+        installedHeadlines = (try? HeadlineCatalog().load(from: ContentRoot.headlinesDirectory)) ?? []
+        configureContextMenu()
+    }
+
+    private func sanitizeNetworkText(_ source: String) -> String {
+        source
+            .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+            .replacingOccurrences(of: "\\", with: "")
+            .filter { character in
+                !character.unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
+            }
+            .prefix(4096)
+            .description
+    }
+
+    private func handleSSTP(_ request: SSTPRequest) async -> SSTPResponse {
+        guard let activeSession = session, let activeBalloon = balloon else {
+            return SSTPResponse(statusCode: 503, reason: "Service Unavailable")
+        }
+        var script: SakuraScript?
+        if let eventID = request.value(for: "Event") {
+            var references: [Int: String] = [:]
+            for index in 0 ..< 256 {
+                guard let value = request.value(for: "Reference\(index)") else { continue }
+                references[index] = value
+            }
+            script = try? await activeSession.handle(event: .shiori(id: eventID, references: references))
+        }
+        if script == nil, let fallback = request.value(for: "Script") {
+            script = SakuraScript(rawValue: fallback)
+        }
+        guard let script else { return SSTPResponse(statusCode: 204, reason: "No Content") }
+        scriptPlayer.play(script, balloon: activeBalloon)
+        return SSTPResponse(script: script.rawValue)
+    }
+
+    private func installNars(from urls: [URL]) {
+        guard !urls.isEmpty else { return }
         let roots = NarInstallationRoots(
             ghostsDirectory: ContentRoot.ghostsDirectory,
-            balloonsDirectory: ContentRoot.balloonsDirectory
+            balloonsDirectory: ContentRoot.balloonsDirectory,
+            headlinesDirectory: ContentRoot.headlinesDirectory
         )
         let selectedGhostDirectory = currentGhost?.rootDirectory
+        let installSession = session
+        let installBalloon = balloon
         Task {
+            let securityScopedURLs = urls.filter { $0.startAccessingSecurityScopedResource() }
             defer {
-                if hasSecurityScope {
+                for url in securityScopedURLs {
                     url.stopAccessingSecurityScopedResource()
                 }
             }
             do {
-                let result = try await Task.detached {
-                    try NarInstaller().install(
-                        archiveURL: url,
-                        roots: roots,
-                        selectedGhostDirectory: selectedGhostDirectory
-                    )
-                }.value
+                _ = await playInstallationEvent(
+                    .shiori(id: "OnInstallBegin", references: [:]),
+                    session: installSession,
+                    balloon: installBalloon
+                )
+                var installedItems: [NarInstalledItem] = []
+                for url in urls {
+                    let result = try await Task.detached {
+                        try NarInstaller().install(
+                            archiveURL: url,
+                            roots: roots,
+                            selectedGhostDirectory: selectedGhostDirectory
+                        )
+                    }.value
+                    installedItems.append(contentsOf: result.items)
+                }
                 await model.load()
-                if result.primaryType == .ghost,
-                   let installedGhostURL = result.installedURLs.first,
-                   let installedGhost = model.ghosts.first(where: {
-                       $0.rootDirectory.standardizedFileURL == installedGhostURL.standardizedFileURL
-                   })
-                {
-                    selectedGhostID = installedGhost.id
-                } else if let currentGhost = model.ghosts.first(where: {
+                if let refreshedGhost = model.ghosts.first(where: {
                     $0.id.standardizedFileURL == selectedGhostID?.standardizedFileURL
                 }) {
-                    await transition(to: currentGhost, forceReload: true)
+                    currentGhost = refreshedGhost
                 }
+                installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonsDirectory)
+                reloadHeadlines()
+                configureContextMenu()
+
+                let separator = "\u{1}"
+                _ = await playInstallationEvent(
+                    .shiori(id: "OnInstallCompleteEx", references: [
+                        0: installedItems.map { $0.type.rawValue }.joined(separator: separator),
+                        1: installedItems.map(\.name).joined(separator: separator),
+                        2: installedItems.map { $0.url.lastPathComponent }.joined(separator: separator)
+                    ]),
+                    session: installSession,
+                    balloon: installBalloon
+                )
             } catch {
-                previewError = error.localizedDescription
+                let handled = await playInstallationEvent(
+                    .shiori(id: "OnInstallFailure", references: [0: installFailureReason(error)]),
+                    session: installSession,
+                    balloon: installBalloon
+                )
+                if !handled {
+                    previewError = error.localizedDescription
+                }
             }
+        }
+    }
+
+    private func playInstallationEvent(
+        _ event: GhostEvent,
+        session: GhostSession?,
+        balloon: BalloonDefinition?
+    ) async -> Bool {
+        guard let session, let balloon else { return false }
+        do {
+            guard let script = try await session.handle(event: event) else { return false }
+            scriptPlayer.play(script, balloon: balloon)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func installFailureReason(_ error: Error) -> String {
+        guard let error = error as? NarInstallError else { return "unsupported" }
+        switch error {
+        case .unreadableArchive, .commandFailed, .symbolicLink, .unsafeEntry,
+             .tooManyEntries, .extractedContentTooLarge:
+            return "extraction"
+        case .missingInstallFile, .ambiguousInstallFile, .unsupportedTextEncoding,
+             .invalidDirectoryName, .missingSourceDirectory, .shellRequiresGhost:
+            return "invalid type"
+        case .unsupportedType, .missingArchive, .archiveTooLarge, .destinationExists:
+            return "unsupported"
         }
     }
 
@@ -519,6 +824,27 @@ private enum ContentRoot {
             for: .applicationSupportDirectory,
             in: .userDomainMask
         )[0].appending(path: "Utatane/Balloons", directoryHint: .isDirectory)
+    }
+
+    static var headlinesDirectory: URL {
+        if let override = ProcessInfo.processInfo.environment["UTATANE_HEADLINES_ROOT"] {
+            return URL(filePath: override, directoryHint: .isDirectory)
+        }
+
+        #if DEBUG
+            let localHeadlines = repositoryRoot.appending(
+                path: "Content/Local/Headline",
+                directoryHint: .isDirectory
+            )
+            if FileManager.default.fileExists(atPath: localHeadlines.path) {
+                return localHeadlines
+            }
+        #endif
+
+        return FileManager.default.urls(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask
+        )[0].appending(path: "Utatane/Headline", directoryHint: .isDirectory)
     }
 
     private static var repositoryRoot: URL {

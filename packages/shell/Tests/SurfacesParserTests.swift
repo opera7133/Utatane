@@ -34,6 +34,24 @@ func `parses collisions and animation patterns`() throws {
 }
 
 @Test
+func `parses stop animation pattern without wait field`() throws {
+    let surfaces = SurfacesParser().parse("""
+    surface0
+    {
+    animation101.interval,bind+rarely
+    animation101.pattern0,stop,100
+    animation101.pattern1,overlay,16000,0,0,0
+    }
+    """)
+
+    let animation = try #require(surfaces[0]?.animations.first)
+    #expect(animation.patterns.count == 2)
+    #expect(animation.patterns[0].method == "stop")
+    #expect(animation.patterns[0].surfaceID == 100)
+    #expect(animation.patterns[0].waitMilliseconds == 0)
+}
+
+@Test
 func `parses ranges exclusions append definitions and aliases`() {
     let source = """
     surface0-3,!2
@@ -64,4 +82,25 @@ func `parses ranges exclusions append definitions and aliases`() {
     #expect(document.surfaces[3]?.collisions.map(\.name) == ["Base", "Added"])
     #expect(document.aliases[0]?["smile"] == [1, 3])
     #expect(document.aliases[1]?["normal"] == [10])
+}
+
+@Test
+func `parses extended rectangle and polygon collisions`() throws {
+    let source = """
+    surface0
+    {
+    collisionex0,head,rect,1,2,10,20
+    collisionex1,hair,polygon,0,0,20,0,20,20,0,20
+    }
+    """
+
+    let surface = try #require(SurfacesParser().parse(source)[0])
+    let head = try #require(surface.collisions.first { $0.name == "head" })
+    let hair = try #require(surface.collisions.first { $0.name == "hair" })
+
+    #expect(head.contains(x: 5, y: 10))
+    #expect(!head.contains(x: 0, y: 10))
+    #expect(hair.polygon.count == 4)
+    #expect(hair.contains(x: 10, y: 10))
+    #expect(!hair.contains(x: 21, y: 10))
 }

@@ -34,7 +34,30 @@ func `installs a balloon NAR into the balloon root`() throws {
         path: "test-balloon",
         directoryHint: .isDirectory
     )
-    #expect(result == NarInstallResult(primaryType: .balloon, installedURLs: [destination]))
+    #expect(result == NarInstallResult(
+        primaryType: .balloon,
+        items: [NarInstalledItem(type: .balloon, name: "Test", url: destination)]
+    ))
+    #expect(FileManager.default.fileExists(atPath: destination.appending(path: "descript.txt").path))
+}
+
+@Test
+func `installs a headline NAR into the headline root`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let package = fixture.source.appending(path: "package", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+    try Data("type,headline\nname,Test News\ndirectory,test-news\n".utf8).write(
+        to: package.appending(path: "install.txt")
+    )
+    try Data("type,rss\nname,Test News\nfeed,https://example.test/feed.xml\n".utf8).write(
+        to: package.appending(path: "descript.txt")
+    )
+    let archive = try makeArchive(from: fixture.source, at: fixture.root)
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+    let destination = fixture.roots.headlinesDirectory.appending(path: "test-news", directoryHint: .isDirectory)
+    #expect(result.items == [NarInstalledItem(type: .headline, name: "Test News", url: destination)])
     #expect(FileManager.default.fileExists(atPath: destination.appending(path: "descript.txt").path))
 }
 
@@ -62,6 +85,8 @@ func `installs a ghost and its bundled balloon together`() throws {
 
     #expect(result.primaryType == .ghost)
     #expect(result.installedURLs.count == 2)
+    #expect(result.items.map(\.type) == [.ghost, .balloon])
+    #expect(result.items.map(\.name) == ["test-ghost", "test-balloon"])
     #expect(FileManager.default.fileExists(atPath: fixture.roots.ghostsDirectory
             .appending(path: "test-ghost/ghost/master/descript.txt").path))
     #expect(FileManager.default.fileExists(atPath: fixture.roots.balloonsDirectory

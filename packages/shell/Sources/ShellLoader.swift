@@ -54,10 +54,13 @@ public struct ShellLoader: Sendable {
             sources.joined(separator: "\n"),
             existingSurfaceIDs: existingSurfaceIDs
         )
+        let shellMetadata = metadata(in: shellDirectory)
         return ShellDefinition(
             directory: shellDirectory,
             surfaces: document.surfaces,
-            surfaceAliases: document.aliases
+            surfaceAliases: document.aliases,
+            usesSelfAlpha: shellMetadata.usesSelfAlpha,
+            defaultBindGroups: shellMetadata.defaultBindGroups
         )
     }
 
@@ -112,6 +115,46 @@ public struct ShellLoader: Sendable {
             throw ShellError.unsupportedTextEncoding(url)
         }
         return text
+    }
+
+    private func metadata(in shellDirectory: URL) -> (usesSelfAlpha: Bool, defaultBindGroups: [Int: Set<Int>]) {
+        let url = shellDirectory.appending(path: "descript.txt", directoryHint: .notDirectory)
+        guard let text = try? readText(from: url) else { return (false, [:]) }
+        var usesSelfAlpha = false
+        var defaultBindGroups: [Int: Set<Int>] = [:]
+        for line in text.split(whereSeparator: \ .isNewline) {
+            let fields = line.split(separator: ",", maxSplits: 1).map {
+                $0.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            guard fields.count == 2, fields[1] == "1" else { continue }
+            if fields[0].caseInsensitiveCompare("seriko.use_self_alpha") == .orderedSame {
+                usesSelfAlpha = true
+                continue
+            }
+            let key = fields[0].lowercased()
+            let scope: Int
+            let remainder: Substring
+            if key.hasPrefix("sakura.bindgroup") {
+                scope = 0
+                remainder = key.dropFirst("sakura.bindgroup".count)
+            } else if key.hasPrefix("kero.bindgroup") {
+                scope = 1
+                remainder = key.dropFirst("kero.bindgroup".count)
+            } else if key.hasPrefix("char"), let separator = key.firstIndex(of: ".") {
+                guard let parsedScope = Int(key[key.index(key.startIndex, offsetBy: 4) ..< separator]),
+                      key[separator...].hasPrefix(".bindgroup")
+                else { continue }
+                scope = parsedScope
+                remainder = key[key.index(separator, offsetBy: ".bindgroup".count)...]
+            } else {
+                continue
+            }
+            guard remainder.hasSuffix(".default"),
+                  let groupID = Int(remainder.dropLast(".default".count))
+            else { continue }
+            defaultBindGroups[scope, default: []].insert(groupID)
+        }
+        return (usesSelfAlpha, defaultBindGroups)
     }
 
     private func surfaceID(fromImageFilename filename: String) -> Int? {

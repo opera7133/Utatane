@@ -37,6 +37,11 @@ public actor NativeYayaPersonalityEngine: PersonalityEngine {
         var context = ShioriEventContext()
         if case let .mouseClick(scope, _) = event {
             context.scope = scope
+        } else if case let .mouse(mouseEvent) = event {
+            context.scope = mouseEvent.scope
+            context.mouseX = mouseEvent.x
+            context.mouseY = mouseEvent.y
+            context.mouseButton = mouseEvent.button
         }
 
         let response = try session.request(adapter.request(for: event, context: context))

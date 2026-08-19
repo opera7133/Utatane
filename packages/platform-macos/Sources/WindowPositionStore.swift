@@ -4,6 +4,7 @@ import AppKit
 public final class WindowPositionStore {
     private let defaults: UserDefaults
     private let namespace: String
+    private var contentID: URL?
 
     public init(
         defaults: UserDefaults = .standard,
@@ -11,6 +12,10 @@ public final class WindowPositionStore {
     ) {
         self.defaults = defaults
         self.namespace = namespace
+    }
+
+    public func setContentID(_ contentID: URL?) {
+        self.contentID = contentID?.standardizedFileURL
     }
 
     func save(_ origin: NSPoint, for kind: FloatingWindowKind, scope: Int) {
@@ -50,7 +55,8 @@ public final class WindowPositionStore {
     }
 
     private func key(for kind: FloatingWindowKind, scope: Int) -> String {
-        "\(namespace).\(kind.rawValue).\(scope)"
+        let contentKey = contentID?.path.data(using: .utf8)?.base64EncodedString() ?? "global"
+        return "\(namespace).\(contentKey).\(kind.rawValue).\(scope)"
     }
 }
 

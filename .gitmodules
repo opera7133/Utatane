@@ -1,0 +1,8 @@
+[submodule "packages/yaya-native/Sources/CYayaNative/Vendor/YAYA"]
+	path = packages/yaya-native/Sources/CYayaNative/Vendor/YAYA
+	url = https://github.com/opera7133/yaya-shiori
+	branch = utatane-macos
+[submodule "packages/satori-native/Sources/CSatoriNative/Vendor"]
+	path = packages/satori-native/Sources/CSatoriNative/Vendor
+	url = https://github.com/opera7133/satoriya-shiori
+	branch = utatane-vendor

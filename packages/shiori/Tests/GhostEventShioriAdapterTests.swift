@@ -38,3 +38,57 @@ import UtataneCore
     #expect(request.reference(1) == "two")
     #expect(request.headers.entries.prefix(4).map(\.name) == ["Charset", "Sender", "SecurityLevel", "ID"])
 }
+
+@Test func `maps native pointer events with coordinates and wheel delta`() {
+    let adapter = GhostEventShioriAdapter()
+    let move = adapter.request(for: .mouse(GhostMouseEvent(
+        kind: .move,
+        scope: 2,
+        region: "Head",
+        x: 44,
+        y: 55
+    )))
+
+    #expect(move.id == "OnMouseMove")
+    #expect(move.reference(0) == "44")
+    #expect(move.reference(1) == "55")
+    #expect(move.reference(3) == "2")
+    #expect(move.reference(4) == "Head")
+    #expect(move.reference(5) == "0")
+
+    let wheel = adapter.request(for: .mouse(GhostMouseEvent(
+        kind: .wheel(delta: -3),
+        scope: 0,
+        region: "Face",
+        x: 10,
+        y: 20
+    )))
+    #expect(wheel.id == "OnMouseWheel")
+    #expect(wheel.reference(2) == "-3")
+}
+
+@Test func `maps double click separately from click`() {
+    let request = GhostEventShioriAdapter().request(for: .mouse(GhostMouseEvent(
+        kind: .doubleClick,
+        scope: 1,
+        region: "Bust",
+        x: 30,
+        y: 40
+    )))
+
+    #expect(request.id == "OnMouseDoubleClick")
+    #expect(request.reference(3) == "1")
+    #expect(request.reference(4) == "Bust")
+}
+
+@Test func `maps a baseware event directly to SHIORI`() {
+    let request = GhostEventShioriAdapter().request(for: .shiori(
+        id: "OnInstallCompleteEx",
+        references: [0: "ghost", 1: "Emily", 2: "emily4"]
+    ))
+
+    #expect(request.id == "OnInstallCompleteEx")
+    #expect(request.reference(0) == "ghost")
+    #expect(request.reference(1) == "Emily")
+    #expect(request.reference(2) == "emily4")
+}

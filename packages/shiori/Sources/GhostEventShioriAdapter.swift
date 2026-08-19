@@ -54,13 +54,13 @@ public struct GhostEventShioriAdapter: Sendable {
     ) -> (id: String, references: [Int: String]) {
         switch event {
         case .boot:
-            ("OnBoot", [:])
+            return ("OnBoot", [:])
         case .close:
-            ("OnClose", [:])
+            return ("OnClose", [:])
         case let .ghostChanging(name):
-            ("OnGhostChanging", name.map { [0: $0] } ?? [:])
+            return ("OnGhostChanging", name.map { [0: $0] } ?? [:])
         case let .mouseClick(scope, region):
-            (
+            return (
                 "OnMouseClick",
                 [
                     0: context.mouseX.map(String.init),
@@ -70,10 +70,37 @@ public struct GhostEventShioriAdapter: Sendable {
                     5: String(context.mouseButton)
                 ].compactMapValues { $0 }
             )
+        case let .mouse(event):
+            let id: String
+            var references: [Int: String] = [
+                0: String(event.x),
+                1: String(event.y),
+                3: String(event.scope),
+                5: String(event.button)
+            ]
+            if let region = event.region {
+                references[4] = region
+            }
+            switch event.kind {
+            case .move:
+                id = "OnMouseMove"
+            case .click:
+                id = "OnMouseClick"
+            case .doubleClick:
+                id = "OnMouseDoubleClick"
+            case let .wheel(delta):
+                id = "OnMouseWheel"
+                references[2] = String(delta)
+            }
+            return (id, references)
+        case let .shiori(id, references):
+            return (id, references)
         case .randomTalk:
-            ("OnAITalk", [:])
+            return ("OnAITalk", [:])
         case let .choice(id, arguments):
-            (id, Dictionary(uniqueKeysWithValues: arguments.enumerated().map { ($0.offset, $0.element) }))
+            return (id, Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
+                ($0.offset, $0.element)
+            }))
         }
     }
 }

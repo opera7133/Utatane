@@ -19,11 +19,14 @@ func `uses top left pixel as transparency key without PNA`() throws {
     ))
     let keyColor = NSColor(deviceRed: 1, green: 0, blue: 1, alpha: 1)
     let contentColor = NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    let nonKeyColor = NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
     for y in 0 ..< 2 {
         for x in 0 ..< 2 {
-            source.setColor(keyColor, atX: x, y: y)
+            source.setColor(nonKeyColor, atX: x, y: y)
         }
     }
+    source.setColor(keyColor, atX: 0, y: 0)
+    source.setColor(keyColor, atX: 1, y: 1)
     source.setColor(contentColor, atX: 1, y: 0)
     // Simulates a 400 DPI image: 2 px is only 0.36 pt at 72 points per inch.
     source.size = NSSize(width: 0.36, height: 0.36)
@@ -34,10 +37,8 @@ func `uses top left pixel as transparency key without PNA`() throws {
     #expect(image.size == NSSize(width: 2, height: 2))
     let tiff = try #require(image.tiffRepresentation)
     let output = try #require(NSBitmapImageRep(data: tiff))
-    let alphas = (0 ..< 2).flatMap { y in
-        (0 ..< 2).map { x in output.colorAt(x: x, y: y)?.alphaComponent ?? 1 }
-    }
-
-    #expect(alphas.contains { $0 == 0 })
-    #expect(alphas.contains { $0 > 0.9 })
+    #expect((output.colorAt(x: 0, y: 0)?.alphaComponent ?? 1) == 0)
+    #expect((output.colorAt(x: 1, y: 1)?.alphaComponent ?? 1) == 0)
+    #expect((output.colorAt(x: 0, y: 1)?.alphaComponent ?? 0) > 0.9)
+    #expect((output.colorAt(x: 1, y: 0)?.alphaComponent ?? 0) > 0.9)
 }
