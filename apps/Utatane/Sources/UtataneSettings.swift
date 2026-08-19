@@ -207,7 +207,7 @@ struct UtataneSettingsView: View {
                             HStack {
                                 Text(headline.name)
                                 Spacer()
-                                Text(kindLabel(headline.kind)).foregroundStyle(.secondary)
+                                Text(kindLabel(headline)).foregroundStyle(.secondary)
                             }
                         }
                     }
@@ -226,10 +226,10 @@ struct UtataneSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Section("Windows SHIORI") {
+                Section("Windows互換モジュール") {
                     TextField("Wine実行ファイル", text: $settings.wineExecutablePath)
                     TextField("WINEPREFIX", text: $settings.winePrefixPath)
-                    Text("両方を設定した場合だけMateriaのFIRSTを起動する。32-bit Windowsアプリを実行できるWineと、専用のprefixを指定する。")
+                    Text("MateriaのFIRSTと、config.txtで解析できないHEADLINE DLLに使用する。32-bit Windowsアプリを実行できるWineと、専用のprefixを指定する。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -251,10 +251,11 @@ struct UtataneSettingsView: View {
         }
     }
 
-    private func kindLabel(_ kind: InstalledHeadline.Kind) -> String {
-        switch kind {
+    private func kindLabel(_ headline: InstalledHeadline) -> String {
+        switch headline.kind {
         case .rss: "RSS / Atom"
-        case .legacyDLL: "HEADLINE DLL（未対応）"
+        case .legacyDLL:
+            ConfigHeadlineSensor.canLoad(headline) ? "HEADLINE設定" : "HEADLINE DLL（Wine）"
         }
     }
 }

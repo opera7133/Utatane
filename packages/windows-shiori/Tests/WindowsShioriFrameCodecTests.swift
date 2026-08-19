@@ -43,3 +43,17 @@ import Testing
             == #"\p[1]\s[13]うにゅ"#
     )
 }
+
+@Test func `parses repeated UTF8 HEADLINE values and URL extension`() throws {
+    let response = Data("""
+    HEADLINE/2.0 200 OK\r
+    Charset: UTF-8\r
+    Headline: 一件目\u{1}https://example.test/1\r
+    Headline: 二件目\r
+    \r
+    """.utf8)
+    #expect(try WindowsHeadlineSensor.items(from: response) == [
+        WindowsHeadlineItem(title: "一件目", url: "https://example.test/1"),
+        WindowsHeadlineItem(title: "二件目")
+    ])
+}

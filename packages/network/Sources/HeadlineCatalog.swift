@@ -9,12 +9,26 @@ public struct InstalledHeadline: Identifiable, Sendable, Equatable {
     public let id: URL
     public let name: String
     public let siteURL: URL?
+    public let openURL: URL?
+    public let charset: String
+    public let alwaysDisplay: Bool
     public let kind: Kind
 
-    public init(id: URL, name: String, siteURL: URL?, kind: Kind) {
+    public init(
+        id: URL,
+        name: String,
+        siteURL: URL?,
+        openURL: URL? = nil,
+        charset: String = "Shift_JIS",
+        alwaysDisplay: Bool = false,
+        kind: Kind
+    ) {
         self.id = id
         self.name = name
         self.siteURL = siteURL
+        self.openURL = openURL
+        self.charset = charset
+        self.alwaysDisplay = alwaysDisplay
         self.kind = kind
     }
 }
@@ -37,11 +51,30 @@ public struct HeadlineCatalog: Sendable {
         guard let data = try? Data(contentsOf: descriptor), let metadata = metadata(from: data) else { return nil }
         let name = metadata["name"] ?? directory.lastPathComponent
         let siteURL = metadata["url"].flatMap(URL.init(string:))
+        let openURL = metadata["openurl"].flatMap(URL.init(string:))
+        let charset = metadata["charset"] ?? "Shift_JIS"
+        let alwaysDisplay = metadata["alwaysdisplay"] == "1"
         if metadata["type"]?.lowercased() == "rss", let value = metadata["feed"], let feedURL = URL(string: value) {
-            return InstalledHeadline(id: directory, name: name, siteURL: siteURL, kind: .rss(feedURL: feedURL))
+            return InstalledHeadline(
+                id: directory,
+                name: name,
+                siteURL: siteURL,
+                openURL: openURL,
+                charset: charset,
+                alwaysDisplay: alwaysDisplay,
+                kind: .rss(feedURL: feedURL)
+            )
         }
         if let dllName = metadata["dllname"] {
-            return InstalledHeadline(id: directory, name: name, siteURL: siteURL, kind: .legacyDLL(fileName: dllName))
+            return InstalledHeadline(
+                id: directory,
+                name: name,
+                siteURL: siteURL,
+                openURL: openURL,
+                charset: charset,
+                alwaysDisplay: alwaysDisplay,
+                kind: .legacyDLL(fileName: dllName)
+            )
         }
         return nil
     }

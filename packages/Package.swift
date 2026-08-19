@@ -83,7 +83,8 @@ let package = Package(
                 "UtataneCore",
                 "UtataneRuntime",
                 "UtataneSakuraScript",
-                "UtataneShiori"
+                "UtataneShiori",
+                "UtataneNetwork"
             ],
             path: "windows-shiori/Sources"
         ),

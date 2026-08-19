@@ -229,8 +229,11 @@ private struct UtataneRootView: View {
                 try? await Task.sleep(for: .seconds(networkSettings.headlineRefreshIntervalMinutes * 60))
                 guard !Task.isCancelled else { return }
                 for headline in installedHeadlines {
-                    if case let .rss(feedURL) = headline.kind {
+                    switch headline.kind {
+                    case let .rss(feedURL):
                         await fetchRSS(url: feedURL)
+                    case .legacyDLL:
+                        await fetchLegacyHeadline(headline)
                     }
                 }
             }
@@ -632,7 +635,13 @@ private struct UtataneRootView: View {
                                 Task { await fetchRSS(url: feedURL) }
                             })
                         case .legacyDLL:
-                            .action(title: "\(headline.name)（DLL未対応）", isEnabled: false, handler: {})
+                            .action(
+                                title: headline.name,
+                                isEnabled: headline.siteURL != nil
+                                    && (ConfigHeadlineSensor.canLoad(headline)
+                                        || ContentRoot.windowsHeadlineConfiguration() != nil),
+                                handler: { Task { await fetchLegacyHeadline(headline) } }
+                            )
                         }
                     } + [
                         .separator,
@@ -918,6 +927,98 @@ private struct UtataneRootView: View {
             if !handled {
                 previewError = error.localizedDescription
             }
+        }
+    }
+
+    private func fetchLegacyHeadline(_ headline: InstalledHeadline) async {
+        guard let headlineSession = session, let headlineBalloon = balloon else { return }
+        guard let sourceURL = headline.siteURL else {
+            previewError = "HEADLINEセンサーの取得URLが設定されていない"
+            return
+        }
+        let usesNativeConfig = ConfigHeadlineSensor.canLoad(headline)
+        let windowsConfiguration = ContentRoot.windowsHeadlineConfiguration()
+        guard usesNativeConfig || windowsConfiguration != nil else {
+            previewError = "このHEADLINE DLLを使うにはWine設定が必要"
+            return
+        }
+        _ = await playInstallationEvent(
+            .shiori(id: "OnHeadlinesenseBegin", references: [
+                0: headline.name,
+                1: sourceURL.absoluteString
+            ]),
+            session: headlineSession,
+            balloon: headlineBalloon
+        )
+
+        let cacheURL = ContentRoot.headlineCacheURL(for: headline)
+        let incomingURL = cacheURL.deletingLastPathComponent().appending(
+            path: "incoming-\(UUID().uuidString).html",
+            directoryHint: .notDirectory
+        )
+        defer { try? FileManager.default.removeItem(at: incomingURL) }
+        do {
+            try FileManager.default.createDirectory(
+                at: cacheURL.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            let data = try await NetworkFetchClient(maximumBytes: 5 * 1024 * 1024).fetch(sourceURL)
+            try data.write(to: incomingURL, options: .atomic)
+            let items: [HeadlineSensorItem] = try await Task.detached {
+                if usesNativeConfig {
+                    return try ConfigHeadlineSensor().analyze(
+                        headline: headline,
+                        oldData: try? Data(contentsOf: cacheURL),
+                        newData: data
+                    )
+                }
+                guard let windowsConfiguration else { return [] }
+                return try WindowsHeadlineSensor(configuration: windowsConfiguration).analyze(
+                    headline: headline,
+                    oldFileURL: FileManager.default.fileExists(atPath: cacheURL.path) ? cacheURL : nil,
+                    newFileURL: incomingURL
+                ).items
+            }.value
+            try data.write(to: cacheURL, options: .atomic)
+
+            let displayedItems = Array(items.prefix(50))
+            guard !displayedItems.isEmpty else {
+                _ = await playInstallationEvent(
+                    .shiori(id: "OnHeadlinesenseComplete", references: [0: "no update"]),
+                    session: headlineSession,
+                    balloon: headlineBalloon
+                )
+                return
+            }
+            for (index, item) in displayedItems.enumerated() {
+                let phase: String = if displayedItems.count == 1 {
+                    "First and Last"
+                } else if index == 0 {
+                    "First"
+                } else if index == displayedItems.count - 1 {
+                    "Last"
+                } else {
+                    "Next"
+                }
+                _ = await playInstallationEvent(
+                    .shiori(id: "OnHeadlinesense.OnFind", references: [
+                        0: headline.name,
+                        1: item.url ?? headline.openURL?.absoluteString ?? sourceURL.absoluteString,
+                        2: phase,
+                        3: sanitizeNetworkText(item.title)
+                    ]),
+                    session: headlineSession,
+                    balloon: headlineBalloon
+                )
+            }
+        } catch {
+            let reason = error is NetworkFetchError ? "can't download" : "can't analyze"
+            let handled = await playInstallationEvent(
+                .shiori(id: "OnHeadlinesenseFailure", references: [0: reason]),
+                session: headlineSession,
+                balloon: headlineBalloon
+            )
+            if !handled { previewError = error.localizedDescription }
         }
     }
 
@@ -1444,6 +1545,54 @@ enum ContentRoot {
             materiaExecutableURL: materiaExecutableURL,
             shioriDLLURL: shioriDLLURL
         )
+    }
+
+    static func windowsHeadlineConfiguration() -> WindowsHeadlineHostConfiguration? {
+        let environment = ProcessInfo.processInfo.environment
+        let defaults = UserDefaults.standard
+        let fileManager = FileManager.default
+        guard let winePath = environment["UTATANE_WINE_EXECUTABLE"]
+            ?? defaults.string(forKey: "windowsShiori.wineExecutablePath"),
+            !winePath.isEmpty,
+            let prefixPath = environment["UTATANE_WINE_PREFIX"]
+            ?? defaults.string(forKey: "windowsShiori.winePrefixPath"),
+            !prefixPath.isEmpty
+        else { return nil }
+
+        let hostURL: URL
+        if let override = environment["UTATANE_WINDOWS_DLL_HOST"] {
+            hostURL = URL(filePath: override, directoryHint: .notDirectory)
+        } else {
+            #if DEBUG
+                hostURL = repositoryRoot.appending(
+                    path: "Content/Local/WindowsDLLBridge/utatane-dll-host.exe",
+                    directoryHint: .notDirectory
+                )
+            #else
+                guard let bundledHost = Bundle.main.url(
+                    forResource: "utatane-dll-host",
+                    withExtension: "exe"
+                ) else { return nil }
+                hostURL = bundledHost
+            #endif
+        }
+        let wineURL = URL(filePath: winePath, directoryHint: .notDirectory)
+        let prefixURL = URL(filePath: prefixPath, directoryHint: .isDirectory)
+        guard [wineURL, prefixURL, hostURL].allSatisfy({ fileManager.fileExists(atPath: $0.path) }) else {
+            return nil
+        }
+        return WindowsHeadlineHostConfiguration(
+            wineExecutableURL: wineURL,
+            winePrefixURL: prefixURL,
+            hostExecutableURL: hostURL
+        )
+    }
+
+    static func headlineCacheURL(for headline: InstalledHeadline) -> URL {
+        contentDirectory
+            .appending(path: "Cache/Headline", directoryHint: .isDirectory)
+            .appending(path: headline.id.lastPathComponent, directoryHint: .isDirectory)
+            .appending(path: "latest.html", directoryHint: .notDirectory)
     }
 
     static var ghostsDirectory: URL {

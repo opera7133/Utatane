@@ -14,9 +14,10 @@ Utataneは、伺かをmacOSで動かすための本体アプリです。
 - NARからのインストール
 - YAYA / SATORIを使うゴーストのネイティブ実行
 - MateriaのFIRSTを設定したWine経由で実行（開発用）
+- `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
 - SSTP (over HTTP)、RSSへの対応
 
-一般のWindows向けDLLの直接実行や、Windows固有のFMOには対応していません。プラグインもDLLやexeを扱うものについては対応していません。ゴーストによっては表示や動作に互換性の問題があります。
+一般のWindows向けDLLの直接実行や、Windows固有のFMOには対応していません（一部例外）。プラグインもDLLやexeを扱うものについては対応していません。ゴーストによっては表示や動作に互換性の問題があります。
 
 ## インストール
 
