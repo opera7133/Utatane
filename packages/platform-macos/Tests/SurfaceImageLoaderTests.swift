@@ -42,3 +42,60 @@ func `uses top left pixel as transparency key without PNA`() throws {
     #expect((output.colorAt(x: 0, y: 1)?.alphaComponent ?? 0) > 0.9)
     #expect((output.colorAt(x: 1, y: 0)?.alphaComponent ?? 0) > 0.9)
 }
+
+@Test
+func `maps both SERIKO overlay fast spellings to source atop`() {
+    #expect(surfaceCompositingOperation(for: "overlay") == .sourceOver)
+    #expect(surfaceCompositingOperation(for: "overlay-fast") == .sourceAtop)
+    #expect(surfaceCompositingOperation(for: "overlayfast") == .sourceAtop)
+    #expect(surfaceCompositingOperation(for: "reduce") == nil)
+}
+
+@Test
+@MainActor
+func `overlay fast clips the new layer to the base alpha`() throws {
+    let base = try makeTestImage(colors: [
+        NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1),
+        NSColor(deviceRed: 0, green: 0, blue: 0, alpha: 0)
+    ])
+    let overlay = try makeTestImage(colors: [
+        NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1),
+        NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1)
+    ])
+
+    let image = SurfaceImageLoader().composite(
+        base: base,
+        overlay: overlay,
+        x: 0,
+        y: 0,
+        operation: .sourceAtop
+    )
+    let data = try #require(image.tiffRepresentation)
+    let output = try #require(NSBitmapImageRep(data: data))
+
+    #expect((output.colorAt(x: 0, y: 0)?.greenComponent ?? 0) > 0.9)
+    #expect((output.colorAt(x: 0, y: 0)?.alphaComponent ?? 0) > 0.9)
+    #expect((output.colorAt(x: 1, y: 0)?.alphaComponent ?? 1) < 0.1)
+}
+
+private func makeTestImage(colors: [NSColor]) throws -> NSImage {
+    let bitmap = try #require(NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: colors.count,
+        pixelsHigh: 1,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: colors.count * 4,
+        bitsPerPixel: 32
+    ))
+    for (x, color) in colors.enumerated() {
+        bitmap.setColor(color, atX: x, y: 0)
+    }
+    bitmap.size = NSSize(width: colors.count, height: 1)
+    let image = NSImage(size: bitmap.size)
+    image.addRepresentation(bitmap)
+    return image
+}

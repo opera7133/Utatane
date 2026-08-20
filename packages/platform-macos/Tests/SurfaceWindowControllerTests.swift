@@ -14,6 +14,12 @@ import UtataneShell
     #expect(SurfaceCursorStyle(region: "MenuButton") == .pointingHand)
 }
 
+@Test func `head strokes emit at a finer movement interval`() {
+    #expect(SurfaceStrokeEventPolicy.minimumDistance(for: "Head") == 2)
+    #expect(SurfaceStrokeEventPolicy.minimumDistance(for: "head") == 2)
+    #expect(SurfaceStrokeEventPolicy.minimumDistance(for: "Hair") == 4)
+}
+
 @Test func `accepts only NAR files dropped on a surface`() {
     let urls = [
         URL(filePath: "/tmp/ghost.nar"),
@@ -138,6 +144,47 @@ func `renders a virtual surface from ordered elements`() throws {
 
     #expect(controller.surfaceID(for: 0) == 5)
     #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 40, height: 80))
+}
+
+@Test
+@MainActor
+func `base animation pattern temporarily replaces the whole surface`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    try makePNG(width: 2, height: 2, color: .red).write(to: directory.appending(path: "surface0.png"))
+    try makePNG(width: 2, height: 2, color: .green).write(to: directory.appending(path: "surface6.png"))
+    let animation = SurfaceAnimation(
+        id: 0,
+        interval: "sometimes",
+        patterns: [SurfaceAnimationPattern(
+            order: 0,
+            method: "base",
+            surfaceID: 6,
+            waitMilliseconds: 200,
+            x: 0,
+            y: 0
+        )]
+    )
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [0: SurfaceDefinition(id: 0, collisions: [], animations: [animation])],
+        usesSelfAlpha: true
+    )
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(shell: shell, scope: 0, surfaceID: 0)
+    defer { controller.hideAll() }
+    let initialImage = try #require(controller.renderedImage(for: 0))
+
+    controller.playAnimation(id: 0, minimumFrameDurationMilliseconds: 1000)
+    try await Task.sleep(for: .milliseconds(50))
+
+    let image = try #require(controller.renderedImage(for: 0))
+    #expect(image !== initialImage)
 }
 
 @Test
@@ -521,7 +568,11 @@ func `dismisses balloons without discarding dialogue surfaces`() async throws {
     #expect(surfaceController.surfaceID(for: 1) == 11)
 }
 
-private func makePNG(width: Int, height: Int) throws -> Data {
+private func makePNG(
+    width: Int,
+    height: Int,
+    color: NSColor = NSColor(deviceRed: 0.25, green: 0.25, blue: 0.25, alpha: 1)
+) throws -> Data {
     let bitmap = try #require(NSBitmapImageRep(
         bitmapDataPlanes: nil,
         pixelsWide: width,
@@ -534,7 +585,6 @@ private func makePNG(width: Int, height: Int) throws -> Data {
         bytesPerRow: width * 4,
         bitsPerPixel: 32
     ))
-    let color = NSColor(deviceRed: 0.25, green: 0.25, blue: 0.25, alpha: 1)
     for y in 0 ..< height {
         for x in 0 ..< width {
             bitmap.setColor(color, atX: x, y: y)

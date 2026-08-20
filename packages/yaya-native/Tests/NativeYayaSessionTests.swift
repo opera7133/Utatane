@@ -55,6 +55,56 @@ import UtataneShiori
     #expect(randomTalk?.rawValue.hasSuffix("\\e") == true)
 }
 
+@Test func `installed ria restores her default surface after dialogue`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let masterURL = repositoryRoot
+        .appendingPathComponent("Content/Local/Ghosts/ria/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: masterURL.path) else {
+        return
+    }
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    let script = try await engine.handle(event: .shiori(id: "OnSurfaceRestore", references: [:]))
+    let state = try await engine.handle(event: .shiori(id: "OnRiaChoiceState", references: [:]))
+    let activity = try await engine.handle(event: .shiori(id: "OnRiaChoiceActivity", references: [:]))
+    let idleTalk = try await engine.handle(event: .shiori(
+        id: "OnAITalkNewEvent",
+        references: [4: "600"]
+    ))
+    for region in ["Head", "Face", "Bust", "Hand", "Leg", "Unknown"] {
+        let doubleClick = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .doubleClick,
+            scope: 0,
+            region: region,
+            x: 100,
+            y: 50
+        )))
+        #expect(doubleClick?.rawValue.isEmpty == false)
+    }
+    var receivedHeadPetResponse = false
+    for x in 0 ..< 40 {
+        let response = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .move,
+            scope: 0,
+            region: "Head",
+            x: 80 + (x % 20),
+            y: 50
+        )))
+        if response?.rawValue.isEmpty == false {
+            receivedHeadPetResponse = true
+        }
+    }
+    #expect(script?.rawValue == "\\0\\s[0]\\e")
+    #expect(state?.rawValue.isEmpty == false)
+    #expect(activity?.rawValue.isEmpty == false)
+    #expect(idleTalk?.rawValue.isEmpty == false)
+    #expect(receivedHeadPetResponse)
+}
+
 @Test func `native YAYA receives Emily double click and stroke events`() async throws {
     let repositoryRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()

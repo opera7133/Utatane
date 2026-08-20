@@ -184,6 +184,10 @@ private struct UtataneRootView: View {
                         Button("停止") {
                             scriptPlayer.cancel()
                         }
+                        Button("リロード") {
+                            reloadCurrentGhost()
+                        }
+                        .disabled(currentGhost == nil || isTransitioningGhost)
                         Button("NARをインストール") {
                             isImportingNar = true
                         }
@@ -782,6 +786,11 @@ private struct UtataneRootView: View {
                     networkSettings.showsDebugWindow = true
                     updateDebugWindowVisibility()
                 }),
+                .action(
+                    title: "現在のゴーストを再読み込み",
+                    isEnabled: currentGhost != nil && !isTransitioningGhost,
+                    handler: { reloadCurrentGhost() }
+                ),
                 .separator,
                 .action(title: "Utataneを終了", handler: { NSApplication.shared.terminate(nil) })
             ]
@@ -1316,6 +1325,10 @@ private struct UtataneRootView: View {
         let installSession = session
         let installBalloon = balloon
         Task {
+            let statusToken = statusWindowController.show(
+                urls.count == 1 ? "NARをインストール中…" : "NARを\(urls.count)件インストール中…"
+            )
+            defer { statusWindowController.hide(token: statusToken) }
             let securityScopedURLs = urls.filter { $0.startAccessingSecurityScopedResource() }
             defer {
                 for url in securityScopedURLs {
@@ -1364,16 +1377,36 @@ private struct UtataneRootView: View {
                     session: installSession,
                     balloon: installBalloon
                 )
+                let completionToken = statusWindowController.show(
+                    installedItems.count == 1
+                        ? "「\(installedItems[0].name)」をインストールした"
+                        : "\(installedItems.count)件をインストールした"
+                )
+                try? await Task.sleep(for: .seconds(2))
+                statusWindowController.hide(token: completionToken)
             } catch {
-                let handled = await playInstallationEvent(
+                _ = await playInstallationEvent(
                     .shiori(id: "OnInstallFailure", references: [0: installFailureReason(error)]),
                     session: installSession,
                     balloon: installBalloon
                 )
-                if !handled {
-                    previewError = error.localizedDescription
-                }
+                previewError = error.localizedDescription
             }
+        }
+    }
+
+    private func reloadCurrentGhost() {
+        guard let activeGhost = currentGhost, !isTransitioningGhost else { return }
+        Task {
+            await model.load()
+            guard let refreshedGhost = model.ghosts.first(where: {
+                $0.id.standardizedFileURL == activeGhost.id.standardizedFileURL
+            }) else {
+                previewError = "再読み込み対象のゴーストが見つからない: \(activeGhost.name)"
+                return
+            }
+            selectedGhostID = refreshedGhost.id
+            await transition(to: refreshedGhost, forceReload: true)
         }
     }
 

@@ -44,9 +44,22 @@ struct SurfaceImageLoader {
         return NSImage(cgImage: image, size: inputImage.extent.size)
     }
 
-    func composite(base: NSImage, overlay: NSImage, x: Int, y: Int) -> NSImage {
+    func composite(
+        base: NSImage,
+        overlay: NSImage,
+        x: Int,
+        y: Int,
+        operation: NSCompositingOperation = .sourceOver
+    ) -> NSImage {
+        if operation == .sourceAtop,
+           let composited = compositeSourceAtop(base: base, overlay: overlay, x: x, y: y)
+        {
+            return composited
+        }
+
         let result = NSImage(size: base.size)
         result.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .none
         base.draw(in: NSRect(origin: .zero, size: base.size))
         overlay.draw(
             in: NSRect(
@@ -56,11 +69,44 @@ struct SurfaceImageLoader {
                 height: overlay.size.height
             ),
             from: .zero,
-            operation: .sourceOver,
+            operation: operation,
             fraction: 1
         )
         result.unlockFocus()
         return result
+    }
+
+    private func compositeSourceAtop(
+        base: NSImage,
+        overlay: NSImage,
+        x: Int,
+        y: Int
+    ) -> NSImage? {
+        guard let baseImage = ciImage(from: base),
+              let overlayImage = ciImage(from: overlay)
+        else { return nil }
+
+        let translatedOverlay = overlayImage.transformed(by: CGAffineTransform(
+            translationX: CGFloat(x),
+            y: baseImage.extent.height - CGFloat(y) - overlayImage.extent.height
+        ))
+        let filter = CIFilter.sourceAtopCompositing()
+        filter.inputImage = translatedOverlay
+        filter.backgroundImage = baseImage
+        guard let outputImage = filter.outputImage?.cropped(to: baseImage.extent),
+              let output = context.createCGImage(outputImage, from: baseImage.extent)
+        else { return nil }
+        return NSImage(cgImage: output, size: base.size)
+    }
+
+    private func ciImage(from image: NSImage) -> CIImage? {
+        var proposedRect = NSRect(origin: .zero, size: image.size)
+        guard let cgImage = image.cgImage(
+            forProposedRect: &proposedRect,
+            context: nil,
+            hints: nil
+        ) else { return nil }
+        return CIImage(cgImage: cgImage)
     }
 
     func loadUsingTopLeftTransparency(_ url: URL) throws -> NSImage {

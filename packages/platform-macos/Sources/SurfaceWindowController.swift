@@ -69,6 +69,10 @@ public final class SurfaceWindowController {
         characters[scope]?.currentSurfaceID
     }
 
+    func renderedImage(for scope: Int) -> NSImage? {
+        characters[scope]?.renderedImage
+    }
+
     public func show(shell: ShellDefinition, surfaceID: Int) throws {
         try show(shell: shell, scope: 0, surfaceID: surfaceID)
     }
@@ -271,6 +275,10 @@ private final class CharacterSurfaceController {
         baseSurfaceID
     }
 
+    var renderedImage: NSImage? {
+        imageView?.image
+    }
+
     func show(shell: ShellDefinition, surfaceID: Int) throws {
         animationTask?.cancel()
         schedulerTask?.cancel()
@@ -444,7 +452,8 @@ private final class CharacterSurfaceController {
             shellLoader.loadElement(filename: first.filename, from: shell.directory),
             usesSelfAlpha: shell.usesSelfAlpha
         )
-        for element in elements.dropFirst() where element.method.lowercased() == "overlay" {
+        for element in elements.dropFirst() {
+            guard let operation = surfaceCompositingOperation(for: element.method) else { continue }
             let overlay = try imageLoader.load(
                 shellLoader.loadElement(filename: element.filename, from: shell.directory),
                 usesSelfAlpha: shell.usesSelfAlpha
@@ -453,7 +462,8 @@ private final class CharacterSurfaceController {
                 base: result,
                 overlay: overlay,
                 x: element.x,
-                y: element.y
+                y: element.y,
+                operation: operation
             )
         }
         return result
@@ -475,11 +485,11 @@ private final class CharacterSurfaceController {
             let isBound = interval.contains("bind")
             let isInitial = interval.contains("runonce") && !isBound
             guard isInitial || (isBound && enabled.contains(animation.id)) else { continue }
-            for pattern in animation.patterns.sorted(by: { $0.order < $1.order })
-                where pattern.waitMilliseconds == 0
-                && pattern.surfaceID >= 0
-                && pattern.method.lowercased() == "overlay"
-            {
+            for pattern in animation.patterns.sorted(by: { $0.order < $1.order }) {
+                guard pattern.waitMilliseconds == 0,
+                      pattern.surfaceID >= 0,
+                      let operation = surfaceCompositingOperation(for: pattern.method)
+                else { continue }
                 let overlay = try renderLayer(
                     surfaceID: pattern.surfaceID,
                     shell: shell,
@@ -489,7 +499,8 @@ private final class CharacterSurfaceController {
                     base: result,
                     overlay: overlay,
                     x: pattern.x,
-                    y: pattern.y
+                    y: pattern.y,
+                    operation: operation
                 )
             }
         }
@@ -604,7 +615,17 @@ private final class CharacterSurfaceController {
 
             if pattern.surfaceID < 0 {
                 imageView.image = animationBase
-            } else if pattern.method.lowercased() == "overlay" {
+            } else if pattern.method.lowercased() == "base" {
+                do {
+                    imageView.image = try render(
+                        surfaceID: pattern.surfaceID,
+                        shell: shell,
+                        excludingInitialAnimations: stoppedAnimationIDs
+                    ).image
+                } catch {
+                    continue
+                }
+            } else if let operation = surfaceCompositingOperation(for: pattern.method) {
                 do {
                     let overlay = try renderLayer(
                         surfaceID: pattern.surfaceID,
@@ -615,7 +636,8 @@ private final class CharacterSurfaceController {
                         base: animationBase,
                         overlay: overlay,
                         x: pattern.x,
-                        y: pattern.y
+                        y: pattern.y,
+                        operation: operation
                     )
                 } catch {
                     continue
@@ -630,6 +652,18 @@ private final class CharacterSurfaceController {
                 return
             }
         }
+    }
+}
+
+func surfaceCompositingOperation(for method: String) -> NSCompositingOperation? {
+    switch method.lowercased() {
+    case "overlay":
+        .sourceOver
+    case "overlay-fast", "overlayfast":
+        // SERIKO overlay-fast clips the new layer to the base layer's alpha.
+        .sourceAtop
+    default:
+        nil
     }
 }
 
@@ -791,7 +825,7 @@ private final class SurfaceImageView: NSImageView {
             return
         }
         let distance = hypot(point.x - previous.x, point.y - previous.y)
-        guard distance >= 4 else { return }
+        guard distance >= SurfaceStrokeEventPolicy.minimumDistance(for: region) else { return }
         lastStrokePoint = point
         onMouseEvent?(.move, region, hit.x, hit.y, buttonNumber(event))
     }
@@ -822,6 +856,12 @@ private final class SurfaceImageView: NSImageView {
         guard let contextMenuItems else { return nil }
         let items = contextMenuItems()
         return items.isEmpty ? nil : SurfaceContextMenuBuilder().build(from: items)
+    }
+}
+
+enum SurfaceStrokeEventPolicy {
+    static func minimumDistance(for region: String) -> CGFloat {
+        region.caseInsensitiveCompare("Head") == .orderedSame ? 2 : 4
     }
 }
 
