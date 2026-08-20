@@ -5,6 +5,7 @@
 - macOS 14以降
 - Xcode 26以降
 - [mise](https://mise.jdx.dev/)
+- [Zig](https://ziglang.org/)（Windows互換ホストのビルド用）
 
 ## セットアップ
 
@@ -33,6 +34,18 @@ SWIFTPM_MODULECACHE_OVERRIDE=/private/tmp/utatane-swift-module-cache \
 CLANG_MODULE_CACHE_PATH=/private/tmp/utatane-clang-module-cache \
 mise run check
 ```
+
+## リリース・パッケージング
+
+ユニバーサルバイナリ（arm64 / x86_64）のビルド、Windows互換ホストおよびMCPサーバーの組み込み、ZIPアーカイブの作成をまとめて実行します。
+
+```sh
+mise run release
+# または
+mise run package
+```
+
+生成物は `dist/Utatane-macOS.zip` に出力されます。
 
 ## コード構成
 

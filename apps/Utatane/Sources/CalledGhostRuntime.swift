@@ -17,6 +17,7 @@ final class CalledGhostRuntime {
     private let shellLoader: ShellLoader
     private let selectionStore: ContentSelectionStore
     private let weatherProvider = CurrentWeatherProvider()
+    private var weatherTask: Task<Void, Never>?
     private(set) var shell: InstalledShell
     private(set) var balloon: BalloonDefinition
 
@@ -222,7 +223,11 @@ final class CalledGhostRuntime {
         }
         player.onWeatherGet = { [weak self] eventID in
             guard let self else { return nil }
-            return await handleWeatherGet(eventID: eventID)
+            weatherTask?.cancel()
+            weatherTask = Task { [weak self] in
+                await self?.fetchWeatherAndPlay(eventID: eventID)
+            }
+            return nil
         }
     }
 
@@ -261,22 +266,42 @@ final class CalledGhostRuntime {
         }
     }
 
-    private func handleWeatherGet(eventID: String) async -> SakuraScript? {
+    private func fetchWeatherAndPlay(eventID: String) async {
+        let script = await handleWeatherGet(eventID: eventID)
+        player.play(script, balloon: balloon)
+    }
+
+    private func handleWeatherGet(eventID: String) async -> SakuraScript {
         do {
             let weather = try await weatherProvider.fetch()
-            return try? await session.handle(event: .shiori(id: eventID, references: [
+            return await weatherResultScript(eventID: eventID, references: [
                 0: "ok",
                 1: String(weather.code),
                 2: String(format: "%.1f", weather.temperatureCelsius),
                 3: weather.isDay ? "1" : "0"
-            ]))
+            ], fallback: "天気は取得できたけど、ゴースト側の結果トークが空だった。")
         } catch CurrentWeatherError.locationPermissionDenied {
-            return try? await session.handle(event: .shiori(id: eventID, references: [0: "denied"]))
+            return await weatherResultScript(eventID: eventID, references: [0: "denied"], fallback: "位置情報が許可されてないみたい。")
         } catch CurrentWeatherError.locationServicesUnavailable {
-            return try? await session.handle(event: .shiori(id: eventID, references: [0: "unavailable"]))
+            return await weatherResultScript(eventID: eventID, references: [0: "unavailable"], fallback: "位置情報サービスを利用できなかった。")
+        } catch CurrentWeatherError.locationTimedOut {
+            return await weatherResultScript(eventID: eventID, references: [0: "timeout"], fallback: "位置情報の取得が10秒でタイムアウトした。")
         } catch {
-            return try? await session.handle(event: .shiori(id: eventID, references: [0: "network"]))
+            return await weatherResultScript(eventID: eventID, references: [0: "network"], fallback: "天気情報の通信に失敗した。")
         }
+    }
+
+    private func weatherResultScript(
+        eventID: String,
+        references: [Int: String],
+        fallback: String
+    ) async -> SakuraScript {
+        if let response = try? await session.handle(event: .shiori(id: eventID, references: references)),
+           !response.rawValue.isEmpty
+        {
+            return response
+        }
+        return SakuraScript(rawValue: "\\0\\s[6]\(fallback)\\e")
     }
 
     private func forwardCommunication(_ response: PersonalityResponse) {

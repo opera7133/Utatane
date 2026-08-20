@@ -144,6 +144,7 @@ import UtataneShiori
     ))
     let outfitMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceOutfit", references: [:]))
     let outing = try await engine.handle(event: .shiori(id: "OnRiaChoiceGoWalk", references: [:]))
+    let weatherMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceWeather", references: [:]))
     let weather = try await engine.handle(event: .shiori(
         id: "OnRiaWeatherResult",
         references: [0: "ok", 1: "61", 2: "18.5", 3: "1"]
@@ -182,6 +183,7 @@ import UtataneShiori
     #expect(installFailure?.rawValue.contains("展開できなかった") == true)
     #expect(outfitMenu?.rawValue.contains("外出着") == true)
     #expect(outing?.rawValue.contains("\\s[-1]") == true)
+    #expect(weatherMenu?.rawValue.contains("\\![execute,weather-get,--async=OnRiaWeatherResult]") == true)
     #expect(weather?.rawValue.contains("雨") == true)
     #expect(weather?.rawValue.contains("18.5度") == true)
     #expect(receivedHeadPetResponse)

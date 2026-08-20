@@ -28,3 +28,36 @@ run = "swiftformat apps packages --lint"
 [tasks.check]
 description = "Run all local checks"
 depends = ["lint", "test", "build"]
+
+[tasks.build-hosts]
+description = "Build Windows helper binaries with zig"
+run = """
+mkdir -p apps/Utatane/Resources/MateriaHost apps/Utatane/Resources/WindowsDLLHost
+zig cc -target x86-windows-gnu -Os tools/materia-shiori-host/main.c -o apps/Utatane/Resources/MateriaHost/materia.exe
+zig cc -target x86-windows-gnu -Os tools/windows-dll-host/main.c -o apps/Utatane/Resources/WindowsDLLHost/utatane-dll-host.exe
+"""
+
+[tasks.build-mcp]
+description = "Build universal MCP server"
+run = "swift build --package-path packages --configuration release --arch arm64 --arch x86_64 --product utatane-mcp"
+
+[tasks.build-release]
+description = "Build universal macOS app in Release configuration"
+depends = ["build-hosts", "generate"]
+run = "xcodebuild -project Utatane.xcodeproj -scheme Utatane -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build"
+
+[tasks.package]
+description = "Package Release app into dist/Utatane-macOS.zip"
+depends = ["build-release", "build-mcp"]
+run = """
+mkdir -p build/Build/Products/Release/Utatane.app/Contents/Helpers dist
+cp packages/.build/apple/Products/Release/utatane-mcp build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
+chmod 755 build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
+codesign --force --sign - --identifier dev.utatane.mcp build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
+codesign --force --sign - --identifier dev.utatane.app build/Build/Products/Release/Utatane.app
+ditto -c -k --keepParent build/Build/Products/Release/Utatane.app dist/Utatane-macOS.zip
+"""
+
+[tasks.release]
+description = "Build and package universal release archive"
+depends = ["package"]

@@ -126,6 +126,7 @@ private struct UtataneRootView: View {
     let sstpServer: SSTPServer
     let statusWindowController: StatusWindowController
     let alertController: ApplicationAlertController
+    private let weatherProvider = CurrentWeatherProvider()
     @ObservedObject var networkSettings: UtataneSettingsStore
     let applicationDelegate: UtataneApplicationDelegate
 
@@ -150,6 +151,7 @@ private struct UtataneRootView: View {
     @State private var showsStartupGhostPicker = false
     @State private var startupGhostID: URL?
     @State private var isTransitioningGhost = false
+    @State private var weatherTask: Task<Void, Never>?
 
     var body: some View {
         Group {
@@ -566,6 +568,13 @@ private struct UtataneRootView: View {
             scriptPlayer.onHTTPGet = { url, eventID in
                 await handleHTTPGet(url: url, eventID: eventID)
             }
+            scriptPlayer.onWeatherGet = { eventID in
+                weatherTask?.cancel()
+                weatherTask = Task {
+                    await fetchWeatherAndPlay(eventID: eventID)
+                }
+                return nil
+            }
 
             let ghostSession = try GhostSession(
                 personalityEngine: personalityEngine(for: ghost),
@@ -650,6 +659,46 @@ private struct UtataneRootView: View {
         } catch {
             return try? await activeSession.handle(event: .shiori(id: eventID, references: [:]))
         }
+    }
+
+    private func fetchWeatherAndPlay(eventID: String) async {
+        guard let balloon else { return }
+        let script = await handleWeatherGet(eventID: eventID)
+        scriptPlayer.play(script, balloon: balloon)
+    }
+
+    private func handleWeatherGet(eventID: String) async -> SakuraScript {
+        do {
+            let weather = try await weatherProvider.fetch()
+            return await weatherResultScript(eventID: eventID, references: [
+                0: "ok",
+                1: String(weather.code),
+                2: String(format: "%.1f", weather.temperatureCelsius),
+                3: weather.isDay ? "1" : "0"
+            ], fallback: "天気は取得できたけど、ゴースト側の結果トークが空だった。")
+        } catch CurrentWeatherError.locationPermissionDenied {
+            return await weatherResultScript(eventID: eventID, references: [0: "denied"], fallback: "位置情報が許可されてないみたい。")
+        } catch CurrentWeatherError.locationServicesUnavailable {
+            return await weatherResultScript(eventID: eventID, references: [0: "unavailable"], fallback: "位置情報サービスを利用できなかった。")
+        } catch CurrentWeatherError.locationTimedOut {
+            return await weatherResultScript(eventID: eventID, references: [0: "timeout"], fallback: "位置情報の取得が10秒でタイムアウトした。")
+        } catch {
+            return await weatherResultScript(eventID: eventID, references: [0: "network"], fallback: "天気情報の通信に失敗した。")
+        }
+    }
+
+    private func weatherResultScript(
+        eventID: String,
+        references: [Int: String],
+        fallback: String
+    ) async -> SakuraScript {
+        if let activeSession = session,
+           let response = try? await activeSession.handle(event: .shiori(id: eventID, references: references)),
+           !response.rawValue.isEmpty
+        {
+            return response
+        }
+        return SakuraScript(rawValue: "\\0\\s[6]\(fallback)\\e")
     }
 
     private func show(shell installedShell: InstalledShell) throws {

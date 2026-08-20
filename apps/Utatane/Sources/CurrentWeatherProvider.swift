@@ -10,6 +10,7 @@ struct CurrentWeather: Sendable, Equatable {
 enum CurrentWeatherError: Error {
     case locationServicesUnavailable
     case locationPermissionDenied
+    case locationTimedOut
     case invalidResponse
 }
 
@@ -17,6 +18,7 @@ enum CurrentWeatherError: Error {
 final class CurrentWeatherProvider: NSObject, @preconcurrency CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private var locationContinuation: CheckedContinuation<CLLocation, Error>?
+    private var timeoutTask: Task<Void, Never>?
 
     override init() {
         super.init()
@@ -55,12 +57,17 @@ final class CurrentWeatherProvider: NSObject, @preconcurrency CLLocationManagerD
         }
         return try await withCheckedThrowingContinuation { continuation in
             locationContinuation = continuation
+            timeoutTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(10))
+                guard !Task.isCancelled else { return }
+                self?.finish(with: .failure(CurrentWeatherError.locationTimedOut))
+            }
             switch manager.authorizationStatus {
             case .authorized, .authorizedAlways:
-                manager.requestLocation()
+                manager.startUpdatingLocation()
             case .notDetermined:
                 // macOS asks for authorization when a location service starts.
-                manager.requestLocation()
+                manager.startUpdatingLocation()
             case .denied, .restricted:
                 finish(with: .failure(CurrentWeatherError.locationPermissionDenied))
             @unknown default:
@@ -73,7 +80,7 @@ final class CurrentWeatherProvider: NSObject, @preconcurrency CLLocationManagerD
         guard locationContinuation != nil else { return }
         switch manager.authorizationStatus {
         case .authorized, .authorizedAlways:
-            manager.requestLocation()
+            manager.startUpdatingLocation()
         case .denied, .restricted:
             finish(with: .failure(CurrentWeatherError.locationPermissionDenied))
         case .notDetermined:
@@ -96,6 +103,9 @@ final class CurrentWeatherProvider: NSObject, @preconcurrency CLLocationManagerD
     }
 
     private func finish(with result: Result<CLLocation, Error>) {
+        manager.stopUpdatingLocation()
+        timeoutTask?.cancel()
+        timeoutTask = nil
         let continuation = locationContinuation
         locationContinuation = nil
         continuation?.resume(with: result)

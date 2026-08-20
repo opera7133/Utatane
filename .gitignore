@@ -12,3 +12,6 @@ xcuserdata/
 Content/Local
 References/Local
 Internal-Docs
+dist
+build
+apps/Utatane/Resources/*Host
