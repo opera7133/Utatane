@@ -159,6 +159,17 @@ public struct SakuraScriptParser: Sendable {
                             url: arguments[2],
                             eventID: String(asyncArgument[asyncArgument.index(after: separator)...])
                         ))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "weather-get",
+                              let asyncArgument = arguments.dropFirst(2).first(where: {
+                                  $0.lowercased().hasPrefix("--async=")
+                              }),
+                              let separator = asyncArgument.firstIndex(of: "=")
+                    {
+                        tokens.append(.weatherGet(
+                            eventID: String(asyncArgument[asyncArgument.index(after: separator)...])
+                        ))
                     } else {
                         tokens.append(.unknown("\\![\(argument)]"))
                     }

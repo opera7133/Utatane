@@ -16,6 +16,7 @@ final class CalledGhostRuntime {
 
     private let shellLoader: ShellLoader
     private let selectionStore: ContentSelectionStore
+    private let weatherProvider = CurrentWeatherProvider()
     private(set) var shell: InstalledShell
     private(set) var balloon: BalloonDefinition
 
@@ -219,6 +220,10 @@ final class CalledGhostRuntime {
             guard let self else { return nil }
             return await handleHTTPGet(url: url, eventID: eventID)
         }
+        player.onWeatherGet = { [weak self] eventID in
+            guard let self else { return nil }
+            return await handleWeatherGet(eventID: eventID)
+        }
     }
 
     private func promptForText(initialValue: String) -> String? {
@@ -253,6 +258,24 @@ final class CalledGhostRuntime {
             ]))
         } catch {
             return try? await session.handle(event: .shiori(id: eventID, references: [:]))
+        }
+    }
+
+    private func handleWeatherGet(eventID: String) async -> SakuraScript? {
+        do {
+            let weather = try await weatherProvider.fetch()
+            return try? await session.handle(event: .shiori(id: eventID, references: [
+                0: "ok",
+                1: String(weather.code),
+                2: String(format: "%.1f", weather.temperatureCelsius),
+                3: weather.isDay ? "1" : "0"
+            ]))
+        } catch CurrentWeatherError.locationPermissionDenied {
+            return try? await session.handle(event: .shiori(id: eventID, references: [0: "denied"]))
+        } catch CurrentWeatherError.locationServicesUnavailable {
+            return try? await session.handle(event: .shiori(id: eventID, references: [0: "unavailable"]))
+        } catch {
+            return try? await session.handle(event: .shiori(id: eventID, references: [0: "network"]))
         }
     }
 

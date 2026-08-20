@@ -23,6 +23,7 @@ public final class SakuraScriptPlayer {
     public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
     public var onInputBox: (@MainActor (String, Int?, String) async -> SakuraScript?)?
     public var onHTTPGet: (@MainActor (String, String) async -> SakuraScript?)?
+    public var onWeatherGet: (@MainActor (String) async -> SakuraScript?)?
     public var onDialogueContent: (@MainActor () -> Void)?
     public var onDialogueDismissed: (@MainActor () -> Void)?
     public var onPlaybackFinished: (@MainActor () -> Void)?
@@ -273,6 +274,10 @@ public final class SakuraScriptPlayer {
                     }
                 case let .httpGet(url, eventID):
                     if let response = await onHTTPGet?(url, eventID) {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                    }
+                case let .weatherGet(eventID):
+                    if let response = await onWeatherGet?(eventID) {
                         pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
                     }
                 case .clear:

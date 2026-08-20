@@ -39,6 +39,10 @@
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 opera7133.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>UTImportedTypeDeclarations</key>

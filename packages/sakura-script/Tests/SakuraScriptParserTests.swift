@@ -24,14 +24,15 @@ func `parses initial playback command set`() {
     ])
 }
 
-@Test func `parses input box and asynchronous HTTP commands`() {
+@Test func `parses input box and asynchronous network commands`() {
     let tokens = SakuraScriptParser().parse(
-        #"\![open,inputbox,OnNameInput,0,おにいちゃん]\![execute,http-get,https://example.com/feed.json,--async=OnLoaded]"#
+        #"\![open,inputbox,OnNameInput,0,おにいちゃん]\![execute,http-get,https://example.com/feed.json,--async=OnLoaded]\![execute,weather-get,--async=OnWeather]"#
     )
 
     #expect(tokens == [
         .inputBox(id: "OnNameInput", timeoutMilliseconds: 0, initialValue: "おにいちゃん"),
-        .httpGet(url: "https://example.com/feed.json", eventID: "OnLoaded")
+        .httpGet(url: "https://example.com/feed.json", eventID: "OnLoaded"),
+        .weatherGet(eventID: "OnWeather")
     ])
 }
 
