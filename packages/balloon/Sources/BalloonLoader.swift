@@ -25,6 +25,18 @@ public struct BalloonLoader: Sendable {
 
     public init() {}
 
+    public func loadInstalled(from rootDirectories: [URL]) throws -> [BalloonDefinition] {
+        var seenDirectoryNames = Set<String>()
+        var balloons: [BalloonDefinition] = []
+        for rootDirectory in rootDirectories {
+            for balloon in try loadInstalled(from: rootDirectory) {
+                guard seenDirectoryNames.insert(balloon.directory.lastPathComponent).inserted else { continue }
+                balloons.append(balloon)
+            }
+        }
+        return balloons.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
     public func loadInstalled(from rootDirectory: URL) throws -> [BalloonDefinition] {
         guard FileManager.default.fileExists(atPath: rootDirectory.path) else {
             return []
@@ -62,8 +74,8 @@ public struct BalloonLoader: Sendable {
         return BalloonDefinition(
             directory: directory,
             name: values["name"] ?? directory.lastPathComponent,
-            originX: integer("origin.x", in: values, default: 14),
-            originY: integer("origin.y", in: values, default: 14),
+            originX: integer("validrect.left", in: values, default: integer("origin.x", in: values, default: 14)),
+            originY: integer("validrect.top", in: values, default: integer("origin.y", in: values, default: 14)),
             wordWrapPointX: integer("wordwrappoint.x", in: values, default: -14),
             wordWrapPointY: integer("wordwrappoint.y", in: values, default: 0),
             fontHeight: integer("font.height", in: values, default: 12),

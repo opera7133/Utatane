@@ -1,0 +1,8 @@
+#globaldefine TALK_INTERVAL 120
+#globaldefine SHIORI3FW.IGLIST_ACCEL 1
+#globaldefine SHIORI3FW.IGLIST_MAX 0
+#globaldefine SHIORI3FW.REQUEST_LINES_LIMIT 0
+#globaldefine SHIORI3FW.RES_REF_MAX 32
+#globaldefine SHIORI3FW.AUTO_DATA_CONVERT 0
+#globaldefine SHIORI3FW.REF_ACCEL 0
+

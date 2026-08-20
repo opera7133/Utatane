@@ -1,0 +1,283 @@
+charset,UTF-8
+
+// surface10000を普段着側と同じ表情差分で使う外出着サーフェス。
+surface10000-10009, 10100-10109, 10200-10202, 10205-10206, 10300-10322, 10500-10501
+{
+	element0,base,surface10000.png,0,0
+}
+
+surface.append10000-10009, 10100-10109, 10200-10202, 10205-10206, 10300-10322, 10500-10501
+{
+	collision100,115,38,208,79,Head
+	collision101,124,111,143,133,Eye
+	collision102,164,110,189,130,Eye
+	collision103,148,145,165,156,Mouth
+	collision104,125,131,187,150,Face
+	collision105,113,194,199,254,Bust
+	collision106,216,324,244,353,Hand
+	collision107,105,352,218,483,Leg
+	collision110,112,80,211,110,Head
+	collision108,42,82,112,338,Hair
+	collision109,200,82,315,338,Hair
+}
+
+surface.append10000
+{
+	animation0.interval,sometimes
+	animation0.pattern0,base,10006,50,0,0
+	animation0.pattern1,base,10500,50,0,0
+	animation0.pattern2,base,-1,60,0,0
+}
+
+surface.append10100
+{
+	animation0.interval,sometimes
+	animation0.pattern0,base,10206,50,0,0
+	animation0.pattern1,base,10501,50,0,0
+	animation0.pattern2,base,-1,60,0,0
+}
+
+surface.append10001
+{
+	element1,overlayfast,surface00001.png,0,0
+}
+
+surface.append10002
+{
+	element1,overlayfast,surface00002.png,0,0
+}
+
+surface.append10003
+{
+	element1,overlayfast,surface00003.png,0,0
+}
+
+surface.append10004
+{
+	element1,overlayfast,surface00004.png,0,0
+}
+
+surface.append10005
+{
+	element1,overlayfast,surface00005.png,0,0
+}
+
+surface.append10006
+{
+	element1,overlayfast,surface00006.png,0,0
+}
+
+surface.append10007
+{
+	element1,overlayfast,surface00007.png,0,0
+}
+
+surface.append10008
+{
+	element1,overlayfast,surface00008.png,0,0
+}
+
+surface.append10009
+{
+	element1,overlayfast,surface00009.png,0,0
+}
+
+surface.append10100
+{
+	element1,overlayfast,surface00100.png,0,0
+}
+
+surface.append10101
+{
+	element1,overlayfast,surface00101.png,0,0
+}
+
+surface.append10102
+{
+	element1,overlayfast,surface00102.png,0,0
+}
+
+surface.append10103
+{
+	element1,overlayfast,surface00103.png,0,0
+}
+
+surface.append10104
+{
+	element1,overlayfast,surface00104.png,0,0
+}
+
+surface.append10105
+{
+	element1,overlayfast,surface00105.png,0,0
+}
+
+surface.append10106
+{
+	element1,overlayfast,surface00106.png,0,0
+}
+
+surface.append10107
+{
+	element1,overlayfast,surface00107.png,0,0
+}
+
+surface.append10108
+{
+	element1,overlayfast,surface00108.png,0,0
+}
+
+surface.append10109
+{
+	element1,overlayfast,surface00109.png,0,0
+}
+
+surface.append10200
+{
+	element1,overlayfast,surface00200.png,0,0
+}
+
+surface.append10201
+{
+	element1,overlayfast,surface00201.png,0,0
+}
+
+surface.append10202
+{
+	element1,overlayfast,surface00202.png,0,0
+}
+
+surface.append10205
+{
+	element1,overlayfast,surface00205.png,0,0
+}
+
+surface.append10206
+{
+	element1,overlayfast,surface00206.png,0,0
+}
+
+surface.append10300
+{
+	element1,overlayfast,surface00300.png,0,0
+}
+
+surface.append10301
+{
+	element1,overlayfast,surface00301.png,0,0
+}
+
+surface.append10302
+{
+	element1,overlayfast,surface00302.png,0,0
+}
+
+surface.append10303
+{
+	element1,overlayfast,surface00303.png,0,0
+}
+
+surface.append10304
+{
+	element1,overlayfast,surface00304.png,0,0
+}
+
+surface.append10305
+{
+	element1,overlayfast,surface00305.png,0,0
+}
+
+surface.append10306
+{
+	element1,overlayfast,surface00306.png,0,0
+}
+
+surface.append10307
+{
+	element1,overlayfast,surface00307.png,0,0
+}
+
+surface.append10308
+{
+	element1,overlayfast,surface00308.png,0,0
+}
+
+surface.append10309
+{
+	element1,overlayfast,surface00309.png,0,0
+}
+
+surface.append10310
+{
+	element1,overlayfast,surface00310.png,0,0
+}
+
+surface.append10311
+{
+	element1,overlayfast,surface00311.png,0,0
+}
+
+surface.append10312
+{
+	element1,overlayfast,surface00312.png,0,0
+}
+
+surface.append10313
+{
+	element1,overlayfast,surface00313.png,0,0
+}
+
+surface.append10314
+{
+	element1,overlayfast,surface00314.png,0,0
+}
+
+surface.append10315
+{
+	element1,overlayfast,surface00315.png,0,0
+}
+
+surface.append10316
+{
+	element1,overlayfast,surface00316.png,0,0
+}
+
+surface.append10317
+{
+	element1,overlayfast,surface00317.png,0,0
+}
+
+surface.append10318
+{
+	element1,overlayfast,surface00318.png,0,0
+}
+
+surface.append10319
+{
+	element1,overlayfast,surface00319.png,0,0
+}
+
+surface.append10320
+{
+	element1,overlayfast,surface00320.png,0,0
+}
+
+surface.append10321
+{
+	element1,overlayfast,surface00321.png,0,0
+}
+
+surface.append10322
+{
+	element1,overlayfast,surface00322.png,0,0
+}
+
+surface.append10500
+{
+	element1,overlayfast,surface00500.png,0,0
+}
+
+surface.append10501
+{
+	element1,overlayfast,surface00501.png,0,0
+}

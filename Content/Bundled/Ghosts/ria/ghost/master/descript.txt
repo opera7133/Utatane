@@ -1,0 +1,11 @@
+charset,UTF-8
+type,ghost
+name,りあ
+sakura.name,りあ
+kero.name,none
+id,ria
+title,りあ
+craftman,wamo
+shiori,yaya.dll
+shiori.version,SHIORI/3.0
+balloon,ria

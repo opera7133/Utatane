@@ -35,12 +35,13 @@ struct UtataneApp: App {
 
     init() {
         try? ContentRoot.prepareDirectories()
+        try? ContentRoot.installBundledContent()
         let positionStore = WindowPositionStore()
         let surfaceWindowController = SurfaceWindowController(positionStore: positionStore)
         let balloonWindowController = BalloonWindowController(positionStore: positionStore)
-        let repository = FileSystemGhostRepository(
-            rootDirectory: ContentRoot.ghostsDirectory
-        )
+        let repository = OverlayGhostRepository(repositories: ContentRoot.ghostReadDirectories.map {
+            FileSystemGhostRepository(rootDirectory: $0)
+        })
         model = GhostListModel(loadGhosts: LoadInstalledGhosts(repository: repository))
         shellLoader = ShellLoader()
         self.surfaceWindowController = surfaceWindowController
@@ -513,9 +514,7 @@ private struct UtataneRootView: View {
                 installNars(from: urls)
             }
 
-            installedBalloons = try balloonLoader.loadInstalled(
-                from: ContentRoot.balloonsDirectory
-            )
+            installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonReadDirectories)
             let loadedBalloon = selectionStore.resolveBalloon(
                 for: ghost,
                 from: installedBalloons,
@@ -796,7 +795,16 @@ private struct UtataneRootView: View {
                     handler: { sendEvent(.randomTalk) }
                 ),
                 .action(title: "バルーンを閉じる", handler: { scriptPlayer.cancel() }),
-                .action(title: "NARをインストール…", handler: { isImportingNar = true }),
+                .submenu(
+                    title: "コンテンツ管理",
+                    items: [
+                        .action(title: "NARをインストール…", handler: { isImportingNar = true }),
+                        .action(title: "SSPフォルダから取り込む…", handler: {
+                            isImportingSSPDirectory = true
+                        }),
+                        .action(title: "Finderで表示", handler: showContentFolder)
+                    ]
+                ),
                 .action(
                     title: "ネットワーク更新",
                     isEnabled: currentGhost != nil && session != nil,
@@ -1412,7 +1420,7 @@ private struct UtataneRootView: View {
                 }) {
                     currentGhost = refreshedGhost
                 }
-                installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonsDirectory)
+                installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonReadDirectories)
                 reloadHeadlines()
                 configureContextMenu()
 
@@ -1476,7 +1484,7 @@ private struct UtataneRootView: View {
                     )
                 }.value
                 await model.load()
-                installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonsDirectory)
+                installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonReadDirectories)
                 if selectedGhostID == nil {
                     selectedGhostID = model.ghosts.first?.id
                 }
@@ -1742,6 +1750,18 @@ enum ContentRoot {
         }
     }
 
+    static func installBundledContent() throws {
+        guard let bundledRoot = Bundle.main.resourceURL?.appending(
+            path: "Bundled",
+            directoryHint: .isDirectory
+        ) else { return }
+        try BundledContentInstaller().install(
+            from: bundledRoot,
+            ghostsDirectory: contentDirectory.appending(path: "Ghosts", directoryHint: .isDirectory),
+            balloonsDirectory: contentDirectory.appending(path: "Balloons", directoryHint: .isDirectory)
+        )
+    }
+
     static func variableStoreURL(for ghost: InstalledGhost) -> URL {
         FileManager.default.urls(
             for: .applicationSupportDirectory,
@@ -1902,6 +1922,15 @@ enum ContentRoot {
         return contentDirectory.appending(path: "Ghosts", directoryHint: .isDirectory)
     }
 
+    static var ghostReadDirectories: [URL] {
+        #if DEBUG
+            let bundled = repositoryRoot.appending(path: "Content/Bundled/Ghosts", directoryHint: .isDirectory)
+            return [bundled, ghostsDirectory]
+        #else
+            return [ghostsDirectory]
+        #endif
+    }
+
     static var materiaCompatibilityDirectory: URL {
         contentDirectory.appending(
             path: "Compatibility/Materia",
@@ -1949,6 +1978,15 @@ enum ContentRoot {
         #endif
 
         return contentDirectory.appending(path: "Balloons", directoryHint: .isDirectory)
+    }
+
+    static var balloonReadDirectories: [URL] {
+        #if DEBUG
+            let bundled = repositoryRoot.appending(path: "Content/Bundled/Balloons", directoryHint: .isDirectory)
+            return [bundled, balloonsDirectory]
+        #else
+            return [balloonsDirectory]
+        #endif
     }
 
     static var headlinesDirectory: URL {

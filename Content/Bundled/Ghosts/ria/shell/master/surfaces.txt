@@ -1,0 +1,349 @@
+charset,Shift_JIS
+
+descript
+{
+	version,1
+}
+
+//-------------------------------------------------------------
+//表情などを乗せる土台になる画像の指定です。
+//0番から501番までに通常、1000番から1500番までに枕ありの画像を指定しています。
+
+surface0-9, 100-109, 200-202, 205-206, 300-322, 500-501
+{
+	element0,base,surface00000.png,0,0
+}
+
+surface1000-1009, 1100-1109, 1200-1202, 1205-1206, 1300-1322, 1500-1501
+{
+	element0,base,surface01000.png,0,0
+}
+
+//-------------------------------------------------------------
+//マウスなどで触れる当たり判定を指定します。
+//必要に応じて追加や削除を行ってください。
+//名前（HeadやEarなど）は自由に設定できます。
+//範囲が重なると番号（collision○○,の部分）が小さいほど優先されます。
+//残り４つの数値は当たり判定の四隅の座標です。
+//普通に調べると大変なのでcoodinやころぺたなどの支援ツールを頼りましょう。
+//これも上と同じく通常と枕ありで２パターン用意しています。
+
+//通常
+surface.append0-9, 100-109, 200-202, 205-206, 300-322, 500-501
+{
+	collision100,115,38,208,79,Head
+	collision101,124,111,143,133,Eye
+	collision102,164,110,189,130,Eye
+	collision103,148,145,165,156,Mouth
+	collision104,125,131,187,150,Face
+	collision105,113,194,199,254,Bust
+	collision106,216,324,244,353,Hand
+	collision107,105,352,218,483,Leg
+}
+
+//枕あり
+surface.append1000-1009, 1100-1109, 1200-1202, 1205-1206, 1300-1322, 1500-1501
+{
+	collision100,115,38,208,79,Head
+	collision101,124,111,143,133,Eye
+	collision102,164,110,189,130,Eye
+	collision103,148,145,165,156,Mouth
+	collision104,125,131,187,150,Face
+	collision105,113,194,199,254,Bust
+	collision106,105,352,218,483,Leg
+}
+
+//-------------------------------------------------------------
+//まばたきのアニメーション指定です。
+//このシェルでは基本の表情（0番と1000番）と100番および1100番に設定してあります。
+//追加したい方は解説サイトなどを探してみてください。ちょっと大変です。
+
+surface.append0
+{
+animation0.interval,sometimes
+animation0.pattern0,base,6,50,0,0
+animation0.pattern1,base,500,50,0,0
+animation0.pattern2,base,-1,60,0,0
+}
+
+surface.append100
+{
+animation0.interval,sometimes
+animation0.pattern0,base,206,50,0,0
+animation0.pattern1,base,501,50,0,0
+animation0.pattern2,base,-1,60,0,0
+}
+
+surface.append1000
+{
+animation0.interval,sometimes
+animation0.pattern0,base,1006,50,0,0
+animation0.pattern1,base,1500,50,0,0
+animation0.pattern2,base,-1,60,0,0
+}
+
+surface.append1100
+{
+animation0.interval,sometimes
+animation0.pattern0,base,1206,50,0,0
+animation0.pattern1,base,1501,50,0,0
+animation0.pattern2,base,-1,60,0,0
+}
+
+//-------------------------------------------------------------
+//何番の表情にどの画像を使うのかという指定です。
+//上で設定した土台の画像にここで指定した表情の画像が重なって表示されます。
+//このシェルでは通常立ち絵と枕差分に同じ画像を重ねています。
+//下の『surface.append1, 1001』は1番と1001番に同じ設定をするという意味です。
+
+surface.append1, 1001
+{
+element1,overlayfast,surface00001.png,0,0
+}
+
+surface.append2, 1002
+{
+element1,overlayfast,surface00002.png,0,0
+}
+
+surface.append3, 1003
+{
+element1,overlayfast,surface00003.png,0,0
+}
+
+surface.append4, 1004
+{
+element1,overlayfast,surface00004.png,0,0
+}
+
+surface.append5, 1005
+{
+element1,overlayfast,surface00005.png,0,0
+}
+
+surface.append6, 1006
+{
+element1,overlayfast,surface00006.png,0,0
+}
+
+surface.append7, 1007
+{
+element1,overlayfast,surface00007.png,0,0
+}
+
+surface.append8, 1008
+{
+element1,overlayfast,surface00008.png,0,0
+}
+
+surface.append9, 1009
+{
+element1,overlayfast,surface00009.png,0,0
+}
+
+surface.append100, 1100
+{
+element1,overlayfast,surface00100.png,0,0
+}
+
+surface.append101, 1101
+{
+element1,overlayfast,surface00101.png,0,0
+}
+
+surface.append102, 1102
+{
+element1,overlayfast,surface00102.png,0,0
+}
+
+surface.append103, 1103
+{
+element1,overlayfast,surface00103.png,0,0
+}
+
+surface.append104, 1104
+{
+element1,overlayfast,surface00104.png,0,0
+}
+
+surface.append105, 1105
+{
+element1,overlayfast,surface00105.png,0,0
+}
+
+surface.append106, 1106
+{
+element1,overlayfast,surface00106.png,0,0
+}
+
+surface.append107, 1107
+{
+element1,overlayfast,surface00107.png,0,0
+}
+
+surface.append108, 1108
+{
+element1,overlayfast,surface00108.png,0,0
+}
+
+surface.append109, 1109
+{
+element1,overlayfast,surface00109.png,0,0
+}
+
+surface.append200, 1200
+{
+element1,overlayfast,surface00200.png,0,0
+}
+
+surface.append201, 1201
+{
+element1,overlayfast,surface00201.png,0,0
+}
+
+surface.append202, 1202
+{
+element1,overlayfast,surface00202.png,0,0
+}
+
+surface.append205, 1205
+{
+element1,overlayfast,surface00205.png,0,0
+}
+
+surface.append206, 1206
+{
+element1,overlayfast,surface00206.png,0,0
+}
+
+surface.append300, 1300
+{
+element1,overlayfast,surface00300.png,0,0
+}
+
+surface.append301, 1301
+{
+element1,overlayfast,surface00301.png,0,0
+}
+
+surface.append302, 1302
+{
+element1,overlayfast,surface00302.png,0,0
+}
+
+surface.append303, 1303
+{
+element1,overlayfast,surface00303.png,0,0
+}
+
+surface.append304, 1304
+{
+element1,overlayfast,surface00304.png,0,0
+}
+
+surface.append305, 1305
+{
+element1,overlayfast,surface00305.png,0,0
+}
+
+surface.append306, 1306
+{
+element1,overlayfast,surface00306.png,0,0
+}
+
+surface.append307, 1307
+{
+element1,overlayfast,surface00307.png,0,0
+}
+
+surface.append308, 1308
+{
+element1,overlayfast,surface00308.png,0,0
+}
+
+surface.append309, 1309
+{
+element1,overlayfast,surface00309.png,0,0
+}
+
+surface.append310, 1310
+{
+element1,overlayfast,surface00310.png,0,0
+}
+
+surface.append311, 1311
+{
+element1,overlayfast,surface00311.png,0,0
+}
+
+surface.append312, 1312
+{
+element1,overlayfast,surface00312.png,0,0
+}
+
+surface.append313, 1313
+{
+element1,overlayfast,surface00313.png,0,0
+}
+
+surface.append314, 1314
+{
+element1,overlayfast,surface00314.png,0,0
+}
+
+surface.append315, 1315
+{
+element1,overlayfast,surface00315.png,0,0
+}
+
+surface.append316, 1316
+{
+element1,overlayfast,surface00316.png,0,0
+}
+
+surface.append317, 1317
+{
+element1,overlayfast,surface00317.png,0,0
+}
+
+surface.append318, 1318
+{
+element1,overlayfast,surface00318.png,0,0
+}
+
+surface.append319, 1319
+{
+element1,overlayfast,surface00319.png,0,0
+}
+
+surface.append320, 1320
+{
+element1,overlayfast,surface00320.png,0,0
+}
+
+surface.append321, 1321
+{
+element1,overlayfast,surface00321.png,0,0
+}
+
+surface.append322, 1322
+{
+element1,overlayfast,surface00322.png,0,0
+}
+
+
+surface.append500, 1500
+{
+element1,overlayfast,surface00500.png,0,0
+}
+
+surface.append501, 1501
+{
+element1,overlayfast,surface00501.png,0,0
+}
+
+
+
+
+
+

@@ -1,0 +1,6 @@
+dic, yaya_config.txt
+dic, system/yaya_shiori3.dic, UTF-8
+dic, system/yaya_optional.dic, UTF-8
+ignoreiolog, ID: OnSecondChange
+ignoreiolog, ID: OnMouse
+

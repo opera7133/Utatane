@@ -63,7 +63,7 @@ import UtataneShiori
         .deletingLastPathComponent()
         .deletingLastPathComponent()
     let masterURL = repositoryRoot
-        .appendingPathComponent("Content/Local/Ghosts/ria/ghost/master", isDirectory: true)
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
     guard FileManager.default.fileExists(atPath: masterURL.path) else {
         return
     }

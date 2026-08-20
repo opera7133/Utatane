@@ -71,9 +71,16 @@ packages/mcp-server/      stdio MCPサーバー
 
 依存方向は`packages/Package.swift`で管理します。パーサーや本体処理は各Packageへ、SwiftUI/AppKit固有の結線だけを`apps/Utatane`と`platform-macos`へ置きます。
 
-## ローカル検証データ
+## 同梱コンテンツとローカル検証データ
 
-Debugビルドは次のgit管理外ディレクトリを見ます。手元のゴースト置き場です。
+再配布条件を確認済みの同梱コンテンツは`Content/Bundled`で管理します。riaの会話、シェル、専用バルーンを変更するときはこちらだけを編集してください。
+
+```text
+Content/Bundled/Ghosts/ria/
+Content/Bundled/Balloons/ria/
+```
+
+Debugビルドは`Bundled`を優先し、次のgit管理外ディレクトリを重ねて読みます。こちらは手元だけで使うゴースト置き場です。
 
 ```text
 Content/Local/Ghosts/
@@ -81,7 +88,7 @@ Content/Local/Balloons/
 Content/Local/Headline/
 ```
 
-実ゴーストや配布素材はコミットしないでください。利用条件を確認して、手元だけで使います。ネイティブSHIORIとSAORIは[Native-SHIORI.md](Native-SHIORI.md)に分けました。
+同梱対象でない実ゴーストや配布素材はコミットしないでください。利用条件を確認して、手元だけで使います。ネイティブSHIORIとSAORIは[Native-SHIORI.md](Native-SHIORI.md)に分けました。
 
 ## MCPサーバー
 

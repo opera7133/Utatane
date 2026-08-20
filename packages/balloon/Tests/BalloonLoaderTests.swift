@@ -27,6 +27,30 @@ func `parses balloon layout and colors`() {
 }
 
 @Test
+func `uses valid rect as the text inset when available`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    charset,UTF-8
+    type,balloon
+    name,Inset Balloon
+    origin.x,0
+    origin.y,0
+    validrect.left,28
+    validrect.top,14
+    wordwrappoint.x,-48
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+
+    let balloon = try BalloonLoader().load(from: directory)
+
+    #expect(balloon.originX == 28)
+    #expect(balloon.originY == 14)
+    #expect(balloon.wordWrapPointX == -48)
+}
+
+@Test
 func `uses scope specific balloon image and falls back for additional characters`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

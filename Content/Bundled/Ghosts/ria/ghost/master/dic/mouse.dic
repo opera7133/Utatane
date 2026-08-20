@@ -1,0 +1,327 @@
+OnMouseDoubleClick
+{
+	if reference3 != 0 {
+		return
+	}
+
+	if RiaRegisterTouchSequence {
+		_talks = RiaSecretTouchTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+	elseif reference4 == 'Head' {
+		if ria_mood_saved <= -4 {
+			_talks = RiaAnnoyedHeadDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+		else {
+			_talks = RiaHeadDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+	}
+	elseif reference4 == 'Face' || reference4 == 'Eye' || reference4 == 'Mouth' {
+		if ria_mood_saved <= -4 {
+			_talks = RiaAnnoyedFaceDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+		else {
+			_talks = RiaFaceDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+	}
+	elseif reference4 == 'Bust' {
+		RiaRegisterBustPoke
+		if TOINT(ria_outfit_active) && ria_session_bust_poke_count < 3 {
+			'\0\s[9]パーカーの上からでも、そこはそこだから。\w5触らないで。\e'
+			return
+		}
+		if ria_session_bust_poke_count >= 3 {
+			_talks = RiaRepeatedBustDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+		else {
+			_talks = RiaBustDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+	}
+	elseif reference4 == 'Hand' {
+		if ria_mood_saved <= -4 {
+			_talks = RiaAnnoyedHandDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+		else {
+			_talks = RiaHandDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+	}
+	elseif reference4 == 'Leg' {
+		if TOINT(ria_outfit_active) && RAND(3) == 0 {
+			'\0\s[202]スカートの裾、気になる？\w5私は別に。お兄が触らなければ。\e'
+			return
+		}
+		_talks = RiaLegDoubleClickTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+	else {
+		_talks = RiaOtherDoubleClickTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+}
+
+RiaRegisterTouchSequence
+{
+	_region = reference4
+	_found = 0
+	if ria_touch_sequence == 0 && _region == 'Head' {
+		ria_touch_sequence = 1
+	}
+	elseif ria_touch_sequence == 1 && _region == 'Hand' {
+		ria_touch_sequence = 2
+	}
+	elseif ria_touch_sequence == 2 && _region == 'Head' {
+		ria_touch_sequence = 3
+	}
+	elseif ria_touch_sequence == 3 && (_region == 'Face' || _region == 'Eye' || _region == 'Mouth') {
+		ria_touch_sequence = 0
+		ria_secret_talk_count_saved++
+		_found = 1
+	}
+	elseif _region == 'Head' {
+		ria_touch_sequence = 1
+	}
+	else {
+		ria_touch_sequence = 0
+	}
+	_found
+}
+
+RiaSecretTouchTalks : array
+{
+	'\0\s[103]……その順番、よく見つけたね。\w5別に何も出ないけど、隠し反応はこれ。\e'
+	'\0\s[105]隠し反応の正解。\w5頭、手、頭、顔。\w5覚えても特に得はないよ。\e'
+	'\0\s[4]隠し順まで試す人、お兄くらいでしょ。\w5一応、記録しとく。\e'
+}
+
+RiaHeadDoubleClickTalks : array
+{
+	'\0\s[4]……髪、変になってない？\w5ならいいけど。\e'
+	'\0\s[6]頭を呼び鈴みたいにしないで。\w5ちゃんと聞こえてるから。\e'
+	'\0\s[103]何、その確認の仕方。\w5起きてるよ。\e'
+	'\0\s[108]二回叩いたら何か出ると思った？\w5出ないけど。\e'
+}
+
+RiaAnnoyedHeadDoubleClickTalks : array
+{
+	'\0\s[9]今は頭も触らないで。\w5機嫌直してから。\e'
+	'\0\s[6]ごまかそうとしてる？\w5そういうの、分かるから。\e'
+}
+
+RiaFaceDoubleClickTalks : array
+{
+	'\0\s[6]近い。\w5何かついてるなら言って。\e'
+	'\0\s[4]顔をつついて確認しなくても、いるけど。\e'
+	'\0\s[9]目の前で急に動かさないで。\w5びっくりする。\e'
+	'\0\s[103]はい、こっち見た。\w5それで何。\e'
+}
+
+RiaAnnoyedFaceDoubleClickTalks : array
+{
+	'\0\s[9]顔見れば機嫌悪いの分かるでしょ。\w5つつかないで。\e'
+	'\0\s[6]近い。\w5今はちょっと離れてて。\e'
+}
+
+RiaBustDoubleClickTalks : array
+{
+	'\0\s[9]そこ反応させる必要あった？\w5お兄。\e'
+	'\0\s[6]場所を考えて。\w5次は普通に呼んで。\e'
+	'\0\s[108]今のは操作ミスってことにしとく。\w5一回だけね。\e'
+}
+
+RiaRepeatedBustDoubleClickTalks : array
+{
+	'\0\s[9]さっきから何回目。\w5いい加減にして、お兄。\e'
+	'\0\s[9]操作ミスって回数じゃないでしょ。\w5次は本気で怒るよ。\e'
+	'\0\s[9]そこを連打する機能、今すぐ忘れて。\e'
+}
+
+RiaRegisterBustPoke
+{
+	if ISVAR('ria_session_bust_poke_count') == 0 {
+		ria_session_bust_poke_count = 0
+	}
+	if ISVAR('ria_bust_poke_count_saved') == 0 {
+		ria_bust_poke_count_saved = 0
+	}
+	if ISVAR('ria_mood_saved') == 0 {
+		ria_mood_saved = 0
+	}
+	ria_session_bust_poke_count++
+	ria_bust_poke_count_saved++
+	ria_mood_saved -= 2
+	if ria_mood_saved < -6 {
+		ria_mood_saved = -6
+	}
+}
+
+RiaHandDoubleClickTalks : array
+{
+	'\0\s[102]手？\w5何か用。\n\n\q[着替える,OnRiaChoiceOutfit]\n\q[少し出かける,OnRiaChoiceGoOut]\n\q[今の天気,OnRiaChoiceWeather]\n\q[今何時？,OnRiaChoiceTime]\n\q[今日は何曜日？,OnRiaChoiceWeekday]\n\q[今どんな感じ？,OnRiaChoiceState]\n\q[記録を見せて,OnRiaChoiceProfile]\n\q[何してた？,OnRiaChoiceActivity]\n\q[何か話して,OnRiaChoiceTalk]\n\q[悪かった,OnRiaChoiceApology]\n\q[やっぱりいい,OnRiaChoiceCancel]\e'
+	'\0\s[103]はいはい。\w5選ぶならこのへん。\n\n\q[着替える,OnRiaChoiceOutfit]\n\q[少し出かける,OnRiaChoiceGoOut]\n\q[今の天気,OnRiaChoiceWeather]\n\q[今何時？,OnRiaChoiceTime]\n\q[今日は何曜日？,OnRiaChoiceWeekday]\n\q[今どんな感じ？,OnRiaChoiceState]\n\q[記録を見せて,OnRiaChoiceProfile]\n\q[何してた？,OnRiaChoiceActivity]\n\q[何か話して,OnRiaChoiceTalk]\n\q[悪かった,OnRiaChoiceApology]\n\q[やっぱりいい,OnRiaChoiceCancel]\e'
+	'\0\s[4]手をつつくより、用件を言えばいいのに。\n\n\q[着替える,OnRiaChoiceOutfit]\n\q[少し出かける,OnRiaChoiceGoOut]\n\q[今の天気,OnRiaChoiceWeather]\n\q[今何時？,OnRiaChoiceTime]\n\q[今日は何曜日？,OnRiaChoiceWeekday]\n\q[今どんな感じ？,OnRiaChoiceState]\n\q[記録を見せて,OnRiaChoiceProfile]\n\q[何してた？,OnRiaChoiceActivity]\n\q[何か話して,OnRiaChoiceTalk]\n\q[悪かった,OnRiaChoiceApology]\n\q[やっぱりいい,OnRiaChoiceCancel]\e'
+}
+
+RiaAnnoyedHandDoubleClickTalks : array
+{
+	'\0\s[9]今はメニュー出す気分じゃない。\w5先に何か言うことあるんじゃないの。\e'
+	'\0\s[6]手を取ってごまかすのなし。\w5ちゃんと謝って。\n\n\q[悪かった,OnRiaChoiceApology]\n\q[今はやめとく,OnRiaChoiceCancel]\e'
+}
+
+RiaLegDoubleClickTalks : array
+{
+	'\0\s[202]動きたくない。\w5用事ならお兄が行けば。\e'
+	'\0\s[203]そこをつついても立たないよ。\w5今日は省エネ。\e'
+	'\0\s[202]散歩の催促？\w5今ちょうど座ったところなんだけど。\e'
+	'\0\s[200]足、しびれてないから。\w5確認いらない。\e'
+}
+
+RiaOtherDoubleClickTalks : array
+{
+	'\0\s[0]ん。\w5どうしたの。\e'
+	'\0\s[4]そこに何かあった？\w5私には見えないけど。\e'
+	'\0\s[103]呼んだ？\w5用件あるなら聞くけど。\e'
+}
+
+OnMouseMove
+{
+	if reference3 != 0 {
+		ria_stroke_count = 0
+		return
+	}
+
+	_region = reference4
+	if _region != 'Head' && _region != 'Hair' {
+		ria_stroke_count = 0
+		ria_stroke_region = ''
+		return
+	}
+
+	_now = GETTICKCOUNT
+	if _region != ria_stroke_region || (_now - TOINT(ria_stroke_timer)) > 1500 {
+		ria_stroke_count = 0
+	}
+
+	ria_stroke_region = _region
+	ria_stroke_timer = _now
+	ria_stroke_count++
+	_threshold = 40
+	if _region == 'Hair' {
+		_threshold = 32
+	}
+
+	if ria_stroke_count >= _threshold {
+		ria_stroke_count = 0
+		RiaRegisterPet
+		if _region == 'Hair' {
+			RiaHairStrokeTalk
+		}
+		else {
+			RiaHeadPetTalk
+		}
+	}
+}
+
+RiaRegisterPet
+{
+	if ISVAR('ria_pet_count_saved') == 0 {
+		ria_pet_count_saved = 0
+	}
+	if ISVAR('ria_session_pet_count') == 0 {
+		ria_session_pet_count = 0
+	}
+	if ISVAR('ria_mood_saved') == 0 {
+		ria_mood_saved = 0
+	}
+	ria_pet_count_saved++
+	ria_session_pet_count++
+	ria_session_apology_count = 0
+	if ria_mood_saved < 6 {
+		ria_mood_saved++
+	}
+}
+
+OnMouseWheel
+{
+	if reference3 != 0 {
+		return
+	}
+
+	if reference4 == 'Hair' {
+		_talks = RiaHairWheelTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+	elseif reference4 == 'Head' {
+		'\0\s[9]ちょっと、髪型崩れる。\w5スクロールする場所そこじゃないでしょ。\e'
+	}
+}
+
+RiaHairWheelTalks : array
+{
+	'\0\s[4]髪をスクロールしてどうするの。\w5伸びたりしないよ。\e'
+	'\0\s[108]それ、ブラシの代わり？\w5雑すぎると思う。\e'
+	'\0\s[6]毛先で遊ばない。\w5絡まったらお兄が直してよ。\e'
+}
+
+RiaHeadPetTalk
+{
+	if ria_session_pet_count >= 7 {
+		_talks = RiaTooMuchPetTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+	elseif ria_mood_saved >= 4 {
+		_talks = RiaGoodMoodPetTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+	else {
+		_talks = RiaHeadPetTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+}
+
+RiaTooMuchPetTalks : array
+{
+	'\0\s[9]撫ですぎ。\w5髪ぺたんこになるから、ちょっと休憩。\e'
+	'\0\s[6]はい、今日は十分。\w5また後でならいいけど。\e'
+	'\0\s[108]お兄、気に入ると同じことずっとやるよね。\w5一回離して。\e'
+}
+
+RiaGoodMoodPetTalks : array
+{
+	'\0\s[1]……まあ、今はそのままでいいよ。\e'
+	'\0\s[103]今日は手つきが丁寧じゃん。\w5いつもそうして。\e'
+	'\0\s[105]ん。\w5別に機嫌取られてるわけじゃないけど。\e'
+}
+
+RiaHeadPetTalks : array
+{
+	'\0\s[4]……撫でてる？\w5子供じゃないんだけど。\e'
+	'\0\s[6]ん。\w5別に、やめろとは言ってない。\e'
+	'\0\s[101]眠くなるから、ほどほどにして。\w5……もう少しならいいけど。\e'
+	'\0\s[108]お兄って、たまに距離感おかしいよね。\w5今さらだけど。\e'
+	'\0\s[103]はいはい、撫でた撫でた。\w5満足した？\e'
+	'\0\s[1]……落ち着くのは、まあ分かる。\w5だからってずっとはなし。\e'
+}
+
+RiaHairStrokeTalk
+{
+	_talks = RiaHairStrokeTalks
+	_talks[RAND(ARRAYSIZE(_talks))]
+}
+
+RiaHairStrokeTalks : array
+{
+	'\0\s[4]髪、さらさら？\w5一応ちゃんと手入れしてるし。\e'
+	'\0\s[6]引っかけないでよ。\w5長いと絡まりやすいんだから。\e'
+	'\0\s[103]そこ、撫でるっていうより髪で遊んでない？\e'
+	'\0\s[108]手ぐしするなら、もう少し丁寧にして。\w5……そう、それくらい。\e'
+	'\0\s[1]朝は毛先が跳ねて大変なんだよね。\w5今は平気でしょ。\e'
+	'\0\s[105]シャンプー変えたの、分かる？\w5分からないなら別にいい。\e'
+}

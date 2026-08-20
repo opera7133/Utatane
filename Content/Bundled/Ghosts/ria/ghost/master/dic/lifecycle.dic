@@ -1,0 +1,222 @@
+OnBoot
+{
+	if ISVAR('ria_boot_count_saved') == 0 {
+		ria_boot_count_saved = 0
+	}
+	if ISVAR('ria_mood_saved') == 0 {
+		ria_mood_saved = 0
+	}
+	if ISVAR('ria_quick_close_count_saved') == 0 {
+		ria_quick_close_count_saved = 0
+	}
+	if ISVAR('ria_secret_talk_count_saved') == 0 {
+		ria_secret_talk_count_saved = 0
+	}
+	if ISVAR('ria_outfit_mode_saved') == 0 {
+		ria_outfit_mode_saved = 'auto'
+	}
+	if ISVAR('ria_weather_enabled_saved') == 0 {
+		ria_weather_enabled_saved = 0
+	}
+	ria_boot_count_saved++
+	ria_session_started = GETSECCOUNT()
+	ria_session_pet_count = 0
+	ria_session_bust_poke_count = 0
+	ria_session_apology_count = 0
+	ria_apology_timer = 0
+	ria_touch_sequence = 0
+	ria_idle_seconds = 0
+	ria_away = 0
+	ria_outfit_change_count = 0
+	ria_outfit_change_timer = 0
+	RiaSelectOutfit
+	RiaUpdateTalkInterval
+	RiaBootTalk
+}
+
+OnClose
+{
+	_elapsed = RiaSessionSeconds
+	if _elapsed < 15 {
+		ria_quick_close_count_saved++
+		if ria_quick_close_count_saved >= 3 {
+			'\0\s[9]また？\w5起動してすぐ閉じるなら、最初から呼ばなくてよくない。\e'
+		}
+		else {
+			'\0\s[6]もう閉じるの。\w5何のために起こしたの、お兄。\e'
+		}
+	}
+	elseif _elapsed < 60 {
+		ria_quick_close_count_saved++
+		'\0\s[4]一分も経ってないけど。\w5まあ、用が済んだならいいけどさ。\e'
+	}
+	else {
+		if ria_quick_close_count_saved > 0 {
+			ria_quick_close_count_saved--
+		}
+		_talks = RiaNormalCloseTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+}
+
+RiaNormalCloseTalks : array
+{
+	'\0\s[5]じゃ、閉じるね。\w5作業の保存くらいはしときなよ。\e'
+	'\0\s[0]今日はここまで？\w5なら、おつかれ。続きはまた今度でいいでしょ。\e'
+	'\0\s[103]ん、終わりね。\w5開きっぱなしのファイルだけ確認しときなよ。\e'
+	'\0\s[105]じゃあね、お兄。\w5次に起こす時は、何か飲み物でも用意しといて。\e'
+	'\0\s[100]閉じるなら私も寝る。\w5お兄もあんまり遅くならないようにね。\e'
+	'\0\s[108]はい、おしまい。\w5別に名残惜しくはないけど、急に消さないでよ。\e'
+}
+
+OnSurfaceRestore
+{
+	if TOINT(ria_away) {
+		return
+	}
+	'\0\s[0]\e'
+}
+
+OnSecondChange
+{
+	if TOINT(ria_away) && GETSECCOUNT() >= TOINT(ria_away_until) {
+		ria_away = 0
+		RiaSelectOutfit
+		_talks = RiaReturnTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+}
+
+RiaSelectOutfit
+{
+	if ria_outfit_mode_saved == 'outing' {
+		ria_outfit_active = 1
+	}
+	elseif ria_outfit_mode_saved == 'home' {
+		ria_outfit_active = 0
+	}
+	else {
+		_hour = GETTIME[4]
+		_weekday = GETTIME[3]
+		ria_outfit_active = (_weekday >= 1 && _weekday <= 5 && _hour >= 8 && _hour < 18)
+	}
+}
+
+OnTranslateInternalRiaOutfit
+{
+	_script = _argv[0]
+	if TOINT(ria_outfit_active) == 0 {
+		_script
+		return
+	}
+	_ids = (0,1,2,3,4,5,6,7,8,9,100,101,102,103,104,105,106,107,108,109,200,201,202,205,206,300,301,302,303,304,305,306,307,308,309,310,311,312,313,314,315,316,317,318,319,320,321,322,500,501)
+	for _i = 0 ; _i < ARRAYSIZE(_ids) ; _i++ {
+		_id = _ids[_i]
+		_script = REPLACE(_script,"\s[%(_id)]","\s[%(_id + 10000)]")
+	}
+	_script
+}
+
+OnAITalkNewEvent
+{
+	if TOINT(ria_away) {
+		return
+	}
+	ria_idle_seconds = TOINT(reference4)
+	RiaUpdateTalkInterval
+	RiaSelectTalk
+}
+
+RiaSelectTalk
+{
+	_talks = RiaRandomTalk
+	_talks ,= RiaStateTalk
+	_talks ,= RiaTimeTalk
+	_talks ,= RiaWeekdayTalk
+	_talks ,= RiaSeasonTalk
+	_talks ,= RiaDateTalk
+	_talks ,= RiaWeatherTalk
+
+	_index = RAND(ARRAYSIZE(_talks))
+	if ARRAYSIZE(_talks) > 1 && _index == ria_last_talk_index_saved {
+		_index = (_index + 1) % ARRAYSIZE(_talks)
+	}
+	ria_last_talk_index_saved = _index
+	if ria_mood_saved > 0 && RAND(3) == 0 {
+		ria_mood_saved--
+	}
+	_talks[_index]
+}
+
+RiaUpdateTalkInterval
+{
+	_hour = GETTIME[4]
+	if _hour >= 1 && _hour < 5 {
+		aitalkinterval = 240
+	}
+	elseif _hour >= 23 {
+		aitalkinterval = 180
+	}
+	else {
+		aitalkinterval = 120
+	}
+}
+
+RiaSessionSeconds
+{
+	_elapsed = GETSECCOUNT() - TOINT(ria_session_started)
+	if _elapsed < 0 {
+		_elapsed = 0
+	}
+	_elapsed
+}
+
+RiaStateTalk
+{
+	_talks = IARRAY
+	_elapsed = RiaSessionSeconds
+	_idle = TOINT(ria_idle_seconds)
+	_hour = GETTIME[4]
+
+	if _idle >= 300 && _idle < 1800 {
+		_talks ,= '\0\s[9]しばらく入力なかったけど、離れてた？\w5ぼーっとしてただけなら、それはそれでいいけど。\e'
+		_talks ,= '\0\s[108]お兄、いる？\w5……返事ないなら、私も静かにしてる。\e'
+	}
+	if _elapsed >= 7200 {
+		_talks ,= '\0\s[101]私を起動してから、もう二時間以上らしいよ。\w5何してたかは知らないけど、一回くらい立ったら。\e'
+		_talks ,= '\0\s[311]長いこと画面の前にいるね。\w5作業かネットかは知らんけど、飲み物まだある？\e'
+	}
+	if _hour < 5 {
+		_talks ,= '\0\s[100]この時間は、さすがに話す頻度落とすね。\w5私も眠いし。\e'
+	}
+	if TOINT(ria_outfit_active) && (_hour >= 21 || _hour < 5) {
+		_talks ,= '\0\s[100]……まだ外出着だった。\w5着替えるの忘れてたけど、もうこのままでいいかな。\e'
+		_talks ,= '\0\s[4]この時間までパーカー着たままなの、ちょっと落ち着かない。\w5後で着替える。たぶん。\e'
+	}
+	if ria_mood_saved >= 4 {
+		_talks ,= '\0\s[1]さっきからちょっと機嫌いいかも。\w5理由は別に言わないけど。\e'
+	}
+	elseif ria_mood_saved <= -3 {
+		_talks ,= '\0\s[9]今はあんまり機嫌よくない。\w5誰のせいとは言わないけど。\e'
+		_talks ,= '\0\s[6]ちょっと静かにしてたい。\w5そのうち戻るから、放っといて。\e'
+	}
+	_talks
+}
+
+RiaCurrentTime
+{
+	STRFORM('$02d:$02d',GETTIME[4],GETTIME[5])
+}
+
+RiaWeekdayName
+{
+	_weekdays = IARRAY
+	_weekdays ,= '日曜'
+	_weekdays ,= '月曜'
+	_weekdays ,= '火曜'
+	_weekdays ,= '水曜'
+	_weekdays ,= '木曜'
+	_weekdays ,= '金曜'
+	_weekdays ,= '土曜'
+	_weekdays[GETTIME[3]]
+}

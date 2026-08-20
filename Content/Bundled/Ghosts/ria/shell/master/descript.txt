@@ -1,0 +1,11 @@
+charset,UTF-8
+name,p016（寝不足）
+id,ria-p016
+type,shell
+craftman,ボトル猫
+craftmanw,ボトル猫
+craftmanurl,https://catbottle.sakura.ne.jp/
+seriko.use_self_alpha,1
+sakura.seriko.alignmenttodesktop,free
+sakura.balloon.alignment,none
+

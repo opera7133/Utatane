@@ -1,0 +1,248 @@
+charset,UTF-8
+// このdescript.txtの文字コード
+
+// 「//」で始まる行の文字は無視される
+// メモなどを残すのに便利
+
+// ------------------------------------------------
+
+type,balloon
+// このファイルセットがバルーンであることを示す
+
+name,Ria
+// このバルーンの名前
+
+craftman,ria
+// このバルーンの作者の名前 半角英数字のみ
+
+craftmanw,りあ
+// このバルーンの作者の名前 全角文字も使える
+
+craftmanurl,https://github.com/opera7133/Utatane
+// このバルーンの作者のURL
+
+// ------------------------------------------------
+
+use_self_alpha,1
+// バルーンの画像自体の透過度を有効にするかどうか
+// 1で有効、0で無効
+
+use_input_alpha,1
+// インプットボックス類の画像自体の透過度を有効にするかどうか
+// 1で有効、0で無効
+
+origin.x,0
+origin.y,0
+// バルーン内の文字開始位置のXY座標
+
+validrect.left,28
+validrect.top,14
+validrect.right,-48
+validrect.bottom,-24
+// バルーン内の文字描画範囲（それぞれ左、上、右、下）
+// 数値がマイナスの場合、右下から数えた座標となる
+
+wordwrappoint.x,-48
+// 自動改行で折り返すX座標
+// 数値がマイナスの場合、右下から数えた座標となる
+
+// ------------------------------------------------
+
+font.name,BIZ UDゴシック,ＭＳ ゴシック
+// 使用するフォント 半角カンマ区切りで複数のフォントを指定できる
+
+font.height,18
+// 使用するフォントの高さ方向の大きさ（単位はピクセル）
+
+font.color.r,55
+font.color.g,53
+font.color.b,65
+// フォントの色（RGB値で0～255）
+
+font.shadowcolor.r,none
+font.shadowcolor.g,none
+font.shadowcolor.b,none
+// フォントの影の色（RGB値で0～255、noneで無効化）
+
+//disable.font.color.r,127
+//disable.font.color.g,127
+//disable.font.color.b,127
+// 操作無効を意味する薄い色の文字の色（RGB値で0～255）
+// 未指定だとfont.colorとバルーン画像の色を混ぜた色になる
+
+// ------------------------------------------------
+
+cursor.style,square
+// 選択肢にカーソルを置いた時の形
+// squareで矩形、underlineで下線
+
+cursor.blendmethod,copypen
+// 指定した色をどう使うか
+// copypenは色をそのまま使う
+
+cursor.font.color.r,70
+cursor.font.color.g,65
+cursor.font.color.b,120
+// 選択肢にカーソルを置いた時の文字色
+
+cursor.pen.color.r,188
+cursor.pen.color.g,184
+cursor.pen.color.b,215
+// 選択肢にカーソルを置いた時の矩形・下線の線の色
+
+cursor.brush.color.r,222
+cursor.brush.color.g,220
+cursor.brush.color.b,235
+// 選択肢にカーソルを置いた時の矩形の内部の色
+
+// ------------------------------------------------
+
+cursor.notselect.style,none
+// 非選択時の選択肢の形
+
+cursor.notselect.blendmethod,copypen
+// 指定した色をどう使うか
+// copypenは色をそのまま使う
+
+cursor.notselect.font.color.r,79
+cursor.notselect.font.color.g,75
+cursor.notselect.font.color.b,112
+// 非選択時の選択肢の文字色
+
+// ------------------------------------------------
+
+anchor.style,underline
+// アンカーにカーソルを置いた時の形
+// squareで矩形、underlineで下線
+
+anchor.blendmethod,copypen
+// 指定した色をどう使うか
+// copypenは色をそのまま使う
+
+anchor.font.color.r,70
+anchor.font.color.g,65
+anchor.font.color.b,120
+// アンカーにカーソルを置いた時の文字色
+
+anchor.pen.color.r,70
+anchor.pen.color.g,65
+anchor.pen.color.b,120
+// アンカーにカーソルを置いた時の矩形・下線の線の色
+
+//anchor.brush.color.r,255
+//anchor.brush.color.g,255
+//anchor.brush.color.b,255
+// アンカーにカーソルを置いた時の矩形の内部の色
+
+// ------------------------------------------------
+
+anchor.notselect.style,none
+// 非選択時・未訪問のアンカーの形
+
+anchor.notselect.blendmethod,copypen
+// 指定した色をどう使うか
+// copypenは色をそのまま使う
+
+anchor.notselect.font.color.r,79
+anchor.notselect.font.color.g,75
+anchor.notselect.font.color.b,112
+// 非選択時・未訪問のアンカーの文字色
+
+// ------------------------------------------------
+
+anchor.visited.style,none
+// 非選択時・訪問済みのアンカーの形
+
+anchor.visited.blendmethod,copypen
+// 指定した色をどう使うか
+// copypenは色をそのまま使う
+
+anchor.visited.font.color.r,105
+anchor.visited.font.color.g,99
+anchor.visited.font.color.b,135
+// 非選択時・訪問済みのアンカーの文字色
+
+// ------------------------------------------------
+
+clickwaitmarker.x,-76
+clickwaitmarker.y,-25
+// クリック待ちマーカーのXY座標
+
+onlinemarker.x,220
+onlinemarker.y,-25
+// オンライン表示のXY座標
+
+onlinemarker.interval,500
+// オンライン表示のアニメーション表示切り替え間隔
+// 数値の単位はミリ秒（1秒は1000ミリ秒となる）
+
+arrow0.x,-34
+arrow0.y,8
+// スクロール可能な時の上矢印のXY座標
+
+arrow1.x,-34
+arrow1.y,-20
+// スクロール可能な時の下矢印のXY座標
+
+// ------------------------------------------------
+
+sstpmarker.x,22
+sstpmarker.y,-19
+// SSTPマーカーのXY座標
+
+sstpmessage.font.name,BIZ UDゴシック,ＭＳ ゴシック
+// SSTPメッセージのフォント
+
+sstpmessage.font.height,12
+// SSTPメッセージの高さ方向の大きさ
+
+sstpmessage.x,35
+sstpmessage.y,-20
+// SSTPメッセージの表示開始位置XY座標
+
+sstpmessage.font.color.r,127
+sstpmessage.font.color.g,127
+sstpmessage.font.color.b,127
+// SSTPメッセージの文字色
+
+// ------------------------------------------------
+
+number.font.name,BIZ UDゴシック,ＭＳ ゴシック
+// カウンタ数値のフォント
+
+number.font.height,12
+// カウンタ数値の高さ方向の大きさ
+
+number.xr,-35
+// カウンタ数値の表示開始位置X座標（右から数えたもの）
+number.y,-20
+// カウンタ数値の表示開始位置Y座標
+
+number.font.color.r,127
+number.font.color.g,127
+number.font.color.b,127
+// カウンタ数値の文字色
+
+// ------------------------------------------------
+
+communicatebox.font.name,BIZ UDゴシック,ＭＳ ゴシック
+// 入力ボックスのフォント
+
+communicatebox.font.color.r,0
+communicatebox.font.color.g,0
+communicatebox.font.color.b,0
+// 入力ボックスの文字色
+
+communicatebox.background.color.r,0
+communicatebox.background.color.g,255
+communicatebox.background.color.b,255
+// 入力ボックスの入力部分の背景色
+
+communicatebox.x,8
+communicatebox.y,27
+// 入力可能域始点のXY座標
+
+communicatebox.width,460
+communicatebox.height,26
+// 入力ボックスの入力部分の大きさ
+

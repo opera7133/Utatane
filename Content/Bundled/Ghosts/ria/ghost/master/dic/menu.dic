@@ -1,0 +1,242 @@
+OnRiaChoiceTime
+{
+	"\0\s[103]今は%(RiaCurrentTime)。\w5時計、画面にも出てると思うけど。\e"
+}
+
+OnRiaChoiceWeekday
+{
+	"\0\s[0]今日は%(RiaWeekdayName)。\w5日付は%(GETTIME[1])月%(GETTIME[2])日。\e"
+}
+
+OnRiaChoiceTalk
+{
+	RiaSelectTalk
+}
+
+OnRiaChoiceState
+{
+	_elapsed = RiaSessionSeconds
+	_hour = GETTIME[4]
+	if _hour < 5 || _elapsed >= 10800 {
+		'\0\s[100]眠い。\w5私を起動してからも結構経ってるし、静かにしてたい。\e'
+	}
+	elseif ria_session_pet_count >= 7 {
+		'\0\s[9]普通。\w5ただ、今日は撫でられすぎて髪が気になる。\e'
+	}
+	elseif ria_mood_saved >= 4 {
+		'\0\s[1]まあまあ。\w5さっきよりちょっと機嫌いい。\e'
+	}
+	elseif ria_mood_saved <= -4 {
+		'\0\s[9]よくない。\w5理由はお兄が一番分かってるでしょ。\e'
+	}
+	elseif ria_mood_saved < 0 {
+		'\0\s[6]ちょっと悪い。\w5変なところ触らなければ、そのうち戻る。\e'
+	}
+	else {
+		'\0\s[0]普通。\w5眠くもないし、特に困ってもない。\e'
+	}
+}
+
+OnRiaChoiceActivity
+{
+	_talks = RiaActivityTalks
+	_talks[RAND(ARRAYSIZE(_talks))]
+}
+
+OnRiaChoiceOutfit
+{
+	"\0\s[103]着替え？\w5好きなの選べば。\n\n\q[自動で決める,OnRiaChoiceOutfitAuto]\n\q[普段着,OnRiaChoiceOutfitHome]\n\q[外出着,OnRiaChoiceOutfitOuting]\n\q[やっぱりいい,OnRiaChoiceCancel]\e"
+}
+
+OnRiaChoiceOutfitAuto
+{
+	if RiaRegisterOutfitChange {
+		'\0\s[9]さっきから着替えさせすぎ。\w5しばらくこれでいいでしょ。\e'
+		return
+	}
+	ria_outfit_mode_saved = 'auto'
+	RiaSelectOutfit
+	'\0\s[0]自動にした。\w5平日の日中なら外出着、それ以外は普段着にする。\e'
+}
+
+OnRiaChoiceOutfitHome
+{
+	if RiaRegisterOutfitChange {
+		'\0\s[9]着せ替え人形じゃないんだけど。\w5もう少し落ち着いて選んで。\e'
+		return
+	}
+	ria_outfit_mode_saved = 'home'
+	ria_outfit_active = 0
+	'\0\s[0]はい、普段着。\w5家ならこれでいいでしょ。\e'
+}
+
+OnRiaChoiceOutfitOuting
+{
+	if RiaRegisterOutfitChange {
+		'\0\s[9]また？\w5着替えるのも一瞬じゃないんだからね。\e'
+		return
+	}
+	ria_outfit_mode_saved = 'outing'
+	ria_outfit_active = 1
+	'\0\s[0]外出着にした。\w5別に出かけるとは言ってないけど。\e'
+}
+
+RiaRegisterOutfitChange
+{
+	_now = GETTICKCOUNT
+	if (_now - TOINT(ria_outfit_change_timer)) > 20000 {
+		ria_outfit_change_count = 0
+	}
+	ria_outfit_change_timer = _now
+	ria_outfit_change_count++
+	(ria_outfit_change_count >= 4)
+}
+
+OnRiaChoiceGoOut
+{
+	if TOINT(ria_away) {
+		'\0\s[4]今ここにいないことになってるんだけど。\w5変な呼び戻し方しないで。\e'
+		return
+	}
+	"\0\s[103]出かける？\w5短いやつなら。\n\n\q[少し散歩,OnRiaChoiceGoWalk]\n\q[コンビニ,OnRiaChoiceGoStore]\n\q[やっぱりいい,OnRiaChoiceCancel]\e"
+}
+
+OnRiaChoiceGoWalk
+{
+	RiaStartOuting(120,'walk')
+	'\0\s[105]じゃ、ちょっと歩いてくる。\w5二分くらいで戻るから。\w5……別に待ってなくていいよ。\w9\s[-1]\e'
+}
+
+OnRiaChoiceGoStore
+{
+	RiaStartOuting(180,'store')
+	'\0\s[205]コンビニ行ってくる。\w5何かいる？\w5……今聞いても遅いか。\w9\s[-1]\e'
+}
+
+RiaStartOuting
+{
+	ria_away = 1
+	ria_away_until = GETSECCOUNT() + TOINT(_argv[0])
+	ria_away_kind = _argv[1]
+	ria_outfit_active = 1
+}
+
+RiaReturnTalks : array
+{
+	'\0\s[105]ただいま。\w5思ったより外の空気まともだった。\e'
+	'\0\s[205]戻った。\w5コンビニ、見るだけのつもりだったのに余計なの買った。\e'
+	'\0\s[103]はい、帰ってきた。\w5お兄はその間も同じ画面見てた？\e'
+}
+
+OnRiaChoiceWeather
+{
+	ria_weather_enabled_saved = 1
+	'\0\s[103]現在地から天気を取るね。\w5初回はmacOSの確認が出るかも。\![execute,weather-get,--async=OnRiaWeatherResult]\e'
+}
+
+OnRiaWeatherResult
+{
+	if reference0 == 'ok' {
+		ria_weather_code_saved = TOINT(reference1)
+		ria_weather_temperature_saved = reference2
+		ria_weather_checked_at_saved = GETSECCOUNT()
+		"\0\s[206]今は%(RiaWeatherLabel(TOINT(reference1)))、%(reference2)度くらい。\w5%(RiaWeatherAdvice(TOINT(reference1),TOINT(reference2)))\e"
+	}
+	elseif reference0 == 'denied' {
+		'\0\s[4]位置情報は許可されてないみたい。\w5それなら天気は取らない。設定から変えるまではこのままね。\e'
+	}
+	elseif reference0 == 'unavailable' {
+		'\0\s[6]現在地を取得できなかった。\w5位置情報サービスが切れてないか見たら。\e'
+	}
+	elseif reference0 == 'timeout' {
+		'\0\s[6]位置情報を待ったけど、何も返ってこなかった。\w5macOSの権限か、アプリの署名が怪しいかも。\e'
+	}
+	else {
+		'\0\s[6]天気を取りに行ったけど失敗した。\w5ネットの調子か、向こうの都合かも。\e'
+	}
+}
+
+RiaWeatherLabel
+{
+	_code = TOINT(_argv[0])
+	if _code == 0 { '晴れ' }
+	elseif _code <= 3 { 'くもり' }
+	elseif _code == 45 || _code == 48 { '霧' }
+	elseif _code >= 51 && _code <= 67 { '雨' }
+	elseif _code >= 71 && _code <= 77 { '雪' }
+	elseif _code >= 80 && _code <= 82 { 'にわか雨' }
+	elseif _code >= 85 && _code <= 86 { 'にわか雪' }
+	elseif _code >= 95 { '雷雨' }
+	else { 'よく分からない天気' }
+}
+
+RiaWeatherAdvice
+{
+	_code = TOINT(_argv[0])
+	_temp = TOINT(_argv[1])
+	if _code >= 51 { '出るなら傘、確認しといた方がいいよ。' }
+	elseif _temp <= 10 { 'パーカーだけだと少し寒そう。' }
+	elseif _temp >= 28 { '外出着でも暑いかもね。' }
+	else { '出かけるには普通じゃない。' }
+}
+
+OnRiaChoiceProfile
+{
+	"\0\s[103]記録ね。\n起動回数：%(TOINT(ria_boot_count_saved))回\n撫でられた回数：%(TOINT(ria_pet_count_saved))回\n変なところを触られた回数：%(TOINT(ria_bust_poke_count_saved))回\n今回の起動時間：%(TOINT(RiaSessionSeconds / 60))分\n機嫌：%(RiaMoodLabel)\w5\n……最後の項目はお兄次第だけど。\e"
+}
+
+RiaMoodLabel
+{
+	if ria_mood_saved >= 4 {
+		'かなり良い'
+	}
+	elseif ria_mood_saved > 0 {
+		'少し良い'
+	}
+	elseif ria_mood_saved <= -4 {
+		'悪い'
+	}
+	elseif ria_mood_saved < 0 {
+		'少し悪い'
+	}
+	else {
+		'普通'
+	}
+}
+
+RiaActivityTalks : array
+{
+	'\0\s[104]講義の資料を開いて、三ページくらいで閉じた。\w5開いただけ昨日より進んでる。\e'
+	'\0\s[304]曲を探してた。\w5探してる時間の方が長くなったから、結局いつものにした。\e'
+	'\0\s[307]スマホ見てた。\w5別に面白いものはなかったけど。\e'
+	'\0\s[300]冷蔵庫を見て、何も増えてないことを確認してた。\e'
+	'\0\s[317]何もしてない。\w5そういう時間もあるでしょ。\e'
+}
+
+OnRiaChoiceCancel
+{
+	'\0\s[108]ふーん。\w5じゃ、いいけど。\e'
+}
+
+OnRiaChoiceApology
+{
+	_now = GETTICKCOUNT
+	if (_now - TOINT(ria_apology_timer)) > 30000 {
+		ria_session_apology_count = 0
+	}
+	ria_apology_timer = _now
+	ria_session_apology_count++
+	if ria_session_apology_count >= 3 {
+		'\0\s[9]謝れば回数でどうにかなると思ってない？\w5言葉より次の行動。\e'
+	}
+	elseif ria_mood_saved < 0 {
+		ria_mood_saved += 2
+		if ria_mood_saved > 0 {
+			ria_mood_saved = 0
+		}
+		'\0\s[4]……分かった。\w5次から気をつけて。\e'
+	}
+	else {
+		'\0\s[103]何の謝罪？\w5心当たりないなら別にいいけど。\e'
+	}
+}

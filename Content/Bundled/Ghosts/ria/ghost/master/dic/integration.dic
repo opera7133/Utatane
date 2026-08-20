@@ -1,0 +1,37 @@
+OnInstallBegin
+{
+	'\0\s[103]何かインストールするんだ。\w5変なのじゃないならいいけど。\e'
+}
+
+OnInstallCompleteEx
+{
+	"\0\s[105]インストール終わったみたい。\w5%(reference1)だって。\w5あとでちゃんと動くか見ときなよ。\e"
+}
+
+OnInstallFailure
+{
+	if reference0 == 'extraction' {
+		'\0\s[6]展開できなかったって。\w5壊れてないか確認したら。\e'
+	}
+	elseif reference0 == 'invalid type' {
+		'\0\s[6]NARの中身が想定と違うみたい。\w5install.txtを見るしかないね。\e'
+	}
+	else {
+		'\0\s[9]インストール失敗。\w5詳しい理由はUtataneのエラーを見て。\e'
+	}
+}
+
+OnUpdateBegin
+{
+	'\0\s[103]更新を確認してくる。\w5そのまま待ってて。\e'
+}
+
+OnUpdateComplete
+{
+	'\0\s[105]更新終わり。\w5変わったところは、そのうち分かるでしょ。\e'
+}
+
+OnUpdateFailure
+{
+	'\0\s[6]更新、うまくいかなかった。\w5ネットか配布元を確認して。\e'
+}
