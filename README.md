@@ -124,6 +124,7 @@ Content/Local/
 ## もう少し詳しい話
 
 - [開発・ビルド](Docs/Development.md)
+- [ゴースト互換状況](Docs/Compatibility.md)
 - [Native SHIORI / SAORI](Docs/Native-SHIORI.md)
 
 ## ライセンス

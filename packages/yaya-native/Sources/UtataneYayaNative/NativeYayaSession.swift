@@ -2,10 +2,21 @@ import CYayaNative
 import Foundation
 import UtataneShiori
 
-public enum NativeYayaError: Error, Equatable, Sendable {
+public enum NativeYayaError: LocalizedError, Equatable, Sendable {
     case loadFailed(URL)
     case requestFailed
     case undecodableResponse
+
+    public var errorDescription: String? {
+        switch self {
+        case let .loadFailed(url):
+            "YAYAがゴーストを読み込めなかった: \(url.path)"
+        case .requestFailed:
+            "YAYAから応答が返らなかった"
+        case .undecodableResponse:
+            "YAYAの応答をUTF-8またはShift_JISとして読み取れなかった"
+        }
+    }
 }
 
 /// A macOS-native instance of the upstream YAYA evaluator.

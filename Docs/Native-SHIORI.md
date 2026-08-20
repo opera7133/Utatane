@@ -47,18 +47,3 @@ mise run test --filter 'installed Aosora demo answers OnBoot'
 ```
 
 </details>
-
-## SAORI
-
-ネイティブ対応済みのSAORIは次のとおりです。
-
-- `ssu.dll`: 文字列操作、計算、分岐など
-- `saori_cpuid.dll`: macOSのOS、CPU、メモリ情報
-- `kenonoke.dll`: `keyword.txt`を使うコミュニケート用キーワード分類
-- `textcopy2.dll`: macOSクリップボードへの書き込み
-
-`exec.dll`、`process.dll`、`proxy.dll`など、副作用が面倒なものは未対応です。
-
-```sh
-mise run test --filter NativeSatoriSessionTests
-```

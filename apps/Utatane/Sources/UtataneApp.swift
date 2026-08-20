@@ -573,15 +573,11 @@ private struct UtataneRootView: View {
             path: "ghost/master",
             directoryHint: .isDirectory
         )
-        if NativeYayaPersonalityEngine.supports(masterDirectoryURL: masterDirectory),
-           let engine = try? NativeYayaPersonalityEngine(masterDirectoryURL: masterDirectory)
-        {
-            return engine
+        if NativeYayaPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
+            return try NativeYayaPersonalityEngine(masterDirectoryURL: masterDirectory)
         }
-        if NativeSatoriPersonalityEngine.supports(masterDirectoryURL: masterDirectory),
-           let engine = try? NativeSatoriPersonalityEngine(masterDirectoryURL: masterDirectory)
-        {
-            return engine
+        if NativeSatoriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
+            return try NativeSatoriPersonalityEngine(masterDirectoryURL: masterDirectory)
         }
         if NativeKawariPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try NativeKawariPersonalityEngine(masterDirectoryURL: masterDirectory)
@@ -598,7 +594,7 @@ private struct UtataneRootView: View {
         }
 
         guard let dialogueURL = ContentRoot.dialogueURL(for: ghost) else {
-            throw AppError.missingResource("default-dialogue.json")
+            throw AppError.unsupportedShiori(ghost.shioriFilename)
         }
         let catalog = try DialogueCatalogLoader().load(from: dialogueURL)
         return DialoguePersonalityEngine(catalog: catalog)
@@ -1505,14 +1501,17 @@ private extension Error {
 
 enum AppError: LocalizedError {
     case missingResource(String)
+    case unsupportedShiori(String?)
     case windowsShioriUnavailable
 
     var errorDescription: String? {
         switch self {
         case let .missingResource(name):
             "アプリ内リソースが見つからない: \(name)"
+        case let .unsupportedShiori(filename):
+            "このゴーストのSHIORIにはまだ対応していない: \(filename ?? "SHIORI不明")"
         case .windowsShioriUnavailable:
-            "FIRSTを起動するには、Wine設定とMateriaの互換ファイルが必要。READMEの追加手順を確認して"
+            "FIRSTを起動するためのWine設定またはMateria互換ファイルが足りない。設定の「Windows SHIORI」とREADMEの追加手順を確認して"
         }
     }
 }

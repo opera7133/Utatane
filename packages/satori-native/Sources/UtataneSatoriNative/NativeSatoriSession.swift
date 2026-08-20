@@ -2,10 +2,21 @@ import CSatoriNative
 import Foundation
 import UtataneShiori
 
-public enum NativeSatoriError: Error, Equatable, Sendable {
+public enum NativeSatoriError: LocalizedError, Equatable, Sendable {
     case loadFailed(URL)
     case requestFailed
     case undecodableResponse
+
+    public var errorDescription: String? {
+        switch self {
+        case let .loadFailed(url):
+            "SATORIがゴーストを読み込めなかった: \(url.path)"
+        case .requestFailed:
+            "SATORIから応答が返らなかった"
+        case .undecodableResponse:
+            "SATORIの応答をUTF-8またはShift_JISとして読み取れなかった"
+        }
+    }
 }
 
 /// A macOS-native instance of the upstream SATORI evaluator.
