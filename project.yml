@@ -23,9 +23,6 @@ targets:
     sources:
       - path: apps/Utatane/Sources
       - path: apps/Utatane/Resources
-        excludes:
-          - Assets.xcassets
-        buildPhase: resources
     info:
       path: apps/Utatane/Info.plist
       properties:
@@ -35,6 +32,20 @@ targets:
         LSMinimumSystemVersion: "$(MACOSX_DEPLOYMENT_TARGET)"
         NSHumanReadableCopyright: "Copyright © 2026 opera7133."
         NSPrincipalClass: NSApplication
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: NAR Archive
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Alternate
+            LSItemContentTypes:
+              - dev.utatane.nar
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: dev.utatane.nar
+            UTTypeDescription: NAR Archive
+            UTTypeConformsTo:
+              - public.archive
+            UTTypeTagSpecification:
+              public.filename-extension:
+                - nar
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.utatane.app
@@ -61,6 +72,10 @@ targets:
         product: UtataneSakuraScript
       - package: UtataneKit
         product: UtatanePlatformMacOS
+      - package: UtataneKit
+        product: UtatanePOSIXShiori
+      - package: UtataneKit
+        product: UtataneKawariNative
       - package: UtataneKit
         product: UtataneYayaNative
       - package: UtataneKit

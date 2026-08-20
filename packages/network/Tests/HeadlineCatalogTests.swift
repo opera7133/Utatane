@@ -29,7 +29,13 @@ import Testing
             false
         }
     })
-    let legacyEntry = try #require(entries.first { if case .legacyDLL = $0.kind { true } else { false } })
+    let legacyEntry = try #require(entries.first {
+        if case .legacyDLL = $0.kind {
+            true
+        } else {
+            false
+        }
+    })
     #expect(legacyEntry.charset == "UTF-8")
     #expect(legacyEntry.openURL?.absoluteString == "https://example.test/")
     #expect(legacyEntry.alwaysDisplay)

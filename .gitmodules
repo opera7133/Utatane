@@ -6,3 +6,7 @@
 	path = packages/satori-native/Sources/CSatoriNative/Vendor
 	url = https://github.com/opera7133/satoriya-shiori
 	branch = utatane-vendor
+[submodule "packages/kawari-native/Sources/CKawariNative/Vendor/KAWARI"]
+	path = packages/kawari-native/Sources/CKawariNative/Vendor/KAWARI
+	url = https://github.com/opera7133/kawari.git
+	branch = utatane-macos

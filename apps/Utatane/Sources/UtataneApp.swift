@@ -5,8 +5,10 @@ import UtataneBalloon
 import UtataneContent
 import UtataneCore
 import UtataneGhostKit
+import UtataneKawariNative
 import UtataneNetwork
 import UtatanePlatformMacOS
+import UtatanePOSIXShiori
 import UtataneRuntime
 import UtataneSakuraScript
 import UtataneSatoriNative
@@ -27,6 +29,8 @@ struct UtataneApp: App {
     private let scriptPlayer: SakuraScriptPlayer
     private let selectionStore: ContentSelectionStore
     private let sstpServer: SSTPServer
+    private let statusWindowController: StatusWindowController
+    private let alertController: ApplicationAlertController
     @StateObject private var networkSettings: UtataneSettingsStore
 
     init() {
@@ -44,6 +48,8 @@ struct UtataneApp: App {
         balloonLoader = BalloonLoader()
         selectionStore = ContentSelectionStore()
         sstpServer = SSTPServer()
+        statusWindowController = StatusWindowController()
+        alertController = ApplicationAlertController()
         _networkSettings = StateObject(wrappedValue: UtataneSettingsStore())
         scriptPlayer = SakuraScriptPlayer(
             surfaceWindowController: surfaceWindowController,
@@ -62,6 +68,8 @@ struct UtataneApp: App {
                 scriptPlayer: scriptPlayer,
                 selectionStore: selectionStore,
                 sstpServer: sstpServer,
+                statusWindowController: statusWindowController,
+                alertController: alertController,
                 networkSettings: networkSettings,
                 applicationDelegate: applicationDelegate
             )
@@ -69,7 +77,8 @@ struct UtataneApp: App {
         Settings {
             UtataneSettingsView(
                 settings: networkSettings,
-                headlinesDirectory: ContentRoot.headlinesDirectory
+                headlinesDirectory: ContentRoot.headlinesDirectory,
+                balloonsDirectory: ContentRoot.balloonsDirectory
             )
         }
         .commands {
@@ -115,6 +124,8 @@ private struct UtataneRootView: View {
     let scriptPlayer: SakuraScriptPlayer
     let selectionStore: ContentSelectionStore
     let sstpServer: SSTPServer
+    let statusWindowController: StatusWindowController
+    let alertController: ApplicationAlertController
     @ObservedObject var networkSettings: UtataneSettingsStore
     let applicationDelegate: UtataneApplicationDelegate
 
@@ -136,6 +147,9 @@ private struct UtataneRootView: View {
     @State private var showsOnboarding = false
     @State private var isImportingSSPDirectory = false
     @State private var calledGhosts: [URL: CalledGhostRuntime] = [:]
+    @State private var showsStartupGhostPicker = false
+    @State private var startupGhostID: URL?
+    @State private var isTransitioningGhost = false
 
     var body: some View {
         Group {
@@ -182,14 +196,26 @@ private struct UtataneRootView: View {
             applicationDelegate.onTerminationRequest = {
                 requestApplicationTermination()
             }
+            applicationDelegate.setOpenNarHandler { urls in
+                installNars(from: urls)
+            }
             await model.load()
             showsOnboarding = model.ghosts.isEmpty
             reloadHeadlines()
-            let restoredGhost = model.ghosts.first {
-                $0.rootDirectory.lastPathComponent == selectionStore.ghostDirectoryName
+            switch networkSettings.startupBehavior {
+            case .restore:
+                let restoredGhost = model.ghosts.first {
+                    $0.rootDirectory.lastPathComponent == selectionStore.ghostDirectoryName
+                }
+                selectedGhostID = selectedGhostID ?? restoredGhost?.id ?? model.ghosts.first?.id
+            case .choose:
+                startupGhostID = model.ghosts.first?.id
+                showsStartupGhostPicker = !model.ghosts.isEmpty
+            case .random:
+                selectedGhostID = model.ghosts.randomElement()?.id
             }
-            selectedGhostID = selectedGhostID ?? restoredGhost?.id ?? model.ghosts.first?.id
             configurePlayback()
+            applyAppearance()
             do {
                 try sstpServer.start { request in
                     await handleSSTP(request)
@@ -200,6 +226,12 @@ private struct UtataneRootView: View {
         }
         .task(id: "\(networkSettings.characterDelayMilliseconds)-\(networkSettings.dialogueDismissalSeconds)") {
             configurePlayback()
+        }
+        .task(id: "\(networkSettings.shellScalePercent)-\(networkSettings.balloonScalePercent)-\(networkSettings.linksBalloonScale)-\(networkSettings.balloonTextScalePercent)-\(networkSettings.locksShellToDesktopBottom)-\(networkSettings.keepsShellOnScreen)") {
+            configureDisplay()
+        }
+        .task(id: networkSettings.appearance) {
+            applyAppearance()
         }
         .task(id: networkSettings.randomTalkIntervalMinutes) {
             let interval = networkSettings.randomTalkIntervalMinutes
@@ -222,6 +254,17 @@ private struct UtataneRootView: View {
                   let ghost = model.ghosts.first(where: { $0.id == selectedGhostID })
             else { return }
             await transition(to: ghost)
+        }
+        .task(id: "\(selectedGhostID?.path ?? "")-\(networkSettings.automaticGhostUpdate)-\(networkSettings.ghostUpdateIntervalDays)") {
+            guard networkSettings.automaticGhostUpdate else { return }
+            try? await Task.sleep(for: .seconds(5))
+            guard !Task.isCancelled,
+                  let ghost = currentGhost,
+                  networkSettings.shouldAutomaticallyUpdateGhost(
+                      directoryName: ghost.rootDirectory.lastPathComponent
+                  )
+            else { return }
+            updateCurrentGhost(isAutomatic: true)
         }
         .task(id: "\(networkSettings.automaticHeadlineRefresh)-\(networkSettings.headlineRefreshIntervalMinutes)") {
             guard networkSettings.automaticHeadlineRefresh else { return }
@@ -251,6 +294,16 @@ private struct UtataneRootView: View {
                 }
             }
         }
+        .sheet(isPresented: $showsStartupGhostPicker) {
+            StartupGhostPicker(
+                ghosts: model.ghosts,
+                selection: $startupGhostID,
+                start: {
+                    selectedGhostID = startupGhostID
+                    showsStartupGhostPicker = false
+                }
+            )
+        }
         .fileImporter(
             isPresented: $isImportingSSPDirectory,
             allowedContentTypes: [.folder]
@@ -264,20 +317,10 @@ private struct UtataneRootView: View {
                 }
             }
         }
-        .alert(
-            "エラー",
-            isPresented: Binding(
-                get: { previewError != nil },
-                set: {
-                    if !$0 {
-                        previewError = nil
-                    }
-                }
-            )
-        ) {
-            Button("OK") { previewError = nil }
-        } message: {
-            Text(previewError ?? "")
+        .onChange(of: previewError) { _, message in
+            guard let message else { return }
+            previewError = nil
+            alertController.showError(message)
         }
         .alert("RSS/Atomを取得", isPresented: $isEnteringRSSURL) {
             TextField("https://example.com/feed.xml", text: $rssURLText)
@@ -305,7 +348,7 @@ private struct UtataneRootView: View {
     }
 
     private func sendEvent(_ event: GhostEvent) {
-        guard let session, let balloon else { return }
+        guard !isTransitioningGhost, let session, let balloon else { return }
         Task {
             do {
                 guard let response = try await session.response(for: event) else { return }
@@ -320,6 +363,7 @@ private struct UtataneRootView: View {
     }
 
     private func sendSecondChange() {
+        guard !isTransitioningGhost else { return }
         let references = secondChangeReferences(for: surfaceWindowController)
         if let session {
             let canTalk = !scriptPlayer.isDialogueActive
@@ -371,18 +415,43 @@ private struct UtataneRootView: View {
 
     private func transition(to ghost: InstalledGhost, forceReload: Bool = false) async {
         guard forceReload || currentGhost?.id != ghost.id else { return }
-        if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),
-           ContentRoot.materiaFirstConfiguration(for: ghost) == nil
-        {
-            previewError = AppError.windowsShioriUnavailable.localizedDescription
-            return
-        }
+        let previousGhost = currentGhost
+        let statusToken = statusWindowController.show("「\(ghost.name)」を起動中…")
+        defer { statusWindowController.hide(token: statusToken) }
+        isTransitioningGhost = true
+        defer { isTransitioningGhost = false }
         if let called = calledGhosts.removeValue(forKey: ghost.id) {
             await called.stop()
         }
         await closeCurrentGhost(reason: .ghostChanging(name: ghost.name))
         guard !Task.isCancelled else { return }
-        await activate(ghost)
+        switch await activate(ghost) {
+        case .success:
+            return
+        case let .failure(error):
+            let fallbackCandidates = ([previousGhost].compactMap(\.self) + model.ghosts)
+                .reduce(into: [InstalledGhost]()) { result, candidate in
+                    guard candidate.id != ghost.id,
+                          !result.contains(where: { $0.id == candidate.id })
+                    else { return }
+                    result.append(candidate)
+                }
+            for fallback in fallbackCandidates {
+                let fallbackToken = statusWindowController.show(
+                    "「\(ghost.name)」を起動できなかったため「\(fallback.name)」を起動中…"
+                )
+                let fallbackResult = await activate(fallback)
+                statusWindowController.hide(token: fallbackToken)
+                if case .success = fallbackResult {
+                    selectedGhostID = fallback.id
+                    previewError = "「\(ghost.name)」を起動できなかったため「\(fallback.name)」へ切り替えた。\n\(error.localizedDescription)"
+                    return
+                }
+            }
+            currentGhost = nil
+            selectedGhostID = nil
+            previewError = "「\(ghost.name)」を起動できず、代わりに起動できるゴーストも見つからなかった。\n\(error.localizedDescription)"
+        }
     }
 
     private func closeCurrentGhost(reason: GhostStopReason) async {
@@ -396,11 +465,13 @@ private struct UtataneRootView: View {
             guard !Task.isCancelled else { return }
             try? await Task.sleep(for: .seconds(1))
         } catch {
-            previewError = error.localizedDescription
+            if !isTransitioningGhost {
+                previewError = error.localizedDescription
+            }
         }
     }
 
-    private func activate(_ ghost: InstalledGhost) async {
+    private func activate(_ ghost: InstalledGhost) async -> Result<Void, any Error> {
         scriptPlayer.cancel()
         surfaceWindowController.hideAll()
         surfaceWindowController.setPresentationHidden(true)
@@ -411,18 +482,14 @@ private struct UtataneRootView: View {
             directoryName: ghost.rootDirectory.lastPathComponent,
             displayName: ghost.name
         )
+        configureDisplay()
         surfaceWindowController.setPositionContentID(ghost.id)
         balloonWindowController.setPositionContentID(ghost.id)
         selectionStore.ghostDirectoryName = ghost.rootDirectory.lastPathComponent
 
+        defer { surfaceWindowController.setPresentationHidden(false) }
         do {
-            let restoredShellName = selectionStore.shellDirectoryName(for: ghost.id)
-            let shellChoice = ghost.shells.first {
-                $0.directory.lastPathComponent == restoredShellName
-            } ?? ghost.shells.first {
-                $0.directory == ghost.defaultShellDirectory
-            } ?? ghost.shells.first
-            guard let shellChoice else {
+            guard let shellChoice = selectionStore.resolveShell(for: ghost) else {
                 throw AppError.missingResource("shell")
             }
             selectedShell = shellChoice
@@ -443,10 +510,11 @@ private struct UtataneRootView: View {
             installedBalloons = try balloonLoader.loadInstalled(
                 from: ContentRoot.balloonsDirectory
             )
-            let restoredBalloonName = selectionStore.balloonDirectoryName(for: ghost.id)
-            let loadedBalloon = installedBalloons.first {
-                $0.directory.lastPathComponent == restoredBalloonName
-            } ?? installedBalloons.first
+            let loadedBalloon = selectionStore.resolveBalloon(
+                for: ghost,
+                from: installedBalloons,
+                defaultDirectoryName: networkSettings.defaultBalloonDirectoryName
+            )
             balloon = loadedBalloon
             configureContextMenu()
             scriptPlayer.onError = { error in
@@ -492,8 +560,11 @@ private struct UtataneRootView: View {
             if let script = try await ghostSession.start(), let loadedBalloon {
                 scriptPlayer.play(script, balloon: loadedBalloon)
             }
+            return .success(())
         } catch {
-            previewError = error.localizedDescription
+            session = nil
+            balloon = nil
+            return .failure(error)
         }
     }
 
@@ -511,6 +582,12 @@ private struct UtataneRootView: View {
            let engine = try? NativeSatoriPersonalityEngine(masterDirectoryURL: masterDirectory)
         {
             return engine
+        }
+        if NativeKawariPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
+            return try NativeKawariPersonalityEngine(masterDirectoryURL: masterDirectory)
+        }
+        if POSIXShioriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
+            return try POSIXShioriPersonalityEngine(masterDirectoryURL: masterDirectory)
         }
         if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),
            let configuration = ContentRoot.materiaFirstConfiguration(for: ghost)
@@ -553,6 +630,8 @@ private struct UtataneRootView: View {
     }
 
     private func select(shell: InstalledShell) {
+        let statusToken = statusWindowController.show("「\(shell.name)」に切り替え中…")
+        defer { statusWindowController.hide(token: statusToken) }
         do {
             try show(shell: shell)
             sendEvent(.shiori(
@@ -745,6 +824,7 @@ private struct UtataneRootView: View {
                     balloons: installedBalloons,
                     shellLoader: shellLoader,
                     selectionStore: selectionStore,
+                    defaultBalloonDirectoryName: networkSettings.defaultBalloonDirectoryName,
                     personalityEngine: personalityEngine(for: ghost),
                     characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
                     dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000
@@ -827,6 +907,30 @@ private struct UtataneRootView: View {
         }
     }
 
+    private func configureDisplay() {
+        let shellScale = Double(networkSettings.shellScalePercent) / 100
+        let balloonScalePercent = networkSettings.linksBalloonScale
+            ? networkSettings.shellScalePercent
+            : networkSettings.balloonScalePercent
+        surfaceWindowController.setDisplayScale(shellScale)
+        surfaceWindowController.setPlacement(
+            locksToDesktopBottom: networkSettings.locksShellToDesktopBottom,
+            keepsOnScreen: networkSettings.keepsShellOnScreen
+        )
+        balloonWindowController.setDisplayScale(
+            Double(balloonScalePercent) / 100,
+            textScale: Double(networkSettings.balloonTextScalePercent) / 100
+        )
+    }
+
+    private func applyAppearance() {
+        NSApplication.shared.appearance = switch networkSettings.appearance {
+        case .system: nil
+        case .light: NSAppearance(named: .aqua)
+        case .dark: NSAppearance(named: .darkAqua)
+        }
+    }
+
     private func updateDebugWindowVisibility() {
         guard let debugWindow else { return }
         if showsOnboarding || networkSettings.showsDebugWindow {
@@ -840,7 +944,7 @@ private struct UtataneRootView: View {
         installNars(from: [url])
     }
 
-    private func updateCurrentGhost() {
+    private func updateCurrentGhost(isAutomatic: Bool = false) {
         guard let ghost = currentGhost, let updateSession = session, let updateBalloon = balloon else { return }
         Task {
             do {
@@ -863,6 +967,9 @@ private struct UtataneRootView: View {
                     rootDirectory: ghost.rootDirectory,
                     homeURL: homeURL
                 )
+                networkSettings.recordGhostUpdate(
+                    directoryName: ghost.rootDirectory.lastPathComponent
+                )
                 _ = await playInstallationEvent(
                     .shiori(id: "OnUpdateComplete", references: [
                         0: result.changedFiles.isEmpty ? "none" : "changed",
@@ -877,7 +984,7 @@ private struct UtataneRootView: View {
                     session: updateSession,
                     balloon: updateBalloon
                 )
-                if !handled {
+                if !handled, !isAutomatic {
                     previewError = error.localizedDescription
                 }
             }
@@ -991,7 +1098,7 @@ private struct UtataneRootView: View {
                 return
             }
             for (index, item) in displayedItems.enumerated() {
-                let phase: String = if displayedItems.count == 1 {
+                let phase = if displayedItems.count == 1 {
                     "First and Last"
                 } else if index == 0 {
                     "First"
@@ -1018,7 +1125,9 @@ private struct UtataneRootView: View {
                 session: headlineSession,
                 balloon: headlineBalloon
             )
-            if !handled { previewError = error.localizedDescription }
+            if !handled {
+                previewError = error.localizedDescription
+            }
         }
     }
 
@@ -1311,6 +1420,8 @@ private struct UtataneRootView: View {
 @MainActor
 private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate {
     var onTerminationRequest: (() -> Void)?
+    private var onOpenNar: (([URL]) -> Void)?
+    private var pendingNarURLs: [URL] = []
 
     private var isAwaitingTermination = false
     private var isTerminationApproved = false
@@ -1333,6 +1444,55 @@ private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate 
         guard isAwaitingTermination else { return }
         isTerminationApproved = true
         NSApplication.shared.reply(toApplicationShouldTerminate: true)
+    }
+
+    func setOpenNarHandler(_ handler: @escaping ([URL]) -> Void) {
+        onOpenNar = handler
+        guard !pendingNarURLs.isEmpty else { return }
+        let urls = pendingNarURLs
+        pendingNarURLs.removeAll()
+        handler(urls)
+    }
+
+    func application(_ sender: NSApplication, openFiles filenames: [String]) {
+        let urls = filenames.map { URL(fileURLWithPath: $0) }.filter {
+            $0.pathExtension.caseInsensitiveCompare("nar") == .orderedSame
+        }
+        guard !urls.isEmpty else {
+            sender.reply(toOpenOrPrint: .failure)
+            return
+        }
+        if let onOpenNar {
+            onOpenNar(urls)
+        } else {
+            pendingNarURLs.append(contentsOf: urls)
+        }
+        sender.reply(toOpenOrPrint: .success)
+    }
+}
+
+private struct StartupGhostPicker: View {
+    let ghosts: [InstalledGhost]
+    @Binding var selection: URL?
+    let start: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("起動するゴーストを選択")
+                .font(.title2.weight(.semibold))
+            List(ghosts, selection: $selection) { ghost in
+                Text(ghost.name).tag(ghost.id)
+            }
+            HStack {
+                Spacer()
+                Button("起動", action: start)
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(selection == nil)
+            }
+        }
+        .padding(20)
+        .frame(width: 420, height: 360)
+        .interactiveDismissDisabled()
     }
 }
 

@@ -25,7 +25,9 @@ public struct NarInstallResult: Sendable, Equatable {
     public let primaryType: NarContentType
     public let items: [NarInstalledItem]
 
-    public var installedURLs: [URL] { items.map(\.url) }
+    public var installedURLs: [URL] {
+        items.map(\.url)
+    }
 
     public init(primaryType: NarContentType, items: [NarInstalledItem]) {
         self.primaryType = primaryType

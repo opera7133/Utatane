@@ -19,6 +19,8 @@ public final class BalloonWindowController {
     private let imageLoader = SurfaceImageLoader()
     private let positionStore: WindowPositionStore
     private var presentations: [Int: BalloonPresentation] = [:]
+    private var displayScale: CGFloat = 1
+    private var textScale: CGFloat = 1
 
     public var onClick: (@MainActor (Int) -> Void)?
     public var onLinkClick: (@MainActor (String, [String]) -> Void)?
@@ -31,6 +33,12 @@ public final class BalloonWindowController {
         hideAll()
         presentations.removeAll()
         positionStore.setContentID(contentID)
+    }
+
+    public func setDisplayScale(_ scale: Double, textScale: Double) {
+        displayScale = CGFloat(min(max(scale, 0.5), 2))
+        self.textScale = CGFloat(min(max(textScale, 0.5), 2))
+        rebuildPresentations()
     }
 
     public var visibleScopes: [Int] {
@@ -63,12 +71,18 @@ public final class BalloonWindowController {
         let image = try imageLoader.loadUsingTopLeftTransparency(imageURL)
         let arrowImage = balloonLoader.arrowImageURL(index: 1, in: balloon)
             .flatMap { try? imageLoader.loadUsingTopLeftTransparency($0) }
+        let scaledSize = NSSize(
+            width: image.size.width * displayScale,
+            height: image.size.height * displayScale
+        )
         let contentView = BalloonContentView(
-            frame: NSRect(origin: .zero, size: image.size),
+            frame: NSRect(origin: .zero, size: scaledSize),
             image: image,
             arrowImage: arrowImage,
             balloon: balloon,
-            text: text
+            text: text,
+            displayScale: displayScale,
+            textScale: textScale
         )
         contentView.onClick = { [weak self] in
             self?.onClick?(scope)
@@ -81,36 +95,49 @@ public final class BalloonWindowController {
         let window = existingPresentation?.window ?? makeWindow(scope: scope)
         let existingOrigin = existingPresentation?.window.frame.origin
         window.contentView = contentView
-        window.setContentSize(image.size)
+        window.setContentSize(scaledSize)
         if let existingOrigin {
             window.setFrameOrigin(existingOrigin)
         } else if let restoredOrigin = positionStore.restoredOrigin(
             for: .balloon,
             scope: scope,
-            windowSize: image.size
+            windowSize: scaledSize
         ) {
             window.setFrameOrigin(restoredOrigin)
         } else {
             place(window, near: surfaceFrame)
         }
         window.makeKeyAndOrderFront(nil)
-        presentations[scope] = BalloonPresentation(window: window, contentView: contentView)
+        presentations[scope] = BalloonPresentation(
+            window: window,
+            contentView: contentView,
+            balloon: balloon,
+            speaker: speaker,
+            style: style,
+            surfaceFrame: surfaceFrame
+        )
     }
 
     public func updateText(_ text: String, scope: Int = 0) {
         presentations[scope]?.contentView.text = text
+        presentations[scope]?.text = text
+        presentations[scope]?.links = []
     }
 
     public func updateContent(text: String, links: [BalloonTextLink], scope: Int = 0) {
         presentations[scope]?.contentView.update(text: text, links: links)
+        presentations[scope]?.text = text
+        presentations[scope]?.links = links
     }
 
     public func setWaitingForClick(_ waiting: Bool, scope: Int? = nil) {
         if let scope {
             presentations[scope]?.contentView.isWaitingForClick = waiting
+            presentations[scope]?.isWaitingForClick = waiting
         } else {
             for presentation in presentations.values {
                 presentation.contentView.isWaitingForClick = waiting
+                presentation.isWaitingForClick = waiting
             }
         }
     }
@@ -155,15 +182,66 @@ public final class BalloonWindowController {
         )
         window.setFrameOrigin(NSPoint(x: x, y: y))
     }
+
+    private func rebuildPresentations() {
+        let snapshots = presentations.map { scope, presentation in
+            (
+                scope,
+                presentation.balloon,
+                presentation.speaker,
+                presentation.style,
+                presentation.surfaceFrame,
+                presentation.text,
+                presentation.links,
+                presentation.isWaitingForClick,
+                presentation.window.isVisible
+            )
+        }
+        for snapshot in snapshots {
+            try? show(
+                balloon: snapshot.1,
+                text: snapshot.5,
+                scope: snapshot.0,
+                speaker: snapshot.2,
+                style: snapshot.3,
+                near: snapshot.4
+            )
+            updateContent(text: snapshot.5, links: snapshot.6, scope: snapshot.0)
+            setWaitingForClick(snapshot.7, scope: snapshot.0)
+            if !snapshot.8 {
+                hide(scope: snapshot.0)
+            }
+        }
+    }
 }
 
+@MainActor
 private final class BalloonPresentation {
     let window: NSWindow
     let contentView: BalloonContentView
+    let balloon: BalloonDefinition
+    let speaker: BalloonSpeaker
+    let style: Int
+    let surfaceFrame: NSRect
+    var text: String
+    var links: [BalloonTextLink] = []
+    var isWaitingForClick = false
 
-    init(window: NSWindow, contentView: BalloonContentView) {
+    init(
+        window: NSWindow,
+        contentView: BalloonContentView,
+        balloon: BalloonDefinition,
+        speaker: BalloonSpeaker,
+        style: Int,
+        surfaceFrame: NSRect
+    ) {
         self.window = window
         self.contentView = contentView
+        self.balloon = balloon
+        self.speaker = speaker
+        self.style = style
+        self.surfaceFrame = surfaceFrame
+        text = contentView.text
     }
 }
 
@@ -178,6 +256,7 @@ private final class BalloonContentView: NSView {
     private let arrowView: NSImageView?
     private let textFont: NSFont
     private let textColor: NSColor
+    private let displayScale: CGFloat
     private var dragStartMouseLocation: NSPoint?
     private var dragStartWindowOrigin: NSPoint?
     private var didDrag = false
@@ -217,12 +296,15 @@ private final class BalloonContentView: NSView {
         image: NSImage,
         arrowImage: NSImage?,
         balloon: BalloonDefinition,
-        text: String
+        text: String,
+        displayScale: CGFloat,
+        textScale: CGFloat
     ) {
         textView = InteractiveTextView(frame: .zero)
         scrollView = NSScrollView(frame: .zero)
         arrowView = arrowImage.map(NSImageView.init(image:))
-        textFont = .systemFont(ofSize: CGFloat(balloon.fontHeight))
+        textFont = .systemFont(ofSize: CGFloat(balloon.fontHeight) * displayScale * textScale)
+        self.displayScale = displayScale
         textColor = NSColor(
             calibratedRed: CGFloat(min(max(balloon.fontColor.red, 0), 255)) / 255,
             green: CGFloat(min(max(balloon.fontColor.green, 0), 255)) / 255,
@@ -234,7 +316,7 @@ private final class BalloonContentView: NSView {
         let imageView = PassthroughImageView(frame: bounds)
         imageView.image = image
         imageView.imageAlignment = .alignCenter
-        imageView.imageScaling = .scaleNone
+        imageView.imageScaling = .scaleAxesIndependently
         addSubview(imageView)
 
         textView.drawsBackground = false
@@ -244,7 +326,7 @@ private final class BalloonContentView: NSView {
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainer?.lineBreakMode = .byWordWrapping
         textView.isVerticallyResizable = true
-        textView.minSize = NSSize(width: 0, height: textFrame(for: balloon, imageSize: image.size).height)
+        textView.minSize = NSSize(width: 0, height: textFrame(for: balloon).height)
         textView.autoresizingMask = [.width]
         textView.maxSize = NSSize(
             width: CGFloat.greatestFiniteMagnitude,
@@ -252,11 +334,11 @@ private final class BalloonContentView: NSView {
         )
         textView.textContainer?.widthTracksTextView = true
         textView.textContainer?.containerSize = NSSize(
-            width: textFrame(for: balloon, imageSize: image.size).width,
+            width: textFrame(for: balloon).width,
             height: CGFloat.greatestFiniteMagnitude
         )
         textView.delegate = textView
-        let textFrame = textFrame(for: balloon, imageSize: image.size)
+        let textFrame = textFrame(for: balloon)
         textView.frame = NSRect(origin: .zero, size: textFrame.size)
         textView.onBackgroundClick = { [weak self] in
             self?.onClick?()
@@ -274,18 +356,20 @@ private final class BalloonContentView: NSView {
         update(text: text, links: [])
 
         if let arrowView {
-            arrowView.imageScaling = .scaleNone
-            let arrowSize = arrowImage?.size ?? .zero
+            arrowView.imageScaling = .scaleAxesIndependently
+            let sourceArrowSize = arrowImage?.size ?? .zero
+            let arrowSize = NSSize(
+                width: sourceArrowSize.width * displayScale,
+                height: sourceArrowSize.height * displayScale
+            )
             arrowView.frame = NSRect(
-                x: resolvedCoordinate(
+                x: scaledCoordinate(
                     balloon.arrow1X,
-                    extent: image.size.width,
-                    itemExtent: arrowSize.width
+                    extent: bounds.width
                 ),
-                y: resolvedCoordinate(
+                y: scaledCoordinate(
                     balloon.arrow1Y,
-                    extent: image.size.height,
-                    itemExtent: arrowSize.height
+                    extent: bounds.height
                 ),
                 width: arrowSize.width,
                 height: arrowSize.height
@@ -333,21 +417,31 @@ private final class BalloonContentView: NSView {
         onClick?()
     }
 
-    private func textFrame(for balloon: BalloonDefinition, imageSize: NSSize) -> NSRect {
-        let originX = CGFloat(balloon.originX)
-        let originY = CGFloat(balloon.originY)
-        let wrapX = CGFloat(balloon.wordWrapPointX)
-        let rightEdge = wrapX < 0 ? imageSize.width + wrapX : wrapX
-        let width = max(1, rightEdge - originX)
-        let bottomMargin = max(originY, CGFloat(abs(balloon.wordWrapPointY)))
-        return NSRect(
-            x: originX,
-            y: originY,
-            width: width,
-            height: max(1, imageSize.height - originY - bottomMargin)
-        )
+    private func textFrame(for balloon: BalloonDefinition) -> NSRect {
+        balloonTextFrame(for: balloon, displayedImageSize: bounds.size, displayScale: displayScale)
     }
+}
 
+func balloonTextFrame(
+    for balloon: BalloonDefinition,
+    displayedImageSize: NSSize,
+    displayScale: CGFloat
+) -> NSRect {
+    let originX = CGFloat(balloon.originX) * displayScale
+    let originY = CGFloat(balloon.originY) * displayScale
+    let wrapX = CGFloat(balloon.wordWrapPointX) * displayScale
+    let rightEdge = wrapX < 0 ? displayedImageSize.width + wrapX : wrapX
+    let width = max(1, rightEdge - originX)
+    let bottomMargin = max(originY, CGFloat(abs(balloon.wordWrapPointY)) * displayScale)
+    return NSRect(
+        x: originX,
+        y: originY,
+        width: width,
+        height: max(1, displayedImageSize.height - originY - bottomMargin)
+    )
+}
+
+private extension BalloonContentView {
     func update(text: String, links: [BalloonTextLink]) {
         let attributedText = NSMutableAttributedString(
             string: text,
@@ -377,8 +471,8 @@ private final class BalloonContentView: NSView {
         }
     }
 
-    private func resolvedCoordinate(_ value: Int, extent: CGFloat, itemExtent _: CGFloat) -> CGFloat {
-        let coordinate = CGFloat(value)
+    private func scaledCoordinate(_ value: Int, extent: CGFloat) -> CGFloat {
+        let coordinate = CGFloat(value) * displayScale
         return coordinate < 0 ? extent + coordinate : coordinate
     }
 }

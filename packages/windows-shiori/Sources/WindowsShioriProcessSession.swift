@@ -116,18 +116,28 @@ public final class WindowsShioriProcessSession: @unchecked Sendable {
         environment["WINEESYNC"] = "1"
         process.environment = environment
         try process.run()
+        let input = inputPipe.fileHandleForWriting
+        let output = outputPipe.fileHandleForReading
+        do {
+            let readyLength = try WindowsShioriFrameCodec.decodeLength(
+                Self.readExact(count: MemoryLayout<UInt32>.size, from: output),
+                allowsReadyFrame: true
+            )
+            guard readyLength == 0 else {
+                throw WindowsShioriProcessError.invalidHostReadyFrame(readyLength)
+            }
+        } catch {
+            try? input.close()
+            try? output.close()
+            if process.isRunning {
+                process.terminate()
+            }
+            throw error
+        }
 
         self.process = process
-        input = inputPipe.fileHandleForWriting
-        output = outputPipe.fileHandleForReading
-
-        let readyLength = try WindowsShioriFrameCodec.decodeLength(
-            Self.readExact(count: MemoryLayout<UInt32>.size, from: output),
-            allowsReadyFrame: true
-        )
-        guard readyLength == 0 else {
-            throw WindowsShioriProcessError.invalidHostReadyFrame(readyLength)
-        }
+        self.input = input
+        self.output = output
     }
 
     deinit {

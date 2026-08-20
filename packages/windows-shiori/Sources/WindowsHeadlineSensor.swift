@@ -74,16 +74,15 @@ public struct WindowsHeadlineSensor: Sendable {
         )
         let version = try Self.parsedResponse(versionResponse).headers["Value"]
 
-        let oldItems: [WindowsHeadlineItem]
-        if let oldFileURL, FileManager.default.fileExists(atPath: oldFileURL.path) {
-            oldItems = try Self.items(
+        let oldItems: [WindowsHeadlineItem] = if let oldFileURL, FileManager.default.fileExists(atPath: oldFileURL.path) {
+            try Self.items(
                 from: session.request(
                     Self.headlineRequest(path: oldFileURL, charset: headline.charset),
                     requestEncoding: Self.encoding(named: headline.charset)
                 )
             )
         } else {
-            oldItems = []
+            []
         }
         let newItems = try Self.items(
             from: session.request(
@@ -118,11 +117,10 @@ public struct WindowsHeadlineSensor: Sendable {
             line.lowercased().hasPrefix("charset:")
         }?.split(separator: ":", maxSplits: 1).last.map(String.init)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-        let text: String?
-        if charset?.lowercased().replacingOccurrences(of: "-", with: "") == "utf8" {
-            text = String(decoding: data, as: UTF8.self)
+        let text: String? = if charset?.lowercased().replacingOccurrences(of: "-", with: "") == "utf8" {
+            String(decoding: data, as: UTF8.self)
         } else {
-            text = String(data: data, encoding: .shiftJIS) ?? String(data: data, encoding: .utf8)
+            String(data: data, encoding: .shiftJIS) ?? String(data: data, encoding: .utf8)
         }
         guard let text else { throw WindowsHeadlineError.invalidResponse }
         return try ShioriMessageParser.parseResponse(text)
@@ -150,7 +148,8 @@ private final class WindowsDLLProcessSession: @unchecked Sendable {
 
     init(configuration: WindowsHeadlineHostConfiguration, dllURL: URL) throws {
         for url in [configuration.wineExecutableURL, configuration.hostExecutableURL, dllURL]
-        where !FileManager.default.fileExists(atPath: url.path) {
+            where !FileManager.default.fileExists(atPath: url.path)
+        {
             throw WindowsShioriProcessError.missingFile(url)
         }
         let process = Process()
@@ -204,7 +203,9 @@ private final class WindowsDLLProcessSession: @unchecked Sendable {
             isClosed = true
             try? input.close()
             try? output.close()
-            if process.isRunning { process.terminate() }
+            if process.isRunning {
+                process.terminate()
+            }
         }
     }
 

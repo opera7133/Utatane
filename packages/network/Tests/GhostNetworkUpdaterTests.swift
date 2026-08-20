@@ -23,12 +23,16 @@ import Testing
     let delimiter = "\u{1}"
     let manifest = Data("ghost/master/talk.dic\(delimiter)\(hash)\(delimiter)\n".utf8)
     let updater = GhostNetworkUpdater { url in
-        if url.lastPathComponent == "updates2.dau" { return manifest }
-        if url.lastPathComponent == "talk.dic" { return content }
+        if url.lastPathComponent == "updates2.dau" {
+            return manifest
+        }
+        if url.lastPathComponent == "talk.dic" {
+            return content
+        }
         throw NetworkFetchError.unsuccessfulStatus(404)
     }
 
-    let result = try await updater.update(rootDirectory: root, homeURL: URL(string: "https://example.test/ghost/")!)
+    let result = try await updater.update(rootDirectory: root, homeURL: #require(URL(string: "https://example.test/ghost/")))
     #expect(result.changedFiles == ["ghost/master/talk.dic"])
     #expect(try Data(contentsOf: root.appending(path: "ghost/master/talk.dic")) == content)
 }

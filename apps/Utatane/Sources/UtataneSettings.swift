@@ -1,8 +1,29 @@
 import SwiftUI
+import UtataneBalloon
 import UtataneNetwork
 
 @MainActor
 final class UtataneSettingsStore: ObservableObject {
+    enum StartupBehavior: String, CaseIterable, Identifiable {
+        case restore
+        case choose
+        case random
+
+        var id: Self {
+            self
+        }
+    }
+
+    enum Appearance: String, CaseIterable, Identifiable {
+        case system
+        case light
+        case dark
+
+        var id: Self {
+            self
+        }
+    }
+
     enum Pane: Hashable {
         case general
         case ghost
@@ -14,9 +35,20 @@ final class UtataneSettingsStore: ObservableObject {
     private enum Key {
         static let automaticHeadlineRefresh = "network.automaticHeadlineRefresh"
         static let headlineRefreshIntervalMinutes = "network.headlineRefreshIntervalMinutes"
+        static let automaticGhostUpdate = "network.automaticGhostUpdate"
+        static let ghostUpdateIntervalDays = "network.ghostUpdateIntervalDays"
+        static let startupBehavior = "general.startupBehavior"
+        static let appearance = "general.appearance"
+        static let defaultBalloonDirectoryName = "general.defaultBalloonDirectoryName"
         static let characterDelayMilliseconds = "talk.characterDelayMilliseconds"
         static let randomTalkIntervalMinutes = "talk.randomTalkIntervalMinutes"
         static let dialogueDismissalSeconds = "balloon.dialogueDismissalSeconds"
+        static let shellScalePercent = "display.shellScalePercent"
+        static let balloonScalePercent = "display.balloonScalePercent"
+        static let linksBalloonScale = "display.linksBalloonScale"
+        static let balloonTextScalePercent = "display.balloonTextScalePercent"
+        static let locksShellToDesktopBottom = "display.locksShellToDesktopBottom"
+        static let keepsShellOnScreen = "display.keepsShellOnScreen"
         static let showsDebugWindow = "debug.showsWindow"
         static let wineExecutablePath = "windowsShiori.wineExecutablePath"
         static let winePrefixPath = "windowsShiori.winePrefixPath"
@@ -25,12 +57,35 @@ final class UtataneSettingsStore: ObservableObject {
     @Published var automaticHeadlineRefresh: Bool {
         didSet { defaults.set(automaticHeadlineRefresh, forKey: Key.automaticHeadlineRefresh) }
     }
+
     @Published var headlineRefreshIntervalMinutes: Int {
         didSet { defaults.set(headlineRefreshIntervalMinutes, forKey: Key.headlineRefreshIntervalMinutes) }
     }
+
+    @Published var automaticGhostUpdate: Bool {
+        didSet { defaults.set(automaticGhostUpdate, forKey: Key.automaticGhostUpdate) }
+    }
+
+    @Published var ghostUpdateIntervalDays: Int {
+        didSet { defaults.set(ghostUpdateIntervalDays, forKey: Key.ghostUpdateIntervalDays) }
+    }
+
+    @Published var startupBehavior: StartupBehavior {
+        didSet { defaults.set(startupBehavior.rawValue, forKey: Key.startupBehavior) }
+    }
+
+    @Published var appearance: Appearance {
+        didSet { defaults.set(appearance.rawValue, forKey: Key.appearance) }
+    }
+
+    @Published var defaultBalloonDirectoryName: String {
+        didSet { defaults.set(defaultBalloonDirectoryName, forKey: Key.defaultBalloonDirectoryName) }
+    }
+
     @Published var characterDelayMilliseconds: Int {
         didSet { defaults.set(characterDelayMilliseconds, forKey: Key.characterDelayMilliseconds) }
     }
+
     @Published var randomTalkIntervalMinutes: Int {
         didSet {
             guard !isLoadingGhostSettings else { return }
@@ -44,18 +99,47 @@ final class UtataneSettingsStore: ObservableObject {
             }
         }
     }
+
     @Published var dialogueDismissalSeconds: Int {
         didSet { defaults.set(dialogueDismissalSeconds, forKey: Key.dialogueDismissalSeconds) }
     }
+
+    @Published var shellScalePercent: Int {
+        didSet { saveGhostValue(shellScalePercent, kind: Key.shellScalePercent) }
+    }
+
+    @Published var balloonScalePercent: Int {
+        didSet { saveGhostValue(balloonScalePercent, kind: Key.balloonScalePercent) }
+    }
+
+    @Published var linksBalloonScale: Bool {
+        didSet { saveGhostValue(linksBalloonScale, kind: Key.linksBalloonScale) }
+    }
+
+    @Published var balloonTextScalePercent: Int {
+        didSet { saveGhostValue(balloonTextScalePercent, kind: Key.balloonTextScalePercent) }
+    }
+
+    @Published var locksShellToDesktopBottom: Bool {
+        didSet { saveGhostValue(locksShellToDesktopBottom, kind: Key.locksShellToDesktopBottom) }
+    }
+
+    @Published var keepsShellOnScreen: Bool {
+        didSet { saveGhostValue(keepsShellOnScreen, kind: Key.keepsShellOnScreen) }
+    }
+
     @Published var showsDebugWindow: Bool {
         didSet { defaults.set(showsDebugWindow, forKey: Key.showsDebugWindow) }
     }
+
     @Published var wineExecutablePath: String {
         didSet { defaults.set(wineExecutablePath, forKey: Key.wineExecutablePath) }
     }
+
     @Published var winePrefixPath: String {
         didSet { defaults.set(winePrefixPath, forKey: Key.winePrefixPath) }
     }
+
     @Published var selectedPane: Pane = .general
     @Published private(set) var activeGhostName: String?
 
@@ -70,6 +154,18 @@ final class UtataneSettingsStore: ObservableObject {
             defaults.integer(forKey: Key.headlineRefreshIntervalMinutes),
             fallback: 60
         )
+        automaticGhostUpdate = defaults.bool(forKey: Key.automaticGhostUpdate)
+        ghostUpdateIntervalDays = Self.positiveValue(
+            defaults.integer(forKey: Key.ghostUpdateIntervalDays),
+            fallback: 7
+        )
+        startupBehavior = StartupBehavior(
+            rawValue: defaults.string(forKey: Key.startupBehavior) ?? ""
+        ) ?? .restore
+        appearance = Appearance(
+            rawValue: defaults.string(forKey: Key.appearance) ?? ""
+        ) ?? .system
+        defaultBalloonDirectoryName = defaults.string(forKey: Key.defaultBalloonDirectoryName) ?? ""
         characterDelayMilliseconds = defaults.object(forKey: Key.characterDelayMilliseconds) == nil
             ? 50 : defaults.integer(forKey: Key.characterDelayMilliseconds)
         randomTalkIntervalMinutes = defaults.integer(forKey: Key.randomTalkIntervalMinutes)
@@ -77,6 +173,12 @@ final class UtataneSettingsStore: ObservableObject {
             defaults.integer(forKey: Key.dialogueDismissalSeconds),
             fallback: 10
         )
+        shellScalePercent = 100
+        balloonScalePercent = 100
+        linksBalloonScale = true
+        balloonTextScalePercent = 100
+        locksShellToDesktopBottom = true
+        keepsShellOnScreen = true
         showsDebugWindow = defaults.bool(forKey: Key.showsDebugWindow)
         wineExecutablePath = defaults.string(forKey: Key.wineExecutablePath) ?? ""
         winePrefixPath = defaults.string(forKey: Key.winePrefixPath) ?? ""
@@ -96,7 +198,68 @@ final class UtataneSettingsStore: ObservableObject {
         } else {
             randomTalkIntervalMinutes = defaults.integer(forKey: Key.randomTalkIntervalMinutes)
         }
+        shellScalePercent = ghostIntegerValue(
+            directoryName: directoryName,
+            kind: Key.shellScalePercent,
+            fallback: 100
+        )
+        balloonScalePercent = ghostIntegerValue(
+            directoryName: directoryName,
+            kind: Key.balloonScalePercent,
+            fallback: 100
+        )
+        linksBalloonScale = ghostBoolValue(
+            directoryName: directoryName,
+            kind: Key.linksBalloonScale,
+            fallback: true
+        )
+        balloonTextScalePercent = ghostIntegerValue(
+            directoryName: directoryName,
+            kind: Key.balloonTextScalePercent,
+            fallback: 100
+        )
+        locksShellToDesktopBottom = ghostBoolValue(
+            directoryName: directoryName,
+            kind: Key.locksShellToDesktopBottom,
+            fallback: true
+        )
+        keepsShellOnScreen = ghostBoolValue(
+            directoryName: directoryName,
+            kind: Key.keepsShellOnScreen,
+            fallback: true
+        )
         isLoadingGhostSettings = false
+    }
+
+    func shouldAutomaticallyUpdateGhost(directoryName: String, now: Date = Date()) -> Bool {
+        guard automaticGhostUpdate else { return false }
+        let lastUpdate = defaults.object(forKey: ghostKey("network.lastUpdate", directoryName)) as? Date
+        guard let lastUpdate else { return true }
+        return now.timeIntervalSince(lastUpdate) >= Double(ghostUpdateIntervalDays) * 86400
+    }
+
+    func recordGhostUpdate(directoryName: String, at date: Date = Date()) {
+        defaults.set(date, forKey: ghostKey("network.lastUpdate", directoryName))
+    }
+
+    private func saveGhostValue(_ value: Any, kind: String) {
+        guard !isLoadingGhostSettings, let activeGhostDirectoryName else { return }
+        defaults.set(value, forKey: ghostKey(kind, activeGhostDirectoryName))
+    }
+
+    private func ghostIntegerValue(directoryName: String, kind: String, fallback: Int) -> Int {
+        let value = defaults.integer(forKey: ghostKey(kind, directoryName))
+        return value > 0 ? value : fallback
+    }
+
+    private func ghostBoolValue(directoryName: String, kind: String, fallback: Bool) -> Bool {
+        let key = ghostKey(kind, directoryName)
+        guard defaults.object(forKey: key) != nil else { return fallback }
+        return defaults.bool(forKey: key)
+    }
+
+    private func ghostKey(_ kind: String, _ directoryName: String) -> String {
+        "\(kind).\(directoryName)"
     }
 
     private func ghostRandomTalkKey(_ directoryName: String) -> String {
@@ -107,7 +270,9 @@ final class UtataneSettingsStore: ObservableObject {
 struct UtataneSettingsView: View {
     @ObservedObject var settings: UtataneSettingsStore
     let headlinesDirectory: URL
+    let balloonsDirectory: URL
     @State private var headlines: [InstalledHeadline] = []
+    @State private var balloons: [BalloonDefinition] = []
     @State private var loadError: String?
 
     var body: some View {
@@ -117,7 +282,28 @@ struct UtataneSettingsView: View {
                 description: "Utatane全体の基本設定。"
             ) {
                 Section("起動と操作") {
+                    Picker("起動するゴースト", selection: $settings.startupBehavior) {
+                        Text("前回のゴースト").tag(UtataneSettingsStore.StartupBehavior.restore)
+                        Text("起動時に選択").tag(UtataneSettingsStore.StartupBehavior.choose)
+                        Text("ランダム").tag(UtataneSettingsStore.StartupBehavior.random)
+                    }
+                    Picker("外観", selection: $settings.appearance) {
+                        Text("システム設定に合わせる").tag(UtataneSettingsStore.Appearance.system)
+                        Text("ライト").tag(UtataneSettingsStore.Appearance.light)
+                        Text("ダーク").tag(UtataneSettingsStore.Appearance.dark)
+                    }
                     Text("Shell、バルーン、キャラクター位置は、最後に使った状態がゴーストごとに復元される。")
+                        .foregroundStyle(.secondary)
+                }
+                Section("既定のバルーン") {
+                    Picker("バルーン", selection: $settings.defaultBalloonDirectoryName) {
+                        Text("インストール済みの先頭").tag("")
+                        ForEach(balloons, id: \.directory) { balloon in
+                            Text(balloon.name).tag(balloon.directory.lastPathComponent)
+                        }
+                    }
+                    Text("ゴースト自身にも、ゴーストごとの履歴にも指定がない場合に使う。削除されていた場合は利用可能なバルーンへ切り替わる。")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -144,6 +330,30 @@ struct UtataneSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Section("表示倍率") {
+                    Picker("シェル", selection: $settings.shellScalePercent) {
+                        ForEach([50, 75, 100, 125, 150, 200], id: \.self) { value in
+                            Text("\(value)%").tag(value)
+                        }
+                    }
+                    Toggle("バルーンをシェル倍率に連動", isOn: $settings.linksBalloonScale)
+                    Picker("バルーン", selection: $settings.balloonScalePercent) {
+                        ForEach([50, 75, 100, 125, 150, 200], id: \.self) { value in
+                            Text("\(value)%").tag(value)
+                        }
+                    }
+                    .disabled(settings.linksBalloonScale)
+                    Text("倍率は現在のゴーストにだけ保存される。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("配置") {
+                    Toggle("画面下に固定", isOn: $settings.locksShellToDesktopBottom)
+                    Toggle("画面端からはみ出さない", isOn: $settings.keepsShellOnScreen)
+                    Text("画面下に固定している間は、ドラッグ時に横方向だけ移動する。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .tabItem { Label("ゴースト", systemImage: "person.2") }
             .tag(UtataneSettingsStore.Pane.ghost)
@@ -162,6 +372,11 @@ struct UtataneSettingsView: View {
                     }
                 }
                 Section("バルーン") {
+                    Picker("文字サイズ", selection: $settings.balloonTextScalePercent) {
+                        ForEach([75, 90, 100, 110, 125, 150], id: \.self) { value in
+                            Text("\(value)%").tag(value)
+                        }
+                    }
                     Picker("会話後に閉じる", selection: $settings.dialogueDismissalSeconds) {
                         Text("5秒").tag(5)
                         Text("10秒").tag(10)
@@ -191,6 +406,21 @@ struct UtataneSettingsView: View {
                         Text("6時間").tag(360)
                     }
                     .disabled(!settings.automaticHeadlineRefresh)
+                }
+
+                Section("ゴーストのネットワーク更新") {
+                    Toggle("起動後に自動更新を確認", isOn: $settings.automaticGhostUpdate)
+                    Picker("更新間隔", selection: $settings.ghostUpdateIntervalDays) {
+                        Text("毎日").tag(1)
+                        Text("3日ごと").tag(3)
+                        Text("7日ごと").tag(7)
+                        Text("14日ごと").tag(14)
+                        Text("30日ごと").tag(30)
+                    }
+                    .disabled(!settings.automaticGhostUpdate)
+                    Text("homeurlが設定されたゴーストだけが対象。手動更新は右クリックメニューから実行できる。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 Section("インストール済みヘッドライン") {
@@ -237,11 +467,19 @@ struct UtataneSettingsView: View {
             .tabItem { Label("詳細", systemImage: "wrench.and.screwdriver") }
             .tag(UtataneSettingsStore.Pane.advanced)
         }
-        .frame(width: 540, height: 440)
+        .frame(width: 560, height: 520)
         .task { reload() }
     }
 
     private func reload() {
+        balloons = (try? BalloonLoader().loadInstalled(from: balloonsDirectory)) ?? []
+        if !settings.defaultBalloonDirectoryName.isEmpty,
+           !balloons.contains(where: {
+               $0.directory.lastPathComponent == settings.defaultBalloonDirectoryName
+           })
+        {
+            settings.defaultBalloonDirectoryName = ""
+        }
         do {
             headlines = try HeadlineCatalog().load(from: headlinesDirectory)
             loadError = nil
@@ -264,16 +502,6 @@ private struct SettingsPage<Content: View>: View {
     let title: String
     let description: String
     @ViewBuilder let content: Content
-
-    init(
-        title: String,
-        description: String,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.title = title
-        self.description = description
-        self.content = content()
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {

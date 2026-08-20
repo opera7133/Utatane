@@ -1,6 +1,6 @@
 # Windows DLL host
 
-伺か系のWindows DLLをWine内でロードし、DLL共通仕様の`load`、`request`、`unload`を標準入出力越しに呼ぶ汎用ホスト。FIRST固有のMateriaホストとは分離している。
+伺か系のWindows DLLをWine内でロードし、DLL共通仕様の`load`、`request`、`unload`を標準入出力越しに呼ぶ汎用ホスト。Wineは最後の手段。FIRST固有の面倒はMateriaホストへ隔離している。
 
 ```sh
 zig cc -target x86-windows-gnu -Os \

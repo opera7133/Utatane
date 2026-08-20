@@ -16,6 +16,8 @@ let package = Package(
         .library(name: "UtataneRuntime", targets: ["UtataneRuntime"]),
         .library(name: "UtataneShiori", targets: ["UtataneShiori"]),
         .library(name: "UtataneWindowsShiori", targets: ["UtataneWindowsShiori"]),
+        .library(name: "UtatanePOSIXShiori", targets: ["UtatanePOSIXShiori"]),
+        .library(name: "UtataneKawariNative", targets: ["UtataneKawariNative"]),
         .library(name: "UtataneYayaNative", targets: ["UtataneYayaNative"]),
         .library(name: "UtataneSatoriNative", targets: ["UtataneSatoriNative"]),
         .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"]),
@@ -89,6 +91,76 @@ let package = Package(
             path: "windows-shiori/Sources"
         ),
         .target(
+            name: "UtatanePOSIXShiori",
+            dependencies: [
+                "UtataneCore",
+                "UtataneRuntime",
+                "UtataneSakuraScript",
+                "UtataneShiori"
+            ],
+            path: "posix-shiori/Sources"
+        ),
+        .target(
+            name: "CKawariNative",
+            path: "kawari-native/Sources/CKawariNative",
+            sources: [
+                "KawariBridge.cpp",
+                "Vendor/KAWARI/build/src/shiori/kawari_shiori.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_engine.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_ns.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_dict.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_code.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_codeset.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_codeexpr.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_codekis.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_vm.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_lexer.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_compiler.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_log.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_rc.cpp",
+                "Vendor/KAWARI/build/src/misc/misc.cpp",
+                "Vendor/KAWARI/build/src/misc/mt19937ar.cpp",
+                "Vendor/KAWARI/build/src/misc/l10n.cpp",
+                "Vendor/KAWARI/build/src/misc/phttp.cpp",
+                "Vendor/KAWARI/build/src/saori/saori.cpp",
+                "Vendor/KAWARI/build/src/saori/saori_module.cpp",
+                "Vendor/KAWARI/build/src/saori/saori_unique.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_echo.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_dict.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_date.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_counter.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_file.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_escape.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_urllist.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_substitute.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_split.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_communicate.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_xargs.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_string.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_help.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_saori.cpp",
+                "Vendor/KAWARI/build/src/kis/kis_system.cpp",
+                "Vendor/KAWARI/build/src/libkawari/kawari_crypt.cpp",
+                "Vendor/KAWARI/build/src/misc/base64.cpp"
+            ],
+            publicHeadersPath: "Include",
+            cxxSettings: [
+                .headerSearchPath("Vendor/KAWARI/build/src"),
+                .unsafeFlags(["-Wno-writable-strings", "-Wno-reserved-user-defined-literal"])
+            ]
+        ),
+        .target(
+            name: "UtataneKawariNative",
+            dependencies: [
+                "CKawariNative",
+                "UtataneCore",
+                "UtataneRuntime",
+                "UtataneSakuraScript",
+                "UtataneShiori"
+            ],
+            path: "kawari-native/Sources/UtataneKawariNative"
+        ),
+        .target(
             name: "CYayaNative",
             path: "yaya-native/Sources/CYayaNative",
             sources: [
@@ -150,6 +222,8 @@ let package = Package(
             sources: [
                 "SatoriBridge.cpp",
                 "CharsetPOSIX.cpp",
+                "NativeKeywordSaori.cpp",
+                "NativeSystemInfoSaori.cpp",
                 "Vendor/_/Sender.cpp",
                 "Vendor/_/Utilities.cpp",
                 "Vendor/_/calc.cpp",
@@ -254,6 +328,16 @@ let package = Package(
             name: "UtataneWindowsShioriTests",
             dependencies: ["UtataneWindowsShiori"],
             path: "windows-shiori/Tests"
+        ),
+        .testTarget(
+            name: "UtatanePOSIXShioriTests",
+            dependencies: ["UtatanePOSIXShiori"],
+            path: "posix-shiori/Tests"
+        ),
+        .testTarget(
+            name: "UtataneKawariNativeTests",
+            dependencies: ["UtataneCore", "UtataneKawariNative", "UtataneShiori"],
+            path: "kawari-native/Tests"
         ),
         .testTarget(
             name: "UtataneYayaNativeTests",

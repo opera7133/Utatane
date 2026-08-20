@@ -19,6 +19,7 @@ public actor MateriaFirstPersonalityEngine: PersonalityEngine {
     private let configuration: WindowsShioriProcessConfiguration
     private let adapter = GhostEventShioriAdapter()
     private var session: WindowsShioriProcessSession?
+    private var sessionStartupTask: Task<WindowsShioriProcessSession, any Error>?
 
     public init(configuration: WindowsShioriProcessConfiguration) {
         self.configuration = configuration
@@ -133,12 +134,23 @@ public actor MateriaFirstPersonalityEngine: PersonalityEngine {
         if let session {
             return session
         }
+        if let sessionStartupTask {
+            return try await sessionStartupTask.value
+        }
         let configuration = configuration
-        let created = try await Task.detached {
+        let startupTask = Task.detached {
             try WindowsShioriProcessSession(configuration: configuration)
-        }.value
-        session = created
-        return created
+        }
+        sessionStartupTask = startupTask
+        do {
+            let created = try await startupTask.value
+            session = created
+            sessionStartupTask = nil
+            return created
+        } catch {
+            sessionStartupTask = nil
+            throw error
+        }
     }
 
     private func normalized(_ event: GhostEvent) -> GhostEvent {

@@ -71,13 +71,22 @@ private final class RSSParserDelegate: NSObject, XMLParserDelegate {
         let name = elementName.lowercased()
         path.append(name)
         text = ""
-        if name == "item" || name == "entry" { current = [:] }
+        if name == "item" || name == "entry" {
+            current = [:]
+        }
         if name == "link", let href = attributeDict["href"] {
-            if current != nil { current?["link"] = href } else if feedLink.isEmpty { feedLink = href }
+            if current != nil {
+                current?["link"] = href
+            } else if feedLink.isEmpty {
+                feedLink = href
+            }
         }
     }
 
-    func parser(_ parser: XMLParser, foundCharacters string: String) { text += string }
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        text += string
+    }
+
     func parser(_ parser: XMLParser, foundCDATA CDATABlock: Data) {
         text += String(data: CDATABlock, encoding: .utf8) ?? ""
     }
@@ -88,7 +97,9 @@ private final class RSSParserDelegate: NSObject, XMLParserDelegate {
         if var item = current {
             switch name {
             case "title", "link", "description", "summary", "content", "author", "creator", "pubdate", "published", "updated":
-                if !value.isEmpty { item[name] = value }
+                if !value.isEmpty {
+                    item[name] = value
+                }
                 current = item
             default: break
             }
@@ -111,5 +122,7 @@ private final class RSSParserDelegate: NSObject, XMLParserDelegate {
         text = ""
     }
 
-    func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) { self.parseError = parseError }
+    func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
+        self.parseError = parseError
+    }
 }

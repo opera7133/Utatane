@@ -1,6 +1,6 @@
 # Materia SHIORI probe
 
-`first.dll`を32-bit Windows環境でロードする検証ツール兼、Utatane接続用の常駐ホスト。
+`first.dll`を32-bit Windows環境でロードする検証ツール兼、Utatane接続用の常駐ホスト。かなり専用品。
 
 ## Build
 
@@ -10,7 +10,7 @@ zig cc -target x86-windows-gnu -Os \
   -o Content/Local/MateriaBridge/materia.exe
 ```
 
-実行ファイル名は必ず`materia.exe`にする。元の`materia.exe`と衝突させないため、次の配置を前提にする。
+実行ファイル名は必ず`materia.exe`にする。`first.dll`がそういうものだと思っているので仕方ない。元の`materia.exe`とは衝突させず、次の配置にする。
 
 ```text
 Content/Local/

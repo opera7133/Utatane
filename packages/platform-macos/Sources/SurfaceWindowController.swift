@@ -9,6 +9,9 @@ public final class SurfaceWindowController {
     private let positionStore: WindowPositionStore
     private var defaultSurfaceIDs: [Int: Int] = [:]
     private var presentationHidden = false
+    private var displayScale: CGFloat = 1
+    private var locksToDesktopBottom = true
+    private var keepsOnScreen = true
 
     public var onMouseClick: (@MainActor (Int, String?) -> Void)?
     public var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
@@ -27,6 +30,24 @@ public final class SurfaceWindowController {
         presentationHidden = hidden
         for character in characters.values {
             character.setPresentationHidden(hidden)
+        }
+    }
+
+    public func setDisplayScale(_ scale: Double) {
+        displayScale = CGFloat(min(max(scale, 0.5), 2))
+        for character in characters.values {
+            character.setDisplayScale(displayScale)
+        }
+    }
+
+    public func setPlacement(locksToDesktopBottom: Bool, keepsOnScreen: Bool) {
+        self.locksToDesktopBottom = locksToDesktopBottom
+        self.keepsOnScreen = keepsOnScreen
+        for character in characters.values {
+            character.setPlacement(
+                locksToDesktopBottom: locksToDesktopBottom,
+                keepsOnScreen: keepsOnScreen
+            )
         }
     }
 
@@ -124,7 +145,13 @@ public final class SurfaceWindowController {
             return character
         }
 
-        let character = CharacterSurfaceController(scope: scope, positionStore: positionStore)
+        let character = CharacterSurfaceController(
+            scope: scope,
+            positionStore: positionStore,
+            displayScale: displayScale,
+            locksToDesktopBottom: locksToDesktopBottom,
+            keepsOnScreen: keepsOnScreen
+        )
         character.onMouseClick = { [weak self] region in
             self?.onMouseClick?(scope, region)
         }
@@ -154,7 +181,8 @@ public final class SurfaceWindowController {
         if let restoredOrigin = positionStore.restoredOrigin(
             for: .surface,
             scope: scope,
-            windowSize: frame.size
+            windowSize: frame.size,
+            constrainsToVisibleFrame: keepsOnScreen
         ) {
             character.setOrigin(restoredOrigin)
             return
@@ -207,15 +235,27 @@ private final class CharacterSurfaceController {
     private var animationTask: Task<Void, Never>?
     private var schedulerTask: Task<Void, Never>?
     private var isAnimating = false
+    private var displayScale: CGFloat
+    private var locksToDesktopBottom: Bool
+    private var keepsOnScreen: Bool
 
     var onMouseClick: (@MainActor (String?) -> Void)?
     var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
     var onNarDrop: (@MainActor ([URL]) -> Void)?
     var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
 
-    init(scope: Int, positionStore: WindowPositionStore) {
+    init(
+        scope: Int,
+        positionStore: WindowPositionStore,
+        displayScale: CGFloat,
+        locksToDesktopBottom: Bool,
+        keepsOnScreen: Bool
+    ) {
         self.scope = scope
         self.positionStore = positionStore
+        self.displayScale = displayScale
+        self.locksToDesktopBottom = locksToDesktopBottom
+        self.keepsOnScreen = keepsOnScreen
     }
 
     var windowFrame: NSRect? {
@@ -238,7 +278,7 @@ private final class CharacterSurfaceController {
         let rendered = try render(surfaceID: surfaceID, shell: shell)
         let window = window ?? makeWindow()
         window.contentView = rendered.view
-        window.setContentSize(rendered.image.size)
+        window.setContentSize(displaySize(for: rendered.image))
         window.makeKeyAndOrderFront(nil)
         self.window = window
         imageView = rendered.view
@@ -275,7 +315,7 @@ private final class CharacterSurfaceController {
         let origin = window.frame.origin
         let rendered = try render(surfaceID: surfaceID, shell: shell)
         window.contentView = rendered.view
-        window.setContentSize(rendered.image.size)
+        window.setContentSize(displaySize(for: rendered.image))
         window.setFrameOrigin(origin)
         window.orderFront(nil)
         imageView = rendered.view
@@ -292,6 +332,37 @@ private final class CharacterSurfaceController {
 
     func setPresentationHidden(_ hidden: Bool) {
         window?.alphaValue = hidden ? 0 : 1
+    }
+
+    func setDisplayScale(_ scale: CGFloat) {
+        guard displayScale != scale else { return }
+        displayScale = scale
+        guard let shell, let baseSurfaceID, let window else { return }
+        let origin = window.frame.origin
+        guard let rendered = try? render(surfaceID: baseSurfaceID, shell: shell) else { return }
+        window.contentView = rendered.view
+        window.setContentSize(displaySize(for: rendered.image))
+        window.setFrameOrigin(origin)
+        imageView = rendered.view
+        baseImage = rendered.image
+        scheduleAutomaticAnimations()
+    }
+
+    func setPlacement(locksToDesktopBottom: Bool, keepsOnScreen: Bool) {
+        self.locksToDesktopBottom = locksToDesktopBottom
+        self.keepsOnScreen = keepsOnScreen
+        imageView?.locksVerticalMovement = locksToDesktopBottom
+        (window as? FloatingContentWindow)?.setPlacementPolicy(.init(
+            locksToDesktopBottom: locksToDesktopBottom,
+            keepsOnScreen: keepsOnScreen
+        ))
+    }
+
+    private func displaySize(for image: NSImage) -> NSSize {
+        NSSize(
+            width: image.size.width * displayScale,
+            height: image.size.height * displayScale
+        )
     }
 
     func center() {
@@ -329,20 +400,26 @@ private final class CharacterSurfaceController {
             shell: shell,
             excludedAnimationIDs: excludedAnimationIDs
         )
-        let imageView = SurfaceImageView(frame: NSRect(origin: .zero, size: boundImage.size))
+        let scaledSize = NSSize(
+            width: boundImage.size.width * displayScale,
+            height: boundImage.size.height * displayScale
+        )
+        let imageView = SurfaceImageView(frame: NSRect(origin: .zero, size: scaledSize))
         imageView.image = boundImage
         imageView.imageAlignment = .alignCenter
-        imageView.imageScaling = .scaleNone
+        imageView.imageScaling = .scaleAxesIndependently
+        imageView.coordinateScale = displayScale
+        imageView.locksVerticalMovement = locksToDesktopBottom
         imageView.collisions = definition?.collisions ?? []
         imageView.onMouseClick = { [weak self] region in
             self?.onMouseClick?(region)
         }
         imageView.onMouseEvent = { [weak self] kind, region, x, y, button in
             guard let self else { return }
-            self.onMouseEvent?(
+            onMouseEvent?(
                 GhostMouseEvent(
                     kind: kind,
-                    scope: self.scope,
+                    scope: scope,
                     region: region,
                     x: x,
                     y: y,
@@ -399,9 +476,10 @@ private final class CharacterSurfaceController {
             let isInitial = interval.contains("runonce") && !isBound
             guard isInitial || (isBound && enabled.contains(animation.id)) else { continue }
             for pattern in animation.patterns.sorted(by: { $0.order < $1.order })
-            where pattern.waitMilliseconds == 0
+                where pattern.waitMilliseconds == 0
                 && pattern.surfaceID >= 0
-                && pattern.method.lowercased() == "overlay" {
+                && pattern.method.lowercased() == "overlay"
+            {
                 let overlay = try renderLayer(
                     surfaceID: pattern.surfaceID,
                     shell: shell,
@@ -440,7 +518,10 @@ private final class CharacterSurfaceController {
     private func makeWindow() -> NSWindow {
         let window = FloatingContentWindow(
             title: "Ghost Surface \(scope)",
-            placementPolicy: .desktopBottom
+            placementPolicy: .init(
+                locksToDesktopBottom: locksToDesktopBottom,
+                keepsOnScreen: keepsOnScreen
+            )
         ) { [positionStore, scope] origin in
             positionStore.save(origin, for: .surface, scope: scope)
         }
@@ -554,13 +635,18 @@ private final class CharacterSurfaceController {
 
 private final class SurfaceImageView: NSImageView {
     var collisions: [SurfaceCollision] = []
+    var coordinateScale: CGFloat = 1
     var onMouseClick: ((String?) -> Void)?
     var onMouseEvent: ((GhostMouseEvent.Kind, String?, Int, Int, Int) -> Void)?
     var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
     var onNarDrop: (([URL]) -> Void)?
+    var locksVerticalMovement = true
     private var hoveredRegion: String?
     private var lastStrokePoint: NSPoint?
     private var lastStrokeRegion: String?
+    private var dragStartMouseLocation: NSPoint?
+    private var dragStartWindowOrigin: NSPoint?
+    private var didDrag = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -573,7 +659,35 @@ private final class SurfaceImageView: NSImageView {
     }
 
     override var mouseDownCanMoveWindow: Bool {
-        hoveredRegion == nil
+        false
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 0, let window else {
+            super.mouseDown(with: event)
+            return
+        }
+        dragStartMouseLocation = NSEvent.mouseLocation
+        dragStartWindowOrigin = window.frame.origin
+        didDrag = false
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let window,
+              let startMouseLocation = dragStartMouseLocation,
+              let startWindowOrigin = dragStartWindowOrigin
+        else {
+            super.mouseDragged(with: event)
+            return
+        }
+        let currentMouseLocation = NSEvent.mouseLocation
+        let deltaX = currentMouseLocation.x - startMouseLocation.x
+        let deltaY = currentMouseLocation.y - startMouseLocation.y
+        didDrag = didDrag || hypot(deltaX, deltaY) >= 2
+        window.setFrameOrigin(NSPoint(
+            x: startWindowOrigin.x + deltaX,
+            y: locksVerticalMovement ? startWindowOrigin.y : startWindowOrigin.y + deltaY
+        ))
     }
 
     override func updateTrackingAreas() {
@@ -612,6 +726,11 @@ private final class SurfaceImageView: NSImageView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        let wasDragging = dragStartMouseLocation != nil && didDrag
+        dragStartMouseLocation = nil
+        dragStartWindowOrigin = nil
+        didDrag = false
+        guard !wasDragging else { return }
         let hit = hitTest(event)
         if event.clickCount >= 2 {
             onMouseEvent?(.doubleClick, hit.region, hit.x, hit.y, buttonNumber(event))
@@ -685,8 +804,8 @@ private final class SurfaceImageView: NSImageView {
 
     private func hitTest(_ event: NSEvent) -> (region: String?, x: Int, y: Int) {
         let point = convert(event.locationInWindow, from: nil)
-        let surfaceX = Int(point.x)
-        let surfaceY = Int(bounds.height - point.y)
+        let surfaceX = Int(point.x / coordinateScale)
+        let surfaceY = Int((bounds.height - point.y) / coordinateScale)
         let region = collisions.first { $0.contains(x: surfaceX, y: surfaceY) }?.name
         return (region, surfaceX, surfaceY)
     }
@@ -725,7 +844,7 @@ enum SurfaceCursorStyle: Equatable {
         let normalized = region
             .lowercased()
             .filter { !$0.isNumber && $0 != "_" && $0 != "-" }
-        let pettableRegions: Set<String> = [
+        let pettableRegions: Set = [
             "bust", "ear", "face", "hair", "hand", "head", "leg",
             "ponytail", "ribbon", "skirt", "tail"
         ]

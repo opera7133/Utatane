@@ -88,8 +88,9 @@ public struct ShellLoader: Sendable {
 
     public func loadElement(filename: String, from shellDirectory: URL) throws -> SurfaceAsset {
         let root = shellDirectory.standardizedFileURL.resolvingSymlinksInPath()
+        let normalizedFilename = filename.replacingOccurrences(of: "\\", with: "/")
         let imageURL = shellDirectory
-            .appending(path: filename, directoryHint: .notDirectory)
+            .appending(path: normalizedFilename, directoryHint: .notDirectory)
             .standardizedFileURL
             .resolvingSymlinksInPath()
         guard imageURL.pathExtension.lowercased() == "png",

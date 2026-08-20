@@ -49,8 +49,12 @@ public final class NativeSatoriSession: @unchecked Sendable {
             guard let responseBuffer else { throw NativeSatoriError.requestFailed }
             defer { utatane_satori_free(responseBuffer) }
             let data = Data(bytes: responseBuffer, count: responseLength)
-            if let text = String(data: data, encoding: .utf8) { return text }
-            if let text = String(data: data, encoding: .shiftJIS) { return text }
+            if let text = String(data: data, encoding: .utf8) {
+                return text
+            }
+            if let text = String(data: data, encoding: .shiftJIS) {
+                return text
+            }
             return decodeMixedJapanese(data)
         }
     }
@@ -68,10 +72,15 @@ private func decodeMixedJapanese(_ data: Data) -> String {
             continue
         }
 
-        let utf8Length: Int? = if byte >= 0xC2 && byte <= 0xDF { 2 }
-            else if byte >= 0xE0 && byte <= 0xEF { 3 }
-            else if byte >= 0xF0 && byte <= 0xF4 { 4 }
-            else { nil }
+        let utf8Length: Int? = if byte >= 0xC2 && byte <= 0xDF {
+            2
+        } else if byte >= 0xE0 && byte <= 0xEF {
+            3
+        } else if byte >= 0xF0 && byte <= 0xF4 {
+            4
+        } else {
+            nil
+        }
         if let utf8Length, index + utf8Length <= bytes.count {
             let candidate = Data(bytes[index ..< index + utf8Length])
             if let decoded = String(data: candidate, encoding: .utf8) {

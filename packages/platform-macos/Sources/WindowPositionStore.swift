@@ -29,7 +29,8 @@ public final class WindowPositionStore {
         for kind: FloatingWindowKind,
         scope: Int,
         windowSize: NSSize,
-        screens: [NSScreen] = NSScreen.screens
+        screens: [NSScreen] = NSScreen.screens,
+        constrainsToVisibleFrame: Bool = true
     ) -> NSPoint? {
         guard let value = defaults.dictionary(forKey: key(for: kind, scope: scope)),
               let x = value["x"] as? Double,
@@ -39,6 +40,7 @@ public final class WindowPositionStore {
         }
 
         let origin = NSPoint(x: x, y: y)
+        guard constrainsToVisibleFrame else { return origin }
         guard let screen = screens.first(where: {
             $0.visibleFrame.intersects(NSRect(origin: origin, size: windowSize))
         }) ?? screens.first else {
@@ -67,7 +69,7 @@ enum FloatingWindowKind: String {
 
 final class FloatingContentWindow: NSWindow, NSWindowDelegate {
     private let onMove: (NSPoint) -> Void
-    private let placementPolicy: FloatingWindowPlacementPolicy
+    private var placementPolicy: FloatingWindowPlacementPolicy
     private var isApplyingConstraint = false
 
     init(
@@ -96,6 +98,11 @@ final class FloatingContentWindow: NSWindow, NSWindowDelegate {
         false
     }
 
+    func setPlacementPolicy(_ placementPolicy: FloatingWindowPlacementPolicy) {
+        self.placementPolicy = placementPolicy
+        applyPlacementConstraint()
+    }
+
     func windowDidMove(_ notification: Notification) {
         applyPlacementConstraint()
         onMove(frame.origin)
@@ -115,21 +122,29 @@ final class FloatingContentWindow: NSWindow, NSWindowDelegate {
     }
 }
 
-enum FloatingWindowPlacementPolicy {
-    case free
-    case desktopBottom
+struct FloatingWindowPlacementPolicy: Equatable {
+    var locksToDesktopBottom: Bool
+    var keepsOnScreen: Bool
+
+    static let free = Self(locksToDesktopBottom: false, keepsOnScreen: false)
+    static let desktopBottom = Self(locksToDesktopBottom: true, keepsOnScreen: true)
 
     func constrainedOrigin(for frame: NSRect, visibleFrames: [NSRect]) -> NSPoint? {
-        guard self == .desktopBottom, !visibleFrames.isEmpty else { return nil }
+        guard locksToDesktopBottom || keepsOnScreen, !visibleFrames.isEmpty else { return nil }
         let screen = visibleFrames.max { lhs, rhs in
             lhs.intersection(frame).area < rhs.intersection(frame).area
         } ?? visibleFrames[0]
         return NSPoint(
-            x: min(
+            x: keepsOnScreen ? min(
                 max(frame.origin.x, screen.minX),
                 max(screen.minX, screen.maxX - frame.width)
-            ),
-            y: screen.minY
+            ) : frame.origin.x,
+            y: locksToDesktopBottom
+                ? screen.minY
+                : min(
+                    max(frame.origin.y, screen.minY),
+                    max(screen.minY, screen.maxY - frame.height)
+                )
         )
     }
 }

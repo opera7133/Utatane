@@ -1,8 +1,8 @@
 import Foundation
 import Testing
 import UtataneCore
-import UtataneSakuraScript
 @testable import UtataneRuntime
+import UtataneSakuraScript
 
 @Test
 func `catalog maps events and substitutes choice arguments`() async throws {

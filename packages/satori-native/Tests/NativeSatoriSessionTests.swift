@@ -43,6 +43,26 @@ struct NativeSatoriSessionTests {
         let response = try session.request(GhostEventShioriAdapter().request(for: event))
         #expect(response.value?.contains("�") == false)
         #expect(response.value?.contains("静電防止手袋") == true)
+        #expect(response.value?.contains("＄メモリ好感度") == false)
+        #expect(response.value?.contains("メモリ好感度") == false)
+
+        var strokeResponses: [String] = []
+        for offset in 0 ..< 200 {
+            let strokeEvent = GhostEvent.mouse(.init(
+                kind: .move,
+                scope: 0,
+                region: "Head",
+                x: 100 + offset,
+                y: 100,
+                button: 0
+            ))
+            let strokeResponse = try session.request(GhostEventShioriAdapter().request(for: strokeEvent))
+            if let value = strokeResponse.value, !value.isEmpty {
+                strokeResponses.append(value)
+            }
+        }
+        #expect(!strokeResponses.isEmpty)
+        #expect(strokeResponses.allSatisfy { !$0.contains("＄") && !$0.contains("メモリ好感度") })
     }
 
     @Test func `detects SATORI ghost configuration`() {
@@ -63,6 +83,108 @@ struct NativeSatoriSessionTests {
         let engine = try NativeSatoriPersonalityEngine(masterDirectoryURL: master)
         let script = try await engine.handle(event: .boot)
         #expect(script?.rawValue.isEmpty == false)
+    }
+
+    @Test func `native SATORI does not expose dictionary control lines as dialogue`() throws {
+        let source = repositoryRoot.appending(path: "Content/Local/Ghosts/memory-na/ghost/master", directoryHint: .isDirectory)
+        guard hasLocalContent(source) else { return }
+        let temporaryRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        let master = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: source, to: master)
+
+        let session = try NativeSatoriSession(masterDirectoryURL: master)
+        let adapter = GhostEventShioriAdapter()
+        _ = try session.request(adapter.request(for: .boot))
+        for _ in 0 ..< 100 {
+            let response = try session.request(adapter.request(for: .randomTalk))
+            #expect(response.value?.contains("＄メモリ好感度") != true)
+            #expect(response.value?.split(separator: "\n").contains(where: {
+                $0.hasPrefix("：") || $0.hasPrefix("＄")
+            }) != true)
+        }
+    }
+
+    @Test func `native SATORI executes bundled SSU without Wine`() throws {
+        let source = repositoryRoot.appending(
+            path: "packages/satori-native/Sources/CSatoriNative/Vendor/satori/test",
+            directoryHint: .isDirectory
+        )
+        let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+            path: UUID().uuidString,
+            directoryHint: .isDirectory
+        )
+        let master = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: source, to: master)
+
+        let dictionary = "＊OnNativeSSUTest\r\n：結果は（calc,1＋2）。\r\n"
+        let dictionaryData = try #require(dictionary.data(using: .shiftJIS))
+        try dictionaryData.write(to: master.appending(path: "dic_utatane_ssu.txt"))
+
+        let session = try NativeSatoriSession(masterDirectoryURL: master)
+        let request = GhostEventShioriAdapter().request(
+            for: .shiori(id: "OnNativeSSUTest", references: [:])
+        )
+        let response = try session.request(request)
+        #expect(response.value?.contains("結果は3。") == true)
+    }
+
+    @Test func `native SATORI answers system info SAORI without Wine`() throws {
+        let source = repositoryRoot.appending(
+            path: "Content/Local/Ghosts/memory-na/ghost/master",
+            directoryHint: .isDirectory
+        )
+        guard hasLocalContent(source) else { return }
+        let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+            path: UUID().uuidString,
+            directoryHint: .isDirectory
+        )
+        let master = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: source, to: master)
+
+        let dictionary = "＊OnNativeSystemInfoTest\r\n：OSは（os_name）、CPUは（cpu_number）個。\r\n"
+        let dictionaryData = try #require(dictionary.data(using: .shiftJIS))
+        try dictionaryData.write(to: master.appending(path: "dic_utatane_system_info.txt"))
+
+        let session = try NativeSatoriSession(masterDirectoryURL: master)
+        let request = GhostEventShioriAdapter().request(
+            for: .shiori(id: "OnNativeSystemInfoTest", references: [:])
+        )
+        let response = try session.request(request)
+        #expect(response.value?.contains("OSはmacOS") == true)
+        #expect(response.value?.contains("CPUは0個") == false)
+    }
+
+    @Test func `native SATORI classifies communication keywords without Wine`() throws {
+        let source = repositoryRoot.appending(
+            path: "Content/Local/Ghosts/sake_kami/ghost/master",
+            directoryHint: .isDirectory
+        )
+        guard hasLocalContent(source) else { return }
+        let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+            path: UUID().uuidString,
+            directoryHint: .isDirectory
+        )
+        let master = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: source, to: master)
+
+        let dictionary = "＊OnNativeKeywordTest\r\n：分類は（kenonoke,GETKEYWORD,お酒が好き,NOCONVERT）。\r\n"
+        let dictionaryData = try #require(dictionary.data(using: .shiftJIS))
+        try dictionaryData.write(to: master.appending(path: "dic_utatane_keyword.txt"))
+
+        let session = try NativeSatoriSession(masterDirectoryURL: master)
+        let request = GhostEventShioriAdapter().request(
+            for: .shiori(id: "OnNativeKeywordTest", references: [:])
+        )
+        let response = try session.request(request)
+        #expect(response.value?.contains("分類はにほんしゅ。") == true)
     }
 
     @Test(arguments: ["memory-na", "twin", "sake_kami"])

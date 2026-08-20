@@ -48,7 +48,7 @@ public struct GhostNetworkUpdater: Sendable {
     private let fetch: Fetch
 
     public init(
-        maximumFileCount: Int = 20_000,
+        maximumFileCount: Int = 20000,
         maximumTotalBytes: Int = 1024 * 1024 * 1024,
         fetch: @escaping Fetch = { try await NetworkFetchClient(maximumBytes: 512 * 1024 * 1024).fetch($0) }
     ) {
@@ -80,7 +80,9 @@ public struct GhostNetworkUpdater: Sendable {
         var totalBytes = 0
         for entry in entries {
             let local = try Self.confinedURL(path: entry.path, root: root)
-            if let data = try? Data(contentsOf: local), Self.md5(data) == entry.md5 { continue }
+            if let data = try? Data(contentsOf: local), Self.md5(data) == entry.md5 {
+                continue
+            }
             let remote = manifestURL.deletingLastPathComponent().appending(path: entry.path)
             let data = try await fetch(remote)
             totalBytes += data.count
@@ -105,13 +107,17 @@ public struct GhostNetworkUpdater: Sendable {
                 }
                 try fileManager.createDirectory(at: item.local.deletingLastPathComponent(), withIntermediateDirectories: true)
                 applied.append((item.local, existed ? relativeBackup : nil, existed))
-                if existed { try fileManager.removeItem(at: item.local) }
+                if existed {
+                    try fileManager.removeItem(at: item.local)
+                }
                 try fileManager.copyItem(at: item.staged, to: item.local)
             }
         } catch {
             for item in applied.reversed() {
                 try? fileManager.removeItem(at: item.local)
-                if let backup = item.backup { try? fileManager.copyItem(at: backup, to: item.local) }
+                if let backup = item.backup {
+                    try? fileManager.copyItem(at: backup, to: item.local)
+                }
             }
             throw error
         }
@@ -167,7 +173,9 @@ public struct GhostNetworkUpdater: Sendable {
     private func fetchManifest(homeURL: URL) async throws -> (URL, Data) {
         for name in ["updates2.dau", "updates.txt"] {
             let url = homeURL.appending(path: name)
-            if let data = try? await fetch(url) { return (url, data) }
+            if let data = try? await fetch(url) {
+                return (url, data)
+            }
         }
         throw GhostNetworkUpdateError.missingManifest
     }

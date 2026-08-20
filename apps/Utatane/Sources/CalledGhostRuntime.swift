@@ -31,6 +31,7 @@ final class CalledGhostRuntime {
         balloons: [BalloonDefinition],
         shellLoader: ShellLoader,
         selectionStore: ContentSelectionStore,
+        defaultBalloonDirectoryName: String?,
         personalityEngine: any PersonalityEngine,
         characterDelayMilliseconds: Int,
         dialogueDismissalMilliseconds: Int
@@ -39,14 +40,14 @@ final class CalledGhostRuntime {
         self.shellLoader = shellLoader
         self.selectionStore = selectionStore
 
-        guard let selectedShell = ghost.shells.first(where: {
-            $0.directory.lastPathComponent == selectionStore.shellDirectoryName(for: ghost.id)
-        }) ?? ghost.shells.first(where: { $0.directory == ghost.defaultShellDirectory }) ?? ghost.shells.first else {
+        guard let selectedShell = selectionStore.resolveShell(for: ghost) else {
             throw AppError.missingResource("shell")
         }
-        guard let selectedBalloon = balloons.first(where: {
-            $0.directory.lastPathComponent == selectionStore.balloonDirectoryName(for: ghost.id)
-        }) ?? balloons.first else {
+        guard let selectedBalloon = selectionStore.resolveBalloon(
+            for: ghost,
+            from: balloons,
+            defaultDirectoryName: defaultBalloonDirectoryName
+        ) else {
             throw AppError.missingResource("balloon")
         }
         shell = selectedShell

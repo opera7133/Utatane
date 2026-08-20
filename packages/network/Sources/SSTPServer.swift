@@ -35,7 +35,9 @@ public struct SSTPResponse: Sendable, Equatable {
 
     public var data: Data {
         var lines = ["SSTP/1.4 \(statusCode) \(reason)", "Charset: UTF-8"]
-        if let script { lines.append("Script: \(script)") }
+        if let script {
+            lines.append("Script: \(script)")
+        }
         return Data((lines.joined(separator: "\r\n") + "\r\n\r\n").utf8)
     }
 }
@@ -90,7 +92,9 @@ public final class SSTPServer: @unchecked Sendable {
         guard requestParts.count == 2, requestParts[1].hasPrefix("SSTP/") else { throw SSTPError.invalidRequest }
         var headers: [(name: String, value: String)] = []
         for line in lines.dropFirst() {
-            if line.isEmpty { break }
+            if line.isEmpty {
+                break
+            }
             guard let separator = line.firstIndex(of: ":") else { throw SSTPError.invalidRequest }
             headers.append((
                 String(line[..<separator]).trimmingCharacters(in: .whitespaces),
@@ -136,12 +140,14 @@ public final class SSTPServer: @unchecked Sendable {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 64 * 1024) { [weak self] data, _, complete, error in
             guard let self else { return }
             var requestData = accumulated
-            if let data { requestData.append(data) }
+            if let data {
+                requestData.append(data)
+            }
             if requestData.count > maximumRequestBytes {
                 send(SSTPResponse(statusCode: 413, reason: "Payload Too Large"), on: connection)
                 return
             }
-            let terminated = self.isCompleteRequest(requestData)
+            let terminated = isCompleteRequest(requestData)
             guard terminated || complete || error != nil else {
                 receiveChunk(connection, accumulated: requestData, handler: handler)
                 return

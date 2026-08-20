@@ -14,8 +14,8 @@ struct SurfaceImageLoader {
             if usesSelfAlpha {
                 guard let source = NSImage(contentsOf: surface.imageURL),
                       let representation = source.representations
-                        .compactMap({ $0 as? NSBitmapImageRep })
-                        .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh })
+                      .compactMap({ $0 as? NSBitmapImageRep })
+                      .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh })
                 else {
                     throw SurfaceImageError.invalidImage(surface.imageURL)
                 }

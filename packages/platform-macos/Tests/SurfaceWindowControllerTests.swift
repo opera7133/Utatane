@@ -142,6 +142,30 @@ func `renders a virtual surface from ordered elements`() throws {
 
 @Test
 @MainActor
+func `resizes an active surface using its display scale`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0.png"))
+
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { controller.hideAll() }
+
+    controller.setDisplayScale(1.5)
+
+    #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 60, height: 120))
+}
+
+@Test
+@MainActor
 func `embedded event can restore a hidden surface`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

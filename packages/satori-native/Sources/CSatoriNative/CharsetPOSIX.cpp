@@ -35,5 +35,12 @@ std::string SJIStoUTF8(const std::string &value) {
 }
 
 std::string UTF8toSJIS(const std::string &value) {
-    return convert(value, "CP932", "UTF-8");
+    std::string normalized = value;
+    const std::string unicodeMinus = "\xE2\x88\x92";
+    size_t position = 0;
+    while ((position = normalized.find(unicodeMinus, position)) != std::string::npos) {
+        normalized.replace(position, unicodeMinus.size(), "-");
+        ++position;
+    }
+    return convert(normalized, "CP932", "UTF-8");
 }
