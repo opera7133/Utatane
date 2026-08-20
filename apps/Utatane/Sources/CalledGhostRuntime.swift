@@ -3,6 +3,7 @@ import UtataneBalloon
 import UtataneCore
 import UtatanePlatformMacOS
 import UtataneRuntime
+import UtataneSakuraScript
 import UtataneShell
 
 @MainActor
@@ -209,6 +210,49 @@ final class CalledGhostRuntime {
                     ($0.offset, $0.element)
                 })
             ))
+        }
+        player.onInputBox = { [weak self] id, _, initialValue in
+            guard let self, let value = promptForText(initialValue: initialValue) else { return nil }
+            return try? await session.handle(event: .shiori(id: id, references: [0: value]))
+        }
+        player.onHTTPGet = { [weak self] url, eventID in
+            guard let self else { return nil }
+            return await handleHTTPGet(url: url, eventID: eventID)
+        }
+    }
+
+    private func promptForText(initialValue: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = "文字を入力"
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "キャンセル")
+        let field = NSTextField(string: initialValue)
+        field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
+    }
+
+    private func handleHTTPGet(url source: String, eventID: String) async -> SakuraScript? {
+        guard let url = URL(string: source), ["http", "https"].contains(url.scheme?.lowercased()) else {
+            return try? await session.handle(event: .shiori(id: eventID, references: [:]))
+        }
+        let temporaryURL = FileManager.default.temporaryDirectory
+            .appending(path: "utatane-http-get-\(UUID().uuidString)", directoryHint: .notDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryURL) }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200 ..< 300).contains(statusCode) else { throw URLError(.badServerResponse) }
+            try data.write(to: temporaryURL, options: .atomic)
+            return try await session.handle(event: .shiori(id: eventID, references: [
+                0: source,
+                1: String(statusCode),
+                2: response.mimeType ?? "",
+                3: temporaryURL.path
+            ]))
+        } catch {
+            return try? await session.handle(event: .shiori(id: eventID, references: [:]))
         }
     }
 

@@ -98,9 +98,16 @@ public struct GhostEventShioriAdapter: Sendable {
         case .randomTalk:
             return ("OnAITalk", [:])
         case let .choice(id, arguments):
-            return (id, Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
-                ($0.offset, $0.element)
-            }))
+            if id.hasPrefix("On") {
+                return (id, Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
+                    ($0.offset, $0.element)
+                }))
+            }
+            var references = Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
+                ($0.offset + 1, $0.element)
+            })
+            references[0] = id
+            return ("OnChoiceSelect", references)
         }
     }
 }

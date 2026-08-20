@@ -550,6 +550,18 @@ private struct UtataneRootView: View {
                     })
                 ))
             }
+            scriptPlayer.onInputBox = { id, _, initialValue in
+                guard let value = promptForText(initialValue: initialValue),
+                      let activeSession = session
+                else { return nil }
+                return try? await activeSession.handle(event: .shiori(
+                    id: id,
+                    references: [0: value]
+                ))
+            }
+            scriptPlayer.onHTTPGet = { url, eventID in
+                await handleHTTPGet(url: url, eventID: eventID)
+            }
 
             let ghostSession = try GhostSession(
                 personalityEngine: personalityEngine(for: ghost),
@@ -598,6 +610,42 @@ private struct UtataneRootView: View {
         }
         let catalog = try DialogueCatalogLoader().load(from: dialogueURL)
         return DialoguePersonalityEngine(catalog: catalog)
+    }
+
+    private func promptForText(initialValue: String) -> String? {
+        let alert = NSAlert()
+        alert.messageText = "文字を入力"
+        alert.addButton(withTitle: "OK")
+        alert.addButton(withTitle: "キャンセル")
+        let field = NSTextField(string: initialValue)
+        field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
+        alert.accessoryView = field
+        alert.window.initialFirstResponder = field
+        return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
+    }
+
+    private func handleHTTPGet(url source: String, eventID: String) async -> SakuraScript? {
+        guard let activeSession = session else { return nil }
+        guard let url = URL(string: source), ["http", "https"].contains(url.scheme?.lowercased()) else {
+            return try? await activeSession.handle(event: .shiori(id: eventID, references: [:]))
+        }
+        let temporaryURL = FileManager.default.temporaryDirectory
+            .appending(path: "utatane-http-get-\(UUID().uuidString)", directoryHint: .notDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryURL) }
+        do {
+            let (data, response) = try await URLSession.shared.data(from: url)
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            guard (200 ..< 300).contains(statusCode) else { throw URLError(.badServerResponse) }
+            try data.write(to: temporaryURL, options: .atomic)
+            return try await activeSession.handle(event: .shiori(id: eventID, references: [
+                0: source,
+                1: String(statusCode),
+                2: response.mimeType ?? "",
+                3: temporaryURL.path
+            ]))
+        } catch {
+            return try? await activeSession.handle(event: .shiori(id: eventID, references: [:]))
+        }
     }
 
     private func show(shell installedShell: InstalledShell) throws {

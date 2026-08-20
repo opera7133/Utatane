@@ -1,6 +1,8 @@
 import Foundation
 import Testing
+import UtataneCore
 @testable import UtatanePOSIXShiori
+import UtataneShiori
 
 @Test func `detects an Aosora ghost layout`() throws {
     let root = FileManager.default.temporaryDirectory
@@ -54,4 +56,23 @@ import Testing
     )
     #expect(response.hasPrefix("SHIORI/3.0 2"))
     #expect(!response.contains("�"))
+
+    let adapter = GhostEventShioriAdapter()
+    let menu = try session.request(adapter.request(for: .mouse(.init(
+        kind: .doubleClick,
+        scope: 0,
+        region: nil,
+        x: 100,
+        y: 100
+    ))))
+    #expect(menu.statusCode == 200)
+    #expect(menu.value?.contains("何か喋って") == true)
+    for choiceID in ["OnChagneTalkInterval", "OnChangeUserName", "OnItemList", "OnMenuClose"] {
+        let choiceResponse = try session.request(adapter.request(for: .choice(id: choiceID, arguments: [])))
+        #expect(choiceResponse.statusCode == 200)
+        #expect(choiceResponse.value?.isEmpty == false)
+    }
+    let randomTalk = try session.request(adapter.request(for: .choice(id: "ランダムトーク", arguments: [])))
+    #expect(randomTalk.statusCode == 200)
+    #expect(randomTalk.value?.isEmpty == false)
 }

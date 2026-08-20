@@ -10,6 +10,8 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case anchorStart(id: String, arguments: [String])
     case anchorEnd
     case embeddedEvent(id: String, arguments: [String])
+    case inputBox(id: String, timeoutMilliseconds: Int?, initialValue: String)
+    case httpGet(url: String, eventID: String)
     case clear
     case end
     case unknown(String)

@@ -138,6 +138,27 @@ public struct SakuraScriptParser: Sendable {
                             id: arguments[1],
                             arguments: Array(arguments.dropFirst(2))
                         ))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "inputbox"
+                    {
+                        tokens.append(.inputBox(
+                            id: arguments[2],
+                            timeoutMilliseconds: arguments.count >= 4 ? Int(arguments[3]) : nil,
+                            initialValue: arguments.count >= 5 ? arguments[4] : ""
+                        ))
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "http-get",
+                              let asyncArgument = arguments.dropFirst(3).first(where: {
+                                  $0.lowercased().hasPrefix("--async=")
+                              }),
+                              let separator = asyncArgument.firstIndex(of: "=")
+                    {
+                        tokens.append(.httpGet(
+                            url: arguments[2],
+                            eventID: String(asyncArgument[asyncArgument.index(after: separator)...])
+                        ))
                     } else {
                         tokens.append(.unknown("\\![\(argument)]"))
                     }

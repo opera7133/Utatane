@@ -21,6 +21,8 @@ public final class SakuraScriptPlayer {
     public var onError: (@MainActor (Error) -> Void)?
     public var onChoice: (@MainActor (String, [String]) -> Void)?
     public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
+    public var onInputBox: (@MainActor (String, Int?, String) async -> SakuraScript?)?
+    public var onHTTPGet: (@MainActor (String, String) async -> SakuraScript?)?
     public var onDialogueContent: (@MainActor () -> Void)?
     public var onDialogueDismissed: (@MainActor () -> Void)?
     public var onPlaybackFinished: (@MainActor () -> Void)?
@@ -264,6 +266,14 @@ public final class SakuraScriptPlayer {
                 case let .embeddedEvent(id, arguments):
                     if let embeddedScript = await onEmbeddedEvent?(id, arguments) {
                         pendingTokens.insert(contentsOf: parser.parse(embeddedScript), at: 0)
+                    }
+                case let .inputBox(id, timeoutMilliseconds, initialValue):
+                    if let response = await onInputBox?(id, timeoutMilliseconds, initialValue) {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                    }
+                case let .httpGet(url, eventID):
+                    if let response = await onHTTPGet?(url, eventID) {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
                     }
                 case .clear:
                     textByScope[scope] = ""

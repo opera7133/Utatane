@@ -28,7 +28,7 @@ import UtataneCore
     #expect(request.reference(5) == "0")
 }
 
-@Test func `maps choice ID and arguments directly`() {
+@Test func `maps a named SakuraScript choice directly`() {
     let request = GhostEventShioriAdapter().request(
         for: .choice(id: "OnChoiceSelect_MAINMENU", arguments: ["one", "two"])
     )
@@ -37,6 +37,17 @@ import UtataneCore
     #expect(request.reference(0) == "one")
     #expect(request.reference(1) == "two")
     #expect(request.headers.entries.prefix(4).map(\.name) == ["Charset", "Sender", "SecurityLevel", "ID"])
+}
+
+@Test func `maps a plain choice through OnChoiceSelect`() {
+    let request = GhostEventShioriAdapter().request(
+        for: .choice(id: "ランダムトーク", arguments: ["one", "two"])
+    )
+
+    #expect(request.id == "OnChoiceSelect")
+    #expect(request.reference(0) == "ランダムトーク")
+    #expect(request.reference(1) == "one")
+    #expect(request.reference(2) == "two")
 }
 
 @Test func `maps native pointer events with coordinates and wheel delta`() {

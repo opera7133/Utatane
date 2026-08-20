@@ -34,16 +34,6 @@ public actor NativeSatoriPersonalityEngine: PersonalityEngine {
     }
 
     public func response(for event: GhostEvent) async throws -> PersonalityResponse {
-        let requestEvent: GhostEvent
-        if case let .choice(id, arguments) = event, !id.hasPrefix("On") {
-            var references = Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
-                ($0.offset + 1, $0.element)
-            })
-            references[0] = id
-            requestEvent = .shiori(id: "OnChoiceSelect", references: references)
-        } else {
-            requestEvent = event
-        }
         var context = ShioriEventContext(charset: "Shift_JIS")
         if case let .mouseClick(scope, _) = event {
             context.scope = scope
@@ -53,7 +43,7 @@ public actor NativeSatoriPersonalityEngine: PersonalityEngine {
             context.mouseY = mouseEvent.y
             context.mouseButton = mouseEvent.button
         }
-        let response = try session.request(adapter.request(for: requestEvent, context: context))
+        let response = try session.request(adapter.request(for: event, context: context))
         guard (200 ..< 300).contains(response.statusCode) else {
             throw NativeSatoriPersonalityError.unsuccessfulResponse(response.statusCode, response.reasonPhrase)
         }

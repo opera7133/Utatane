@@ -217,6 +217,47 @@ func `embedded event can restore a hidden surface`() async throws {
 
 @Test
 @MainActor
+func `runs input box and asynchronous HTTP commands`() async {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: SurfaceWindowController(positionStore: positionStore),
+        balloonWindowController: BalloonWindowController(positionStore: positionStore)
+    )
+    var calls: [String] = []
+    player.onInputBox = { id, timeout, initialValue in
+        calls.append("input:\(id):\(timeout ?? -1):\(initialValue)")
+        return nil
+    }
+    player.onHTTPGet = { url, eventID in
+        calls.append("http:\(url):\(eventID)")
+        return nil
+    }
+    let balloon = BalloonDefinition(
+        directory: FileManager.default.temporaryDirectory,
+        name: "test",
+        originX: 0,
+        originY: 0,
+        wordWrapPointX: 0,
+        wordWrapPointY: 0,
+        fontHeight: 14,
+        fontColor: BalloonColor(red: 0, green: 0, blue: 0)
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\![open,inputbox,OnInput,0,初期値]\![execute,http-get,https://example.com/data,--async=OnLoaded]\e"#),
+        balloon: balloon,
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(calls == [
+        "input:OnInput:0:初期値",
+        "http:https://example.com/data:OnLoaded"
+    ])
+}
+
+@Test
+@MainActor
 func `restores a saved floating window position`() {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

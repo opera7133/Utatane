@@ -24,6 +24,17 @@ func `parses initial playback command set`() {
     ])
 }
 
+@Test func `parses input box and asynchronous HTTP commands`() {
+    let tokens = SakuraScriptParser().parse(
+        #"\![open,inputbox,OnNameInput,0,おにいちゃん]\![execute,http-get,https://example.com/feed.json,--async=OnLoaded]"#
+    )
+
+    #expect(tokens == [
+        .inputBox(id: "OnNameInput", timeoutMilliseconds: 0, initialValue: "おにいちゃん"),
+        .httpGet(url: "https://example.com/feed.json", eventID: "OnLoaded")
+    ])
+}
+
 @Test
 func `supports aliases short arguments and escaped backslash`() {
     let tokens = SakuraScriptParser().parse(#"\h\s1A\\B\u\p[2]C"#)

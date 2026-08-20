@@ -15,7 +15,7 @@ mise run test --filter NativeKawariSessionTests
 
 ## Aosora（実験的）
 
-Aosoraのソースはライセンスが未設定で、上流READMEでは個人利用またはプロジェクト参加目的に用途が限定されています。なのでUtataneにはソースもsubmoduleもビルド済みモジュールも入れません。[上流リポジトリ](https://github.com/kanadelab/aosora-shiori)を確認してください。
+Aosoraのソースはライセンスが未設定で、上流READMEでは個人利用またはプロジェクト参加目的に用途が限定されています。なのでUtataneにはソースもsubmoduleもビルド済みモジュールも入れません。[上流リポジトリ](https://github.com/opera7133/aosora-shiori)を確認してください。
 
 <details>
 <summary>macOSでのローカルビルド手順</summary>
@@ -24,9 +24,11 @@ Aosoraのソースはライセンスが未設定で、上流READMEでは個人�
 
 ```sh
 brew install pkg-config openssl@3 jsoncpp
-git clone https://github.com/kanadelab/aosora-shiori.git ~/src/aosora-shiori
+git clone --branch utatane-macos https://github.com/opera7133/aosora-shiori.git ~/src/aosora-shiori
 tools/native-shiori/build-aosora-macos.sh ~/src/aosora-shiori
 ```
+
+`utatane-macos`には、macOSで見つかった実行スタック初期化の修正が入っています。上流へ取り込まれたら普通の上流版へ戻す予定です。
 
 標準の配置先は次の場所です。
 
@@ -40,7 +42,7 @@ tools/native-shiori/build-aosora-macos.sh ~/src/aosora-shiori
 UTATANE_AOSORA_MODULE=/path/to/libaosora.dylib open Utatane.app
 ```
 
-`Content/Local/Ghosts/demo`があれば、次のテストで`OnBoot`まで確認できます。素材かモジュールがなければ何もせず終わります。
+`Content/Local/Ghosts/demo`があれば、次のテストで起動とメニュー項目の応答まで確認できます。素材かモジュールがなければ何もせず終わります。
 
 ```sh
 mise run test --filter 'installed Aosora demo answers OnBoot'
