@@ -60,7 +60,9 @@ public struct ShellLoader: Sendable {
             surfaces: document.surfaces,
             surfaceAliases: document.aliases,
             usesSelfAlpha: shellMetadata.usesSelfAlpha,
-            defaultBindGroups: shellMetadata.defaultBindGroups
+            defaultBindGroups: shellMetadata.defaultBindGroups,
+            bindGroups: shellMetadata.bindGroups,
+            bindOptions: shellMetadata.bindOptions
         )
     }
 
@@ -118,44 +120,93 @@ public struct ShellLoader: Sendable {
         return text
     }
 
-    private func metadata(in shellDirectory: URL) -> (usesSelfAlpha: Bool, defaultBindGroups: [Int: Set<Int>]) {
+    private func metadata(in shellDirectory: URL) -> (
+        usesSelfAlpha: Bool,
+        defaultBindGroups: [Int: Set<Int>],
+        bindGroups: [Int: [Int: ShellBindGroup]],
+        bindOptions: [Int: [String: ShellBindOptions]]
+    ) {
         let url = shellDirectory.appending(path: "descript.txt", directoryHint: .notDirectory)
-        guard let text = try? readText(from: url) else { return (false, [:]) }
+        guard let text = try? readText(from: url) else { return (false, [:], [:], [:]) }
         var usesSelfAlpha = false
         var defaultBindGroups: [Int: Set<Int>] = [:]
+        var groupNames: [Int: [Int: (category: String, part: String, thumbnail: String)]] = [:]
+        var groupAddIDs: [Int: [Int: Set<Int>]] = [:]
+        var bindOptions: [Int: [String: ShellBindOptions]] = [:]
         for line in text.split(whereSeparator: \ .isNewline) {
             let fields = line.split(separator: ",", maxSplits: 1).map {
                 $0.trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            guard fields.count == 2, fields[1] == "1" else { continue }
+            guard fields.count == 2 else { continue }
             if fields[0].caseInsensitiveCompare("seriko.use_self_alpha") == .orderedSame {
-                usesSelfAlpha = true
+                usesSelfAlpha = fields[1] == "1"
                 continue
             }
             let key = fields[0].lowercased()
-            let scope: Int
-            let remainder: Substring
-            if key.hasPrefix("sakura.bindgroup") {
-                scope = 0
-                remainder = key.dropFirst("sakura.bindgroup".count)
-            } else if key.hasPrefix("kero.bindgroup") {
-                scope = 1
-                remainder = key.dropFirst("kero.bindgroup".count)
-            } else if key.hasPrefix("char"), let separator = key.firstIndex(of: ".") {
-                guard let parsedScope = Int(key[key.index(key.startIndex, offsetBy: 4) ..< separator]),
-                      key[separator...].hasPrefix(".bindgroup")
-                else { continue }
-                scope = parsedScope
-                remainder = key[key.index(separator, offsetBy: ".bindgroup".count)...]
-            } else {
+            if let (scope, remainder) = scopedMetadataKey(key, marker: "bindgroup"),
+               let separator = remainder.firstIndex(of: "."),
+               let groupID = Int(remainder[..<separator])
+            {
+                let property = remainder[remainder.index(after: separator)...]
+                if property == "default", fields[1] == "1" {
+                    defaultBindGroups[scope, default: []].insert(groupID)
+                } else if property == "name" {
+                    let values = fields[1].split(
+                        separator: ",",
+                        maxSplits: 2,
+                        omittingEmptySubsequences: false
+                    ).map(String.init)
+                    guard values.count >= 2 else { continue }
+                    groupNames[scope, default: [:]][groupID] = (
+                        values[0], values[1], values.count >= 3 ? values[2] : ""
+                    )
+                } else if property == "addid" {
+                    groupAddIDs[scope, default: [:]][groupID] = Set(
+                        fields[1].split(separator: ",").compactMap { Int($0) }
+                    )
+                }
                 continue
             }
-            guard remainder.hasSuffix(".default"),
-                  let groupID = Int(remainder.dropLast(".default".count))
-            else { continue }
-            defaultBindGroups[scope, default: []].insert(groupID)
+            if let (scope, remainder) = scopedMetadataKey(key, marker: "bindoption"),
+               remainder.hasSuffix(".group")
+            {
+                let values = fields[1].split(separator: ",", maxSplits: 1).map(String.init)
+                guard values.count == 2 else { continue }
+                let options = Set(values[1].lowercased().split(separator: "+").map(String.init))
+                bindOptions[scope, default: [:]][values[0]] = ShellBindOptions(
+                    mustSelect: options.contains("mustselect"),
+                    multiple: options.contains("multiple")
+                )
+            }
         }
-        return (usesSelfAlpha, defaultBindGroups)
+        var bindGroups: [Int: [Int: ShellBindGroup]] = [:]
+        for (scope, scopeGroups) in groupNames {
+            bindGroups[scope] = Dictionary(uniqueKeysWithValues: scopeGroups.map { id, value in
+                (id, ShellBindGroup(
+                    id: id,
+                    category: value.category,
+                    part: value.part,
+                    thumbnail: value.thumbnail,
+                    addIDs: groupAddIDs[scope]?[id] ?? []
+                ))
+            })
+        }
+        return (usesSelfAlpha, defaultBindGroups, bindGroups, bindOptions)
+    }
+
+    private func scopedMetadataKey(_ key: String, marker: String) -> (Int, Substring)? {
+        if key.hasPrefix("sakura.\(marker)") {
+            return (0, key.dropFirst("sakura.\(marker)".count))
+        }
+        if key.hasPrefix("kero.\(marker)") {
+            return (1, key.dropFirst("kero.\(marker)".count))
+        }
+        guard key.hasPrefix("char"), let separator = key.firstIndex(of: "."),
+              let scope = Int(key[key.index(key.startIndex, offsetBy: 4) ..< separator])
+        else { return nil }
+        let prefix = ".\(marker)"
+        guard key[separator...].hasPrefix(prefix) else { return nil }
+        return (scope, key[key.index(separator, offsetBy: prefix.count)...])
     }
 
     private func surfaceID(fromImageFilename filename: String) -> Int? {

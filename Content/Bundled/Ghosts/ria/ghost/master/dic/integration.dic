@@ -5,7 +5,7 @@ OnInstallBegin
 
 OnInstallCompleteEx
 {
-	"\0\s[105]インストール終わったみたい。\w5%(reference1)だって。\w5あとでちゃんと動くか見ときなよ。\e"
+	"\0\s[105]インストール終わったみたい。\w5%(reference1)だって。\w5\s[103]あとでちゃんと動くか見ときなよ。\e"
 }
 
 OnInstallFailure
@@ -28,7 +28,7 @@ OnUpdateBegin
 
 OnUpdateComplete
 {
-	'\0\s[105]更新終わり。\w5変わったところは、そのうち分かるでしょ。\e'
+	'\0\s[105]更新終わり。\w5\s[0]変わったところは、そのうち分かるでしょ。\e'
 }
 
 OnUpdateFailure

@@ -151,6 +151,8 @@ import UtataneShiori
         references: [0: "extraction"]
     ))
     let outfitMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceOutfit", references: [:]))
+    let winter = try await engine.handle(event: .shiori(id: "OnRiaChoiceOutfitWinter", references: [:]))
+    let winterRestore = try await engine.handle(event: .shiori(id: "OnSurfaceRestore", references: [:]))
     let outing = try await engine.handle(event: .shiori(id: "OnRiaChoiceGoWalk", references: [:]))
     let weatherMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceWeather", references: [:]))
     let weather = try await engine.handle(event: .shiori(
@@ -183,7 +185,7 @@ import UtataneShiori
             receivedHairStrokeResponse = true
         }
     }
-    #expect(["\\0\\s[0]\\e", "\\0\\s[10000]\\e"].contains(script?.rawValue))
+    #expect(["\\0\\s[0]\\e", "\\0\\s[10000]\\e", "\\0\\s[20000]\\e"].contains(script?.rawValue))
     #expect(["もう閉じる", "起動してすぐ閉じる"].contains {
         quickClose?.rawValue.contains($0) == true
     })
@@ -205,6 +207,9 @@ import UtataneShiori
     #expect(installComplete?.rawValue.contains("テストゴースト") == true)
     #expect(installFailure?.rawValue.contains("展開できなかった") == true)
     #expect(outfitMenu?.rawValue.contains("外出着") == true)
+    #expect(outfitMenu?.rawValue.contains("冬服") == true)
+    #expect(winter?.rawValue.contains("\\s[20000]") == true)
+    #expect(winterRestore?.rawValue == "\\0\\s[20000]\\e")
     #expect(outing?.rawValue.contains("\\s[-1]") == true)
     #expect(weatherMenu?.rawValue.contains("\\![execute,weather-get,--async=OnRiaWeatherResult]") == true)
     #expect(weather?.rawValue.contains("雨") == true)

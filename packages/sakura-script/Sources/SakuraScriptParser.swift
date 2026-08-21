@@ -269,6 +269,16 @@ public struct SakuraScriptParser: Sendable {
                         case "stop": tokens.append(.sound(.stop))
                         default: tokens.append(.unknown("\\![\(argument)]"))
                         }
+                    } else if arguments.count >= 3,
+                              ["bind", "bind-noevent"].contains(arguments[0].lowercased())
+                    {
+                        let value = arguments.count >= 4 ? arguments[3] : ""
+                        tokens.append(.bind(
+                            category: arguments[1],
+                            part: arguments[2],
+                            enabled: value == "1" ? true : value == "0" ? false : nil,
+                            notifiesEvents: arguments[0].lowercased() == "bind"
+                        ))
                     } else if arguments.count >= 2, arguments[0].lowercased() == "embed" {
                         tokens.append(.embeddedEvent(
                             id: arguments[1],

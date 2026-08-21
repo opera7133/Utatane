@@ -17,7 +17,11 @@ OnRiaChoiceState
 {
 	_elapsed = RiaSessionSeconds
 	_hour = GETTIME[4]
-	if _hour < 5 || _elapsed >= 10800 {
+	_spoiling = RiaSpoilingActive
+	if TOINT(_spoiling) {
+		'\0\s[1]お兄のこと大好き。\w5一人にされたくないし、ずっと構ってほしい。\w5……状態を聞いたお兄が悪いからね。\e'
+	}
+	elseif _hour < 5 || _elapsed >= 10800 {
 		'\0\s[100]眠い。\w5私を起動してからも結構経ってるし、静かにしてたい。\e'
 	}
 	elseif ria_session_pet_count >= 7 {
@@ -45,7 +49,7 @@ OnRiaChoiceActivity
 
 OnRiaChoiceOutfit
 {
-	"\0\s[103]着替え？\w5好きなの選べば。\n\n\![*]\q[自動で決める,OnRiaChoiceOutfitAuto]\n\![*]\q[普段着,OnRiaChoiceOutfitHome]\n\![*]\q[外出着,OnRiaChoiceOutfitOuting]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e"
+	"\0\s[103]着替え？\w5好きなの選べば。\n\n\![*]\q[自動で決める,OnRiaChoiceOutfitAuto]\n\![*]\q[普段着,OnRiaChoiceOutfitHome]\n\![*]\q[外出着,OnRiaChoiceOutfitOuting]\n\![*]\q[冬服,OnRiaChoiceOutfitWinter]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e"
 }
 
 OnRiaChoiceOutfitAuto
@@ -56,7 +60,7 @@ OnRiaChoiceOutfitAuto
 	}
 	ria_outfit_mode_saved = 'auto'
 	RiaSelectOutfit
-	'\0\s[0]自動にした。\w5平日の日中なら外出着、それ以外は普段着にする。\e'
+	'\0\s[0]自動にした。\w5冬の日中は冬服、それ以外の平日の日中なら外出着。朝晩は普段着にする。\e'
 }
 
 OnRiaChoiceOutfitHome
@@ -66,6 +70,7 @@ OnRiaChoiceOutfitHome
 		return
 	}
 	ria_outfit_mode_saved = 'home'
+	ria_outfit_offset = 0
 	ria_outfit_active = 0
 	'\0\s[0]はい、普段着。\w5家ならこれでいいでしょ。\e'
 }
@@ -77,8 +82,21 @@ OnRiaChoiceOutfitOuting
 		return
 	}
 	ria_outfit_mode_saved = 'outing'
+	ria_outfit_offset = 10000
 	ria_outfit_active = 1
 	'\0\s[0]外出着にした。\w5別に出かけるとは言ってないけど。\e'
+}
+
+OnRiaChoiceOutfitWinter
+{
+	if RiaRegisterOutfitChange {
+		'\0\s[9]また？\w5服くらい少し落ち着いて選んで。\e'
+		return
+	}
+	ria_outfit_mode_saved = 'winter'
+	ria_outfit_offset = 20000
+	ria_outfit_active = 1
+	'\0\s[0]冬服にした。\w5手はちゃんと出てるから、用があるならそっちから。\e'
 }
 
 RiaRegisterOutfitChange
@@ -104,13 +122,13 @@ OnRiaChoiceGoOut
 OnRiaChoiceGoWalk
 {
 	RiaStartOuting(120,'walk')
-	'\0\s[105]じゃ、ちょっと歩いてくる。\w5二分くらいで戻るから。\w5……別に待ってなくていいよ。\w9\s[-1]\e'
+	'\0\s[105]じゃ、ちょっと歩いてくる。\w5二分くらいで戻るから。\w5\s[3]……別に待ってなくていいよ。\w9\s[-1]\e'
 }
 
 OnRiaChoiceGoStore
 {
 	RiaStartOuting(180,'store')
-	'\0\s[205]コンビニ行ってくる。\w5何かいる？\w5……今聞いても遅いか。\w9\s[-1]\e'
+	'\0\s[205]コンビニ行ってくる。\w5\s[2]何かいる？\w5\s[3]……今聞いても遅いか。\w9\s[-1]\e'
 }
 
 RiaStartOuting
@@ -118,13 +136,17 @@ RiaStartOuting
 	ria_away = 1
 	ria_away_until = GETSECCOUNT() + TOINT(_argv[0])
 	ria_away_kind = _argv[1]
+	RiaSelectOutfit
+	if TOINT(ria_outfit_offset) == 0 {
+		ria_outfit_offset = 10000
+	}
 	ria_outfit_active = 1
 }
 
 RiaReturnTalks : array
 {
-	'\0\s[105]ただいま。\w5思ったより外の空気まともだった。\e'
-	'\0\s[205]戻った。\w5コンビニ、見るだけのつもりだったのに余計なの買った。\e'
+	'\0\s[105]ただいま。\w5\s[0]思ったより外の空気まともだった。\e'
+	'\0\s[205]戻った。\w5\s[300]コンビニ、見るだけのつもりだったのに余計なの買った。\e'
 	'\0\s[103]はい、帰ってきた。\w5お兄はその間も同じ画面見てた？\e'
 }
 
@@ -206,16 +228,16 @@ RiaMoodLabel
 
 RiaActivityTalks : array
 {
-	'\0\s[104]講義の資料を開いて、三ページくらいで閉じた。\w5開いただけ昨日より進んでる。\e'
-	'\0\s[304]曲を探してた。\w5探してる時間の方が長くなったから、結局いつものにした。\e'
-	'\0\s[307]スマホ見てた。\w5別に面白いものはなかったけど。\e'
+	'\0\s[104]講義の資料を開いて、三ページくらいで閉じた。\w5\s[8]開いただけ昨日より進んでる。\e'
+	'\0\s[304]曲を探してた。\w5\s[103]探してる時間の方が長くなったから、結局いつものにした。\e'
+	'\0\s[0]スマホ見てた。\w5\s[103]別に面白いものはなかったけど。\e'
 	'\0\s[300]冷蔵庫を見て、何も増えてないことを確認してた。\e'
 	'\0\s[317]何もしてない。\w5そういう時間もあるでしょ。\e'
 }
 
 OnRiaChoiceCancel
 {
-	'\0\s[108]ふーん。\w5じゃ、いいけど。\e'
+	'\0\s[103]ふーん。\w5\s[0]じゃ、いいけど。\e'
 }
 
 OnRiaChoiceApology

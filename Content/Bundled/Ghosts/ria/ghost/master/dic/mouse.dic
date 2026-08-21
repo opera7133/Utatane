@@ -5,8 +5,14 @@ OnMouseDoubleClick
 	}
 
 	if RiaRegisterTouchSequence {
-		_talks = RiaSecretTouchTalks
-		_talks[RAND(ARRAYSIZE(_talks))]
+		if ria_mood_saved >= 4 && (TOINT(ria_secret_talk_count_saved) % 3) == 0 {
+			RiaStartSpoilingMode
+			'\0\s[1]……だめ。急にお兄のこと、すごく好きになった。\w5\s[5]五分だけ全部忘れて、私のことだけ構って。\e'
+		}
+		else {
+			_talks = RiaSecretTouchTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
 	}
 	elseif reference4 == 'Head' {
 		if ria_mood_saved <= -4 {
@@ -29,6 +35,11 @@ OnMouseDoubleClick
 		}
 	}
 	elseif reference4 == 'Bust' {
+		if TOINT(ria_spoiling_until) > GETSECCOUNT() {
+			_talks = RiaSpoilingBustDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+			return
+		}
 		RiaRegisterBustPoke
 		if TOINT(ria_outfit_active) && ria_session_bust_poke_count < 3 {
 			'\0\s[9]パーカーの上からでも、そこはそこだから。\w5触らないで。\e'
@@ -136,6 +147,14 @@ RiaBustDoubleClickTalks : array
 	'\0\s[108]今のは操作ミスってことにしとく。\w5一回だけね。\e'
 }
 
+RiaSpoilingBustDoubleClickTalks : array
+{
+	'\0\s[1]……ん。今日は怒らない。\w5むしろ、もう一回くらいならいいよ。今だけね。\e'
+	'\0\s[5]お兄になら触られてもいい。\w5……今の私はそう思ってるから、変に確認しないで。\e'
+	'\0\s[2]そこもいいけど、もっと近くに来て。\w5今日はお兄にくっついてたい。\e'
+	'\0\s[105]お兄、調子に乗ってる。\w5でも今はそれでも好き。\w5後で私が正気に戻ったら全部忘れて。\e'
+}
+
 RiaRepeatedBustDoubleClickTalks : array
 {
 	'\0\s[9]さっきから何回目。\w5いい加減にして、お兄。\e'
@@ -164,7 +183,7 @@ RiaRegisterBustPoke
 
 RiaHandDoubleClickTalks : array
 {
-	'\0\s[102]手？\w5何か用。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
+	'\0\s[2]手？\w5\s[0]何か用。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
 	'\0\s[103]はいはい。\w5選ぶならこのへん。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
 	'\0\s[4]手をつつくより、用件を言えばいいのに。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
 }
@@ -214,7 +233,7 @@ OnMouseMove
 	ria_stroke_count++
 	_threshold = 64
 	if _region == 'Hair' {
-		_threshold = 48
+		_threshold = 64
 	}
 
 	if ria_stroke_count >= _threshold {
@@ -272,6 +291,11 @@ RiaHairWheelTalks : array
 
 RiaHeadPetTalk
 {
+	if TOINT(ria_spoiling_until) > GETSECCOUNT() {
+		_talks = RiaSpoilingPetTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+		return
+	}
 	if ria_session_pet_count >= 7 {
 		_talks = RiaTooMuchPetTalks
 		_talks[RAND(ARRAYSIZE(_talks))]
@@ -284,6 +308,13 @@ RiaHeadPetTalk
 		_talks = RiaHeadPetTalks
 		_talks[RAND(ARRAYSIZE(_talks))]
 	}
+}
+
+RiaSpoilingPetTalks : array
+{
+	'\0\s[1]ん……それ好き。\w5今日はやめないで。ずっとそのまま撫でてて。\e'
+	'\0\s[5]もっと。\w5お兄の手じゃないと嫌。\w5ちゃんと私が眠くなるまで続けて。\e'
+	'\0\s[2]……なんで止めたの。\w5もう終わりとか許さない。ほら、続き。\e'
 }
 
 RiaTooMuchPetTalks : array
@@ -304,7 +335,7 @@ RiaHeadPetTalks : array
 {
 	'\0\s[4]……撫でてる？\w5子供じゃないんだけど。\e'
 	'\0\s[6]ん。\w5別に、やめろとは言ってない。\e'
-	'\0\s[101]眠くなるから、ほどほどにして。\w5……もう少しならいいけど。\e'
+	'\0\s[100]眠くなるから、ほどほどにして。\w5\s[5]……もう少しならいいけど。\e'
 	'\0\s[108]お兄って、たまに距離感おかしいよね。\w5今さらだけど。\e'
 	'\0\s[103]はいはい、撫でた撫でた。\w5満足した？\e'
 	'\0\s[1]……落ち着くのは、まあ分かる。\w5だからってずっとはなし。\e'
@@ -312,6 +343,11 @@ RiaHeadPetTalks : array
 
 RiaHairStrokeTalk
 {
+	if TOINT(ria_spoiling_until) > GETSECCOUNT() {
+		_talks = RiaSpoilingPetTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+		return
+	}
 	_talks = RiaHairStrokeTalks
 	_talks[RAND(ARRAYSIZE(_talks))]
 }
@@ -321,7 +357,7 @@ RiaHairStrokeTalks : array
 	'\0\s[4]髪、さらさら？\w5一応ちゃんと手入れしてるし。\e'
 	'\0\s[6]引っかけないでよ。\w5長いと絡まりやすいんだから。\e'
 	'\0\s[103]そこ、撫でるっていうより髪で遊んでない？\e'
-	'\0\s[108]手ぐしするなら、もう少し丁寧にして。\w5……そう、それくらい。\e'
+	'\0\s[6]手ぐしするなら、もう少し丁寧にして。\w5\s[5]……そう、それくらい。\e'
 	'\0\s[1]朝は毛先が跳ねて大変なんだよね。\w5今は平気でしょ。\e'
 	'\0\s[105]シャンプー変えたの、分かる？\w5分からないなら別にいい。\e'
 }

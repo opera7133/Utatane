@@ -305,6 +305,54 @@ func `runs input box and asynchronous HTTP commands`() async {
 
 @Test
 @MainActor
+func `bind command switches exclusive dressup parts and sends events`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+
+    let coat = ShellBindGroup(id: 10, category: "服", part: "コート")
+    let hoodie = ShellBindGroup(id: 11, category: "服", part: "パーカー")
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [:],
+        defaultBindGroups: [0: [10]],
+        bindGroups: [0: [10: coat, 11: hoodie]],
+        bindOptions: [0: ["服": ShellBindOptions(mustSelect: true)]]
+    )
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(shell: shell, scope: 0, surfaceID: 0)
+    defer { surfaceController.hideAll() }
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: BalloonWindowController(positionStore: positionStore)
+    )
+    var events: [(String, [String])] = []
+    player.onEmbeddedEvent = { id, arguments in
+        events.append((id, arguments))
+        return nil
+    }
+    let balloon = makeBalloon(directory: directory)
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\![bind,服,パーカー,1]\![bind-noevent,服,コート,1]\e"#),
+        balloon: balloon,
+        characterDelayMilliseconds: 0
+    )
+
+    let info = surfaceController.dressupInfo()
+    #expect(info.first(where: { $0.group.id == 10 })?.enabled == true)
+    #expect(info.first(where: { $0.group.id == 11 })?.enabled == false)
+    #expect(events.map(\.0) == ["OnDressupChanged", "OnDressupChanged", "OnNotifyDressupInfo"])
+    #expect(events[0].1 == ["0", "コート", "0", "服", "script"])
+    #expect(events[1].1 == ["0", "パーカー", "1", "服", "script"])
+}
+
+@Test
+@MainActor
 func `restores a saved floating window position`() {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

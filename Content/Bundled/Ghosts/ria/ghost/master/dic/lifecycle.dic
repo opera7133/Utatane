@@ -29,6 +29,7 @@ OnBoot
 	ria_away = 0
 	ria_outfit_change_count = 0
 	ria_outfit_change_timer = 0
+	ria_spoiling_until = 0
 	RiaSelectOutfit
 	RiaUpdateTalkInterval
 	RiaBootTalk
@@ -61,7 +62,7 @@ OnClose
 
 RiaNormalCloseTalks : array
 {
-	'\0\s[5]じゃ、閉じるね。\w5作業の保存くらいはしときなよ。\e'
+	'\0\s[5]じゃ、閉じるね。\w5\s[103]作業の保存くらいはしときなよ。\e'
 	'\0\s[0]今日はここまで？\w5なら、おつかれ。続きはまた今度でいいでしょ。\e'
 	'\0\s[103]ん、終わりね。\w5開きっぱなしのファイルだけ確認しときなよ。\e'
 	'\0\s[105]じゃあね、お兄。\w5次に起こす時は、何か飲み物でも用意しといて。\e'
@@ -79,40 +80,63 @@ OnSurfaceRestore
 
 OnSecondChange
 {
+	RiaSpoilingActive
 	if TOINT(ria_away) && GETSECCOUNT() >= TOINT(ria_away_until) {
 		ria_away = 0
 		RiaSelectOutfit
 		_talks = RiaReturnTalks
 		_talks[RAND(ARRAYSIZE(_talks))]
+		return
+	}
+	if ria_outfit_mode_saved == 'auto' {
+		_previous_outfit_offset = TOINT(ria_outfit_offset)
+		RiaSelectOutfit
+		if TOINT(ria_outfit_offset) != _previous_outfit_offset {
+			'\0\s[0]\e'
+		}
 	}
 }
 
 RiaSelectOutfit
 {
 	if ria_outfit_mode_saved == 'outing' {
-		ria_outfit_active = 1
+		ria_outfit_offset = 10000
+	}
+	elseif ria_outfit_mode_saved == 'winter' {
+		ria_outfit_offset = 20000
 	}
 	elseif ria_outfit_mode_saved == 'home' {
-		ria_outfit_active = 0
+		ria_outfit_offset = 0
 	}
 	else {
 		_hour = GETTIME[4]
 		_weekday = GETTIME[3]
-		ria_outfit_active = (_weekday >= 1 && _weekday <= 5 && _hour >= 8 && _hour < 18)
+		_month = GETTIME[1]
+		if (_month == 12 || _month <= 2) && _hour >= 8 && _hour < 18 {
+			ria_outfit_offset = 20000
+		}
+		elseif _weekday >= 1 && _weekday <= 5 && _hour >= 8 && _hour < 18 {
+			ria_outfit_offset = 10000
+		}
+		else {
+			ria_outfit_offset = 0
+		}
 	}
+	ria_outfit_active = (TOINT(ria_outfit_offset) != 0)
 }
 
 OnTranslateInternalRiaOutfit
 {
 	_script = _argv[0]
-	if TOINT(ria_outfit_active) == 0 {
+	_offset = TOINT(ria_outfit_offset)
+	if _offset == 0 {
 		_script
 		return
 	}
 	_ids = (0,1,2,3,4,5,6,7,8,9,100,101,102,103,104,105,106,107,108,109,200,201,202,205,206,300,301,302,303,304,305,306,307,308,309,310,311,312,313,314,315,316,317,318,319,320,321,322,500,501)
 	for _i = 0 ; _i < ARRAYSIZE(_ids) ; _i++ {
 		_id = _ids[_i]
-		_script = REPLACE(_script,"\s[%(_id)]","\s[%(_id + 10000)]")
+		_script = REPLACE(_script,"\s[%(_id)]","\s[%(_id + _offset)]")
 	}
 	_script
 }
@@ -129,6 +153,12 @@ OnAITalkNewEvent
 
 RiaSelectTalk
 {
+	_spoiling = RiaSpoilingActive
+	if TOINT(_spoiling) {
+		_talks = RiaSpoilingTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+		return
+	}
 	_talks = RiaRandomTalk
 	_talks ,= RiaStateTalk
 	_talks ,= RiaTimeTalk
@@ -146,6 +176,33 @@ RiaSelectTalk
 		ria_mood_saved--
 	}
 	_talks[_index]
+}
+
+RiaSpoilingActive
+{
+	if TOINT(ria_spoiling_until) <= GETSECCOUNT() {
+		ria_spoiling_until = 0
+		0
+		return
+	}
+	1
+}
+
+RiaStartSpoilingMode
+{
+	ria_spoiling_until = GETSECCOUNT() + 300
+}
+
+RiaSpoilingTalks : array
+{
+	'\0\s[1]お兄、私だけ見て。\w5画面じゃなくて私。\w5……できた。えらい。もうちょっとそのままね。\e'
+	'\0\s[5]今日はお兄の隣、私の場所。\w5どっか行くなら連れてって。置いてくのは禁止。\e'
+	'\0\s[2]お兄。お兄。お兄。\w5呼んだら毎回答えて。\w5面倒でも今はやって。お願い。\e'
+	'\0\s[105]ぎゅってしてほしい。\w5……言わせたんだから、聞かなかったことにするのなし。\e'
+	'\0\s[1]ねえ、もっと撫でて。\w5まだ全然足りない。\w5今日は私が満足するまで終わりじゃないから。\e'
+	'\0\s[5]お兄のこと大好き。\w5かなり好き。ずっといてほしい。\w5……今の私はちょっとおかしいから、反論は後で。\e'
+	'\0\s[2]作業やめて。五分だけ私を一番にして。\w5一秒でも余所見したら、最初から五分やり直し。\e'
+	'\0\s[1]お兄がいないと寂しい。\w5だから今日は離れないで。\w5……こんなこと普段は絶対言わないんだからね。\e'
 }
 
 RiaUpdateTalkInterval
@@ -183,15 +240,17 @@ RiaStateTalk
 		_talks ,= '\0\s[108]お兄、いる？\w5……返事ないなら、私も静かにしてる。\e'
 	}
 	if _elapsed >= 7200 {
-		_talks ,= '\0\s[101]私を起動してから、もう二時間以上らしいよ。\w5何してたかは知らないけど、一回くらい立ったら。\e'
-		_talks ,= '\0\s[311]長いこと画面の前にいるね。\w5作業かネットかは知らんけど、飲み物まだある？\e'
+		_talks ,= '\0\s[0]私を起動してから、もう二時間以上らしいよ。\w5\s[9]何してたかは知らないけど、一回くらい立ったら。\e'
+		_talks ,= '\0\s[0]長いこと画面の前にいるね。\w5\s[103]作業かネットかは知らんけど、飲み物まだある？\e'
 	}
 	if _hour < 5 {
 		_talks ,= '\0\s[100]この時間は、さすがに話す頻度落とすね。\w5私も眠いし。\e'
 	}
-	if TOINT(ria_outfit_active) && (_hour >= 21 || _hour < 5) {
+	if TOINT(ria_outfit_offset) == 10000 && (_hour >= 21 || _hour < 5) {
 		_talks ,= '\0\s[100]……まだ外出着だった。\w5着替えるの忘れてたけど、もうこのままでいいかな。\e'
-		_talks ,= '\0\s[4]この時間までパーカー着たままなの、ちょっと落ち着かない。\w5後で着替える。たぶん。\e'
+	}
+	elseif TOINT(ria_outfit_offset) == 20000 && (_hour >= 21 || _hour < 5) {
+		_talks ,= '\0\s[4]この時間までパーカー着たままなの、ちょっと落ち着かない。\w5\s[103]後で着替える。たぶん。\e'
 	}
 	if ria_mood_saved >= 4 {
 		_talks ,= '\0\s[1]さっきからちょっと機嫌いいかも。\w5理由は別に言わないけど。\e'

@@ -1,0 +1,283 @@
+charset,UTF-8
+
+// surface20000を普段着側と同じ表情差分で使う冬服サーフェス。
+surface20000-20009, 20100-20109, 20200-20202, 20205-20206, 20300-20322, 20500-20501
+{
+	element0,base,surface20000.png,0,0
+}
+
+surface.append20000-20009, 20100-20109, 20200-20202, 20205-20206, 20300-20322, 20500-20501
+{
+	collision100,115,38,208,79,Head
+	collision101,124,111,143,133,Eye
+	collision102,164,110,189,130,Eye
+	collision103,148,145,165,156,Mouth
+	collision104,125,131,187,150,Face
+	collision105,113,194,199,254,Bust
+	collision106,216,324,244,353,Hand
+	collision107,105,352,218,483,Leg
+	collision110,112,80,211,110,Head
+	collision108,42,82,112,338,Hair
+	collision109,200,82,315,338,Hair
+}
+
+surface.append20000
+{
+	animation0.interval,sometimes
+	animation0.pattern0,base,20006,50,0,0
+	animation0.pattern1,base,20500,50,0,0
+	animation0.pattern2,base,-1,60,0,0
+}
+
+surface.append20100
+{
+	animation0.interval,sometimes
+	animation0.pattern0,base,20206,50,0,0
+	animation0.pattern1,base,20501,50,0,0
+	animation0.pattern2,base,-1,60,0,0
+}
+
+surface.append20001
+{
+	element1,overlayfast,surface00001.png,0,0
+}
+
+surface.append20002
+{
+	element1,overlayfast,surface00002.png,0,0
+}
+
+surface.append20003
+{
+	element1,overlayfast,surface00003.png,0,0
+}
+
+surface.append20004
+{
+	element1,overlayfast,surface00004.png,0,0
+}
+
+surface.append20005
+{
+	element1,overlayfast,surface00005.png,0,0
+}
+
+surface.append20006
+{
+	element1,overlayfast,surface00006.png,0,0
+}
+
+surface.append20007
+{
+	element1,overlayfast,surface00007.png,0,0
+}
+
+surface.append20008
+{
+	element1,overlayfast,surface00008.png,0,0
+}
+
+surface.append20009
+{
+	element1,overlayfast,surface00009.png,0,0
+}
+
+surface.append20100
+{
+	element1,overlayfast,surface00100.png,0,0
+}
+
+surface.append20101
+{
+	element1,overlayfast,surface00101.png,0,0
+}
+
+surface.append20102
+{
+	element1,overlayfast,surface00102.png,0,0
+}
+
+surface.append20103
+{
+	element1,overlayfast,surface00103.png,0,0
+}
+
+surface.append20104
+{
+	element1,overlayfast,surface00104.png,0,0
+}
+
+surface.append20105
+{
+	element1,overlayfast,surface00105.png,0,0
+}
+
+surface.append20106
+{
+	element1,overlayfast,surface00106.png,0,0
+}
+
+surface.append20107
+{
+	element1,overlayfast,surface00107.png,0,0
+}
+
+surface.append20108
+{
+	element1,overlayfast,surface00108.png,0,0
+}
+
+surface.append20109
+{
+	element1,overlayfast,surface00109.png,0,0
+}
+
+surface.append20200
+{
+	element1,overlayfast,surface00200.png,0,0
+}
+
+surface.append20201
+{
+	element1,overlayfast,surface00201.png,0,0
+}
+
+surface.append20202
+{
+	element1,overlayfast,surface00202.png,0,0
+}
+
+surface.append20205
+{
+	element1,overlayfast,surface00205.png,0,0
+}
+
+surface.append20206
+{
+	element1,overlayfast,surface00206.png,0,0
+}
+
+surface.append20300
+{
+	element1,overlayfast,surface00300.png,0,0
+}
+
+surface.append20301
+{
+	element1,overlayfast,surface00301.png,0,0
+}
+
+surface.append20302
+{
+	element1,overlayfast,surface00302.png,0,0
+}
+
+surface.append20303
+{
+	element1,overlayfast,surface00303.png,0,0
+}
+
+surface.append20304
+{
+	element1,overlayfast,surface00304.png,0,0
+}
+
+surface.append20305
+{
+	element1,overlayfast,surface00305.png,0,0
+}
+
+surface.append20306
+{
+	element1,overlayfast,surface00306.png,0,0
+}
+
+surface.append20307
+{
+	element1,overlayfast,surface00307.png,0,0
+}
+
+surface.append20308
+{
+	element1,overlayfast,surface00308.png,0,0
+}
+
+surface.append20309
+{
+	element1,overlayfast,surface00309.png,0,0
+}
+
+surface.append20310
+{
+	element1,overlayfast,surface00310.png,0,0
+}
+
+surface.append20311
+{
+	element1,overlayfast,surface00311.png,0,0
+}
+
+surface.append20312
+{
+	element1,overlayfast,surface00312.png,0,0
+}
+
+surface.append20313
+{
+	element1,overlayfast,surface00313.png,0,0
+}
+
+surface.append20314
+{
+	element1,overlayfast,surface00314.png,0,0
+}
+
+surface.append20315
+{
+	element1,overlayfast,surface00315.png,0,0
+}
+
+surface.append20316
+{
+	element1,overlayfast,surface00316.png,0,0
+}
+
+surface.append20317
+{
+	element1,overlayfast,surface00317.png,0,0
+}
+
+surface.append20318
+{
+	element1,overlayfast,surface00318.png,0,0
+}
+
+surface.append20319
+{
+	element1,overlayfast,surface00319.png,0,0
+}
+
+surface.append20320
+{
+	element1,overlayfast,surface00320.png,0,0
+}
+
+surface.append20321
+{
+	element1,overlayfast,surface00321.png,0,0
+}
+
+surface.append20322
+{
+	element1,overlayfast,surface00322.png,0,0
+}
+
+surface.append20500
+{
+	element1,overlayfast,surface00500.png,0,0
+}
+
+surface.append20501
+{
+	element1,overlayfast,surface00501.png,0,0
+}

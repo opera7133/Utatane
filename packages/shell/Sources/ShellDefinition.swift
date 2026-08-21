@@ -6,19 +6,25 @@ public struct ShellDefinition: Sendable, Equatable {
     public let surfaceAliases: [Int: [String: [Int]]]
     public let usesSelfAlpha: Bool
     public let defaultBindGroups: [Int: Set<Int>]
+    public let bindGroups: [Int: [Int: ShellBindGroup]]
+    public let bindOptions: [Int: [String: ShellBindOptions]]
 
     public init(
         directory: URL,
         surfaces: [Int: SurfaceDefinition],
         surfaceAliases: [Int: [String: [Int]]] = [:],
         usesSelfAlpha: Bool = false,
-        defaultBindGroups: [Int: Set<Int>] = [:]
+        defaultBindGroups: [Int: Set<Int>] = [:],
+        bindGroups: [Int: [Int: ShellBindGroup]] = [:],
+        bindOptions: [Int: [String: ShellBindOptions]] = [:]
     ) {
         self.directory = directory
         self.surfaces = surfaces
         self.surfaceAliases = surfaceAliases
         self.usesSelfAlpha = usesSelfAlpha
         self.defaultBindGroups = defaultBindGroups
+        self.bindGroups = bindGroups
+        self.bindOptions = bindOptions
     }
 
     public func resolveSurface(_ identifier: String, scope: Int) -> Int? {
@@ -26,6 +32,43 @@ public struct ShellDefinition: Sendable, Equatable {
             return surfaceID
         }
         return surfaceAliases[scope]?[identifier]?.randomElement()
+    }
+
+    public func effectiveBindGroups(scope: Int, enabled: Set<Int>) -> Set<Int> {
+        var result = enabled
+        var pending = Array(enabled)
+        while let id = pending.popLast() {
+            for addedID in bindGroups[scope]?[id]?.addIDs ?? [] where result.insert(addedID).inserted {
+                pending.append(addedID)
+            }
+        }
+        return result
+    }
+}
+
+public struct ShellBindGroup: Sendable, Equatable {
+    public let id: Int
+    public let category: String
+    public let part: String
+    public let thumbnail: String
+    public let addIDs: Set<Int>
+
+    public init(id: Int, category: String, part: String, thumbnail: String = "", addIDs: Set<Int> = []) {
+        self.id = id
+        self.category = category
+        self.part = part
+        self.thumbnail = thumbnail
+        self.addIDs = addIDs
+    }
+}
+
+public struct ShellBindOptions: Sendable, Equatable {
+    public let mustSelect: Bool
+    public let multiple: Bool
+
+    public init(mustSelect: Bool = false, multiple: Bool = false) {
+        self.mustSelect = mustSelect
+        self.multiple = multiple
     }
 }
 

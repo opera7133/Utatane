@@ -4,6 +4,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case surface(Int)
     case namedSurface(String)
     case balloonSurface(Int)
+    case bind(category: String, part: String, enabled: Bool?, notifiesEvents: Bool)
     case lineBreak
     case wait(milliseconds: Int)
     case waitForClick(clearOnResume: Bool)

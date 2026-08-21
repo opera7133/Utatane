@@ -64,6 +64,17 @@ func `parses balloon surface commands`() {
 }
 
 @Test
+func `parses bind commands including toggle and noevent`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![bind,服,冬服,1]\![bind,腕,,0]\![bind-noevent,飾り,リボン]"#
+    ) == [
+        .bind(category: "服", part: "冬服", enabled: true, notifiesEvents: true),
+        .bind(category: "腕", part: "", enabled: false, notifiesEvents: true),
+        .bind(category: "飾り", part: "リボン", enabled: nil, notifiesEvents: false)
+    ])
+}
+
+@Test
 func `parses font commands`() {
     #expect(SakuraScriptParser().parse(#"\f[color,100,150,200]色\f[bold,true]\f[default]"#) == [
         .font(name: "color", arguments: ["100", "150", "200"]),

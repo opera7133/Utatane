@@ -2,12 +2,26 @@ import AppKit
 import UtataneCore
 import UtataneShell
 
+public struct DressupChange: Sendable, Equatable {
+    public let scope: Int
+    public let group: ShellBindGroup
+    public let enabled: Bool
+}
+
+public struct DressupInfo: Sendable, Equatable {
+    public let scope: Int
+    public let group: ShellBindGroup
+    public let enabled: Bool
+    public let options: ShellBindOptions
+}
+
 @MainActor
 public final class SurfaceWindowController {
     private var characters: [Int: CharacterSurfaceController] = [:]
     private var shell: ShellDefinition?
     private let positionStore: WindowPositionStore
     private var defaultSurfaceIDs: [Int: Int] = [:]
+    private var enabledBindGroups: [Int: Set<Int>] = [:]
     private var presentationHidden = false
     private var displayScale: CGFloat = 1
     private var locksToDesktopBottom = true
@@ -81,10 +95,12 @@ public final class SurfaceWindowController {
         hideAll()
         self.shell = shell
         self.defaultSurfaceIDs = defaultSurfaceIDs
+        enabledBindGroups = shell.defaultBindGroups
 
         for (scope, surfaceID) in defaultSurfaceIDs.sorted(by: { $0.key < $1.key }) {
             do {
                 let character = characterController(for: scope)
+                character.setBindGroups(enabledBindGroups[scope] ?? [], redraw: false)
                 try character.show(shell: shell, surfaceID: surfaceID)
                 character.setPresentationHidden(presentationHidden)
                 placeInitialWindow(for: scope)
@@ -97,7 +113,9 @@ public final class SurfaceWindowController {
     public func show(shell: ShellDefinition, scope: Int, surfaceID: Int) throws {
         self.shell = shell
         defaultSurfaceIDs[scope] = defaultSurfaceIDs[scope] ?? surfaceID
+        enabledBindGroups[scope] = enabledBindGroups[scope] ?? shell.defaultBindGroups[scope] ?? []
         let character = characterController(for: scope)
+        character.setBindGroups(enabledBindGroups[scope] ?? [], redraw: false)
         try character.show(shell: shell, surfaceID: surfaceID)
         placeInitialWindow(for: scope)
     }
@@ -142,6 +160,55 @@ public final class SurfaceWindowController {
         for (scope, surfaceID) in defaultSurfaceIDs {
             try? characters[scope]?.changeSurface(to: surfaceID)
         }
+    }
+
+    @discardableResult
+    public func changeBind(scope: Int, category: String, part: String, enabled: Bool?) -> [DressupChange] {
+        guard let shell, let groups = shell.bindGroups[scope] else { return [] }
+        let targets = groups.values.filter {
+            $0.category == category && (part.isEmpty || $0.part == part)
+        }.sorted { $0.id < $1.id }
+        guard !targets.isEmpty else { return [] }
+
+        let options = shell.bindOptions[scope]?[category] ?? ShellBindOptions()
+        let categoryIDs = Set(groups.values.filter { $0.category == category }.map(\.id))
+        var selected = enabledBindGroups[scope] ?? []
+        let before = selected
+        for target in targets {
+            let shouldEnable = enabled ?? !selected.contains(target.id)
+            if shouldEnable {
+                if !options.multiple {
+                    selected.subtract(categoryIDs)
+                }
+                selected.insert(target.id)
+            } else {
+                let remaining = selected.intersection(categoryIDs).subtracting([target.id])
+                if !options.mustSelect || !remaining.isEmpty {
+                    selected.remove(target.id)
+                }
+            }
+        }
+
+        enabledBindGroups[scope] = selected
+        characters[scope]?.setBindGroups(selected, redraw: true)
+        return categoryIDs.sorted().compactMap { id in
+            guard before.contains(id) != selected.contains(id), let group = groups[id] else { return nil }
+            return DressupChange(scope: scope, group: group, enabled: selected.contains(id))
+        }
+    }
+
+    public func dressupInfo() -> [DressupInfo] {
+        guard let shell else { return [] }
+        return shell.bindGroups.flatMap { scope, groups in
+            groups.values.map { group in
+                DressupInfo(
+                    scope: scope,
+                    group: group,
+                    enabled: enabledBindGroups[scope]?.contains(group.id) == true,
+                    options: shell.bindOptions[scope]?[group.category] ?? ShellBindOptions()
+                )
+            }
+        }.sorted { ($0.scope, $0.group.id) < ($1.scope, $1.group.id) }
     }
 
     private func characterController(for scope: Int) -> CharacterSurfaceController {
@@ -236,6 +303,7 @@ private final class CharacterSurfaceController {
     private var shell: ShellDefinition?
     private var baseSurfaceID: Int?
     private var baseImage: NSImage?
+    private var enabledBindGroups: Set<Int> = []
     private var animationTask: Task<Void, Never>?
     private var schedulerTask: Task<Void, Never>?
     private var isAnimating = false
@@ -292,6 +360,21 @@ private final class CharacterSurfaceController {
         imageView = rendered.view
         self.shell = shell
         baseSurfaceID = surfaceID
+        baseImage = rendered.image
+        scheduleAutomaticAnimations()
+    }
+
+    func setBindGroups(_ groups: Set<Int>, redraw: Bool) {
+        enabledBindGroups = groups
+        schedulerTask?.cancel()
+        guard redraw, let shell, let baseSurfaceID, let window,
+              let rendered = try? render(surfaceID: baseSurfaceID, shell: shell)
+        else { return }
+        let origin = window.frame.origin
+        window.contentView = rendered.view
+        window.setContentSize(displaySize(for: rendered.image))
+        window.setFrameOrigin(origin)
+        imageView = rendered.view
         baseImage = rendered.image
         scheduleAutomaticAnimations()
     }
@@ -477,7 +560,7 @@ private final class CharacterSurfaceController {
         excludedAnimationIDs: Set<Int> = []
     ) throws -> NSImage {
         guard let definition else { return base }
-        let enabled = shell.defaultBindGroups[scope] ?? []
+        let enabled = shell.effectiveBindGroups(scope: scope, enabled: enabledBindGroups)
         var result = base
         for animation in definition.animations.sorted(by: { $0.id < $1.id }) {
             guard !excludedAnimationIDs.contains(animation.id) else { continue }
@@ -552,7 +635,7 @@ private final class CharacterSurfaceController {
     }
 
     private func scheduleAutomaticAnimations() {
-        let enabled = shell?.defaultBindGroups[scope] ?? []
+        let enabled = shell.map { $0.effectiveBindGroups(scope: scope, enabled: enabledBindGroups) } ?? []
         let animations = currentSurfaceDefinition?.animations.filter { animation in
             let interval = animation.interval?.lowercased() ?? ""
             let components = Set(interval.split(separator: "+").map(String.init))
