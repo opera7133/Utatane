@@ -28,6 +28,8 @@ final class CalledGhostRuntime {
     var onError: ((Error) -> Void)?
     var onCommunication: ((String, String) -> Void)?
     var onNarDrop: (([URL]) -> Void)?
+    var onContentAction: ((SakuraScriptContentAction) -> Void)?
+    var onOtherEvent: ((String, String, [String], Bool) async -> Void)?
 
     init(
         ghost: InstalledGhost,
@@ -72,6 +74,16 @@ final class CalledGhostRuntime {
             characterDelayMilliseconds: characterDelayMilliseconds,
             postDialogueDismissalMilliseconds: dialogueDismissalMilliseconds
         )
+        player.configure(resourceBaseDirectory: ghost.rootDirectory.appending(
+            path: "ghost/master",
+            directoryHint: .isDirectory
+        ))
+        let mainName = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+        player.configure(environmentVariables: [
+            "selfname": mainName,
+            "selfname2": mainName,
+            "keroname": ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+        ])
         configureCallbacks()
     }
 
@@ -136,6 +148,18 @@ final class CalledGhostRuntime {
             player.play(script, balloon: balloon)
         }
         return response
+    }
+
+    func handleExternalEvent(id: String, arguments: [String], reflectsResponse: Bool) async {
+        guard let response = try? await session.handle(event: .shiori(
+            id: id,
+            references: Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
+                ($0.offset, $0.element)
+            })
+        )) else { return }
+        if reflectsResponse, !response.rawValue.isEmpty {
+            player.play(response, balloon: balloon)
+        }
     }
 
     func stop() async {
@@ -203,6 +227,17 @@ final class CalledGhostRuntime {
             } else {
                 self?.send(.choice(id: id, arguments: arguments))
             }
+        }
+        player.onOpen = { target in
+            guard let url = URL(string: target),
+                  let scheme = url.scheme?.lowercased(),
+                  ["http", "https"].contains(scheme)
+            else { return }
+            NSWorkspace.shared.open(url)
+        }
+        player.onContentAction = { [weak self] action in self?.onContentAction?(action) }
+        player.onOtherEvent = { [weak self] target, id, arguments, reflectsResponse in
+            await self?.onOtherEvent?(target, id, arguments, reflectsResponse)
         }
         player.onEmbeddedEvent = { [weak self] id, arguments in
             guard let self else { return nil }

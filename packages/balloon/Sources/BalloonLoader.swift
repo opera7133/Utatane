@@ -87,8 +87,26 @@ public struct BalloonLoader: Sendable {
             arrow0X: integer("arrow0.x", in: values, default: 0),
             arrow0Y: integer("arrow0.y", in: values, default: 0),
             arrow1X: integer("arrow1.x", in: values, default: 0),
-            arrow1Y: integer("arrow1.y", in: values, default: 0)
+            arrow1Y: integer("arrow1.y", in: values, default: 0),
+            cursorStyle: linkAppearance(prefix: "cursor", in: values, defaultShape: .underline),
+            cursorNotSelectedStyle: linkAppearance(prefix: "cursor.notselect", in: values, defaultShape: .none),
+            anchorStyle: linkAppearance(prefix: "anchor", in: values, defaultShape: .underline),
+            anchorNotSelectedStyle: linkAppearance(prefix: "anchor.notselect", in: values, defaultShape: .none)
         )
+    }
+
+    public func markerImageURL(speaker: BalloonSpeaker, in balloon: BalloonDefinition) -> URL? {
+        let names: [String] = switch speaker {
+        case .sakura:
+            ["markers.png", "marker.png"]
+        case .kero:
+            ["markerk.png", "marker.png"]
+        case let .character(scope):
+            ["markerp\(scope)def.png", "markerk.png", "marker.png"]
+        }
+        return names.lazy
+            .map { balloon.directory.appending(path: $0, directoryHint: .notDirectory) }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     public func arrowImageURL(index: Int, in balloon: BalloonDefinition) -> URL? {
@@ -123,5 +141,27 @@ public struct BalloonLoader: Sendable {
         default defaultValue: Int
     ) -> Int {
         values[key].flatMap(Int.init) ?? defaultValue
+    }
+
+    private func linkAppearance(
+        prefix: String,
+        in values: [String: String],
+        defaultShape: BalloonLinkShape
+    ) -> BalloonLinkAppearance {
+        BalloonLinkAppearance(
+            shape: values["\(prefix).style"]
+                .flatMap { BalloonLinkShape(rawValue: $0.lowercased()) } ?? defaultShape,
+            fontColor: color(prefix: "\(prefix).font.color", in: values),
+            penColor: color(prefix: "\(prefix).pen.color", in: values),
+            brushColor: color(prefix: "\(prefix).brush.color", in: values)
+        )
+    }
+
+    private func color(prefix: String, in values: [String: String]) -> BalloonColor? {
+        guard let red = values["\(prefix).r"].flatMap(Int.init),
+              let green = values["\(prefix).g"].flatMap(Int.init),
+              let blue = values["\(prefix).b"].flatMap(Int.init)
+        else { return nil }
+        return BalloonColor(red: red, green: green, blue: blue)
     }
 }

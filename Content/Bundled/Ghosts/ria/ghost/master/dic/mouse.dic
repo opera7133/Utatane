@@ -164,15 +164,15 @@ RiaRegisterBustPoke
 
 RiaHandDoubleClickTalks : array
 {
-	'\0\s[102]手？\w5何か用。\n\n\q[着替える,OnRiaChoiceOutfit]\n\q[少し出かける,OnRiaChoiceGoOut]\n\q[今の天気,OnRiaChoiceWeather]\n\q[今何時？,OnRiaChoiceTime]\n\q[今日は何曜日？,OnRiaChoiceWeekday]\n\q[今どんな感じ？,OnRiaChoiceState]\n\q[記録を見せて,OnRiaChoiceProfile]\n\q[何してた？,OnRiaChoiceActivity]\n\q[何か話して,OnRiaChoiceTalk]\n\q[悪かった,OnRiaChoiceApology]\n\q[やっぱりいい,OnRiaChoiceCancel]\e'
-	'\0\s[103]はいはい。\w5選ぶならこのへん。\n\n\q[着替える,OnRiaChoiceOutfit]\n\q[少し出かける,OnRiaChoiceGoOut]\n\q[今の天気,OnRiaChoiceWeather]\n\q[今何時？,OnRiaChoiceTime]\n\q[今日は何曜日？,OnRiaChoiceWeekday]\n\q[今どんな感じ？,OnRiaChoiceState]\n\q[記録を見せて,OnRiaChoiceProfile]\n\q[何してた？,OnRiaChoiceActivity]\n\q[何か話して,OnRiaChoiceTalk]\n\q[悪かった,OnRiaChoiceApology]\n\q[やっぱりいい,OnRiaChoiceCancel]\e'
-	'\0\s[4]手をつつくより、用件を言えばいいのに。\n\n\q[着替える,OnRiaChoiceOutfit]\n\q[少し出かける,OnRiaChoiceGoOut]\n\q[今の天気,OnRiaChoiceWeather]\n\q[今何時？,OnRiaChoiceTime]\n\q[今日は何曜日？,OnRiaChoiceWeekday]\n\q[今どんな感じ？,OnRiaChoiceState]\n\q[記録を見せて,OnRiaChoiceProfile]\n\q[何してた？,OnRiaChoiceActivity]\n\q[何か話して,OnRiaChoiceTalk]\n\q[悪かった,OnRiaChoiceApology]\n\q[やっぱりいい,OnRiaChoiceCancel]\e'
+	'\0\s[102]手？\w5何か用。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
+	'\0\s[103]はいはい。\w5選ぶならこのへん。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
+	'\0\s[4]手をつつくより、用件を言えばいいのに。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
 }
 
 RiaAnnoyedHandDoubleClickTalks : array
 {
 	'\0\s[9]今はメニュー出す気分じゃない。\w5先に何か言うことあるんじゃないの。\e'
-	'\0\s[6]手を取ってごまかすのなし。\w5ちゃんと謝って。\n\n\q[悪かった,OnRiaChoiceApology]\n\q[今はやめとく,OnRiaChoiceCancel]\e'
+	'\0\s[6]手を取ってごまかすのなし。\w5ちゃんと謝って。\n\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[今はやめとく,OnRiaChoiceCancel]\e'
 }
 
 RiaLegDoubleClickTalks : array

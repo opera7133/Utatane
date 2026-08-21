@@ -483,6 +483,165 @@ func `does not show a balloon until its scope has text`() async throws {
 
 @Test
 @MainActor
+func `changes balloon surface before and during dialogue`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 120, height: 80).write(to: directory.appending(path: "balloons2.png"))
+    try makePNG(width: 140, height: 90).write(to: directory.appending(path: "balloons3.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\b2hello\b[3]\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(balloonController.style(for: 0) == 3)
+    #expect(balloonController.windowFrame(for: 0)?.size == NSSize(width: 140, height: 90))
+}
+
+@Test
+@MainActor
+func `renders SakuraScript font styles by text range`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"A\f[color,#ff0000]B\f[bold,1]C\f[underline,true]D\f[default]E\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    let red = try #require(balloonController.textAttributes(at: 1, scope: 0)?[.foregroundColor] as? NSColor)
+    #expect(red.redComponent > 0.9)
+    let boldFont = try #require(balloonController.textAttributes(at: 2, scope: 0)?[.font] as? NSFont)
+    #expect(NSFontManager.shared.traits(of: boldFont).contains(.boldFontMask))
+    #expect(balloonController.textAttributes(at: 3, scope: 0)?[.underlineStyle] as? Int == 1)
+    #expect(balloonController.textAttributes(at: 4, scope: 0)?[.underlineStyle] == nil)
+}
+
+@Test
+@MainActor
+func `renders an extended choice and appends its automatic newline`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\__q[OnSelect,arg]選択肢\__q次\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    let content = try #require(balloonController.textAndLinks(for: 0))
+    #expect(content.0 == "選択肢\n次")
+    #expect(content.1 == [
+        BalloonTextLink(
+            range: NSRange(location: 0, length: 3),
+            id: "OnSelect",
+            arguments: ["arg"]
+        )
+    ])
+}
+
+@Test
+@MainActor
+func `expands environment names and replaces the script after raise`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    player.configure(environmentVariables: ["selfname": "さくら"])
+    player.onEmbeddedEvent = { id, arguments in
+        #expect(id == "OnRaised")
+        #expect(arguments == ["arg"])
+        return SakuraScript(rawValue: "応答\\e")
+    }
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"%selfnameから\![raise,OnRaised,arg]捨てる\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    let content = try #require(balloonController.textAndLinks(for: 0))
+    #expect(content.0 == "さくらから応答")
+}
+
+@Test
+@MainActor
 func `long balloon text scrolls and follows its bottom`() throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

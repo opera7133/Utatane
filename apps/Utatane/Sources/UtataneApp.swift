@@ -580,6 +580,35 @@ private struct UtataneRootView: View {
                     sendEvent(.choice(id: id, arguments: arguments))
                 }
             }
+            scriptPlayer.onOpen = { target in
+                guard let url = URL(string: target),
+                      let scheme = url.scheme?.lowercased(),
+                      ["http", "https"].contains(scheme)
+                else { return }
+                NSWorkspace.shared.open(url)
+            }
+            scriptPlayer.configure(resourceBaseDirectory: ghost.rootDirectory.appending(
+                path: "ghost/master",
+                directoryHint: .isDirectory
+            ))
+            let mainName = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+            scriptPlayer.configure(environmentVariables: [
+                "selfname": mainName,
+                "selfname2": mainName,
+                "keroname": ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+            ])
+            scriptPlayer.onContentAction = { action in
+                handleContentAction(action)
+            }
+            scriptPlayer.onOtherEvent = { target, id, arguments, reflectsResponse in
+                await handleOtherEvent(
+                    target: target,
+                    id: id,
+                    arguments: arguments,
+                    reflectsResponse: reflectsResponse,
+                    excluding: ghost.id
+                )
+            }
             scriptPlayer.onEmbeddedEvent = { id, arguments in
                 guard let embeddedSession = session else { return nil }
                 return try? await embeddedSession.handle(event: .shiori(
@@ -793,6 +822,127 @@ private struct UtataneRootView: View {
         configureContextMenu()
     }
 
+    private func handleContentAction(
+        _ action: SakuraScriptContentAction,
+        calledRuntime: CalledGhostRuntime? = nil
+    ) {
+        switch action {
+        case .randomGhost:
+            let candidates = model.ghosts.filter { $0.id != currentGhost?.id }
+            if let ghost = candidates.randomElement() {
+                selectedGhostID = ghost.id
+            }
+        case .nextGhost:
+            guard !model.ghosts.isEmpty else { return }
+            let currentIndex = model.ghosts.firstIndex { $0.id == currentGhost?.id } ?? -1
+            selectedGhostID = model.ghosts[(currentIndex + 1) % model.ghosts.count].id
+        case let .changeGhost(target):
+            if target.caseInsensitiveCompare("random") == .orderedSame {
+                handleContentAction(.randomGhost, calledRuntime: calledRuntime)
+                return
+            }
+            if target.caseInsensitiveCompare("sequential") == .orderedSame {
+                handleContentAction(.nextGhost, calledRuntime: calledRuntime)
+                return
+            }
+            guard let ghost = model.ghosts.first(where: { matches(target, name: $0.name, directory: $0.rootDirectory) })
+            else { return }
+            selectedGhostID = ghost.id
+        case let .callGhost(target):
+            let available = model.ghosts.filter { $0.id != currentGhost?.id && calledGhosts[$0.id] == nil }
+            let ghost = target.caseInsensitiveCompare("random") == .orderedSame
+                ? available.randomElement()
+                : available.first(where: { matches(target, name: $0.name, directory: $0.rootDirectory) })
+            guard let ghost
+            else { return }
+            call(ghost)
+        case let .changeShell(target):
+            if target.caseInsensitiveCompare("random") == .orderedSame {
+                if let calledRuntime, let shell = calledRuntime.ghost.shells.randomElement() {
+                    calledRuntime.select(shell: shell)
+                } else if let shell = currentGhost?.shells.randomElement() {
+                    select(shell: shell)
+                }
+                return
+            }
+            if let calledRuntime,
+               let shell = calledRuntime.ghost.shells.first(where: {
+                   matches(target, name: $0.name, directory: $0.directory)
+               })
+            {
+                calledRuntime.select(shell: shell)
+            } else if let shell = currentGhost?.shells.first(where: {
+                matches(target, name: $0.name, directory: $0.directory)
+            }) {
+                select(shell: shell)
+            }
+        case let .changeBalloon(target):
+            let selected = target.caseInsensitiveCompare("random") == .orderedSame
+                ? installedBalloons.randomElement()
+                : installedBalloons.first(where: { matches(target, name: $0.name, directory: $0.directory) })
+            guard let selected else { return }
+            if let calledRuntime {
+                calledRuntime.select(balloon: selected)
+            } else {
+                select(balloon: selected)
+            }
+            configureContextMenu()
+        case .updateGhost:
+            Task { await updateCurrentGhost() }
+        case .updateBalloon:
+            Task { await updateCurrentBalloon() }
+        case let .headline(target):
+            let headline = target.caseInsensitiveCompare("random") == .orderedSame
+                ? installedHeadlines.randomElement()
+                : installedHeadlines.first(where: { matches(target, name: $0.name, directory: $0.id) })
+            guard let headline else { return }
+            Task {
+                switch headline.kind {
+                case let .rss(feedURL): await fetchRSS(url: feedURL)
+                case .legacyDLL: await fetchLegacyHeadline(headline)
+                }
+            }
+        }
+    }
+
+    private func matches(_ target: String, name: String, directory: URL) -> Bool {
+        name.caseInsensitiveCompare(target) == .orderedSame
+            || directory.lastPathComponent.caseInsensitiveCompare(target) == .orderedSame
+    }
+
+    private func handleOtherEvent(
+        target: String,
+        id: String,
+        arguments: [String],
+        reflectsResponse: Bool,
+        excluding originID: URL
+    ) async {
+        let isAll = target.caseInsensitiveCompare("__SYSTEM_ALL_GHOST__") == .orderedSame
+        let references = Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
+            ($0.offset, $0.element)
+        })
+        if let currentGhost,
+           currentGhost.id != originID,
+           isAll || ghost(currentGhost, matches: target),
+           let session,
+           let response = try? await session.handle(event: .shiori(id: id, references: references)),
+           reflectsResponse,
+           !response.rawValue.isEmpty,
+           let balloon
+        {
+            scriptPlayer.play(response, balloon: balloon)
+        }
+        for runtime in calledGhosts.values where runtime.ghost.id != originID
+            && (isAll || ghost(runtime.ghost, matches: target))
+        {
+            await runtime.handleExternalEvent(
+                id: id,
+                arguments: arguments,
+                reflectsResponse: reflectsResponse
+            )
+        }
+    }
+
     private func configureContextMenu() {
         surfaceWindowController.contextMenuItems = {
             [
@@ -992,6 +1142,18 @@ private struct UtataneRootView: View {
                 runtime.onNarDrop = { installNars(from: $0) }
                 runtime.onCommunication = { target, sentence in
                     deliverCommunication(from: ghost, target: target, sentence: sentence)
+                }
+                runtime.onContentAction = { action in
+                    handleContentAction(action, calledRuntime: runtime)
+                }
+                runtime.onOtherEvent = { target, id, arguments, reflectsResponse in
+                    await handleOtherEvent(
+                        target: target,
+                        id: id,
+                        arguments: arguments,
+                        reflectsResponse: reflectsResponse,
+                        excluding: ghost.id
+                    )
                 }
                 calledGhosts[ghost.id] = runtime
                 configureContextMenu()

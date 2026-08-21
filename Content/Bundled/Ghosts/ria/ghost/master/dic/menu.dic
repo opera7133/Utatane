@@ -45,7 +45,7 @@ OnRiaChoiceActivity
 
 OnRiaChoiceOutfit
 {
-	"\0\s[103]着替え？\w5好きなの選べば。\n\n\q[自動で決める,OnRiaChoiceOutfitAuto]\n\q[普段着,OnRiaChoiceOutfitHome]\n\q[外出着,OnRiaChoiceOutfitOuting]\n\q[やっぱりいい,OnRiaChoiceCancel]\e"
+	"\0\s[103]着替え？\w5好きなの選べば。\n\n\![*]\q[自動で決める,OnRiaChoiceOutfitAuto]\n\![*]\q[普段着,OnRiaChoiceOutfitHome]\n\![*]\q[外出着,OnRiaChoiceOutfitOuting]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e"
 }
 
 OnRiaChoiceOutfitAuto
@@ -98,7 +98,7 @@ OnRiaChoiceGoOut
 		'\0\s[4]今ここにいないことになってるんだけど。\w5変な呼び戻し方しないで。\e'
 		return
 	}
-	"\0\s[103]出かける？\w5短いやつなら。\n\n\q[少し散歩,OnRiaChoiceGoWalk]\n\q[コンビニ,OnRiaChoiceGoStore]\n\q[やっぱりいい,OnRiaChoiceCancel]\e"
+	"\0\s[103]出かける？\w5短いやつなら。\n\n\![*]\q[少し散歩,OnRiaChoiceGoWalk]\n\![*]\q[コンビニ,OnRiaChoiceGoStore]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e"
 }
 
 OnRiaChoiceGoWalk

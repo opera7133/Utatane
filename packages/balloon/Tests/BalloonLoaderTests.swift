@@ -51,6 +51,66 @@ func `uses valid rect as the text inset when available`() throws {
 }
 
 @Test
+func `loads SSP choice and anchor appearances`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    charset,UTF-8
+    type,balloon
+    name,Styled Balloon
+    cursor.style,square
+    cursor.font.color.r,10
+    cursor.font.color.g,20
+    cursor.font.color.b,30
+    cursor.brush.color.r,40
+    cursor.brush.color.g,50
+    cursor.brush.color.b,60
+    cursor.notselect.style,none
+    anchor.style,underline
+    anchor.pen.color.r,70
+    anchor.pen.color.g,80
+    anchor.pen.color.b,90
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+
+    let balloon = try BalloonLoader().load(from: directory)
+
+    #expect(balloon.cursorStyle.shape == .square)
+    #expect(balloon.cursorStyle.fontColor == BalloonColor(red: 10, green: 20, blue: 30))
+    #expect(balloon.cursorStyle.brushColor == BalloonColor(red: 40, green: 50, blue: 60))
+    #expect(balloon.cursorNotSelectedStyle.shape == .none)
+    #expect(balloon.anchorStyle.shape == .underline)
+    #expect(balloon.anchorStyle.penColor == BalloonColor(red: 70, green: 80, blue: 90))
+}
+
+@Test
+func `uses scope specific marker and falls back to common marker`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let balloon = BalloonDefinition(
+        directory: directory,
+        name: "test",
+        originX: 0,
+        originY: 0,
+        wordWrapPointX: 0,
+        wordWrapPointY: 0,
+        fontHeight: 12,
+        fontColor: BalloonColor(red: 0, green: 0, blue: 0)
+    )
+    let loader = BalloonLoader()
+    let common = directory.appending(path: "marker.png")
+    try Data().write(to: common)
+    #expect(loader.markerImageURL(speaker: .sakura, in: balloon) == common)
+
+    let sakura = directory.appending(path: "markers.png")
+    try Data().write(to: sakura)
+    #expect(loader.markerImageURL(speaker: .sakura, in: balloon) == sakura)
+}
+
+@Test
 func `uses scope specific balloon image and falls back for additional characters`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

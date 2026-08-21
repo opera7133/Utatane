@@ -2,14 +2,43 @@ import AppKit
 import UtataneBalloon
 
 public struct BalloonTextLink: Sendable, Equatable {
+    public enum Kind: Sendable, Hashable {
+        case choice
+        case anchor
+    }
+
     public let range: NSRange
     public let id: String
     public let arguments: [String]
+    public let kind: Kind
 
-    public init(range: NSRange, id: String, arguments: [String]) {
+    public init(range: NSRange, id: String, arguments: [String], kind: Kind = .choice) {
         self.range = range
         self.id = id
         self.arguments = arguments
+        self.kind = kind
+    }
+}
+
+public struct BalloonTextStyle: Sendable, Equatable {
+    public var fontName: String?
+    public var fontHeight: Double?
+    public var color: BalloonColor?
+    public var bold = false
+    public var italic = false
+    public var strike = false
+    public var underline = false
+
+    public init() {}
+}
+
+public struct BalloonTextStyleRun: Sendable, Equatable {
+    public let range: NSRange
+    public let style: BalloonTextStyle
+
+    public init(range: NSRange, style: BalloonTextStyle) {
+        self.range = range
+        self.style = style
     }
 }
 
@@ -51,12 +80,24 @@ public final class BalloonWindowController {
         presentations[scope]?.window.frame
     }
 
+    func style(for scope: Int) -> Int? {
+        presentations[scope]?.style
+    }
+
     func isTextScrollable(scope: Int) -> Bool {
         presentations[scope]?.contentView.isTextScrollable ?? false
     }
 
     func isTextAtBottom(scope: Int) -> Bool {
         presentations[scope]?.contentView.isTextAtBottom ?? false
+    }
+
+    func textAttributes(at location: Int, scope: Int) -> [NSAttributedString.Key: Any]? {
+        presentations[scope]?.contentView.textAttributes(at: location)
+    }
+
+    func textAndLinks(for scope: Int) -> (String, [BalloonTextLink])? {
+        presentations[scope].map { ($0.text, $0.links) }
     }
 
     public func show(
@@ -71,6 +112,8 @@ public final class BalloonWindowController {
         let image = try imageLoader.loadUsingTopLeftTransparency(imageURL)
         let arrowImage = balloonLoader.arrowImageURL(index: 1, in: balloon)
             .flatMap { try? imageLoader.loadUsingTopLeftTransparency($0) }
+        let markerImage = balloonLoader.markerImageURL(speaker: speaker, in: balloon)
+            .flatMap { try? imageLoader.loadUsingTopLeftTransparency($0) }
         let scaledSize = NSSize(
             width: image.size.width * displayScale,
             height: image.size.height * displayScale
@@ -79,6 +122,7 @@ public final class BalloonWindowController {
             frame: NSRect(origin: .zero, size: scaledSize),
             image: image,
             arrowImage: arrowImage,
+            markerImage: markerImage,
             balloon: balloon,
             text: text,
             displayScale: displayScale,
@@ -125,9 +169,42 @@ public final class BalloonWindowController {
     }
 
     public func updateContent(text: String, links: [BalloonTextLink], scope: Int = 0) {
-        presentations[scope]?.contentView.update(text: text, links: links)
+        updateContent(text: text, links: links, styles: [], scope: scope)
+    }
+
+    public func updateContent(
+        text: String,
+        links: [BalloonTextLink],
+        styles: [BalloonTextStyleRun],
+        scope: Int = 0
+    ) {
+        presentations[scope]?.contentView.update(text: text, links: links, styles: styles)
         presentations[scope]?.text = text
         presentations[scope]?.links = links
+        presentations[scope]?.styles = styles
+    }
+
+    public func changeStyle(_ style: Int, scope: Int = 0) throws {
+        guard let presentation = presentations[scope] else { return }
+        let wasVisible = presentation.window.isVisible
+        try show(
+            balloon: presentation.balloon,
+            text: presentation.text,
+            scope: scope,
+            speaker: presentation.speaker,
+            style: style,
+            near: presentation.surfaceFrame
+        )
+        updateContent(
+            text: presentation.text,
+            links: presentation.links,
+            styles: presentation.styles,
+            scope: scope
+        )
+        setWaitingForClick(presentation.isWaitingForClick, scope: scope)
+        if !wasVisible {
+            hide(scope: scope)
+        }
     }
 
     public func setWaitingForClick(_ waiting: Bool, scope: Int? = nil) {
@@ -161,6 +238,7 @@ public final class BalloonWindowController {
         window.hasShadow = true
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
+        window.acceptsMouseMovedEvents = true
         window.level = .floating
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         return window
@@ -193,6 +271,7 @@ public final class BalloonWindowController {
                 presentation.surfaceFrame,
                 presentation.text,
                 presentation.links,
+                presentation.styles,
                 presentation.isWaitingForClick,
                 presentation.window.isVisible
             )
@@ -206,9 +285,9 @@ public final class BalloonWindowController {
                 style: snapshot.3,
                 near: snapshot.4
             )
-            updateContent(text: snapshot.5, links: snapshot.6, scope: snapshot.0)
-            setWaitingForClick(snapshot.7, scope: snapshot.0)
-            if !snapshot.8 {
+            updateContent(text: snapshot.5, links: snapshot.6, styles: snapshot.7, scope: snapshot.0)
+            setWaitingForClick(snapshot.8, scope: snapshot.0)
+            if !snapshot.9 {
                 hide(scope: snapshot.0)
             }
         }
@@ -225,6 +304,7 @@ private final class BalloonPresentation {
     let surfaceFrame: NSRect
     var text: String
     var links: [BalloonTextLink] = []
+    var styles: [BalloonTextStyleRun] = []
     var isWaitingForClick = false
 
     init(
@@ -254,9 +334,11 @@ private final class BalloonContentView: NSView {
     private let textView: InteractiveTextView
     private let scrollView: NSScrollView
     private let arrowView: NSImageView?
+    private let markerImage: NSImage?
     private let textFont: NSFont
     private let textColor: NSColor
     private let displayScale: CGFloat
+    private let textScale: CGFloat
     private var dragStartMouseLocation: NSPoint?
     private var dragStartWindowOrigin: NSPoint?
     private var didDrag = false
@@ -283,6 +365,14 @@ private final class BalloonContentView: NSView {
         return scrollView.documentVisibleRect.maxY >= textBottom - 1
     }
 
+    func textAttributes(at location: Int) -> [NSAttributedString.Key: Any]? {
+        guard let textStorage = textView.textStorage,
+              location >= 0,
+              location < textStorage.length
+        else { return nil }
+        return textStorage.attributes(at: location, effectiveRange: nil)
+    }
+
     override var isFlipped: Bool {
         true
     }
@@ -295,6 +385,7 @@ private final class BalloonContentView: NSView {
         frame: NSRect,
         image: NSImage,
         arrowImage: NSImage?,
+        markerImage: NSImage?,
         balloon: BalloonDefinition,
         text: String,
         displayScale: CGFloat,
@@ -303,8 +394,10 @@ private final class BalloonContentView: NSView {
         textView = InteractiveTextView(frame: .zero)
         scrollView = NSScrollView(frame: .zero)
         arrowView = arrowImage.map(NSImageView.init(image:))
+        self.markerImage = markerImage
         textFont = .systemFont(ofSize: CGFloat(balloon.fontHeight) * displayScale * textScale)
         self.displayScale = displayScale
+        self.textScale = textScale
         textColor = NSColor(
             calibratedRed: CGFloat(min(max(balloon.fontColor.red, 0), 255)) / 255,
             green: CGFloat(min(max(balloon.fontColor.green, 0), 255)) / 255,
@@ -338,6 +431,11 @@ private final class BalloonContentView: NSView {
             height: CGFloat.greatestFiniteMagnitude
         )
         textView.delegate = textView
+        textView.defaultTextColor = textColor
+        textView.appearanceByKind = [
+            .choice: (balloon.cursorNotSelectedStyle, balloon.cursorStyle),
+            .anchor: (balloon.anchorNotSelectedStyle, balloon.anchorStyle)
+        ]
         let textFrame = textFrame(for: balloon)
         textView.frame = NSRect(origin: .zero, size: textFrame.size)
         textView.onBackgroundClick = { [weak self] in
@@ -442,7 +540,11 @@ func balloonTextFrame(
 }
 
 private extension BalloonContentView {
-    func update(text: String, links: [BalloonTextLink]) {
+    func update(
+        text: String,
+        links: [BalloonTextLink],
+        styles: [BalloonTextStyleRun] = []
+    ) {
         let attributedText = NSMutableAttributedString(
             string: text,
             attributes: [
@@ -450,6 +552,9 @@ private extension BalloonContentView {
                 .foregroundColor: textColor
             ]
         )
+        for run in styles where NSMaxRange(run.range) <= attributedText.length {
+            attributedText.addAttributes(attributes(for: run.style), range: run.range)
+        }
         var linkTargets: [String: BalloonTextLink] = [:]
         for (index, link) in links.enumerated() where NSMaxRange(link.range) <= attributedText.length {
             let token = "utatane-link-\(index)"
@@ -463,12 +568,63 @@ private extension BalloonContentView {
             )
             linkTargets[token] = link
         }
+        if let markerImage {
+            let source = attributedText.string as NSString
+            var searchRange = NSRange(location: 0, length: source.length)
+            while searchRange.length > 0 {
+                let range = source.range(of: "\u{FFFC}", options: [], range: searchRange)
+                guard range.location != NSNotFound else { break }
+                let attachment = NSTextAttachment()
+                attachment.image = markerImage
+                let markerHeight = min(markerImage.size.height * displayScale, textFont.pointSize)
+                let markerWidth = markerImage.size.height > 0
+                    ? markerImage.size.width * markerHeight / markerImage.size.height
+                    : markerHeight
+                attachment.bounds = NSRect(
+                    x: 0,
+                    y: textFont.descender,
+                    width: markerWidth,
+                    height: markerHeight
+                )
+                attributedText.addAttribute(.attachment, value: attachment, range: range)
+                let nextLocation = NSMaxRange(range)
+                searchRange = NSRange(location: nextLocation, length: source.length - nextLocation)
+            }
+        }
         textView.linkTargets = linkTargets
         textView.textStorage?.setAttributedString(attributedText)
+        textView.refreshLinkAppearance()
         textView.layoutManager?.ensureLayout(for: textView.textContainer!)
         if attributedText.length > 0 {
             textView.scrollRangeToVisible(NSRange(location: attributedText.length, length: 0))
         }
+    }
+
+    private func attributes(for style: BalloonTextStyle) -> [NSAttributedString.Key: Any] {
+        let defaultUnscaledSize = textFont.pointSize / displayScale
+        let size = style.fontHeight.map { CGFloat($0) * displayScale * textScale }
+            ?? defaultUnscaledSize * displayScale
+        let baseFont = style.fontName.flatMap { NSFont(name: $0, size: size) }
+            ?? NSFont.systemFont(ofSize: size)
+        var traits: NSFontTraitMask = []
+        if style.bold {
+            traits.insert(.boldFontMask)
+        }
+        if style.italic {
+            traits.insert(.italicFontMask)
+        }
+        let font = NSFontManager.shared.convert(baseFont, toHaveTrait: traits)
+        var result: [NSAttributedString.Key: Any] = [.font: font]
+        if let color = style.color {
+            result[.foregroundColor] = NSColor(balloonColor: color)
+        }
+        if style.strike {
+            result[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        }
+        if style.underline {
+            result[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        }
+        return result
     }
 
     private func scaledCoordinate(_ value: Int, extent: CGFloat) -> CGFloat {
@@ -479,11 +635,15 @@ private extension BalloonContentView {
 
 private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
     var linkTargets: [String: BalloonTextLink] = [:]
+    var appearanceByKind: [BalloonTextLink.Kind: (normal: BalloonLinkAppearance, hovered: BalloonLinkAppearance)] = [:]
+    var defaultTextColor = NSColor.textColor
     var onBackgroundClick: (() -> Void)?
     var onLinkClick: ((String, [String]) -> Void)?
     private var dragStartMouseLocation: NSPoint?
     private var dragStartWindowOrigin: NSPoint?
     private var didDrag = false
+    private var hoveredLinkToken: String?
+    private var mouseTrackingArea: NSTrackingArea?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
@@ -491,6 +651,34 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
 
     override var mouseDownCanMoveWindow: Bool {
         false
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let mouseTrackingArea {
+            removeTrackingArea(mouseTrackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.activeInKeyWindow, .inVisibleRect, .mouseMoved, .mouseEnteredAndExited],
+            owner: self
+        )
+        addTrackingArea(area)
+        mouseTrackingArea = area
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        let token = balloonTextLinkID(at: point, in: self)
+        guard token != hoveredLinkToken else { return }
+        hoveredLinkToken = token
+        refreshLinkAppearance()
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        guard hoveredLinkToken != nil else { return }
+        hoveredLinkToken = nil
+        refreshLinkAppearance()
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -540,6 +728,44 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
             onLinkClick?(token, [])
         }
     }
+
+    func refreshLinkAppearance() {
+        guard let textStorage else { return }
+        for (token, link) in linkTargets where NSMaxRange(link.range) <= textStorage.length {
+            textStorage.removeAttribute(.backgroundColor, range: link.range)
+            textStorage.removeAttribute(.underlineStyle, range: link.range)
+            textStorage.removeAttribute(.underlineColor, range: link.range)
+            let pair = appearanceByKind[link.kind]
+            let appearance = token == hoveredLinkToken ? pair?.hovered : pair?.normal
+            textStorage.addAttribute(
+                .foregroundColor,
+                value: appearance?.fontColor.map(NSColor.init(balloonColor:)) ?? defaultTextColor,
+                range: link.range
+            )
+            guard let appearance else { continue }
+            if appearance.shape == .square || appearance.shape == .squareUnderline {
+                textStorage.addAttribute(
+                    .backgroundColor,
+                    value: appearance.brushColor.map(NSColor.init(balloonColor:)) ?? NSColor.selectedTextBackgroundColor,
+                    range: link.range
+                )
+            }
+            if appearance.shape == .underline || appearance.shape == .squareUnderline {
+                textStorage.addAttribute(
+                    .underlineStyle,
+                    value: NSUnderlineStyle.single.rawValue,
+                    range: link.range
+                )
+                if let penColor = appearance.penColor {
+                    textStorage.addAttribute(
+                        .underlineColor,
+                        value: NSColor(balloonColor: penColor),
+                        range: link.range
+                    )
+                }
+            }
+        }
+    }
 }
 
 private final class PassthroughImageView: NSImageView {
@@ -570,4 +796,15 @@ func balloonTextLinkID(at point: NSPoint, in textView: NSTextView) -> String? {
         return nil
     }
     return textView.textStorage?.attribute(.link, at: characterIndex, effectiveRange: nil) as? String
+}
+
+private extension NSColor {
+    convenience init(balloonColor: BalloonColor) {
+        self.init(
+            calibratedRed: CGFloat(min(max(balloonColor.red, 0), 255)) / 255,
+            green: CGFloat(min(max(balloonColor.green, 0), 255)) / 255,
+            blue: CGFloat(min(max(balloonColor.blue, 0), 255)) / 255,
+            alpha: 1
+        )
+    }
 }
