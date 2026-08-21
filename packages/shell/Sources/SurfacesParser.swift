@@ -228,7 +228,9 @@ public struct SurfacesParser: Sendable {
         guard animationKey.count == 2, let animationID = Int(animationKey[0]) else { return }
 
         var animation = builder.animations[animationID] ?? AnimationBuilder(id: animationID)
-        if animationKey[1] == "interval" {
+        if animationKey[1] == "name" {
+            animation.name = values.first
+        } else if animationKey[1] == "interval" {
             animation.interval = values.first
         } else if animationKey[1].hasPrefix("pattern"),
                   let order = Int(animationKey[1].dropFirst("pattern".count)),
@@ -274,12 +276,14 @@ private struct SurfaceBuilder {
 
 private struct AnimationBuilder {
     let id: Int
+    var name: String?
     var interval: String?
     var patterns: [Int: SurfaceAnimationPattern] = [:]
 
     func build() -> SurfaceAnimation {
         SurfaceAnimation(
             id: id,
+            name: name,
             interval: interval,
             patterns: patterns.values.sorted { $0.order < $1.order }
         )

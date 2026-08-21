@@ -88,6 +88,22 @@ public struct SakuraScriptParser: Sendable {
                 } else {
                     tokens.append(.unknown("\\s"))
                 }
+            case "i":
+                if let argument = bracketArgument(in: characters, index: &index) {
+                    let arguments = splitArguments(argument)
+                    if let identifier = arguments.first, !identifier.isEmpty {
+                        tokens.append(.animation(
+                            identifier: identifier,
+                            waitsForCompletion: arguments.dropFirst().contains {
+                                $0.lowercased() == "wait"
+                            }
+                        ))
+                    } else {
+                        tokens.append(.unknown("\\i[\(argument)]"))
+                    }
+                } else {
+                    tokens.append(.unknown("\\i"))
+                }
             case "b":
                 if let value = numericArgument(in: characters, index: &index) {
                     tokens.append(.balloonSurface(value))
@@ -110,6 +126,8 @@ public struct SakuraScriptParser: Sendable {
             case "x":
                 let argument = bracketArgument(in: characters, index: &index)
                 tokens.append(.waitForClick(clearOnResume: argument?.lowercased() != "noclear"))
+            case "t":
+                tokens.append(.timeCritical)
             case "q":
                 if let argument = bracketArgument(in: characters, index: &index) {
                     let arguments = splitArguments(argument)
@@ -137,6 +155,8 @@ public struct SakuraScriptParser: Sendable {
                 } else {
                     tokens.append(.unknown("\\8"))
                 }
+            case "*":
+                tokens.append(.choiceTimeout(.disabled))
             case "f":
                 if let argument = bracketArgument(in: characters, index: &index) {
                     let arguments = splitArguments(argument)
@@ -170,9 +190,74 @@ public struct SakuraScriptParser: Sendable {
                     } else {
                         tokens.append(.choiceEnd)
                     }
+                } else if index + 1 < characters.count,
+                          characters[index] == "_",
+                          characters[index + 1] == "w"
+                {
+                    index += 2
+                    if let argument = bracketArgument(in: characters, index: &index) {
+                        let arguments = splitArguments(argument)
+                        if arguments.count == 2,
+                           arguments[0].lowercased() == "animation",
+                           !arguments[1].isEmpty
+                        {
+                            tokens.append(.waitForAnimation(arguments[1]))
+                        } else if argument.lowercased() == "clear" {
+                            tokens.append(.waitUntil(milliseconds: nil))
+                        } else if let milliseconds = Int(argument) {
+                            tokens.append(.waitUntil(milliseconds: max(0, milliseconds)))
+                        } else {
+                            tokens.append(.unknown("\\__w[\(argument)]"))
+                        }
+                    } else {
+                        tokens.append(.unknown("\\__w"))
+                    }
                 } else if index < characters.count, characters[index] == "q" {
                     index += 1
                     tokens.append(.quickSection(nil))
+                } else if index < characters.count, characters[index] == "s" {
+                    index += 1
+                    if let argument = bracketArgument(in: characters, index: &index) {
+                        let scopes = splitArguments(argument).compactMap(Int.init)
+                        if !scopes.isEmpty, scopes.count == splitArguments(argument).count {
+                            tokens.append(.synchronizeScopes(scopes))
+                        } else {
+                            tokens.append(.unknown("\\_s[\(argument)]"))
+                        }
+                    } else {
+                        tokens.append(.synchronizeScopes(nil))
+                    }
+                } else if index < characters.count,
+                          ["!", "?"].contains(characters[index])
+                {
+                    let delimiter = characters[index]
+                    index += 1
+                    let literal = readLiteralSection(
+                        endingWith: delimiter,
+                        in: characters,
+                        index: &index
+                    )
+                    if !literal.isEmpty {
+                        tokens.append(.text(literal))
+                    }
+                } else if index < characters.count, characters[index] == "u" {
+                    index += 1
+                    if let argument = bracketArgument(in: characters, index: &index),
+                       let text = encodedCharacter(argument, maximum: 0xFFFF, excludesSurrogates: true)
+                    {
+                        tokens.append(.text(text))
+                    } else {
+                        tokens.append(.unknown("\\_u"))
+                    }
+                } else if index < characters.count, characters[index] == "m" {
+                    index += 1
+                    if let argument = bracketArgument(in: characters, index: &index),
+                       let text = encodedCharacter(argument, maximum: 0x7F)
+                    {
+                        tokens.append(.text(text))
+                    } else {
+                        tokens.append(.unknown("\\_m"))
+                    }
                 } else if index < characters.count, characters[index] == "+" {
                     index += 1
                     tokens.append(.contentAction(.nextGhost))
@@ -210,14 +295,21 @@ public struct SakuraScriptParser: Sendable {
                     } else {
                         tokens.append(.anchorEnd)
                     }
-                } else if index < characters.count, characters[index] == "?" {
-                    index += 1
-                    tokens.append(.unknown("\\_?"))
                 } else {
                     tokens.append(.unknown(readUnknown(command: command, in: characters, index: &index)))
                 }
             case "c":
                 tokens.append(.clear)
+            case "C":
+                tokens.append(.clearAll)
+            case "&":
+                if let identifier = bracketArgument(in: characters, index: &index),
+                   let text = entityReferences[identifier.lowercased()]
+                {
+                    tokens.append(.text(text))
+                } else {
+                    tokens.append(.unknown("\\&"))
+                }
             case "!":
                 if let argument = bracketArgument(in: characters, index: &index) {
                     let arguments = splitArguments(argument)
@@ -228,6 +320,76 @@ public struct SakuraScriptParser: Sendable {
                     {
                         tokens.append(.quickSection(
                             ["true", "1"].contains(arguments[1].lowercased())
+                        ))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "choicetimeout"
+                    {
+                        if arguments.count < 3 || arguments[2].isEmpty {
+                            tokens.append(.choiceTimeout(.defaultValue))
+                        } else if let milliseconds = Int(arguments[2]) {
+                            tokens.append(milliseconds <= 0
+                                ? .choiceTimeout(.disabled)
+                                : .choiceTimeout(.milliseconds(milliseconds)))
+                        } else {
+                            tokens.append(.unknown("\\![\(argument)]"))
+                        }
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "balloontimeout"
+                    {
+                        if arguments.count < 3 || arguments[2].isEmpty {
+                            tokens.append(.balloonTimeout(.defaultValue))
+                        } else if let milliseconds = Int(arguments[2]) {
+                            tokens.append(milliseconds <= 0
+                                ? .balloonTimeout(.disabled)
+                                : .balloonTimeout(.milliseconds(milliseconds)))
+                        } else {
+                            tokens.append(.unknown("\\![\(argument)]"))
+                        }
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "balloonwait"
+                    {
+                        let value = arguments.count >= 3 ? arguments[2].lowercased() : ""
+                        if value.isEmpty || value == "1" {
+                            tokens.append(.balloonWait(.defaultValue))
+                        } else if value.hasSuffix("ms"),
+                                  let milliseconds = Int(value.dropLast(2)),
+                                  (0 ... 10000).contains(milliseconds)
+                        {
+                            tokens.append(.balloonWait(.milliseconds(milliseconds)))
+                        } else if value.hasSuffix("%"),
+                                  let percent = Double(value.dropLast()),
+                                  (0 ... 10000).contains(percent)
+                        {
+                            tokens.append(.balloonWait(.multiplier(percent / 100)))
+                        } else if let multiplier = Double(value),
+                                  (0 ... 100).contains(multiplier)
+                        {
+                            tokens.append(.balloonWait(.multiplier(multiplier)))
+                        } else {
+                            tokens.append(.unknown("\\![\(argument)]"))
+                        }
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "autoscroll",
+                              ["disable", "enable"].contains(arguments[2].lowercased())
+                    {
+                        tokens.append(.autoscroll(arguments[2].lowercased() == "enable"))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "alpha",
+                              let percent = Int(arguments[2])
+                    {
+                        let options = Array(arguments.dropFirst(3))
+                        let namedDuration = options.first { $0.lowercased().hasPrefix("--time=") }
+                            .flatMap { Int($0.dropFirst("--time=".count)) }
+                        let positionalDuration = options.first.flatMap(Int.init)
+                        tokens.append(.surfaceAlpha(
+                            percent: percent < 0 ? nil : min(percent, 100),
+                            durationMilliseconds: max(0, namedDuration ?? positionalDuration ?? 0),
+                            waitsForCompletion: options.contains { $0.lowercased() == "--wait" }
                         ))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "open",
@@ -269,6 +431,36 @@ public struct SakuraScriptParser: Sendable {
                         case "stop": tokens.append(.sound(.stop))
                         default: tokens.append(.unknown("\\![\(argument)]"))
                         }
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "anim",
+                              ["clear", "stop"].contains(arguments[1].lowercased()),
+                              !arguments[2].isEmpty
+                    {
+                        tokens.append(.stopAnimation(arguments[2]))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "anim",
+                              ["pause", "resume"].contains(arguments[1].lowercased()),
+                              !arguments[2].isEmpty
+                    {
+                        tokens.append(arguments[1].lowercased() == "pause"
+                            ? .pauseAnimation(arguments[2])
+                            : .resumeAnimation(arguments[2]))
+                    } else if arguments.count >= 5,
+                              arguments[0].lowercased() == "anim",
+                              arguments[1].lowercased() == "offset",
+                              !arguments[2].isEmpty,
+                              let x = Int(arguments[3]),
+                              let y = Int(arguments[4])
+                    {
+                        tokens.append(.offsetAnimation(identifier: arguments[2], x: x, y: y))
+                    } else if arguments.count >= 2,
+                              ["lock", "unlock"].contains(arguments[0].lowercased()),
+                              arguments[1].lowercased() == "repaint"
+                    {
+                        tokens.append(.repaintLock(
+                            locked: arguments[0].lowercased() == "lock",
+                            manual: arguments.dropFirst(2).contains { $0.lowercased() == "manual" }
+                        ))
                     } else if arguments.count >= 3,
                               ["bind", "bind-noevent"].contains(arguments[0].lowercased())
                     {
@@ -380,7 +572,7 @@ public struct SakuraScriptParser: Sendable {
                 } else {
                     tokens.append(.unknown("\\!"))
                 }
-            case "e":
+            case "e", "z":
                 tokens.append(.end)
                 flushText()
                 return tokens
@@ -415,6 +607,56 @@ public struct SakuraScriptParser: Sendable {
         guard index < characters.count else { return nil }
         index += 1
         return argument
+    }
+
+    private func encodedCharacter(
+        _ argument: String,
+        maximum: Int,
+        excludesSurrogates: Bool = false
+    ) -> String? {
+        let value = if argument.lowercased().hasPrefix("0x") {
+            Int(argument.dropFirst(2), radix: 16)
+        } else {
+            Int(argument)
+        }
+        guard let value,
+              (0 ... maximum).contains(value),
+              !(excludesSurrogates && (0xD800 ... 0xDFFF).contains(value)),
+              let scalar = UnicodeScalar(value)
+        else { return nil }
+        return String(scalar)
+    }
+
+    private func readLiteralSection(
+        endingWith delimiter: Character,
+        in characters: [Character],
+        index: inout Int
+    ) -> String {
+        var result = ""
+        while index < characters.count {
+            if index + 2 < characters.count,
+               characters[index] == "\\",
+               characters[index + 1] == "_",
+               characters[index + 2] == delimiter
+            {
+                index += 3
+                break
+            }
+            result.append(characters[index])
+            index += 1
+        }
+        return result
+    }
+
+    private var entityReferences: [String: String] {
+        [
+            "amp": "&",
+            "apos": "'",
+            "gt": ">",
+            "lt": "<",
+            "nbsp": "\u{00A0}",
+            "quot": "\""
+        ]
     }
 
     private func readUnknown(

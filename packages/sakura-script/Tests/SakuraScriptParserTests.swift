@@ -51,6 +51,31 @@ func `supports aliases short arguments and escaped backslash`() {
 }
 
 @Test
+func `keeps unbracketed IDs to one digit and parses bracketed multi-digit IDs`() {
+    #expect(SakuraScriptParser().parse(#"\p12\s34\b56\p[12]\s[345]\b[67]\C"#) == [
+        .scope(1),
+        .text("2"),
+        .surface(3),
+        .text("4"),
+        .balloonSurface(5),
+        .text("6"),
+        .scope(12),
+        .surface(345),
+        .balloonSurface(67),
+        .clearAll
+    ])
+}
+
+@Test
+func `parses double-underscore millisecond wait`() {
+    #expect(SakuraScriptParser().parse(#"\__w[250]\__w[-10]\__w[clear]"#) == [
+        .waitUntil(milliseconds: 250),
+        .waitUntil(milliseconds: 0),
+        .waitUntil(milliseconds: nil)
+    ])
+}
+
+@Test
 func `parses a named surface alias`() {
     #expect(SakuraScriptParser().parse("\\s[smile]") == [.namedSurface("smile")])
 }
@@ -121,6 +146,117 @@ func `parses environment variables and escaped percent`() {
         .text("username "),
         .marker,
         .text(" %unknown")
+    ])
+}
+
+@Test
+func `parses legacy choice script terminator as end`() {
+    #expect(SakuraScriptParser().parse(#"選択肢の後\z表示されない"#) == [
+        .text("選択肢の後"),
+        .end
+    ])
+}
+
+@Test
+func `parses choice timeout controls`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![set,choicetimeout,1500]\![set,choicetimeout,0]\![set,choicetimeout]\*"#
+    ) == [
+        .choiceTimeout(.milliseconds(1500)),
+        .choiceTimeout(.disabled),
+        .choiceTimeout(.defaultValue),
+        .choiceTimeout(.disabled)
+    ])
+}
+
+@Test
+func `parses balloon playback controls`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![set,balloontimeout,1200]\![set,balloontimeout,0]\![set,balloontimeout]\![set,balloonwait,1.5]\![set,balloonwait,75%]\![set,balloonwait,20ms]\![set,balloonwait]\![set,autoscroll,disable]\![set,autoscroll,enable]"#
+    ) == [
+        .balloonTimeout(.milliseconds(1200)),
+        .balloonTimeout(.disabled),
+        .balloonTimeout(.defaultValue),
+        .balloonWait(.multiplier(1.5)),
+        .balloonWait(.multiplier(0.75)),
+        .balloonWait(.milliseconds(20)),
+        .balloonWait(.defaultValue),
+        .autoscroll(false),
+        .autoscroll(true)
+    ])
+}
+
+@Test
+func `parses surface alpha transitions`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![set,alpha,50]\![set,alpha,200,--time=300,--wait]\![set,alpha,-1,250]"#
+    ) == [
+        .surfaceAlpha(percent: 50, durationMilliseconds: 0, waitsForCompletion: false),
+        .surfaceAlpha(percent: 100, durationMilliseconds: 300, waitsForCompletion: true),
+        .surfaceAlpha(percent: nil, durationMilliseconds: 250, waitsForCompletion: false)
+    ])
+}
+
+@Test
+func `parses time critical sections`() {
+    #expect(SakuraScriptParser().parse(#"通常\t抑止中\e"#) == [
+        .text("通常"),
+        .timeCritical,
+        .text("抑止中"),
+        .end
+    ])
+}
+
+@Test
+func `parses synchronized scope sections`() {
+    #expect(SakuraScriptParser().parse(#"\_s両方\_s\_s[0,2,3]複数\_s"#) == [
+        .synchronizeScopes(nil),
+        .text("両方"),
+        .synchronizeScopes(nil),
+        .synchronizeScopes([0, 2, 3]),
+        .text("複数"),
+        .synchronizeScopes(nil)
+    ])
+}
+
+@Test
+func `parses surface animation commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\i[blink]\i[12,wait]\![anim,clear,12]\![anim,stop,3]\![anim,pause,12]\![anim,resume,12]\![anim,offset,blink,4,-2]\![lock,repaint]\![unlock,repaint]\__w[animation,12]"#
+    ) == [
+        .animation(identifier: "blink", waitsForCompletion: false),
+        .animation(identifier: "12", waitsForCompletion: true),
+        .stopAnimation("12"),
+        .stopAnimation("3"),
+        .pauseAnimation("12"),
+        .resumeAnimation("12"),
+        .offsetAnimation(identifier: "blink", x: 4, y: -2),
+        .repaintLock(locked: true, manual: false),
+        .repaintLock(locked: false, manual: false),
+        .waitForAnimation("12")
+    ])
+}
+
+@Test
+func `decodes UCS-2 ASCII and common entity references`() {
+    #expect(SakuraScriptParser().parse(#"\_u[0x22EE]\_u[12354]\_m[0x41]\_m[66]\&[amp]\&[lt]\&[quot]"#) == [
+        .text("⋮"),
+        .text("あ"),
+        .text("A"),
+        .text("B"),
+        .text("&"),
+        .text("<"),
+        .text("\"")
+    ])
+}
+
+@Test
+func `rejects invalid encoded characters`() {
+    #expect(SakuraScriptParser().parse(#"\_u[0xD800]\_u[0x10000]\_m[128]\&[unknown]"#) == [
+        .unknown("\\_u"),
+        .unknown("\\_u"),
+        .unknown("\\_m"),
+        .unknown("\\&")
     ])
 }
 
@@ -209,6 +345,16 @@ func `parses choices anchors and quoted arguments`() {
 }
 
 @Test
+func `preserves direct scripts in regular and ranged choices`() {
+    #expect(SakuraScriptParser().parse(#"\q[実行,script:\0通常\e]\__q[script:\0範囲\e]実行\__q"#) == [
+        .choice(label: "実行", id: #"script:\0通常\e"#, arguments: []),
+        .choiceStart(id: #"script:\0範囲\e"#, arguments: []),
+        .text("実行"),
+        .choiceEnd
+    ])
+}
+
+@Test
 func `parses embedded SHIORI events`() {
     #expect(SakuraScriptParser().parse(#"\![embed,OnCallSurface,5]"#) == [
         .embeddedEvent(id: "OnCallSurface", arguments: ["5"])
@@ -217,14 +363,30 @@ func `parses embedded SHIORI events`() {
 
 @Test
 func `consumes anchor display marker without leaking question marks`() {
-    let tokens = SakuraScriptParser().parse(#"\_a[https://example.test/]\_?News\_?\_a"#)
+    let tokens = SakuraScriptParser().parse(#"\_a[https://example.test/]News\_a"#)
 
     #expect(tokens == [
         .anchorStart(id: "https://example.test/", arguments: []),
-        .unknown("\\_?"),
         .text("News"),
-        .unknown("\\_?"),
         .anchorEnd
+    ])
+}
+
+@Test
+func `preserves SakuraScript commands inside literal sections`() {
+    #expect(SakuraScriptParser().parse(#"before\_?\1\n%month\_?middle\_!\s[10]\e\_!after"#) == [
+        .text("before"),
+        .text(#"\1\n%month"#),
+        .text("middle"),
+        .text(#"\s[10]\e"#),
+        .text("after")
+    ])
+}
+
+@Test
+func `treats an unterminated literal section as text through the end`() {
+    #expect(SakuraScriptParser().parse(#"\_?\1still literal"#) == [
+        .text(#"\1still literal"#)
     ])
 }
 

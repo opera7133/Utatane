@@ -213,7 +213,10 @@ final class CalledGhostRuntime {
     }
 
     private func configureCallbacks() {
-        surfaceController.onMouseEvent = { [weak self] event in self?.send(.mouse(event)) }
+        surfaceController.onMouseEvent = { [weak self] event in
+            guard let self, !player.isTimeCritical else { return }
+            send(.mouse(event))
+        }
         surfaceController.onNarDrop = { [weak self] _, urls in self?.onNarDrop?(urls) }
         player.onError = { [weak self] error in self?.onError?(error) }
         player.onDialogueContent = { [weak self] in self?.surfaceController.setPresentationHidden(false) }
@@ -227,6 +230,9 @@ final class CalledGhostRuntime {
             } else {
                 self?.send(.choice(id: id, arguments: arguments))
             }
+        }
+        player.onChoiceTimeout = { [weak self] in
+            self?.send(.shiori(id: "OnChoiceTimeout", references: [:]))
         }
         player.onOpen = { target in
             guard let url = URL(string: target),

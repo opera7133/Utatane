@@ -167,11 +167,13 @@ public struct SurfacePoint: Sendable, Equatable {
 
 public struct SurfaceAnimation: Sendable, Equatable {
     public let id: Int
+    public let name: String?
     public let interval: String?
     public let patterns: [SurfaceAnimationPattern]
 
-    public init(id: Int, interval: String?, patterns: [SurfaceAnimationPattern]) {
+    public init(id: Int, name: String? = nil, interval: String?, patterns: [SurfaceAnimationPattern]) {
         self.id = id
+        self.name = name
         self.interval = interval
         self.patterns = patterns
     }

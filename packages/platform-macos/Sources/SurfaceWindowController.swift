@@ -131,6 +131,86 @@ public final class SurfaceWindowController {
         )
     }
 
+    public func playAnimationAndWait(
+        id: Int,
+        scope: Int = 0,
+        minimumFrameDurationMilliseconds: Int = 0
+    ) async {
+        await characters[scope]?.playAnimationAndWait(
+            id: id,
+            minimumFrameDurationMilliseconds: minimumFrameDurationMilliseconds
+        )
+    }
+
+    public func playAnimation(identifier: String, scope: Int = 0) {
+        characters[scope]?.playAnimation(identifier: identifier)
+    }
+
+    public func playAnimationAndWait(identifier: String, scope: Int = 0) async {
+        await characters[scope]?.playAnimationAndWait(identifier: identifier)
+    }
+
+    public func stopAnimation(id: Int, scope: Int = 0) {
+        characters[scope]?.stopAnimation(id: id)
+    }
+
+    public func pauseAnimation(id: Int, scope: Int = 0) {
+        characters[scope]?.pauseAnimation(id: id)
+    }
+
+    public func resumeAnimation(id: Int, scope: Int = 0) {
+        characters[scope]?.resumeAnimation(id: id)
+    }
+
+    public func waitForAnimation(id: Int, scope: Int = 0) async {
+        await characters[scope]?.waitForAnimation(id: id)
+    }
+
+    public func stopAnimation(identifier: String, scope: Int = 0) {
+        characters[scope]?.stopAnimation(identifier: identifier)
+    }
+
+    public func pauseAnimation(identifier: String, scope: Int = 0) {
+        characters[scope]?.pauseAnimation(identifier: identifier)
+    }
+
+    public func resumeAnimation(identifier: String, scope: Int = 0) {
+        characters[scope]?.resumeAnimation(identifier: identifier)
+    }
+
+    public func waitForAnimation(identifier: String, scope: Int = 0) async {
+        await characters[scope]?.waitForAnimation(identifier: identifier)
+    }
+
+    public func setAnimationOffset(identifier: String, x: Int, y: Int, scope: Int = 0) {
+        characters[scope]?.setAnimationOffset(identifier: identifier, x: x, y: y)
+    }
+
+    public func setRepaintLocked(_ locked: Bool, scope: Int) {
+        characters[scope]?.setRepaintLocked(locked)
+    }
+
+    public func setAlpha(
+        _ alpha: Double?,
+        scope: Int,
+        durationMilliseconds: Int = 0
+    ) async {
+        await characters[scope]?.setAlpha(
+            alpha.map { CGFloat($0) },
+            durationMilliseconds: durationMilliseconds
+        )
+    }
+
+    func alpha(for scope: Int) -> Double? {
+        characters[scope].map { Double($0.surfaceAlpha) }
+    }
+
+    public func unlockRepaint() {
+        for character in characters.values {
+            character.setRepaintLocked(false)
+        }
+    }
+
     public func changeSurface(scope: Int = 0, to surfaceID: Int) throws {
         if let character = characters[scope] {
             try character.changeSurface(to: surfaceID)
@@ -305,9 +385,15 @@ private final class CharacterSurfaceController {
     private var baseImage: NSImage?
     private var enabledBindGroups: Set<Int> = []
     private var animationTask: Task<Void, Never>?
+    private var currentAnimationID: Int?
+    private var pausedAnimationIDs: Set<Int> = []
+    private var animationOffsets: [Int: SurfacePoint] = [:]
+    private var isRepaintLocked = false
+    private var pendingAnimationImage: NSImage?
     private var schedulerTask: Task<Void, Never>?
     private var isAnimating = false
     private var displayScale: CGFloat
+    private(set) var surfaceAlpha: CGFloat = 1
     private var locksToDesktopBottom: Bool
     private var keepsOnScreen: Bool
 
@@ -350,11 +436,16 @@ private final class CharacterSurfaceController {
     func show(shell: ShellDefinition, surfaceID: Int) throws {
         animationTask?.cancel()
         schedulerTask?.cancel()
+        pausedAnimationIDs.removeAll()
+        animationOffsets.removeAll()
+        isRepaintLocked = false
+        pendingAnimationImage = nil
 
         let rendered = try render(surfaceID: surfaceID, shell: shell)
         let window = window ?? makeWindow()
         window.contentView = rendered.view
         window.setContentSize(displaySize(for: rendered.image))
+        window.alphaValue = presentationAlpha
         window.makeKeyAndOrderFront(nil)
         self.window = window
         imageView = rendered.view
@@ -380,23 +471,126 @@ private final class CharacterSurfaceController {
     }
 
     func playAnimation(id: Int, minimumFrameDurationMilliseconds: Int = 0) {
+        _ = startAnimation(
+            id: id,
+            minimumFrameDurationMilliseconds: minimumFrameDurationMilliseconds
+        )
+    }
+
+    func playAnimation(identifier: String) {
+        guard let id = animationID(for: identifier) else { return }
+        playAnimation(id: id)
+    }
+
+    func playAnimationAndWait(identifier: String) async {
+        guard let id = animationID(for: identifier) else { return }
+        await playAnimationAndWait(id: id)
+    }
+
+    func playAnimationAndWait(id: Int, minimumFrameDurationMilliseconds: Int = 0) async {
+        animationTask?.cancel()
+        await animationTask?.value
+        let task = startAnimation(
+            id: id,
+            minimumFrameDurationMilliseconds: minimumFrameDurationMilliseconds
+        )
+        await task?.value
+    }
+
+    func stopAnimation(id: Int) {
+        guard currentAnimationID == id else { return }
+        animationTask?.cancel()
+    }
+
+    func pauseAnimation(id: Int) {
+        guard currentAnimationID == id else { return }
+        pausedAnimationIDs.insert(id)
+    }
+
+    func resumeAnimation(id: Int) {
+        pausedAnimationIDs.remove(id)
+    }
+
+    func waitForAnimation(id: Int) async {
+        guard currentAnimationID == id else { return }
+        let task = animationTask
+        await task?.value
+    }
+
+    func stopAnimation(identifier: String) {
+        guard let id = animationID(for: identifier) else { return }
+        stopAnimation(id: id)
+    }
+
+    func pauseAnimation(identifier: String) {
+        guard let id = animationID(for: identifier) else { return }
+        pauseAnimation(id: id)
+    }
+
+    func resumeAnimation(identifier: String) {
+        guard let id = animationID(for: identifier) else { return }
+        resumeAnimation(id: id)
+    }
+
+    func waitForAnimation(identifier: String) async {
+        guard let id = animationID(for: identifier) else { return }
+        await waitForAnimation(id: id)
+    }
+
+    func setAnimationOffset(identifier: String, x: Int, y: Int) {
+        guard let id = animationID(for: identifier) else { return }
+        animationOffsets[id] = SurfacePoint(x: x, y: y)
+    }
+
+    func setRepaintLocked(_ locked: Bool) {
+        isRepaintLocked = locked
+        guard !locked, let pendingAnimationImage else { return }
+        imageView?.image = pendingAnimationImage
+        self.pendingAnimationImage = nil
+    }
+
+    private func animationID(for identifier: String) -> Int? {
+        if let id = Int(identifier) {
+            return id
+        }
+        return currentSurfaceDefinition?.animations.first {
+            $0.name?.caseInsensitiveCompare(identifier) == .orderedSame
+        }?.id
+    }
+
+    private func startAnimation(
+        id: Int,
+        minimumFrameDurationMilliseconds: Int
+    ) -> Task<Void, Never>? {
         guard let animation = currentSurfaceDefinition?.animations.first(where: { $0.id == id }) else {
-            return
+            return nil
         }
         window?.makeKeyAndOrderFront(nil)
         animationTask?.cancel()
-        animationTask = Task { [weak self] in
-            await self?.run(
+        currentAnimationID = id
+        let task = Task<Void, Never> { [weak self] in
+            guard let self else { return }
+            await run(
                 animation,
                 minimumFrameDurationMilliseconds: minimumFrameDurationMilliseconds
             )
+            if currentAnimationID == id {
+                currentAnimationID = nil
+                animationTask = nil
+            }
         }
+        animationTask = task
+        return task
     }
 
     func changeSurface(to surfaceID: Int) throws {
         guard let shell, let window else { return }
         animationTask?.cancel()
         schedulerTask?.cancel()
+        pausedAnimationIDs.removeAll()
+        animationOffsets.removeAll()
+        isRepaintLocked = false
+        pendingAnimationImage = nil
 
         if surfaceID < 0 {
             window.orderOut(nil)
@@ -422,7 +616,35 @@ private final class CharacterSurfaceController {
     }
 
     func setPresentationHidden(_ hidden: Bool) {
-        window?.alphaValue = hidden ? 0 : 1
+        presentationHidden = hidden
+        window?.alphaValue = presentationAlpha
+    }
+
+    func setAlpha(_ alpha: CGFloat?, durationMilliseconds: Int) async {
+        if let alpha {
+            surfaceAlpha = min(max(alpha, 0), 1)
+        }
+        guard let window else { return }
+        let target = presentationAlpha
+        guard durationMilliseconds > 0 else {
+            window.alphaValue = target
+            return
+        }
+        await withCheckedContinuation { continuation in
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Double(durationMilliseconds) / 1000
+                context.timingFunction = CAMediaTimingFunction(name: .linear)
+                window.animator().alphaValue = target
+            } completionHandler: {
+                continuation.resume()
+            }
+        }
+    }
+
+    private var presentationHidden = false
+
+    private var presentationAlpha: CGFloat {
+        presentationHidden ? 0 : surfaceAlpha
     }
 
     func setDisplayScale(_ scale: CGFloat) {
@@ -674,11 +896,11 @@ private final class CharacterSurfaceController {
               let shell,
               let baseSurfaceID,
               let baseImage,
-              let imageView
+              imageView != nil
         else { return }
         isAnimating = true
         defer {
-            imageView.image = baseImage
+            setAnimationImage(baseImage)
             isAnimating = false
         }
 
@@ -695,16 +917,17 @@ private final class CharacterSurfaceController {
 
         for pattern in animation.patterns {
             guard !Task.isCancelled else { return }
+            let offset = animationOffsets[animation.id] ?? SurfacePoint(x: 0, y: 0)
 
             if pattern.surfaceID < 0 {
-                imageView.image = animationBase
+                setAnimationImage(animationBase)
             } else if pattern.method.lowercased() == "base" {
                 do {
-                    imageView.image = try render(
+                    try setAnimationImage(render(
                         surfaceID: pattern.surfaceID,
                         shell: shell,
                         excludingInitialAnimations: stoppedAnimationIDs
-                    ).image
+                    ).image)
                 } catch {
                     continue
                 }
@@ -715,25 +938,48 @@ private final class CharacterSurfaceController {
                         shell: shell,
                         visited: []
                     )
-                    imageView.image = imageLoader.composite(
+                    setAnimationImage(imageLoader.composite(
                         base: animationBase,
                         overlay: overlay,
-                        x: pattern.x,
-                        y: pattern.y,
+                        x: pattern.x + offset.x,
+                        y: pattern.y + offset.y,
                         operation: operation
-                    )
+                    ))
                 } catch {
                     continue
                 }
             }
 
-            do {
-                try await Task.sleep(
-                    for: .milliseconds(max(pattern.waitMilliseconds, minimumFrameDurationMilliseconds))
-                )
-            } catch {
-                return
+            var remainingMilliseconds = max(
+                pattern.waitMilliseconds,
+                minimumFrameDurationMilliseconds
+            )
+            while remainingMilliseconds > 0 {
+                guard !Task.isCancelled else { return }
+                if pausedAnimationIDs.contains(animation.id) {
+                    do {
+                        try await Task.sleep(for: .milliseconds(20))
+                    } catch {
+                        return
+                    }
+                    continue
+                }
+                let interval = min(remainingMilliseconds, 20)
+                do {
+                    try await Task.sleep(for: .milliseconds(interval))
+                } catch {
+                    return
+                }
+                remainingMilliseconds -= interval
             }
+        }
+    }
+
+    private func setAnimationImage(_ image: NSImage) {
+        if isRepaintLocked {
+            pendingAnimationImage = image
+        } else {
+            imageView?.image = image
         }
     }
 }

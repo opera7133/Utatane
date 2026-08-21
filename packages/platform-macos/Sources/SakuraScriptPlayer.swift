@@ -20,9 +20,15 @@ public final class SakuraScriptPlayer {
     private let soundPlayer = SakuraScriptSoundPlayer()
     private var environmentVariables: [String: String] = [:]
     private var eventTimers: [String: Task<Void, Never>] = [:]
+    private var currentBalloon: BalloonDefinition?
+    private var completedDialogueTimeoutMilliseconds: Int?
+    private var notifiesChoiceTimeout = false
+
+    public private(set) var isTimeCritical = false
 
     public var onError: (@MainActor (Error) -> Void)?
     public var onChoice: (@MainActor (String, [String]) -> Void)?
+    public var onChoiceTimeout: (@MainActor () -> Void)?
     public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
     public var onInputBox: (@MainActor (String, Int?, String) async -> SakuraScript?)?
     public var onHTTPGet: (@MainActor (String, String) async -> SakuraScript?)?
@@ -50,8 +56,18 @@ public final class SakuraScriptPlayer {
             self?.advance()
         }
         balloonWindowController.onLinkClick = { [weak self] id, arguments in
-            self?.cancel()
-            self?.onChoice?(id, arguments)
+            guard let self else { return }
+            if id.lowercased().hasPrefix("script:") {
+                let script = String(id.dropFirst("script:".count))
+                let balloon = currentBalloon
+                cancel()
+                if let balloon {
+                    play(SakuraScript(rawValue: script), balloon: balloon)
+                }
+            } else {
+                cancel()
+                onChoice?(id, arguments)
+            }
         }
     }
 
@@ -67,9 +83,12 @@ public final class SakuraScriptPlayer {
         advanceRequested = false
         isWaitingForClick = false
         isPlaybackComplete = false
+        isTimeCritical = false
+        currentBalloon = balloon
         balloonWindowController.hideAll()
         balloonWindowController.setWaitingForClick(false)
         let tokens = parser.parse(script)
+        configureCompletionTimeout(for: tokens)
         let effectiveCharacterDelay = characterDelayMilliseconds ?? self.characterDelayMilliseconds
         playbackTask = Task { [weak self] in
             await self?.run(
@@ -136,6 +155,7 @@ public final class SakuraScriptPlayer {
         advanceRequested = false
         isWaitingForClick = false
         isPlaybackComplete = false
+        isTimeCritical = false
         balloonWindowController.setWaitingForClick(false)
         balloonWindowController.hideAll()
         finishPlaybackWait()
@@ -168,6 +188,12 @@ public final class SakuraScriptPlayer {
         var balloonStyleByScope = defaultBalloonSurfaceIDs
         var activatedScopes = Set<Int>()
         var isQuickSection = false
+        var synchronizedScopes: Set<Int>?
+        var repaintLockedScopes: Set<Int> = []
+        var manualRepaintScopes: Set<Int> = []
+        var autoscrollByScope: [Int: Bool] = [:]
+        var currentCharacterDelayMilliseconds = characterDelayMilliseconds
+        var preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
 
         func appendStyleRun(scope: Int, location: Int, length: Int) {
             guard length > 0 else { return }
@@ -194,6 +220,9 @@ public final class SakuraScriptPlayer {
         defer {
             isWaitingForClick = false
             balloonWindowController.setWaitingForClick(false)
+            for lockedScope in repaintLockedScopes.subtracting(manualRepaintScopes) {
+                surfaceWindowController.setRepaintLocked(false, scope: lockedScope)
+            }
         }
 
         do {
@@ -205,25 +234,33 @@ public final class SakuraScriptPlayer {
                 case let .text(text):
                     for character in text {
                         guard !Task.isCancelled else { return }
-                        let start = textByScope[scope, default: ""].utf16.count
-                        textByScope[scope, default: ""].append(character)
-                        appendStyleRun(scope: scope, location: start, length: character.utf16.count)
-                        try activateIfNeeded(
-                            scope: scope,
-                            balloon: balloon,
-                            text: textByScope[scope, default: ""],
-                            links: linksByScope[scope, default: []],
-                            style: balloonStyleByScope[scope] ?? 0,
-                            activatedScopes: &activatedScopes
-                        )
-                        updateContent(
-                            scope: scope,
-                            text: textByScope[scope, default: ""],
-                            links: linksByScope[scope, default: []],
-                            styles: styleRunsByScope[scope, default: []]
-                        )
+                        let targetScopes = synchronizedScopes?.sorted() ?? [scope]
+                        for targetScope in targetScopes {
+                            let start = textByScope[targetScope, default: ""].utf16.count
+                            textByScope[targetScope, default: ""].append(character)
+                            appendStyleRun(
+                                scope: targetScope,
+                                location: start,
+                                length: character.utf16.count
+                            )
+                            try activateIfNeeded(
+                                scope: targetScope,
+                                balloon: balloon,
+                                text: textByScope[targetScope, default: ""],
+                                links: linksByScope[targetScope, default: []],
+                                style: balloonStyleByScope[targetScope] ?? 0,
+                                activatedScopes: &activatedScopes
+                            )
+                            updateContent(
+                                scope: targetScope,
+                                text: textByScope[targetScope, default: ""],
+                                links: linksByScope[targetScope, default: []],
+                                styles: styleRunsByScope[targetScope, default: []],
+                                autoscroll: autoscrollByScope[targetScope] ?? true
+                            )
+                        }
                         if !fastForwardRequested, !isQuickSection {
-                            try await sleep(milliseconds: characterDelayMilliseconds)
+                            try await sleep(milliseconds: currentCharacterDelayMilliseconds)
                         }
                     }
                     fastForwardRequested = false
@@ -233,6 +270,74 @@ public final class SakuraScriptPlayer {
                     try surfaceWindowController.changeSurface(scope: scope, to: surfaceID)
                 case let .namedSurface(identifier):
                     try surfaceWindowController.changeSurface(scope: scope, named: identifier)
+                case let .animation(identifier, waitsForCompletion):
+                    if waitsForCompletion {
+                        await surfaceWindowController.playAnimationAndWait(
+                            identifier: identifier,
+                            scope: scope
+                        )
+                    } else {
+                        surfaceWindowController.playAnimation(identifier: identifier, scope: scope)
+                    }
+                case let .stopAnimation(identifier):
+                    surfaceWindowController.stopAnimation(identifier: identifier, scope: scope)
+                case let .pauseAnimation(identifier):
+                    surfaceWindowController.pauseAnimation(identifier: identifier, scope: scope)
+                case let .resumeAnimation(identifier):
+                    surfaceWindowController.resumeAnimation(identifier: identifier, scope: scope)
+                case let .waitForAnimation(identifier):
+                    await surfaceWindowController.waitForAnimation(identifier: identifier, scope: scope)
+                case let .offsetAnimation(identifier, x, y):
+                    surfaceWindowController.setAnimationOffset(
+                        identifier: identifier,
+                        x: x,
+                        y: y,
+                        scope: scope
+                    )
+                case let .repaintLock(locked, manual):
+                    surfaceWindowController.setRepaintLocked(locked, scope: scope)
+                    if locked {
+                        repaintLockedScopes.insert(scope)
+                        if manual {
+                            manualRepaintScopes.insert(scope)
+                        }
+                    } else {
+                        repaintLockedScopes.remove(scope)
+                        manualRepaintScopes.remove(scope)
+                    }
+                case let .surfaceAlpha(percent, durationMilliseconds, waitsForCompletion):
+                    let alpha = percent.map { Double($0) / 100 }
+                    if waitsForCompletion {
+                        await surfaceWindowController.setAlpha(
+                            alpha,
+                            scope: scope,
+                            durationMilliseconds: durationMilliseconds
+                        )
+                    } else {
+                        Task { @MainActor [surfaceWindowController] in
+                            await surfaceWindowController.setAlpha(
+                                alpha,
+                                scope: scope,
+                                durationMilliseconds: durationMilliseconds
+                            )
+                        }
+                    }
+                case let .balloonWait(wait):
+                    switch wait {
+                    case .defaultValue:
+                        currentCharacterDelayMilliseconds = characterDelayMilliseconds
+                    case let .multiplier(multiplier):
+                        currentCharacterDelayMilliseconds = max(
+                            0,
+                            Int((Double(characterDelayMilliseconds) * multiplier).rounded())
+                        )
+                    case let .milliseconds(milliseconds):
+                        currentCharacterDelayMilliseconds = milliseconds
+                    }
+                case let .autoscroll(enabled):
+                    autoscrollByScope[scope] = enabled
+                case .balloonTimeout:
+                    break
                 case let .bind(category, part, enabled, notifiesEvents):
                     let changes = surfaceWindowController.changeBind(
                         scope: scope,
@@ -275,26 +380,37 @@ public final class SakuraScriptPlayer {
                         try balloonWindowController.changeStyle(style, scope: scope)
                     }
                 case .lineBreak:
-                    textByScope[scope, default: ""].append("\n")
-                    try activateIfNeeded(
-                        scope: scope,
-                        balloon: balloon,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []],
-                        style: balloonStyleByScope[scope] ?? 0,
-                        activatedScopes: &activatedScopes
-                    )
-                    updateContent(
-                        scope: scope,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []],
-                        styles: styleRunsByScope[scope, default: []]
-                    )
+                    for targetScope in synchronizedScopes?.sorted() ?? [scope] {
+                        textByScope[targetScope, default: ""].append("\n")
+                        try activateIfNeeded(
+                            scope: targetScope,
+                            balloon: balloon,
+                            text: textByScope[targetScope, default: ""],
+                            links: linksByScope[targetScope, default: []],
+                            style: balloonStyleByScope[targetScope] ?? 0,
+                            activatedScopes: &activatedScopes
+                        )
+                        updateContent(
+                            scope: targetScope,
+                            text: textByScope[targetScope, default: ""],
+                            links: linksByScope[targetScope, default: []],
+                            styles: styleRunsByScope[targetScope, default: []]
+                        )
+                    }
                 case let .wait(milliseconds):
                     if fastForwardRequested {
                         fastForwardRequested = false
                     } else {
                         try await sleep(milliseconds: milliseconds)
+                    }
+                case let .waitUntil(milliseconds):
+                    if let milliseconds {
+                        let elapsed = Int((ProcessInfo.processInfo.systemUptime - preciseWaitStartedAt) * 1000)
+                        if elapsed < milliseconds {
+                            try await sleep(milliseconds: milliseconds - elapsed)
+                        }
+                    } else {
+                        preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
                     }
                 case let .waitForClick(clearOnResume):
                     fastForwardRequested = false
@@ -308,6 +424,7 @@ public final class SakuraScriptPlayer {
                     isWaitingForClick = false
                     balloonWindowController.setWaitingForClick(false, scope: scope)
                     scope = 0
+                    preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
                     if clearOnResume {
                         textByScope.removeAll()
                         linksByScope.removeAll()
@@ -316,6 +433,8 @@ public final class SakuraScriptPlayer {
                         textStyleByScope.removeAll()
                         styleRunsByScope.removeAll()
                     }
+                case .timeCritical:
+                    isTimeCritical = true
                 case let .choice(label, id, arguments):
                     let start = textByScope[scope, default: ""].utf16.count
                     textByScope[scope, default: ""].append(label)
@@ -365,6 +484,8 @@ public final class SakuraScriptPlayer {
                         links: linksByScope[scope, default: []],
                         styles: styleRunsByScope[scope, default: []]
                     )
+                case .choiceTimeout:
+                    continue
                 case let .anchorStart(id, arguments):
                     anchorsByScope[scope] = ActiveAnchor(
                         id: id,
@@ -416,6 +537,12 @@ public final class SakuraScriptPlayer {
                     )
                 case let .quickSection(enabled):
                     isQuickSection = enabled ?? !isQuickSection
+                case let .synchronizeScopes(scopes):
+                    if let scopes {
+                        synchronizedScopes = Set(scopes)
+                    } else {
+                        synchronizedScopes = synchronizedScopes == nil ? [0, 1] : nil
+                    }
                 case let .open(target):
                     onOpen?(target)
                 case let .sound(command):
@@ -461,8 +588,18 @@ public final class SakuraScriptPlayer {
                     textByScope[scope] = ""
                     linksByScope[scope] = []
                     anchorsByScope[scope] = nil
+                    choicesByScope[scope] = nil
                     styleRunsByScope[scope] = []
                     updateContent(scope: scope, text: "", links: [], styles: [])
+                case .clearAll:
+                    for activeScope in activatedScopes {
+                        updateContent(scope: activeScope, text: "", links: [], styles: [])
+                    }
+                    textByScope.removeAll()
+                    linksByScope.removeAll()
+                    anchorsByScope.removeAll()
+                    choicesByScope.removeAll()
+                    styleRunsByScope.removeAll()
                 case .end:
                     return
                 case .unknown:
@@ -520,6 +657,16 @@ public final class SakuraScriptPlayer {
         case "screenwidth": return String(Int((NSScreen.main ?? NSScreen.screens.first)?.frame.width ?? 0))
         case "screenheight": return String(Int((NSScreen.main ?? NSScreen.screens.first)?.frame.height ?? 0))
         case "exh": return String(Int(ProcessInfo.processInfo.systemUptime))
+        case "ms": return ["学生", "会社員", "旅人", "猫好き"].randomElement()!
+        case "mz": return ["時計", "傘", "冷蔵庫", "パソコン"].randomElement()!
+        case "ml": return ["人々", "鳥の群れ", "本の山", "星々"].randomElement()!
+        case "mc": return ["架空電機", "月見商事", "北風出版", "うたたね工房"].randomElement()!
+        case "mh": return ["喫茶店", "本屋", "食堂", "雑貨店"].randomElement()!
+        case "mt": return ["必殺技", "早起き", "高速タイピング", "居眠り"].randomElement()!
+        case "me": return ["カレー", "おにぎり", "プリン", "焼き芋"].randomElement()!
+        case "mp": return ["東京", "月面", "商店街", "海辺"].randomElement()!
+        case "m?": return ["何か", "不思議なもの", "例のあれ", "秘密"].randomElement()!
+        case "dms": return ["猫に相談する話", "月へ運ぶ計画", "静かに片付ける方法", "明日試す約束"].randomElement()!
         default: return "%\(name)"
         }
     }
@@ -568,9 +715,16 @@ public final class SakuraScriptPlayer {
         scope: Int,
         text: String,
         links: [BalloonTextLink],
-        styles: [BalloonTextStyleRun] = []
+        styles: [BalloonTextStyleRun] = [],
+        autoscroll: Bool = true
     ) {
-        balloonWindowController.updateContent(text: text, links: links, styles: styles, scope: scope)
+        balloonWindowController.updateContent(
+            text: text,
+            links: links,
+            styles: styles,
+            autoscroll: autoscroll,
+            scope: scope
+        )
     }
 
     private func applyFontCommand(
@@ -607,6 +761,10 @@ public final class SakuraScriptPlayer {
             style.strike = fontFlag(value)
         case "underline":
             style.underline = fontFlag(value)
+        case "sub":
+            style.baseline = fontFlag(value) ? -1 : 0
+        case "sup":
+            style.baseline = fontFlag(value) ? 1 : 0
         default:
             break
         }
@@ -651,20 +809,76 @@ public final class SakuraScriptPlayer {
 
     private func playbackDidFinish() {
         playbackTask = nil
+        isTimeCritical = false
         isPlaybackComplete = true
         isWaitingForClick = false
         balloonWindowController.setWaitingForClick(false)
         finishPlaybackWait()
         onPlaybackFinished?()
         dismissalTask?.cancel()
+        guard let timeout = completedDialogueTimeoutMilliseconds else { return }
         dismissalTask = Task { [weak self] in
             guard let self else { return }
             do {
-                try await sleep(milliseconds: postDialogueDismissalMilliseconds)
+                try await sleep(milliseconds: timeout)
             } catch {
                 return
             }
+            let shouldNotifyChoiceTimeout = notifiesChoiceTimeout
             dismissCompletedDialogue()
+            if shouldNotifyChoiceTimeout {
+                onChoiceTimeout?()
+            }
+        }
+    }
+
+    private func configureCompletionTimeout(for tokens: [SakuraScriptToken]) {
+        let hasChoices = tokens.contains { token in
+            switch token {
+            case .choice, .choiceStart: true
+            default: false
+            }
+        }
+        let choicePolicy = tokens.compactMap { token -> SakuraScriptChoiceTimeout? in
+            if case let .choiceTimeout(policy) = token {
+                return policy
+            }
+            return nil
+        }.last ?? .defaultValue
+        let balloonPolicy = tokens.compactMap { token -> SakuraScriptChoiceTimeout? in
+            if case let .balloonTimeout(policy) = token {
+                return policy
+            }
+            return nil
+        }.last ?? .defaultValue
+        let balloonTimeout = resolveTimeout(balloonPolicy)
+        guard hasChoices else {
+            completedDialogueTimeoutMilliseconds = balloonTimeout
+            notifiesChoiceTimeout = false
+            return
+        }
+        let choiceTimeout = resolveTimeout(choicePolicy)
+        switch (choiceTimeout, balloonTimeout) {
+        case let (choice?, balloon?) where choice <= balloon:
+            completedDialogueTimeoutMilliseconds = choice
+            notifiesChoiceTimeout = true
+        case let (_, balloon?):
+            completedDialogueTimeoutMilliseconds = balloon
+            notifiesChoiceTimeout = false
+        case (let choice?, nil):
+            completedDialogueTimeoutMilliseconds = choice
+            notifiesChoiceTimeout = true
+        case (nil, nil):
+            completedDialogueTimeoutMilliseconds = nil
+            notifiesChoiceTimeout = false
+        }
+    }
+
+    private func resolveTimeout(_ policy: SakuraScriptChoiceTimeout) -> Int? {
+        switch policy {
+        case .defaultValue: postDialogueDismissalMilliseconds
+        case .disabled: nil
+        case let .milliseconds(milliseconds): milliseconds
         }
     }
 

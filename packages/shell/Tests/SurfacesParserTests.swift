@@ -10,6 +10,7 @@ func `parses collisions and animation patterns`() throws {
     {
     element0,overlay,surface0000.png,0,0
     element1,overlay,face.png,10,20
+    animation0.name,blink
     animation0.interval,sometimes
     animation0.pattern1,overlay,1000,100,3,4
     animation0.pattern2,overlay,-1,200,0,0
@@ -28,6 +29,7 @@ func `parses collisions and animation patterns`() throws {
     #expect(collision.contains(x: 20, y: 30))
     #expect(!collision.contains(x: 9, y: 30))
     #expect(animation.interval == "sometimes")
+    #expect(animation.name == "blink")
     #expect(animation.patterns.map(\.surfaceID) == [1000, -1])
     #expect(animation.patterns.first?.x == 3)
     #expect(animation.patterns.first?.y == 4)

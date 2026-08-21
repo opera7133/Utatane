@@ -539,6 +539,7 @@ private struct UtataneRootView: View {
                 lastClickedRegion = "scope \(scope): \(region ?? "範囲外")"
             }
             surfaceWindowController.onMouseEvent = { event in
+                guard !scriptPlayer.isTimeCritical else { return }
                 if case .click = event.kind {
                     lastClickedRegion = "scope \(event.scope): \(event.region ?? "範囲外")"
                 }
@@ -579,6 +580,9 @@ private struct UtataneRootView: View {
                 } else {
                     sendEvent(.choice(id: id, arguments: arguments))
                 }
+            }
+            scriptPlayer.onChoiceTimeout = {
+                sendEvent(.shiori(id: "OnChoiceTimeout", references: [:]))
             }
             scriptPlayer.onOpen = { target in
                 guard let url = URL(string: target),

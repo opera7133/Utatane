@@ -28,6 +28,7 @@ public struct BalloonTextStyle: Sendable, Equatable {
     public var italic = false
     public var strike = false
     public var underline = false
+    public var baseline = 0
 
     public init() {}
 }
@@ -176,9 +177,15 @@ public final class BalloonWindowController {
         text: String,
         links: [BalloonTextLink],
         styles: [BalloonTextStyleRun],
+        autoscroll: Bool = true,
         scope: Int = 0
     ) {
-        presentations[scope]?.contentView.update(text: text, links: links, styles: styles)
+        presentations[scope]?.contentView.update(
+            text: text,
+            links: links,
+            styles: styles,
+            autoscroll: autoscroll
+        )
         presentations[scope]?.text = text
         presentations[scope]?.links = links
         presentations[scope]?.styles = styles
@@ -543,7 +550,8 @@ private extension BalloonContentView {
     func update(
         text: String,
         links: [BalloonTextLink],
-        styles: [BalloonTextStyleRun] = []
+        styles: [BalloonTextStyleRun] = [],
+        autoscroll: Bool = true
     ) {
         let attributedText = NSMutableAttributedString(
             string: text,
@@ -595,7 +603,7 @@ private extension BalloonContentView {
         textView.textStorage?.setAttributedString(attributedText)
         textView.refreshLinkAppearance()
         textView.layoutManager?.ensureLayout(for: textView.textContainer!)
-        if attributedText.length > 0 {
+        if autoscroll, attributedText.length > 0 {
             textView.scrollRangeToVisible(NSRange(location: attributedText.length, length: 0))
         }
     }
@@ -623,6 +631,9 @@ private extension BalloonContentView {
         }
         if style.underline {
             result[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        }
+        if style.baseline != 0 {
+            result[.baselineOffset] = CGFloat(style.baseline) * font.pointSize * 0.3
         }
         return result
     }

@@ -160,6 +160,7 @@ func `base animation pattern temporarily replaces the whole surface`() async thr
     try makePNG(width: 2, height: 2, color: .green).write(to: directory.appending(path: "surface6.png"))
     let animation = SurfaceAnimation(
         id: 0,
+        name: "blink",
         interval: "sometimes",
         patterns: [SurfaceAnimationPattern(
             order: 0,
@@ -180,11 +181,40 @@ func `base animation pattern temporarily replaces the whole surface`() async thr
     defer { controller.hideAll() }
     let initialImage = try #require(controller.renderedImage(for: 0))
 
-    controller.playAnimation(id: 0, minimumFrameDurationMilliseconds: 1000)
+    controller.setRepaintLocked(true, scope: 0)
+    controller.playAnimation(identifier: "blink", scope: 0)
     try await Task.sleep(for: .milliseconds(50))
+    #expect(controller.renderedImage(for: 0) === initialImage)
+    controller.setRepaintLocked(false, scope: 0)
 
     let image = try #require(controller.renderedImage(for: 0))
     #expect(image !== initialImage)
+
+    let startedAt = ProcessInfo.processInfo.systemUptime
+    await controller.playAnimationAndWait(identifier: "blink", scope: 0)
+    #expect(ProcessInfo.processInfo.systemUptime - startedAt >= 0.18)
+    #expect(controller.renderedImage(for: 0) === initialImage)
+
+    controller.playAnimation(id: 0, minimumFrameDurationMilliseconds: 1000)
+    try await Task.sleep(for: .milliseconds(50))
+    let waitStartedAt = ProcessInfo.processInfo.systemUptime
+    let waitTask = Task { @MainActor in
+        await controller.waitForAnimation(id: 0)
+    }
+    controller.stopAnimation(id: 0)
+    await waitTask.value
+    #expect(ProcessInfo.processInfo.systemUptime - waitStartedAt < 0.5)
+    #expect(controller.renderedImage(for: 0) === initialImage)
+
+    controller.playAnimation(id: 0)
+    try await Task.sleep(for: .milliseconds(50))
+    controller.pauseAnimation(id: 0)
+    let pausedImage = try #require(controller.renderedImage(for: 0))
+    try await Task.sleep(for: .milliseconds(250))
+    #expect(controller.renderedImage(for: 0) === pausedImage)
+    controller.resumeAnimation(id: 0)
+    await controller.waitForAnimation(id: 0)
+    #expect(controller.renderedImage(for: 0) === initialImage)
 }
 
 @Test
@@ -209,6 +239,68 @@ func `resizes an active surface using its display scale`() throws {
     controller.setDisplayScale(1.5)
 
     #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 60, height: 120))
+}
+
+@Test
+@MainActor
+func `changes a surface alpha immediately and over time`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0.png"))
+
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { controller.hideAll() }
+
+    await controller.setAlpha(0.5, scope: 0)
+    #expect(controller.alpha(for: 0) == 0.5)
+    await controller.setAlpha(0.75, scope: 0, durationMilliseconds: 20)
+    #expect(controller.alpha(for: 0) == 0.75)
+    await controller.setAlpha(nil, scope: 0)
+    #expect(controller.alpha(for: 0) == 0.75)
+}
+
+@Test
+@MainActor
+func `renders synchronized text and line breaks in both scopes`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0001.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloonk0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    let shell = ShellDefinition(directory: directory, surfaces: [:])
+    try surfaceController.show(shell: shell, scope: 0, surfaceID: 0)
+    try surfaceController.show(shell: shell, scope: 1, surfaceID: 1)
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\0前\_s同期\n\_s後\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(balloonController.textAndLinks(for: 0)?.0 == "前同期\n後")
+    #expect(balloonController.textAndLinks(for: 1)?.0 == "同期\n")
 }
 
 @Test
@@ -568,6 +660,61 @@ func `changes balloon surface before and during dialogue`() async throws {
 
 @Test
 @MainActor
+func `clears dialogue text in every active scope`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0001.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloonk0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    let shell = ShellDefinition(directory: directory, surfaces: [:])
+    try surfaceController.show(shell: shell, scope: 0, surfaceID: 0)
+    try surfaceController.show(shell: shell, scope: 1, surfaceID: 1)
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\0さくら\1うにゅう\C\0後\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(balloonController.textAndLinks(for: 0)?.0 == "後")
+    #expect(balloonController.textAndLinks(for: 1)?.0 == "")
+}
+
+@Test
+@MainActor
+func `waits until elapsed playback time and resets the precise wait clock`() async {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: SurfaceWindowController(positionStore: positionStore),
+        balloonWindowController: BalloonWindowController(positionStore: positionStore)
+    )
+    let startedAt = Date()
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\__w[80]\__w[clear]\__w[80]\e"#),
+        balloon: makeBalloon(directory: FileManager.default.temporaryDirectory),
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(Date().timeIntervalSince(startedAt) >= 0.14)
+}
+
+@Test
+@MainActor
 func `renders SakuraScript font styles by text range`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
@@ -592,7 +739,7 @@ func `renders SakuraScript font styles by text range`() async throws {
     )
 
     await player.playAndWait(
-        SakuraScript(rawValue: #"A\f[color,#ff0000]B\f[bold,1]C\f[underline,true]D\f[default]E\e"#),
+        SakuraScript(rawValue: #"A\f[color,#ff0000]B\f[bold,1]C\f[underline,true]D\f[sub,1]E\f[sup,1]F\f[sup,0]G\f[default]H\e"#),
         balloon: makeBalloon(directory: directory),
         characterDelayMilliseconds: 0
     )
@@ -602,7 +749,12 @@ func `renders SakuraScript font styles by text range`() async throws {
     let boldFont = try #require(balloonController.textAttributes(at: 2, scope: 0)?[.font] as? NSFont)
     #expect(NSFontManager.shared.traits(of: boldFont).contains(.boldFontMask))
     #expect(balloonController.textAttributes(at: 3, scope: 0)?[.underlineStyle] as? Int == 1)
-    #expect(balloonController.textAttributes(at: 4, scope: 0)?[.underlineStyle] == nil)
+    let subOffset = try #require(balloonController.textAttributes(at: 4, scope: 0)?[.baselineOffset] as? CGFloat)
+    let supOffset = try #require(balloonController.textAttributes(at: 5, scope: 0)?[.baselineOffset] as? CGFloat)
+    #expect(subOffset < 0)
+    #expect(supOffset > 0)
+    #expect(balloonController.textAttributes(at: 6, scope: 0)?[.baselineOffset] == nil)
+    #expect(balloonController.textAttributes(at: 7, scope: 0)?[.underlineStyle] == nil)
 }
 
 @Test
@@ -649,6 +801,50 @@ func `renders an extended choice and appends its automatic newline`() async thro
 
 @Test
 @MainActor
+func `runs a script choice directly without dispatching a SHIORI choice`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    var dispatchedChoice = false
+    player.onChoice = { _, _ in dispatchedChoice = true }
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\q[実行,script:\0直接実行\e]"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    let initial = try #require(balloonController.textAndLinks(for: 0))
+    #expect(initial.1.first?.id == #"script:\0直接実行\e"#)
+
+    balloonController.onLinkClick?(initial.1[0].id, initial.1[0].arguments)
+    for _ in 0 ..< 100 where balloonController.textAndLinks(for: 0)?.0 != "直接実行" {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+
+    #expect(balloonController.textAndLinks(for: 0)?.0 == "直接実行")
+    #expect(!dispatchedChoice)
+}
+
+@Test
+@MainActor
 func `expands environment names and replaces the script after raise`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
@@ -679,13 +875,15 @@ func `expands environment names and replaces the script after raise`() async thr
     }
 
     await player.playAndWait(
-        SakuraScript(rawValue: #"%selfnameから\![raise,OnRaised,arg]捨てる\e"#),
+        SakuraScript(rawValue: #"%selfnameと%meから\![raise,OnRaised,arg]捨てる\e"#),
         balloon: makeBalloon(directory: directory),
         characterDelayMilliseconds: 0
     )
 
     let content = try #require(balloonController.textAndLinks(for: 0))
-    #expect(content.0 == "さくらから応答")
+    #expect(content.0.hasPrefix("さくらと"))
+    #expect(content.0.hasSuffix("から応答"))
+    #expect(!content.0.contains("%me"))
 }
 
 @Test
@@ -773,6 +971,85 @@ func `dismisses balloons without discarding dialogue surfaces`() async throws {
     #expect(balloonController.visibleScopes.isEmpty)
     #expect(surfaceController.surfaceID(for: 0) == 1)
     #expect(surfaceController.surfaceID(for: 1) == 11)
+}
+
+@Test
+@MainActor
+func `times out choices after playback and dispatches the timeout event`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    var timeoutCount = 0
+    player.onChoiceTimeout = { timeoutCount += 1 }
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\q[選択,OnSelect]\![set,choicetimeout,20]\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    for _ in 0 ..< 100 where timeoutCount == 0 {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+
+    #expect(timeoutCount == 1)
+    #expect(balloonController.visibleScopes.isEmpty)
+}
+
+@Test
+@MainActor
+func `exposes time critical state only until playback ends`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: BalloonWindowController(positionStore: positionStore)
+    )
+
+    player.play(
+        SakuraScript(rawValue: #"\t\_w[100]\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    for _ in 0 ..< 100 where !player.isTimeCritical {
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    #expect(player.isTimeCritical)
+    for _ in 0 ..< 100 where player.isTimeCritical {
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    #expect(!player.isTimeCritical)
 }
 
 private func makePNG(
