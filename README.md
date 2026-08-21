@@ -136,3 +136,5 @@ Content/Local/
 Utatane本体は[MIT License](LICENSE)で公開しています。
 
 submoduleのYAYAはBSD 3-Clause License、SATORIはBSD 2-Clause License、KAWARIは修正BSD Licenseです。ゴースト、シェル、バルーンは各配布元のルールに従ってください。
+
+同梱ゴースト「りあ」のシェルには、ボトル猫さんの「p016（寝不足）」を使用しています。専用バルーン「Ria」は、ろすえんさんの「[something like Template](https://github.com/lost-nd-xxx/something_like_balloon)」を元に制作しています。詳しい規約とクレジットは、それぞれの同梱READMEを参照してください。
