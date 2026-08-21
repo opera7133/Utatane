@@ -80,7 +80,12 @@ OnSurfaceRestore
 
 OnSecondChange
 {
-	RiaSpoilingActive
+	if TOINT(ria_spoiling_until) > 0 && TOINT(ria_spoiling_until) <= GETSECCOUNT() {
+		ria_spoiling_until = 0
+		_talks = RiaSpoilingRecoveryTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+		return
+	}
 	if TOINT(ria_away) && GETSECCOUNT() >= TOINT(ria_away_until) {
 		ria_away = 0
 		RiaSelectOutfit
@@ -181,7 +186,6 @@ RiaSelectTalk
 RiaSpoilingActive
 {
 	if TOINT(ria_spoiling_until) <= GETSECCOUNT() {
-		ria_spoiling_until = 0
 		0
 		return
 	}
@@ -203,6 +207,16 @@ RiaSpoilingTalks : array
 	'\0\s[5]お兄のこと大好き。\w5かなり好き。ずっといてほしい。\w5……今の私はちょっとおかしいから、反論は後で。\e'
 	'\0\s[2]作業やめて。五分だけ私を一番にして。\w5一秒でも余所見したら、最初から五分やり直し。\e'
 	'\0\s[1]お兄がいないと寂しい。\w5だから今日は離れないで。\w5……こんなこと普段は絶対言わないんだからね。\e'
+}
+
+RiaSpoilingRecoveryTalks : array
+{
+	'\0\s[9]…………。\w9\s[6]お兄、今の五分間のこと全部忘れて。\w5今すぐ。お願いだから。\e'
+	'\0\s[4]……私、何か変なこと言ってた？\w5\s[9]いや、答えなくていい。聞きたくない。しばらくこっち見ないで。\e'
+	'\0\s[6]無理。今のは無理。\w5\s[9]記録してたら消して。覚えてても忘れたふりして。お兄ならできるでしょ。\e'
+	'\0\s[9]……正気に戻った。\w5五分前の私と今の私は別人だから。\w5反論は受け付けない。\e'
+	'\0\s[4]ちょっと待って。私、どこまで言った？\w5\s[6]……やっぱ言わなくていい。今日はもうその話禁止。\e'
+	'\0\s[6]忘れて。\w5忘れてって言ってるでしょ。\w5\s[9]次その話したら本気で怒るからね、お兄。\e'
 }
 
 RiaUpdateTalkInterval

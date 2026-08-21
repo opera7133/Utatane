@@ -55,7 +55,10 @@ OnMouseDoubleClick
 		}
 	}
 	elseif reference4 == 'Hand' {
-		if ria_mood_saved <= -4 {
+		if TOINT(ria_spoiling_until) > GETSECCOUNT() {
+			RiaSpoilingHandMenu
+		}
+		elseif ria_mood_saved <= -4 {
 			_talks = RiaAnnoyedHandDoubleClickTalks
 			_talks[RAND(ARRAYSIZE(_talks))]
 		}
@@ -65,7 +68,11 @@ OnMouseDoubleClick
 		}
 	}
 	elseif reference4 == 'Leg' {
-		if TOINT(ria_outfit_active) && RAND(3) == 0 {
+		if TOINT(ria_spoiling_until) > GETSECCOUNT() {
+			_talks = RiaSpoilingLegDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+		elseif TOINT(ria_outfit_active) && RAND(3) == 0 {
 			'\0\s[202]スカートの裾、気になる？\w5私は別に。お兄が触らなければ。\e'
 			return
 		}
@@ -73,8 +80,14 @@ OnMouseDoubleClick
 		_talks[RAND(ARRAYSIZE(_talks))]
 	}
 	else {
-		_talks = RiaOtherDoubleClickTalks
-		_talks[RAND(ARRAYSIZE(_talks))]
+		if TOINT(ria_spoiling_until) > GETSECCOUNT() {
+			_talks = RiaSpoilingOtherDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+		else {
+			_talks = RiaOtherDoubleClickTalks
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
 	}
 }
 
@@ -188,6 +201,11 @@ RiaHandDoubleClickTalks : array
 	'\0\s[4]手をつつくより、用件を言えばいいのに。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
 }
 
+RiaSpoilingHandMenu
+{
+	'\0\s[1]手、つないでくれるの？\w5……違うの。じゃあ、選び終わるまで握ってて。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
+}
+
 RiaAnnoyedHandDoubleClickTalks : array
 {
 	'\0\s[9]今はメニュー出す気分じゃない。\w5先に何か言うことあるんじゃないの。\e'
@@ -202,11 +220,25 @@ RiaLegDoubleClickTalks : array
 	'\0\s[200]足、しびれてないから。\w5確認いらない。\e'
 }
 
+RiaSpoilingLegDoubleClickTalks : array
+{
+	'\0\s[205]そこにいるか確認した？\w5ちゃんといるよ。お兄の隣から動かない。\e'
+	'\0\s[202]足じゃなくて手にして。\w5今は手つないでほしいから。\e'
+	'\0\s[200]お兄の方に寄るから、少し場所空けて。\w5今日は近い方がいい。\e'
+}
+
 RiaOtherDoubleClickTalks : array
 {
 	'\0\s[0]ん。\w5どうしたの。\e'
 	'\0\s[4]そこに何かあった？\w5私には見えないけど。\e'
 	'\0\s[103]呼んだ？\w5用件あるなら聞くけど。\e'
+}
+
+RiaSpoilingOtherDoubleClickTalks : array
+{
+	'\0\s[1]そこじゃなくて、もっとちゃんと私に触って。\w5今は雑に構われるの嫌。\e'
+	'\0\s[2]どこ触ってるの。\w5……まあ、お兄が構ってくれるなら何でもいいけど。\e'
+	'\0\s[5]呼んだ？\w5呼んでなくても、そっち行っていい？\e'
 }
 
 OnMouseMove
@@ -344,12 +376,19 @@ RiaHeadPetTalks : array
 RiaHairStrokeTalk
 {
 	if TOINT(ria_spoiling_until) > GETSECCOUNT() {
-		_talks = RiaSpoilingPetTalks
+		_talks = RiaSpoilingHairStrokeTalks
 		_talks[RAND(ARRAYSIZE(_talks))]
 		return
 	}
 	_talks = RiaHairStrokeTalks
 	_talks[RAND(ARRAYSIZE(_talks))]
+}
+
+RiaSpoilingHairStrokeTalks : array
+{
+	'\0\s[1]さらさらでしょ。\w5もっと触っていいよ。今日はお兄に撫でてもらいたい。\e'
+	'\0\s[5]髪、好き？\w5じゃあずっと触ってて。お兄の手なら絡まっても許す。\e'
+	'\0\s[2]毛先だけじゃなくて、ちゃんと頭から撫でて。\w5……優しくね。\e'
 }
 
 RiaHairStrokeTalks : array

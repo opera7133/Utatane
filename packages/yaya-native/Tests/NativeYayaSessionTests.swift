@@ -94,7 +94,7 @@ import UtataneShiori
             x: 100,
             y: 50
         )))
-        #expect(doubleClick?.rawValue.isEmpty == false)
+        #expect(doubleClick?.rawValue.isEmpty == false, "missing double-click response for \(region)")
     }
     var secretTalk: SakuraScript?
     for region in ["Head", "Hand", "Head", "Face"] {
