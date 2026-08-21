@@ -21,6 +21,9 @@ craftmanw,りあ
 craftmanurl,https://github.com/opera7133/Utatane
 // このバルーンの作者のURL
 
+homeurl,https://dl.wmsci.com/utatane/content/balloon-ria/
+// ネットワーク更新ファイルのURL
+
 // ------------------------------------------------
 
 use_self_alpha,1
@@ -245,4 +248,3 @@ communicatebox.y,27
 communicatebox.width,460
 communicatebox.height,26
 // 入力ボックスの入力部分の大きさ
-

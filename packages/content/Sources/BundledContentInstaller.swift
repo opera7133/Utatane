@@ -36,7 +36,10 @@ public struct BundledContentInstaller {
                 path: source.lastPathComponent,
                 directoryHint: .isDirectory
             )
-            guard !fileManager.fileExists(atPath: destination.path) else { continue }
+            if fileManager.fileExists(atPath: destination.path) {
+                try installMissingHomeURL(from: source, to: destination)
+                continue
+            }
 
             let staging = destinationRoot.appending(
                 path: ".utatane-bundled-\(UUID().uuidString)",
@@ -45,6 +48,34 @@ public struct BundledContentInstaller {
             defer { try? fileManager.removeItem(at: staging) }
             try fileManager.copyItem(at: source, to: staging)
             try fileManager.moveItem(at: staging, to: destination)
+        }
+    }
+
+    private func installMissingHomeURL(from source: URL, to destination: URL) throws {
+        for relativePath in ["descript.txt", "ghost/master/descript.txt"] {
+            let sourceDescriptor = source.appending(path: relativePath)
+            let destinationDescriptor = destination.appending(path: relativePath)
+            guard fileManager.fileExists(atPath: sourceDescriptor.path),
+                  fileManager.fileExists(atPath: destinationDescriptor.path),
+                  let sourceText = try? String(contentsOf: sourceDescriptor, encoding: .utf8),
+                  var destinationText = try? String(contentsOf: destinationDescriptor, encoding: .utf8),
+                  homeURLLine(in: destinationText) == nil,
+                  let bundledHomeURL = homeURLLine(in: sourceText)
+            else { continue }
+
+            if !destinationText.isEmpty, !destinationText.hasSuffix("\n") {
+                destinationText.append("\n")
+            }
+            destinationText.append(bundledHomeURL)
+            destinationText.append("\n")
+            try destinationText.write(to: destinationDescriptor, atomically: true, encoding: .utf8)
+        }
+    }
+
+    private func homeURLLine(in descriptor: String) -> String? {
+        descriptor.components(separatedBy: .newlines).first { line in
+            let fields = line.split(separator: ",", maxSplits: 1)
+            return fields.count == 2 && fields[0].trimmingCharacters(in: .whitespaces).lowercased() == "homeurl"
         }
     }
 }

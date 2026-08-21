@@ -158,7 +158,7 @@ import UtataneShiori
         references: [0: "ok", 1: "61", 2: "18.5", 3: "1"]
     ))
     var receivedHeadPetResponse = false
-    for x in 0 ..< 40 {
+    for x in 0 ..< 80 {
         let response = try await engine.handle(event: .mouse(GhostMouseEvent(
             kind: .move,
             scope: 0,
@@ -168,6 +168,19 @@ import UtataneShiori
         )))
         if response?.rawValue.isEmpty == false {
             receivedHeadPetResponse = true
+        }
+    }
+    var receivedHairStrokeResponse = false
+    for x in 0 ..< 80 {
+        let response = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .move,
+            scope: 0,
+            region: "Hair",
+            x: 80 + (x % 20),
+            y: 50
+        )))
+        if response?.rawValue.isEmpty == false {
+            receivedHairStrokeResponse = true
         }
     }
     #expect(["\\0\\s[0]\\e", "\\0\\s[10000]\\e"].contains(script?.rawValue))
@@ -197,6 +210,7 @@ import UtataneShiori
     #expect(weather?.rawValue.contains("雨") == true)
     #expect(weather?.rawValue.contains("18.5度") == true)
     #expect(receivedHeadPetResponse)
+    #expect(receivedHairStrokeResponse)
     let apologyAfterPet = try await engine.handle(event: .shiori(id: "OnRiaChoiceApology", references: [:]))
     #expect(apologyAfterPet?.rawValue.contains("言葉より次の行動") == false)
 }

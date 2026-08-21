@@ -34,11 +34,35 @@ gh secret set SPARKLE_PRIVATE_KEY < /安全な一時保存先/sparkle-private-ke
 https://dl.wmsci.com/utatane/appcast.xml
 ```
 
-appcastにはGitHub Release上のZIP URLと、そのZIPを検証するSparkleのEd25519署名が入っています。タグのworkflowは、GitHub Releaseの作成後にFTPSでappcastを自動配置します。
+appcastにはGitHub Release上のZIP URLと、そのZIPを検証するSparkleのEd25519署名が入っています。タグのworkflowは、GitHub Releaseの作成後にFTPSでappcastを自動配置します。同じ処理で、同梱しているりあゴーストとバルーンもネットワーク更新用に公開します。
 
-FTPS接続には次のGitHub Actions Secretsを使用します。コアサーバーのExplicit FTPS（ポート21）へ接続するため、`DEPLOY_HOST`には`ftp://`を付けずにサーバー名だけを設定します。`DEPLOY_PATH`はファイル名を含む絶対パスです。
+```text
+https://dl.wmsci.com/utatane/content/ria/updates2.dau
+https://dl.wmsci.com/utatane/content/balloon-ria/updates2.dau
+```
+
+CIは配布ツリーから`.DS_Store`とYAYAの`*_variable.cfg`を除外し、各ファイルのMD5を記録した`updates2.dau`を生成します。FTPSでは実体ファイルを先に同期し、更新途中の定義をクライアントが読まないように`updates2.dau`を最後に配置します。
+
+既にインストール済みの同梱版りあには、起動時に`homeurl`だけを補います。利用者が変更した辞書や画像などは、この移行では上書きしません。現状の更新処理はマニフェストから消えたローカルファイルを削除しないため、ファイルの削除や改名が必要な更新では別途移行処理が必要です。
+
+FTPS接続には次のGitHub Actions Secretsを使用します。コアサーバーのExplicit FTPS（ポート21）へ接続するため、`DEPLOY_HOST`には`ftp://`を付けずにサーバー名だけを設定します。`DEPLOY_PATH`は配布ルートの絶対パスです。
 
 - `DEPLOY_HOST`
 - `DEPLOY_USERNAME`
 - `DEPLOY_PASSWORD`
-- `DEPLOY_PATH`（例: `/public_html/utatane/appcast.xml`）
+- `DEPLOY_PATH`（例: `/public_html/utatane`）
+
+以前の設定が`/public_html/utatane/appcast.xml`なら、ファイル名を外した`/public_html/utatane`へ変更してください。公開先では次の構成になります。
+
+```text
+utatane/
+├── appcast.xml
+└── content/
+    ├── ria/
+    │   ├── updates2.dau
+    │   ├── ghost/
+    │   └── shell/
+    └── balloon-ria/
+        ├── updates2.dau
+        └── ...
+```

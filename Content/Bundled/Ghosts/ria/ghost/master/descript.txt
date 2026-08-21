@@ -9,3 +9,4 @@ craftman,wamo
 shiori,yaya.dll
 shiori.version,SHIORI/3.0
 balloon,ria
+homeurl,https://dl.wmsci.com/utatane/content/ria/

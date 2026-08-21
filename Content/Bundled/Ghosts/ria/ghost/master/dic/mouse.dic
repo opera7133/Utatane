@@ -212,9 +212,9 @@ OnMouseMove
 	ria_stroke_region = _region
 	ria_stroke_timer = _now
 	ria_stroke_count++
-	_threshold = 40
+	_threshold = 64
 	if _region == 'Hair' {
-		_threshold = 32
+		_threshold = 48
 	}
 
 	if ria_stroke_count >= _threshold {

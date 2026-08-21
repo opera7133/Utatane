@@ -20,7 +20,7 @@ jobs:
           submodules: recursive
 
       - name: Install build tools
-        run: brew install xcodegen zig
+        run: brew install lftp xcodegen zig
 
       - name: Prepare version
         shell: bash
@@ -144,6 +144,36 @@ jobs:
           path: dist/update-feed/appcast.xml
           retention-days: 14
 
+      - name: Prepare bundled content updates
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          mkdir -p dist/content/ria dist/content/balloon-ria
+          rsync -a \
+            --exclude '.DS_Store' \
+            --exclude '*_variable.cfg' \
+            Content/Bundled/Ghosts/ria/ \
+            dist/content/ria/
+          rsync -a \
+            --exclude '.DS_Store' \
+            --exclude '*_variable.cfg' \
+            Content/Bundled/Balloons/ria/ \
+            dist/content/balloon-ria/
+          bash Scripts/generate-content-manifest.sh \
+            dist/content/ria \
+            dist/content/ria/updates2.dau
+          bash Scripts/generate-content-manifest.sh \
+            dist/content/balloon-ria \
+            dist/content/balloon-ria/updates2.dau
+
+      - name: Upload content update artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: Utatane-bundled-content-updates
+          path: dist/content
+          retention-days: 14
+
       - name: Publish pre-release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -163,7 +193,7 @@ jobs:
               --prerelease
           fi
 
-      - name: Publish appcast to dl.wmsci.com
+      - name: Publish updates to dl.wmsci.com
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -176,14 +206,23 @@ jobs:
           test -n "$DEPLOY_PASSWORD"
           test -n "$DEPLOY_PATH"
           [[ "$DEPLOY_PATH" == /* ]]
-          curl \
-            --fail \
-            --show-error \
-            --silent \
-            --ssl-reqd \
-            --ftp-pasv \
-            --ftp-create-dirs \
-            --retry 3 \
-            --user "$DEPLOY_USERNAME:$DEPLOY_PASSWORD" \
-            --upload-file dist/update-feed/appcast.xml \
-            "ftp://$DEPLOY_HOST$DEPLOY_PATH"
+          lftp -u "$DEPLOY_USERNAME","$DEPLOY_PASSWORD" "ftp://$DEPLOY_HOST" <<LFTP
+          set cmd:fail-exit true
+          set ftp:ssl-force true
+          set ftp:ssl-protect-data true
+          set ssl:verify-certificate true
+          set net:max-retries 3
+          set net:timeout 20
+          mkdir -p "$DEPLOY_PATH/content/ria"
+          mkdir -p "$DEPLOY_PATH/content/balloon-ria"
+          mirror --reverse --ignore-time --parallel=4 \
+            --exclude-glob updates2.dau \
+            dist/content/ria "$DEPLOY_PATH/content/ria"
+          mirror --reverse --ignore-time --parallel=4 \
+            --exclude-glob updates2.dau \
+            dist/content/balloon-ria "$DEPLOY_PATH/content/balloon-ria"
+          put -O "$DEPLOY_PATH/content/ria" dist/content/ria/updates2.dau
+          put -O "$DEPLOY_PATH/content/balloon-ria" dist/content/balloon-ria/updates2.dau
+          put -O "$DEPLOY_PATH" dist/update-feed/appcast.xml
+          bye
+          LFTP
