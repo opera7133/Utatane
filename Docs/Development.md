@@ -47,6 +47,8 @@ mise run package
 
 生成物は `dist/Utatane-macOS.zip` に出力されます。
 
+タグから配布する手順とSparkle用appcastについては[リリース手順](Release.md)を参照してください。
+
 ## コード構成
 
 ```text

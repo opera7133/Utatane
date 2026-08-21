@@ -32,7 +32,7 @@ Utataneは、伺かをmacOSで動かすための本体アプリです。
 - YAYA / SATORIを使うゴーストのネイティブ実行
 - KAWARIを使うゴーストのネイティブ実行
 - SSU、`saori_cpuid`、`kenonoke`、`textcopy2`のネイティブSAORI互換
-- ゴーストの手動ネットワーク更新と、設定した日数ごとの自動更新
+- ゴーストとバルーンの手動ネットワーク更新と、設定した日数ごとの自動更新
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
 - `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
 - MateriaのFIRSTを設定したWine経由で実行（開発用）
@@ -44,7 +44,7 @@ Utataneは、伺かをmacOSで動かすための本体アプリです。
 - 一般のWindows向けSHIORI / SAORI / プラグインDLLやexeは直接実行できません
 - Windows固有のFMOには対応していません
 - SakuraScript、SERIKO、着せ替えなどは未対応の命令や定義があります
-- ネットワーク更新はゴーストが主対象です。SSPの修復モードやシェル・バルーンの同時更新には未対応です
+- ネットワーク更新はゴーストと単体バルーンが対象です。SSPの修復モードや、別配布のシェル・バルーンをまとめて更新する機能には未対応です
 - ゴーストによっては表示、文字コード、イベントの互換性に問題があります
 
 <details>

@@ -54,7 +54,8 @@ mkdir -p build/Build/Products/Release/Utatane.app/Contents/Helpers dist
 cp packages/.build/apple/Products/Release/utatane-mcp build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
 chmod 755 build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
 codesign --force --sign - --identifier dev.utatane.mcp build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
-codesign --force --sign - --identifier dev.utatane.app build/Build/Products/Release/Utatane.app
+codesign --force --deep --sign - --identifier dev.utatane.app build/Build/Products/Release/Utatane.app
+codesign --verify --deep --strict build/Build/Products/Release/Utatane.app
 ditto -c -k --keepParent build/Build/Products/Release/Utatane.app dist/Utatane-macOS.zip
 """
 

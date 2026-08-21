@@ -1,9 +1,15 @@
+import Sparkle
 import SwiftUI
 import UtataneBalloon
 import UtataneNetwork
 
 @MainActor
 final class UtataneSettingsStore: ObservableObject {
+    enum ContentUpdateKind: String {
+        case ghost
+        case balloon
+    }
+
     enum StartupBehavior: String, CaseIterable, Identifiable {
         case restore
         case choose
@@ -35,8 +41,9 @@ final class UtataneSettingsStore: ObservableObject {
     private enum Key {
         static let automaticHeadlineRefresh = "network.automaticHeadlineRefresh"
         static let headlineRefreshIntervalMinutes = "network.headlineRefreshIntervalMinutes"
-        static let automaticGhostUpdate = "network.automaticGhostUpdate"
-        static let ghostUpdateIntervalDays = "network.ghostUpdateIntervalDays"
+        // Keep the existing keys so current users retain their update settings.
+        static let automaticContentUpdate = "network.automaticGhostUpdate"
+        static let contentUpdateIntervalDays = "network.ghostUpdateIntervalDays"
         static let startupBehavior = "general.startupBehavior"
         static let appearance = "general.appearance"
         static let defaultBalloonDirectoryName = "general.defaultBalloonDirectoryName"
@@ -62,12 +69,12 @@ final class UtataneSettingsStore: ObservableObject {
         didSet { defaults.set(headlineRefreshIntervalMinutes, forKey: Key.headlineRefreshIntervalMinutes) }
     }
 
-    @Published var automaticGhostUpdate: Bool {
-        didSet { defaults.set(automaticGhostUpdate, forKey: Key.automaticGhostUpdate) }
+    @Published var automaticContentUpdate: Bool {
+        didSet { defaults.set(automaticContentUpdate, forKey: Key.automaticContentUpdate) }
     }
 
-    @Published var ghostUpdateIntervalDays: Int {
-        didSet { defaults.set(ghostUpdateIntervalDays, forKey: Key.ghostUpdateIntervalDays) }
+    @Published var contentUpdateIntervalDays: Int {
+        didSet { defaults.set(contentUpdateIntervalDays, forKey: Key.contentUpdateIntervalDays) }
     }
 
     @Published var startupBehavior: StartupBehavior {
@@ -154,9 +161,9 @@ final class UtataneSettingsStore: ObservableObject {
             defaults.integer(forKey: Key.headlineRefreshIntervalMinutes),
             fallback: 60
         )
-        automaticGhostUpdate = defaults.bool(forKey: Key.automaticGhostUpdate)
-        ghostUpdateIntervalDays = Self.positiveValue(
-            defaults.integer(forKey: Key.ghostUpdateIntervalDays),
+        automaticContentUpdate = defaults.bool(forKey: Key.automaticContentUpdate)
+        contentUpdateIntervalDays = Self.positiveValue(
+            defaults.integer(forKey: Key.contentUpdateIntervalDays),
             fallback: 7
         )
         startupBehavior = StartupBehavior(
@@ -231,15 +238,39 @@ final class UtataneSettingsStore: ObservableObject {
         isLoadingGhostSettings = false
     }
 
-    func shouldAutomaticallyUpdateGhost(directoryName: String, now: Date = Date()) -> Bool {
-        guard automaticGhostUpdate else { return false }
-        let lastUpdate = defaults.object(forKey: ghostKey("network.lastUpdate", directoryName)) as? Date
-        guard let lastUpdate else { return true }
-        return now.timeIntervalSince(lastUpdate) >= Double(ghostUpdateIntervalDays) * 86400
+    func shouldAutomaticallyUpdateContent(
+        kind: ContentUpdateKind,
+        directoryName: String,
+        now: Date = Date()
+    ) -> Bool {
+        guard automaticContentUpdate else { return false }
+        let lastAttempt = defaults.object(
+            forKey: contentUpdateKey("network.lastAttempt", kind: kind, directoryName: directoryName)
+        ) as? Date ?? legacyGhostUpdateDate(kind: kind, directoryName: directoryName)
+        guard let lastAttempt else { return true }
+        return now.timeIntervalSince(lastAttempt) >= Double(contentUpdateIntervalDays) * 86400
     }
 
-    func recordGhostUpdate(directoryName: String, at date: Date = Date()) {
-        defaults.set(date, forKey: ghostKey("network.lastUpdate", directoryName))
+    func recordContentUpdateAttempt(
+        kind: ContentUpdateKind,
+        directoryName: String,
+        at date: Date = Date()
+    ) {
+        defaults.set(
+            date,
+            forKey: contentUpdateKey("network.lastAttempt", kind: kind, directoryName: directoryName)
+        )
+    }
+
+    func recordContentUpdateSuccess(
+        kind: ContentUpdateKind,
+        directoryName: String,
+        at date: Date = Date()
+    ) {
+        defaults.set(
+            date,
+            forKey: contentUpdateKey("network.lastSuccess", kind: kind, directoryName: directoryName)
+        )
     }
 
     private func saveGhostValue(_ value: Any, kind: String) {
@@ -262,6 +293,19 @@ final class UtataneSettingsStore: ObservableObject {
         "\(kind).\(directoryName)"
     }
 
+    private func contentUpdateKey(
+        _ prefix: String,
+        kind: ContentUpdateKind,
+        directoryName: String
+    ) -> String {
+        "\(prefix).\(kind.rawValue).\(directoryName)"
+    }
+
+    private func legacyGhostUpdateDate(kind: ContentUpdateKind, directoryName: String) -> Date? {
+        guard kind == .ghost else { return nil }
+        return defaults.object(forKey: ghostKey("network.lastUpdate", directoryName)) as? Date
+    }
+
     private func ghostRandomTalkKey(_ directoryName: String) -> String {
         "talk.randomTalkIntervalMinutes.\(directoryName)"
     }
@@ -271,6 +315,7 @@ struct UtataneSettingsView: View {
     @ObservedObject var settings: UtataneSettingsStore
     let headlinesDirectory: URL
     let balloonsDirectory: URL
+    let appUpdater: SPUUpdater
     @State private var headlines: [InstalledHeadline] = []
     @State private var balloons: [BalloonDefinition] = []
     @State private var loadError: String?
@@ -408,17 +453,19 @@ struct UtataneSettingsView: View {
                     .disabled(!settings.automaticHeadlineRefresh)
                 }
 
-                Section("ゴーストのネットワーク更新") {
-                    Toggle("起動後に自動更新を確認", isOn: $settings.automaticGhostUpdate)
-                    Picker("更新間隔", selection: $settings.ghostUpdateIntervalDays) {
+                AppUpdateSettingsView(updater: appUpdater)
+
+                Section("ゴースト / バルーンのネットワーク更新") {
+                    Toggle("起動後に自動更新を確認", isOn: $settings.automaticContentUpdate)
+                    Picker("更新間隔", selection: $settings.contentUpdateIntervalDays) {
                         Text("毎日").tag(1)
                         Text("3日ごと").tag(3)
                         Text("7日ごと").tag(7)
                         Text("14日ごと").tag(14)
                         Text("30日ごと").tag(30)
                     }
-                    .disabled(!settings.automaticGhostUpdate)
-                    Text("homeurlが設定されたゴーストだけが対象。手動更新は右クリックメニューから実行できる。")
+                    .disabled(!settings.automaticContentUpdate)
+                    Text("homeurlが設定されたゴーストとバルーンが対象。手動更新は右クリックメニューから実行できる。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

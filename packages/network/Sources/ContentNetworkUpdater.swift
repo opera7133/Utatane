@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-public struct GhostUpdateEntry: Sendable, Equatable {
+public struct ContentUpdateEntry: Sendable, Equatable {
     public let path: String
     public let md5: String
 
@@ -11,7 +11,7 @@ public struct GhostUpdateEntry: Sendable, Equatable {
     }
 }
 
-public struct GhostUpdateResult: Sendable, Equatable {
+public struct ContentUpdateResult: Sendable, Equatable {
     public let changedFiles: [String]
 
     public init(changedFiles: [String]) {
@@ -19,7 +19,7 @@ public struct GhostUpdateResult: Sendable, Equatable {
     }
 }
 
-public enum GhostNetworkUpdateError: LocalizedError, Equatable, Sendable {
+public enum ContentNetworkUpdateError: LocalizedError, Equatable, Sendable {
     case invalidHomeURL
     case missingManifest
     case invalidManifestLine(String)
@@ -41,7 +41,7 @@ public enum GhostNetworkUpdateError: LocalizedError, Equatable, Sendable {
     }
 }
 
-public struct GhostNetworkUpdater: Sendable {
+public struct ContentNetworkUpdater: Sendable {
     public typealias Fetch = @Sendable (URL) async throws -> Data
     private let maximumFileCount: Int
     private let maximumTotalBytes: Int
@@ -57,13 +57,13 @@ public struct GhostNetworkUpdater: Sendable {
         self.fetch = fetch
     }
 
-    public func update(rootDirectory: URL, homeURL: URL) async throws -> GhostUpdateResult {
+    public func update(rootDirectory: URL, homeURL: URL) async throws -> ContentUpdateResult {
         guard let scheme = homeURL.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
-            throw GhostNetworkUpdateError.invalidHomeURL
+            throw ContentNetworkUpdateError.invalidHomeURL
         }
         let (manifestURL, manifestData) = try await fetchManifest(homeURL: homeURL)
         let entries = try Self.parseManifest(manifestData)
-        guard entries.count <= maximumFileCount else { throw GhostNetworkUpdateError.tooManyFiles }
+        guard entries.count <= maximumFileCount else { throw ContentNetworkUpdateError.tooManyFiles }
 
         let fileManager = FileManager.default
         let root = rootDirectory.standardizedFileURL
@@ -76,7 +76,7 @@ public struct GhostNetworkUpdater: Sendable {
             try? fileManager.removeItem(at: backup)
         }
 
-        var changed: [(entry: GhostUpdateEntry, local: URL, staged: URL)] = []
+        var changed: [(entry: ContentUpdateEntry, local: URL, staged: URL)] = []
         var totalBytes = 0
         for entry in entries {
             let local = try Self.confinedURL(path: entry.path, root: root)
@@ -86,9 +86,9 @@ public struct GhostNetworkUpdater: Sendable {
             let remote = manifestURL.deletingLastPathComponent().appending(path: entry.path)
             let data = try await fetch(remote)
             totalBytes += data.count
-            guard totalBytes <= maximumTotalBytes else { throw GhostNetworkUpdateError.updateTooLarge }
+            guard totalBytes <= maximumTotalBytes else { throw ContentNetworkUpdateError.updateTooLarge }
             guard Self.md5(data) == entry.md5 else {
-                throw GhostNetworkUpdateError.checksumMismatch(entry.path)
+                throw ContentNetworkUpdateError.checksumMismatch(entry.path)
             }
             let staged = try Self.confinedURL(path: entry.path, root: staging)
             try fileManager.createDirectory(at: staged.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -121,7 +121,7 @@ public struct GhostNetworkUpdater: Sendable {
             }
             throw error
         }
-        return GhostUpdateResult(changedFiles: changed.map(\.entry.path))
+        return ContentUpdateResult(changedFiles: changed.map(\.entry.path))
     }
 
     public static func homeURL(in rootDirectory: URL) -> URL? {
@@ -143,9 +143,9 @@ public struct GhostNetworkUpdater: Sendable {
         return nil
     }
 
-    public static func parseManifest(_ data: Data) throws -> [GhostUpdateEntry] {
+    public static func parseManifest(_ data: Data) throws -> [ContentUpdateEntry] {
         guard let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .shiftJIS) else {
-            throw GhostNetworkUpdateError.invalidManifestLine("encoding")
+            throw ContentNetworkUpdateError.invalidManifestLine("encoding")
         }
         return try text.components(separatedBy: .newlines).compactMap { raw in
             let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -160,13 +160,13 @@ public struct GhostNetworkUpdater: Sendable {
                 path = fields[0]
                 hash = fields[1]
             } else {
-                throw GhostNetworkUpdateError.invalidManifestLine(line)
+                throw ContentNetworkUpdateError.invalidManifestLine(line)
             }
             _ = try confinedURL(path: path, root: URL(filePath: "/manifest-root", directoryHint: .isDirectory))
             guard hash.range(of: "^[0-9a-fA-F]{32}$", options: .regularExpression) != nil else {
-                throw GhostNetworkUpdateError.invalidManifestLine(line)
+                throw ContentNetworkUpdateError.invalidManifestLine(line)
             }
-            return GhostUpdateEntry(path: path, md5: hash)
+            return ContentUpdateEntry(path: path, md5: hash)
         }
     }
 
@@ -177,20 +177,20 @@ public struct GhostNetworkUpdater: Sendable {
                 return (url, data)
             }
         }
-        throw GhostNetworkUpdateError.missingManifest
+        throw ContentNetworkUpdateError.missingManifest
     }
 
     private static func confinedURL(path: String, root: URL) throws -> URL {
         guard !path.isEmpty, !path.hasPrefix("/"), !path.contains("\\"), !path.contains("\0") else {
-            throw GhostNetworkUpdateError.unsafePath(path)
+            throw ContentNetworkUpdateError.unsafePath(path)
         }
         let components = path.split(separator: "/", omittingEmptySubsequences: false)
         guard !components.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) else {
-            throw GhostNetworkUpdateError.unsafePath(path)
+            throw ContentNetworkUpdateError.unsafePath(path)
         }
         let result = components.reduce(root) { $0.appending(path: String($1)) }.standardizedFileURL
         guard result.path.hasPrefix(root.standardizedFileURL.path + "/") else {
-            throw GhostNetworkUpdateError.unsafePath(path)
+            throw ContentNetworkUpdateError.unsafePath(path)
         }
         return result
     }

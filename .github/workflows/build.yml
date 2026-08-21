@@ -22,6 +22,16 @@ jobs:
       - name: Install build tools
         run: brew install xcodegen zig
 
+      - name: Prepare version
+        shell: bash
+        run: |
+          version="0.1.0"
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "UTATANE_VERSION=$version" >> "$GITHUB_ENV"
+          echo "UTATANE_BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
+
       - name: Test
         run: swift test --package-path packages
 
@@ -51,9 +61,12 @@ jobs:
             -configuration Release \
             -destination 'generic/platform=macOS' \
             -derivedDataPath build \
+            -clonedSourcePackagesDirPath build/SourcePackages \
             ARCHS='arm64 x86_64' \
             ONLY_ACTIVE_ARCH=NO \
             CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION="$UTATANE_VERSION" \
+            CURRENT_PROJECT_VERSION="$UTATANE_BUILD_NUMBER" \
             build
 
       - name: Build universal MCP server
@@ -88,6 +101,12 @@ jobs:
       - name: Package
         run: |
           mkdir -p dist
+          codesign --force --sign - --identifier dev.utatane.mcp \
+            build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
+          codesign --force --deep --sign - --identifier dev.utatane.app \
+            build/Build/Products/Release/Utatane.app
+          codesign --verify --deep --strict \
+            build/Build/Products/Release/Utatane.app
           ditto -c -k --keepParent \
             build/Build/Products/Release/Utatane.app \
             dist/Utatane-macOS.zip
@@ -99,17 +118,72 @@ jobs:
           path: dist/Utatane-macOS.zip
           retention-days: 14
 
+      - name: Generate signed appcast
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          test -n "$SPARKLE_PRIVATE_KEY"
+          generator=build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast
+          test -x "$generator"
+          mkdir -p dist/update-feed
+          cp dist/Utatane-macOS.zip dist/update-feed/Utatane-macOS.zip
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | "$generator" \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/opera7133/Utatane/releases/download/$GITHUB_REF_NAME/" \
+            --link "https://dl.wmsci.com/utatane.html" \
+            --maximum-deltas 0 \
+            -o dist/update-feed/appcast.xml \
+            dist/update-feed
+
+      - name: Upload update feed artifact
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: Utatane-update-feed
+          path: dist/update-feed/appcast.xml
+          retention-days: 14
+
       - name: Publish pre-release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" dist/Utatane-macOS.zip --clobber
+            gh release upload "$GITHUB_REF_NAME" \
+              dist/Utatane-macOS.zip \
+              dist/update-feed/appcast.xml \
+              --clobber
           else
             gh release create "$GITHUB_REF_NAME" \
               dist/Utatane-macOS.zip \
+              dist/update-feed/appcast.xml \
               --title "$GITHUB_REF_NAME" \
               --generate-notes \
               --prerelease
           fi
+
+      - name: Publish appcast to dl.wmsci.com
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USERNAME"
+          test -n "$DEPLOY_PASSWORD"
+          test -n "$DEPLOY_PATH"
+          [[ "$DEPLOY_PATH" == /* ]]
+          curl \
+            --fail \
+            --show-error \
+            --silent \
+            --ssl-reqd \
+            --ftp-pasv \
+            --ftp-create-dirs \
+            --retry 3 \
+            --user "$DEPLOY_USERNAME:$DEPLOY_PASSWORD" \
+            --upload-file dist/update-feed/appcast.xml \
+            "ftp://$DEPLOY_HOST$DEPLOY_PATH"

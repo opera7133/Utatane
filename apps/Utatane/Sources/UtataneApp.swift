@@ -1,4 +1,5 @@
 import AppKit
+import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import UtataneBalloon
@@ -31,9 +32,11 @@ struct UtataneApp: App {
     private let sstpServer: SSTPServer
     private let statusWindowController: StatusWindowController
     private let alertController: ApplicationAlertController
+    private let updaterController: SPUStandardUpdaterController
     @StateObject private var networkSettings: UtataneSettingsStore
 
     init() {
+        Self.configureApplicationIcon()
         try? ContentRoot.prepareDirectories()
         try? ContentRoot.installBundledContent()
         let positionStore = WindowPositionStore()
@@ -51,11 +54,26 @@ struct UtataneApp: App {
         sstpServer = SSTPServer()
         statusWindowController = StatusWindowController()
         alertController = ApplicationAlertController()
+        updaterController = SPUStandardUpdaterController(
+            startingUpdater: true,
+            updaterDelegate: nil,
+            userDriverDelegate: nil
+        )
         _networkSettings = StateObject(wrappedValue: UtataneSettingsStore())
         scriptPlayer = SakuraScriptPlayer(
             surfaceWindowController: surfaceWindowController,
             balloonWindowController: balloonWindowController
         )
+    }
+
+    private static func configureApplicationIcon() {
+        guard
+            let iconURL = Bundle.main.url(forResource: "AppIcon", withExtension: "icns"),
+            let icon = NSImage(contentsOf: iconURL)
+        else {
+            return
+        }
+        NSApplication.shared.applicationIconImage = icon
     }
 
     var body: some Scene {
@@ -79,7 +97,8 @@ struct UtataneApp: App {
             UtataneSettingsView(
                 settings: networkSettings,
                 headlinesDirectory: ContentRoot.headlinesDirectory,
-                balloonsDirectory: ContentRoot.balloonsDirectory
+                balloonsDirectory: ContentRoot.balloonsDirectory,
+                appUpdater: updaterController.updater
             )
         }
         .commands {
@@ -87,6 +106,9 @@ struct UtataneApp: App {
                 Button("Utataneについて") {
                     showAboutPanel()
                 }
+            }
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesView(updater: updaterController.updater)
             }
         }
     }
@@ -145,6 +167,7 @@ private struct UtataneRootView: View {
     @State private var isEnteringRSSURL = false
     @State private var rssURLText = ""
     @State private var installedHeadlines: [InstalledHeadline] = []
+    @State private var isUpdatingContent = false
     @State private var debugWindow: NSWindow?
     @State private var showsOnboarding = false
     @State private var isImportingSSPDirectory = false
@@ -262,16 +285,27 @@ private struct UtataneRootView: View {
             else { return }
             await transition(to: ghost)
         }
-        .task(id: "\(selectedGhostID?.path ?? "")-\(networkSettings.automaticGhostUpdate)-\(networkSettings.ghostUpdateIntervalDays)") {
-            guard networkSettings.automaticGhostUpdate else { return }
+        .task(id: "\(selectedGhostID?.path ?? "")-\(balloon?.directory.path ?? "")-\(networkSettings.automaticContentUpdate)-\(networkSettings.contentUpdateIntervalDays)") {
+            guard networkSettings.automaticContentUpdate else { return }
             try? await Task.sleep(for: .seconds(5))
-            guard !Task.isCancelled,
-                  let ghost = currentGhost,
-                  networkSettings.shouldAutomaticallyUpdateGhost(
-                      directoryName: ghost.rootDirectory.lastPathComponent
-                  )
-            else { return }
-            updateCurrentGhost(isAutomatic: true)
+            guard !Task.isCancelled else { return }
+            if let ghost = currentGhost,
+               networkSettings.shouldAutomaticallyUpdateContent(
+                   kind: .ghost,
+                   directoryName: ghost.rootDirectory.lastPathComponent
+               )
+            {
+                await updateCurrentGhost(isAutomatic: true)
+            }
+            guard !Task.isCancelled else { return }
+            if let balloon,
+               networkSettings.shouldAutomaticallyUpdateContent(
+                   kind: .balloon,
+                   directoryName: balloon.directory.lastPathComponent
+               )
+            {
+                await updateCurrentBalloon(isAutomatic: true)
+            }
         }
         .task(id: "\(networkSettings.automaticHeadlineRefresh)-\(networkSettings.headlineRefreshIntervalMinutes)") {
             guard networkSettings.automaticHeadlineRefresh else { return }
@@ -810,10 +844,20 @@ private struct UtataneRootView: View {
                         .action(title: "Finderで表示", handler: showContentFolder)
                     ]
                 ),
-                .action(
+                .submenu(
                     title: "ネットワーク更新",
-                    isEnabled: currentGhost != nil && session != nil,
-                    handler: { updateCurrentGhost() }
+                    items: [
+                        .action(
+                            title: "ゴーストを更新",
+                            isEnabled: currentGhost != nil && session != nil && !isUpdatingContent,
+                            handler: { Task { await updateCurrentGhost() } }
+                        ),
+                        .action(
+                            title: "バルーンを更新",
+                            isEnabled: balloon != nil && !isUpdatingContent,
+                            handler: { Task { await updateCurrentBalloon() } }
+                        )
+                    ]
                 ),
                 .submenu(
                     title: "RSS / ヘッドライン",
@@ -1059,51 +1103,125 @@ private struct UtataneRootView: View {
         installNars(from: [url])
     }
 
-    private func updateCurrentGhost(isAutomatic: Bool = false) {
-        guard let ghost = currentGhost, let updateSession = session, let updateBalloon = balloon else { return }
-        Task {
-            do {
-                _ = await playInstallationEvent(
-                    .shiori(id: "OnUpdateBegin", references: [:]),
-                    session: updateSession,
-                    balloon: updateBalloon
-                )
-                let homeURL: URL
-                if let configured = GhostNetworkUpdater.homeURL(in: ghost.rootDirectory) {
-                    homeURL = configured
-                } else if let value = try await updateSession.handle(event: .shiori(id: "On_homeurl", references: [:])),
-                          let configured = URL(string: value.rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
-                {
-                    homeURL = configured
-                } else {
-                    throw GhostNetworkUpdateError.invalidHomeURL
-                }
-                let result = try await GhostNetworkUpdater().update(
-                    rootDirectory: ghost.rootDirectory,
-                    homeURL: homeURL
-                )
-                networkSettings.recordGhostUpdate(
-                    directoryName: ghost.rootDirectory.lastPathComponent
-                )
-                _ = await playInstallationEvent(
-                    .shiori(id: "OnUpdateComplete", references: [
-                        0: result.changedFiles.isEmpty ? "none" : "changed",
-                        1: String(result.changedFiles.count)
-                    ]),
-                    session: updateSession,
-                    balloon: updateBalloon
-                )
-            } catch {
-                let handled = await playInstallationEvent(
-                    .shiori(id: "OnUpdateFailure", references: [0: "download"]),
-                    session: updateSession,
-                    balloon: updateBalloon
-                )
-                if !handled, !isAutomatic {
-                    previewError = error.localizedDescription
-                }
+    private func updateCurrentGhost(isAutomatic: Bool = false) async {
+        guard !isUpdatingContent,
+              let ghost = currentGhost,
+              let updateSession = session,
+              let updateBalloon = balloon
+        else { return }
+        isUpdatingContent = true
+        defer { isUpdatingContent = false }
+
+        let directoryName = ghost.rootDirectory.lastPathComponent
+        networkSettings.recordContentUpdateAttempt(kind: .ghost, directoryName: directoryName)
+        let statusToken = isAutomatic ? nil : statusWindowController.show("「\(ghost.name)」を更新中…")
+        defer {
+            if let statusToken {
+                statusWindowController.hide(token: statusToken)
             }
         }
+
+        do {
+            _ = await playInstallationEvent(
+                .shiori(id: "OnUpdateBegin", references: [:]),
+                session: updateSession,
+                balloon: updateBalloon
+            )
+            let homeURL: URL
+            if let configured = ContentNetworkUpdater.homeURL(in: ghost.rootDirectory) {
+                homeURL = configured
+            } else if let value = try await updateSession.handle(event: .shiori(id: "On_homeurl", references: [:])),
+                      let configured = URL(string: value.rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+            {
+                homeURL = configured
+            } else {
+                throw ContentNetworkUpdateError.invalidHomeURL
+            }
+            let result = try await ContentNetworkUpdater().update(
+                rootDirectory: ghost.rootDirectory,
+                homeURL: homeURL
+            )
+            networkSettings.recordContentUpdateSuccess(kind: .ghost, directoryName: directoryName)
+            _ = await playInstallationEvent(
+                .shiori(id: "OnUpdateComplete", references: [
+                    0: result.changedFiles.isEmpty ? "none" : "changed",
+                    1: String(result.changedFiles.count)
+                ]),
+                session: updateSession,
+                balloon: updateBalloon
+            )
+        } catch {
+            let handled = await playInstallationEvent(
+                .shiori(id: "OnUpdateFailure", references: [0: "download"]),
+                session: updateSession,
+                balloon: updateBalloon
+            )
+            if !handled, !isAutomatic {
+                previewError = error.localizedDescription
+            }
+        }
+    }
+
+    private func updateCurrentBalloon(isAutomatic: Bool = false) async {
+        guard !isUpdatingContent, let updateBalloon = balloon else { return }
+        isUpdatingContent = true
+        defer { isUpdatingContent = false }
+
+        let directoryName = updateBalloon.directory.lastPathComponent
+        networkSettings.recordContentUpdateAttempt(kind: .balloon, directoryName: directoryName)
+        let statusToken = isAutomatic
+            ? nil
+            : statusWindowController.show("バルーン「\(updateBalloon.name)」を更新中…")
+        defer {
+            if let statusToken {
+                statusWindowController.hide(token: statusToken)
+            }
+        }
+
+        do {
+            guard let homeURL = ContentNetworkUpdater.homeURL(in: updateBalloon.directory) else {
+                throw ContentNetworkUpdateError.invalidHomeURL
+            }
+            let result = try await ContentNetworkUpdater().update(
+                rootDirectory: updateBalloon.directory,
+                homeURL: homeURL
+            )
+            try reloadInstalledBalloons(preserving: updateBalloon.directory)
+            networkSettings.recordContentUpdateSuccess(kind: .balloon, directoryName: directoryName)
+            if !isAutomatic {
+                if let statusToken {
+                    statusWindowController.hide(token: statusToken)
+                }
+                let completionToken = statusWindowController.show(
+                    result.changedFiles.isEmpty
+                        ? "バルーンは最新です"
+                        : "バルーンを更新しました（\(result.changedFiles.count)ファイル）"
+                )
+                try? await Task.sleep(for: .seconds(2))
+                statusWindowController.hide(token: completionToken)
+            }
+        } catch {
+            if !isAutomatic {
+                previewError = error.localizedDescription
+            }
+        }
+    }
+
+    private func reloadInstalledBalloons(preserving selectedDirectory: URL) throws {
+        installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonReadDirectories)
+        guard let refreshedSelectedBalloon = installedBalloons.first(where: {
+            $0.directory.standardizedFileURL == selectedDirectory.standardizedFileURL
+        }) else {
+            throw AppError.missingResource("更新後のバルーン")
+        }
+        balloon = refreshedSelectedBalloon
+        for runtime in calledGhosts.values where !runtime.player.isDialogueActive {
+            guard let refreshed = installedBalloons.first(where: {
+                $0.directory.standardizedFileURL == runtime.balloon.directory.standardizedFileURL
+            }) else { continue }
+            runtime.select(balloon: refreshed)
+        }
+        configureContextMenu()
     }
 
     private func fetchRSS() {
