@@ -87,7 +87,7 @@ SSPから持ってくる場合は、SSP本体のZIPを展開して、そのフ�
 ```
 
 <details>
-<summary>元祖さくらとうにゅをどうしても動かす</summary>
+<summary>元祖さくらとうにゅうをどうしても動かす</summary>
 
 これは一般のWindowsゴースト互換機能ではなく、Materia付属のFIRST専用です。32-bit Windowsアプリを実行できるWineと、正規に入手したMateria一式が要ります。
 

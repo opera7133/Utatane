@@ -21,26 +21,26 @@ import Testing
 }
 
 @Test func `maps Materia kero local surfaces to shell surface IDs`() {
-    let script = #"\0\s0さくら\1\s0うにゅ\s[3]\0\s4さくら"#
+    let script = #"\0\s0さくら\1\s0うにゅう\s[3]\0\s4さくら"#
     #expect(
         MateriaFirstPersonalityEngine.normalizeLegacyKeroSurfaces(in: script)
-            == #"\0\s0さくら\1\s[10]うにゅ\s[13]\0\s4さくら"#
+            == #"\0\s0さくら\1\s[10]うにゅう\s[13]\0\s4さくら"#
     )
 }
 
 @Test func `uses clicked kero scope when a Materia response omits its speaker`() {
     #expect(
         MateriaFirstPersonalityEngine.normalizeLegacyKeroSurfaces(
-            in: #"\s3うにゅ"#,
+            in: #"\s3うにゅう"#,
             initialScope: 1
-        ) == #"\s[13]うにゅ"#
+        ) == #"\s[13]うにゅう"#
     )
 }
 
 @Test func `tracks explicit Materia p scope before mapping a surface`() {
     #expect(
-        MateriaFirstPersonalityEngine.normalizeLegacyKeroSurfaces(in: #"\p[1]\s3うにゅ"#)
-            == #"\p[1]\s[13]うにゅ"#
+        MateriaFirstPersonalityEngine.normalizeLegacyKeroSurfaces(in: #"\p[1]\s3うにゅう"#)
+            == #"\p[1]\s[13]うにゅう"#
     )
 }
 
