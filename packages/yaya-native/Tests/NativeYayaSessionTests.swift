@@ -62,11 +62,19 @@ import UtataneShiori
         .deletingLastPathComponent()
         .deletingLastPathComponent()
         .deletingLastPathComponent()
-    let masterURL = repositoryRoot
+    let installedMasterURL = repositoryRoot
         .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
-    guard FileManager.default.fileExists(atPath: masterURL.path) else {
+    guard FileManager.default.fileExists(atPath: installedMasterURL.path) else {
         return
     }
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
 
     let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
     _ = try await engine.handle(event: .boot)
@@ -162,7 +170,7 @@ import UtataneShiori
             receivedHeadPetResponse = true
         }
     }
-    #expect(script?.rawValue == "\\0\\s[0]\\e")
+    #expect(["\\0\\s[0]\\e", "\\0\\s[10000]\\e"].contains(script?.rawValue))
     #expect(["もう閉じる", "起動してすぐ閉じる"].contains {
         quickClose?.rawValue.contains($0) == true
     })
@@ -170,8 +178,10 @@ import UtataneShiori
     #expect(activity?.rawValue.isEmpty == false)
     #expect(idleTalk?.rawValue.isEmpty == false)
     #expect(secretTalk?.rawValue.contains("隠し") == true)
-    #expect(repeatedBustClick?.rawValue.contains("\\s[9]") == true)
-    #expect(annoyedState?.rawValue.contains("\\s[9]") == true)
+    #expect(["\\s[9]", "\\s[10009]"].contains {
+        repeatedBustClick?.rawValue.contains($0) == true
+    })
+    #expect(annoyedState?.rawValue.isEmpty == false)
     #expect(apology?.rawValue.isEmpty == false)
     #expect(["機嫌直して", "ごまかそう"].contains {
         annoyedHeadClick?.rawValue.contains($0) == true

@@ -598,7 +598,12 @@ private struct UtataneRootView: View {
             directoryHint: .isDirectory
         )
         if NativeYayaPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
-            return try NativeYayaPersonalityEngine(masterDirectoryURL: masterDirectory)
+            return try NativeYayaPersonalityEngine(
+                masterDirectoryURL: ContentRoot.writableYayaMasterDirectory(
+                    for: ghost,
+                    source: masterDirectory
+                )
+            )
         }
         if NativeSatoriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try NativeSatoriPersonalityEngine(masterDirectoryURL: masterDirectory)
@@ -1770,6 +1775,55 @@ enum ContentRoot {
             .appending(path: "Utatane/State", directoryHint: .isDirectory)
             .appending(path: ghost.rootDirectory.lastPathComponent, directoryHint: .isDirectory)
             .appending(path: "variables.json", directoryHint: .notDirectory)
+    }
+
+    static func writableYayaMasterDirectory(for ghost: InstalledGhost, source: URL) throws -> URL {
+        #if DEBUG
+            let bundledGhosts = repositoryRoot
+                .appending(path: "Content/Bundled/Ghosts", directoryHint: .isDirectory)
+                .standardizedFileURL
+            let sourcePath = source.standardizedFileURL.path
+            guard sourcePath.hasPrefix(bundledGhosts.path + "/") else { return source }
+
+            let destination = contentDirectory
+                .appending(path: "Debug/YAYA", directoryHint: .isDirectory)
+                .appending(path: ghost.rootDirectory.lastPathComponent, directoryHint: .isDirectory)
+                .appending(path: "master", directoryHint: .isDirectory)
+            try synchronizeYayaMaster(from: source, to: destination)
+            return destination
+        #else
+            return source
+        #endif
+    }
+
+    private static func synchronizeYayaMaster(from source: URL, to destination: URL) throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+        guard let enumerator = fileManager.enumerator(
+            at: source,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return }
+
+        for case let sourceItem as URL in enumerator {
+            let relativePath = String(sourceItem.path.dropFirst(source.path.count + 1))
+            let destinationItem = destination.appending(path: relativePath)
+            let isDirectory = try sourceItem.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+            if isDirectory {
+                try fileManager.createDirectory(at: destinationItem, withIntermediateDirectories: true)
+            } else if !sourceItem.lastPathComponent.hasSuffix("_variable.cfg") {
+                try fileManager.createDirectory(
+                    at: destinationItem.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                if fileManager.fileExists(atPath: destinationItem.path) {
+                    try fileManager.removeItem(at: destinationItem)
+                }
+                try fileManager.copyItem(at: sourceItem, to: destinationItem)
+            } else if !fileManager.fileExists(atPath: destinationItem.path) {
+                try fileManager.copyItem(at: sourceItem, to: destinationItem)
+            }
+        }
     }
 
     static func dialogueURL(for ghost: InstalledGhost) -> URL? {
