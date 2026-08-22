@@ -273,21 +273,22 @@ public final class SakuraScriptPlayer {
 
         func deletionRange(scope: Int, unit: SakuraScriptClearUnit, count: Int, start: Int?) -> NSRange {
             let source = textByScope[scope, default: ""] as NSString
-            guard count > 0, source.length > 0 else { return NSRange(location: 0, length: 0) }
+            let sourceLength = source.length
+            guard count > 0, sourceLength > 0 else { return NSRange(location: 0, length: 0) }
             switch unit {
             case .character:
-                let location = start.map { min(max(0, $0), source.length) }
-                    ?? max(0, source.length - count)
-                return NSRange(location: location, length: min(count, source.length - location))
+                let location = start.map { min(max(0, $0), sourceLength) }
+                    ?? max(0, sourceLength - count)
+                return NSRange(location: location, length: min(count, sourceLength - location))
             case .line:
                 var starts = [0]
-                for index in 0 ..< source.length where source.character(at: index) == 10 {
+                for index in 0 ..< sourceLength where source.character(at: index) == 10 {
                     starts.append(index + 1)
                 }
                 let firstLine = min(max(0, start ?? max(0, starts.count - count)), starts.count - 1)
                 let endLine = min(starts.count, firstLine + count)
                 let location = starts[firstLine]
-                let end = endLine < starts.count ? starts[endLine] : source.length
+                let end = endLine < starts.count ? starts[endLine] : sourceLength
                 return NSRange(location: location, length: end - location)
             }
         }
