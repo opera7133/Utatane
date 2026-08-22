@@ -25,6 +25,10 @@ public final class WindowPositionStore {
         )
     }
 
+    func remove(for kind: FloatingWindowKind, scope: Int) {
+        defaults.removeObject(forKey: key(for: kind, scope: scope))
+    }
+
     func restoredOrigin(
         for kind: FloatingWindowKind,
         scope: Int,
@@ -123,29 +127,43 @@ final class FloatingContentWindow: NSWindow, NSWindowDelegate {
 }
 
 struct FloatingWindowPlacementPolicy: Equatable {
-    var locksToDesktopBottom: Bool
+    enum Edge: Equatable {
+        case top
+        case bottom
+        case left
+        case right
+    }
+
+    var edge: Edge?
     var keepsOnScreen: Bool
 
-    static let free = Self(locksToDesktopBottom: false, keepsOnScreen: false)
-    static let desktopBottom = Self(locksToDesktopBottom: true, keepsOnScreen: true)
+    static let free = Self(edge: nil, keepsOnScreen: false)
+    static let desktopBottom = Self(edge: .bottom, keepsOnScreen: true)
 
     func constrainedOrigin(for frame: NSRect, visibleFrames: [NSRect]) -> NSPoint? {
-        guard locksToDesktopBottom || keepsOnScreen, !visibleFrames.isEmpty else { return nil }
+        guard edge != nil || keepsOnScreen, !visibleFrames.isEmpty else { return nil }
         let screen = visibleFrames.max { lhs, rhs in
             lhs.intersection(frame).area < rhs.intersection(frame).area
         } ?? visibleFrames[0]
-        return NSPoint(
-            x: keepsOnScreen ? min(
-                max(frame.origin.x, screen.minX),
-                max(screen.minX, screen.maxX - frame.width)
-            ) : frame.origin.x,
-            y: locksToDesktopBottom
-                ? screen.minY
-                : min(
-                    max(frame.origin.y, screen.minY),
-                    max(screen.minY, screen.maxY - frame.height)
-                )
+        let constrainedX = min(
+            max(frame.origin.x, screen.minX),
+            max(screen.minX, screen.maxX - frame.width)
         )
+        let constrainedY = min(
+            max(frame.origin.y, screen.minY),
+            max(screen.minY, screen.maxY - frame.height)
+        )
+        let x: CGFloat = switch edge {
+        case .left: screen.minX
+        case .right: screen.maxX - frame.width
+        default: keepsOnScreen ? constrainedX : frame.origin.x
+        }
+        let y: CGFloat = switch edge {
+        case .top: screen.maxY - frame.height
+        case .bottom: screen.minY
+        default: keepsOnScreen ? constrainedY : frame.origin.y
+        }
+        return NSPoint(x: x, y: y)
     }
 }
 

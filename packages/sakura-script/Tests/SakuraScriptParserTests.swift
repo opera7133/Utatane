@@ -10,7 +10,7 @@ func `parses initial playback command set`() {
     #expect(tokens == [
         .scope(0),
         .text("こんにちは"),
-        .lineBreak,
+        .lineBreak(scale: nil),
         .wait(milliseconds: 200),
         .surface(10),
         .scope(1),
@@ -172,7 +172,7 @@ func `parses choice timeout controls`() {
 @Test
 func `parses balloon playback controls`() {
     #expect(SakuraScriptParser().parse(
-        #"\![set,balloontimeout,1200]\![set,balloontimeout,0]\![set,balloontimeout]\![set,balloonwait,1.5]\![set,balloonwait,75%]\![set,balloonwait,20ms]\![set,balloonwait]\![set,autoscroll,disable]\![set,autoscroll,enable]"#
+        #"\![set,balloontimeout,1200]\![set,balloontimeout,0]\![set,balloontimeout]\![set,balloonwait,1.5]\![set,balloonwait,75%]\![set,balloonwait,20ms]\![set,balloonwait]\![set,balloonmarker,更新中]\![set,balloonmarker]\![set,autoscroll,disable]\![set,autoscroll,enable]"#
     ) == [
         .balloonTimeout(.milliseconds(1200)),
         .balloonTimeout(.disabled),
@@ -181,6 +181,8 @@ func `parses balloon playback controls`() {
         .balloonWait(.multiplier(0.75)),
         .balloonWait(.milliseconds(20)),
         .balloonWait(.defaultValue),
+        .balloonMarker("更新中"),
+        .balloonMarker(""),
         .autoscroll(false),
         .autoscroll(true)
     ])
@@ -194,6 +196,89 @@ func `parses surface alpha transitions`() {
         .surfaceAlpha(percent: 50, durationMilliseconds: 0, waitsForCompletion: false),
         .surfaceAlpha(percent: 100, durationMilliseconds: 300, waitsForCompletion: true),
         .surfaceAlpha(percent: nil, durationMilliseconds: 250, waitsForCompletion: false)
+    ])
+}
+
+@Test
+func `parses surface scaling transitions`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![set,scaling,50]\![set,scaling,-100,75,--time=300,--wait]\![set,scaling,125,80,250]"#
+    ) == [
+        .surfaceScaling(
+            horizontalPercent: 50,
+            verticalPercent: 50,
+            durationMilliseconds: 0,
+            waitsForCompletion: false
+        ),
+        .surfaceScaling(
+            horizontalPercent: -100,
+            verticalPercent: 75,
+            durationMilliseconds: 300,
+            waitsForCompletion: true
+        ),
+        .surfaceScaling(
+            horizontalPercent: 125,
+            verticalPercent: 80,
+            durationMilliseconds: 250,
+            waitsForCompletion: false
+        )
+    ])
+}
+
+@Test
+func `parses desktop alignment aliases and directions`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![set,alignmentondesktop,bottom]\![set,alignmenttodesktop,top]\![set,alignmenttodesktop,left]\![set,alignmenttodesktop,right]\![set,alignmenttodesktop,free]\![set,alignmenttodesktop,default]"#
+    ) == [
+        .desktopAlignment(.bottom),
+        .desktopAlignment(.top),
+        .desktopAlignment(.left),
+        .desktopAlignment(.right),
+        .desktopAlignment(.free),
+        .desktopAlignment(.defaultValue)
+    ])
+}
+
+@Test
+func `parses window position reset commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,resetwindowpos]\![execute,resetballoonpos]"#
+    ) == [
+        .resetWindowPositions,
+        .resetBalloonPositions
+    ])
+}
+
+@Test
+func `parses automatic line break and partial clear commands`() {
+    #expect(SakuraScriptParser().parse(#"\n[half]\n[150]\n[75%]"#) == [
+        .lineBreak(scale: 0.5),
+        .lineBreak(scale: 1.5),
+        .lineBreak(scale: 0.75)
+    ])
+    #expect(SakuraScriptParser().parse(
+        #"\_n折返しなし\_n\c[char,3]\c[char,2,4]\c[line,1]\c[line,2,3]"#
+    ) == [
+        .automaticLineBreak,
+        .text("折返しなし"),
+        .automaticLineBreak,
+        .partialClear(unit: .character, count: 3, start: nil),
+        .partialClear(unit: .character, count: 2, start: 4),
+        .partialClear(unit: .line, count: 1, start: nil),
+        .partialClear(unit: .line, count: 2, start: 3)
+    ])
+}
+
+@Test
+func `parses balloon repaint and movement locks`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![lock,balloonrepaint]\![lock,balloonrepaint,manual]\![unlock,balloonrepaint]\![lock,balloonmove]\![unlock,balloonmove]"#
+    ) == [
+        .balloonRepaintLock(locked: true, manual: false),
+        .balloonRepaintLock(locked: true, manual: true),
+        .balloonRepaintLock(locked: false, manual: false),
+        .balloonMoveLock(true),
+        .balloonMoveLock(false)
     ])
 }
 

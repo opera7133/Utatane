@@ -15,6 +15,15 @@ public struct DressupInfo: Sendable, Equatable {
     public let options: ShellBindOptions
 }
 
+public enum SurfaceDesktopAlignment: Sendable, Equatable {
+    case top
+    case bottom
+    case left
+    case right
+    case free
+    case defaultValue
+}
+
 @MainActor
 public final class SurfaceWindowController {
     private var characters: [Int: CharacterSurfaceController] = [:]
@@ -63,6 +72,10 @@ public final class SurfaceWindowController {
                 keepsOnScreen: keepsOnScreen
             )
         }
+    }
+
+    public func setDesktopAlignment(_ alignment: SurfaceDesktopAlignment, scope: Int) {
+        characters[scope]?.setDesktopAlignment(alignment)
     }
 
     public var windowFrame: NSRect? {
@@ -205,6 +218,25 @@ public final class SurfaceWindowController {
         characters[scope].map { Double($0.surfaceAlpha) }
     }
 
+    public func setRuntimeScale(
+        horizontal: Double,
+        vertical: Double,
+        scope: Int,
+        durationMilliseconds: Int = 0
+    ) async {
+        await characters[scope]?.setRuntimeScale(
+            horizontal: CGFloat(horizontal),
+            vertical: CGFloat(vertical),
+            durationMilliseconds: durationMilliseconds
+        )
+    }
+
+    func runtimeScale(for scope: Int) -> NSSize? {
+        characters[scope].map {
+            NSSize(width: $0.runtimeScaleX, height: $0.runtimeScaleY)
+        }
+    }
+
     public func unlockRepaint() {
         for character in characters.values {
             character.setRepaintLocked(false)
@@ -239,6 +271,14 @@ public final class SurfaceWindowController {
     public func resetToDefaultSurfaces() {
         for (scope, surfaceID) in defaultSurfaceIDs {
             try? characters[scope]?.changeSurface(to: surfaceID)
+        }
+    }
+
+    public func resetWindowPositions() {
+        for scope in characters.keys.sorted() {
+            positionStore.remove(for: .surface, scope: scope)
+            placeInitialWindow(for: scope)
+            positionStore.remove(for: .surface, scope: scope)
         }
     }
 
@@ -394,8 +434,11 @@ private final class CharacterSurfaceController {
     private var isAnimating = false
     private var displayScale: CGFloat
     private(set) var surfaceAlpha: CGFloat = 1
+    private(set) var runtimeScaleX: CGFloat = 1
+    private(set) var runtimeScaleY: CGFloat = 1
     private var locksToDesktopBottom: Bool
     private var keepsOnScreen: Bool
+    private var desktopAlignment: SurfaceDesktopAlignment = .defaultValue
 
     var onMouseClick: (@MainActor (String?) -> Void)?
     var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
@@ -661,20 +704,77 @@ private final class CharacterSurfaceController {
         scheduleAutomaticAnimations()
     }
 
+    func setRuntimeScale(
+        horizontal: CGFloat,
+        vertical: CGFloat,
+        durationMilliseconds: Int
+    ) async {
+        runtimeScaleX = horizontal
+        runtimeScaleY = vertical
+        guard let shell, let baseSurfaceID, let window,
+              let rendered = try? render(surfaceID: baseSurfaceID, shell: shell)
+        else { return }
+        let oldContentSize = window.contentView?.frame.size
+            ?? window.contentRect(forFrameRect: window.frame).size
+        rendered.view.frame = NSRect(origin: .zero, size: oldContentSize)
+        rendered.view.autoresizingMask = [.width, .height]
+        window.contentView = rendered.view
+        imageView = rendered.view
+        baseImage = rendered.image
+        let targetSize = displaySize(for: rendered.image)
+        guard durationMilliseconds > 0 else {
+            window.setContentSize(targetSize)
+            scheduleAutomaticAnimations()
+            return
+        }
+        await withCheckedContinuation { continuation in
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Double(durationMilliseconds) / 1000
+                context.timingFunction = CAMediaTimingFunction(name: .linear)
+                window.animator().setContentSize(targetSize)
+            } completionHandler: {
+                continuation.resume()
+            }
+        }
+        scheduleAutomaticAnimations()
+    }
+
     func setPlacement(locksToDesktopBottom: Bool, keepsOnScreen: Bool) {
         self.locksToDesktopBottom = locksToDesktopBottom
         self.keepsOnScreen = keepsOnScreen
         imageView?.locksVerticalMovement = locksToDesktopBottom
         (window as? FloatingContentWindow)?.setPlacementPolicy(.init(
-            locksToDesktopBottom: locksToDesktopBottom,
+            edge: effectiveDesktopEdge,
             keepsOnScreen: keepsOnScreen
         ))
     }
 
+    func setDesktopAlignment(_ alignment: SurfaceDesktopAlignment) {
+        desktopAlignment = alignment
+        imageView?.locksHorizontalMovement = [.left, .right].contains(alignment)
+        imageView?.locksVerticalMovement = [.top, .bottom].contains(alignment)
+            || (alignment == .defaultValue && locksToDesktopBottom)
+        (window as? FloatingContentWindow)?.setPlacementPolicy(.init(
+            edge: effectiveDesktopEdge,
+            keepsOnScreen: keepsOnScreen
+        ))
+    }
+
+    private var effectiveDesktopEdge: FloatingWindowPlacementPolicy.Edge? {
+        switch desktopAlignment {
+        case .top: .top
+        case .bottom: .bottom
+        case .left: .left
+        case .right: .right
+        case .free: nil
+        case .defaultValue: locksToDesktopBottom ? .bottom : nil
+        }
+    }
+
     private func displaySize(for image: NSImage) -> NSSize {
         NSSize(
-            width: image.size.width * displayScale,
-            height: image.size.height * displayScale
+            width: max(1, image.size.width * displayScale * abs(runtimeScaleX)),
+            height: max(1, image.size.height * displayScale * abs(runtimeScaleY))
         )
     }
 
@@ -713,16 +813,18 @@ private final class CharacterSurfaceController {
             shell: shell,
             excludedAnimationIDs: excludedAnimationIDs
         )
-        let scaledSize = NSSize(
-            width: boundImage.size.width * displayScale,
-            height: boundImage.size.height * displayScale
-        )
+        let scaledSize = displaySize(for: boundImage)
         let imageView = SurfaceImageView(frame: NSRect(origin: .zero, size: scaledSize))
         imageView.image = boundImage
         imageView.imageAlignment = .alignCenter
         imageView.imageScaling = .scaleAxesIndependently
-        imageView.coordinateScale = displayScale
-        imageView.locksVerticalMovement = locksToDesktopBottom
+        imageView.coordinateScaleX = max(.leastNonzeroMagnitude, displayScale * abs(runtimeScaleX))
+        imageView.coordinateScaleY = max(.leastNonzeroMagnitude, displayScale * abs(runtimeScaleY))
+        imageView.flipsHorizontally = runtimeScaleX < 0
+        imageView.flipsVertically = runtimeScaleY < 0
+        imageView.locksHorizontalMovement = [.left, .right].contains(desktopAlignment)
+        imageView.locksVerticalMovement = [.top, .bottom].contains(desktopAlignment)
+            || (desktopAlignment == .defaultValue && locksToDesktopBottom)
         imageView.collisions = definition?.collisions ?? []
         imageView.onMouseClick = { [weak self] region in
             self?.onMouseClick?(region)
@@ -835,7 +937,7 @@ private final class CharacterSurfaceController {
         let window = FloatingContentWindow(
             title: "Ghost Surface \(scope)",
             placementPolicy: .init(
-                locksToDesktopBottom: locksToDesktopBottom,
+                edge: effectiveDesktopEdge,
                 keepsOnScreen: keepsOnScreen
             )
         ) { [positionStore, scope] origin in
@@ -998,12 +1100,16 @@ func surfaceCompositingOperation(for method: String) -> NSCompositingOperation? 
 
 private final class SurfaceImageView: NSImageView {
     var collisions: [SurfaceCollision] = []
-    var coordinateScale: CGFloat = 1
+    var coordinateScaleX: CGFloat = 1
+    var coordinateScaleY: CGFloat = 1
+    var flipsHorizontally = false
+    var flipsVertically = false
     var onMouseClick: ((String?) -> Void)?
     var onMouseEvent: ((GhostMouseEvent.Kind, String?, Int, Int, Int) -> Void)?
     var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
     var onNarDrop: (([URL]) -> Void)?
     var locksVerticalMovement = true
+    var locksHorizontalMovement = false
     private var hoveredRegion: String?
     private var lastStrokePoint: NSPoint?
     private var lastStrokeRegion: String?
@@ -1013,7 +1119,18 @@ private final class SurfaceImageView: NSImageView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        wantsLayer = true
         registerForDraggedTypes([.fileURL])
+    }
+
+    override func layout() {
+        super.layout()
+        layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        layer?.position = CGPoint(x: bounds.midX, y: bounds.midY)
+        layer?.setAffineTransform(CGAffineTransform(
+            scaleX: flipsHorizontally ? -1 : 1,
+            y: flipsVertically ? -1 : 1
+        ))
     }
 
     @available(*, unavailable)
@@ -1048,7 +1165,7 @@ private final class SurfaceImageView: NSImageView {
         let deltaY = currentMouseLocation.y - startMouseLocation.y
         didDrag = didDrag || hypot(deltaX, deltaY) >= 2
         window.setFrameOrigin(NSPoint(
-            x: startWindowOrigin.x + deltaX,
+            x: locksHorizontalMovement ? startWindowOrigin.x : startWindowOrigin.x + deltaX,
             y: locksVerticalMovement ? startWindowOrigin.y : startWindowOrigin.y + deltaY
         ))
     }
@@ -1167,8 +1284,10 @@ private final class SurfaceImageView: NSImageView {
 
     private func hitTest(_ event: NSEvent) -> (region: String?, x: Int, y: Int) {
         let point = convert(event.locationInWindow, from: nil)
-        let surfaceX = Int(point.x / coordinateScale)
-        let surfaceY = Int((bounds.height - point.y) / coordinateScale)
+        let logicalX = flipsHorizontally ? bounds.width - point.x : point.x
+        let logicalY = flipsVertically ? point.y : bounds.height - point.y
+        let surfaceX = Int(logicalX / coordinateScaleX)
+        let surfaceY = Int(logicalY / coordinateScaleY)
         let region = collisions.first { $0.contains(x: surfaceX, y: surfaceY) }?.name
         return (region, surfaceX, surfaceY)
     }

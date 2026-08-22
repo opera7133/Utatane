@@ -46,8 +46,8 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\__w[animation,ID]` | ✅ | 現scopeで同じID・名前のアニメーションTaskが完了・停止するまで待機 |
 | `\![bind,...]`, `\![bind-noevent,...]` | 🟡 | カテゴリ・パーツ指定、明示ON/OFFとトグル、scope、`mustselect`・`multiple`・`addid`の描画、実行時再描画に対応。`bind`は`OnDressupChanged`と`OnNotifyDressupInfo`を通知。着せ替えメニューUIと選択状態の永続化は未実装 |
 | `\![lock/unlock,repaint]` | ✅ | アニメーション進行を止めず描画だけ保留し、unlock時に最新フレームを反映。通常lockはスクリプト終端で自動解除、manualは維持 |
-| `\![set,alignmentondesktop/... ]` | ❌ | デスクトップ配置 |
-| `\![set,scaling,...]` | ❌ | 実行中の倍率変更。設定画面の表示倍率とは別 |
+| `\![set,alignmentondesktop/alignmenttodesktop,...]` | ✅ | scope別の`top`・`bottom`・`left`・`right`・`free`・`default`に対応。端への吸着と吸着軸のドラッグ固定をゴースト終了まで保持 |
+| `\![set,scaling,...]` | ✅ | ユーザー設定倍率を基準にscope別の単一・縦横倍率、負数による軸反転、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
 | `\![set,alpha,...]` | ✅ | scope別の0〜100指定、上限クランプ、負値で値を維持した再描画、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
 | `\![effect...]`, `\![filter...]` | ➖ | SSPプラグイン依存。実装方針が必要 |
 | `\4`, `\5` | ❌ | キャラクター位置操作 |
@@ -55,7 +55,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\![set/reset,position...]` | ❌ | 未実装 |
 | `\![set/reset,zorder...]` | ❌ | 未実装 |
 | `\![set/reset,sticky-window...]` | ❌ | 未実装 |
-| `\![execute,resetwindowpos]` | ❌ | 設定UIからの位置リセットとは未接続 |
+| `\![execute,resetwindowpos]` | ✅ | 保存済みの全scopeのサーフェス・バルーン位置を消去し、表示中ウィンドウを初期配置へ戻す |
 
 ### バルーンとテキスト
 
@@ -64,34 +64,34 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\bID`, `\b[ID]` | 🟡 | scope別のバルーンsurface変更に対応。括弧なしは1桁、複数桁は括弧形式 |
 | `\_b[ファイル,...]` 全形式 | ❌ | 座標表示、inline、opaque、各オプションとも未実装 |
 | `\n` | ✅ | 改行 |
-| `\n[half]`, `\n[百分率]` | 🟡 | 構文は受理するが通常改行と同じ |
-| `\_n` | ❌ | 自動改行 |
+| `\n[half]`, `\n[百分率]` | ✅ | `half`と数値・`%`付き百分率を改行文字の行高へ反映 |
+| `\_n` | ✅ | 次の`\_n`まで現scopeの自動折返しを停止し、スクリプト終了時に復帰 |
 | `\c` | ✅ | 現scopeの本文とリンクを消去 |
-| `\c[char/line,...]` | ❌ | 部分消去 |
+| `\c[char/line,...]` | ✅ | カーソル直前または0始まり開始位置から文字数・行数を消去。後続のリンク・文字装飾範囲も補正 |
 | `\_l[x,y]` | ❌ | 描画位置変更 |
 | `\C` | ✅ | 全scopeの本文・リンクを消去し、Playerテストで確認 |
 | `\![set,autoscroll,...]` | ✅ | `disable` / `enable` をスコープ単位で反映 |
-| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | ❌ | 未実装 |
+| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | `balloonmarker`をscope別のバルーン下部追加情報として表示し、スクリプト終了時に解除。offset・align・numは未実装 |
 | `\![set,balloontimeout,...]` | ✅ | 表示完了後のバルーン消去時間を指定。0以下で無効、選択肢タイムアウトとの競合は早い方を採用 |
 | `\![set,balloonwait,...]` | ✅ | 倍率・百分率・`ms` 絶対値に対応し、スクリプト終了時に復帰 |
 | `\![set,serikotalk,...]` | ❌ | 発話中の SERIKO `talk` アニメーション駆動が未実装 |
 | `\![*]` | ✅ | scope別の `marker*.png` をインライン表示 |
 | online / nouserbreak mode | ❌ | `enter` / `leave` とも未実装 |
-| balloon repaint / move lock | ❌ | `lock` / `unlock` とも未実装 |
+| balloon repaint / move lock | ✅ | `balloonrepaint`は描画を保留してunlock時に最新内容を反映。通常lockは終端解除、manualは維持。`balloonmove`は明示解除までドラッグを抑止 |
 | `\_!`, `\_?` | ✅ | 区間内のタグ・環境変数を解釈せずそのまま表示。閉じタグがない場合は末尾までを対象にしParserテストで確認 |
 | `\__v` | ❌ | 音声合成・バックログ制御は未実装 |
-| `\![execute,resetballoonpos]` | ❌ | 未実装 |
+| `\![execute,resetballoonpos]` | ✅ | 保存済みの全scopeのバルーン位置を消去し、表示中バルーンをサーフェス近傍へ戻す |
 
 ### 文字装飾
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\f[align/valign,...]` | ❌ | 未実装 |
-| `\f[name,フォント名]` | 🟡 | インストール済みフォント名と `default` に対応。代替フォントファイル指定は未対応 |
-| `\f[height,数値]` | 🟡 | 絶対値、相対値、百分率、`default` に対応。CSS風サイズ名は未対応 |
+| `\f[align/valign,...]` | ✅ | `align`のleft・center・rightは同じ行の既存文字にも反映し、明示改行でleftへ復帰。`valign`のtop・center・bottomは改行をまたいでscope別に維持 |
+| `\f[name,フォント名]` | ✅ | 複数候補を優先順に選択し、ゴーストmaster／バルーン内のフォントファイルをプロセス登録。`default`への復帰にも対応 |
+| `\f[height,数値]` | ✅ | 絶対値、相対値、百分率、`default`、CSS風の7段階サイズ名と`smaller`・`larger`に対応 |
 | `\f[color,色指定]` | 🟡 | RGB、百分率RGB、`#RRGGBB`、主要な色名、`default` に対応。全色名は未照合 |
-| shadow color/style、outline | ❌ | 未実装 |
-| anchor font color | ❌ | バルーン `descript.txt` の色は使うが実行中変更なし |
+| shadow color/style、outline | ✅ | `shadowcolor`の色指定・`none`・`default`、`shadowstyle`の`offset`・`outline`、`outline`の真偽・`default`を文字範囲別に描画 |
+| anchor font color | ✅ | `\f[anchor.font.color,...]`のRGB・百分率・16進・主要色名・defaultを以後のアンカー範囲へ反映 |
 | bold / italic / strike / underline | ✅ | 有効・無効・defaultと、文字範囲別の描画に対応 |
 | sub / sup | ✅ | true・false・1・0・default・disableに対応し、文字範囲別の描画をPlayerテストで確認 |
 | `\f[default]`, `\f[disable]` | ✅ | 現scopeで以後に表示する文字属性を初期化 |

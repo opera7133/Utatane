@@ -111,8 +111,15 @@ public struct SakuraScriptParser: Sendable {
                     tokens.append(.unknown("\\b"))
                 }
             case "n":
-                _ = bracketArgument(in: characters, index: &index)
-                tokens.append(.lineBreak)
+                let argument = bracketArgument(in: characters, index: &index)?.lowercased()
+                let scale: Double? = if argument == "half" {
+                    0.5
+                } else if let argument {
+                    Double(argument.hasSuffix("%") ? String(argument.dropLast()) : argument).map { $0 / 100 }
+                } else {
+                    nil
+                }
+                tokens.append(.lineBreak(scale: scale))
             case "w":
                 if index < characters.count,
                    let value = characters[index].wholeNumberValue,
@@ -261,6 +268,9 @@ public struct SakuraScriptParser: Sendable {
                 } else if index < characters.count, characters[index] == "+" {
                     index += 1
                     tokens.append(.contentAction(.nextGhost))
+                } else if index < characters.count, characters[index] == "n" {
+                    index += 1
+                    tokens.append(.automaticLineBreak)
                 } else if index < characters.count, characters[index] == "w" {
                     index += 1
                     if let argument = bracketArgument(in: characters, index: &index),
@@ -299,7 +309,23 @@ public struct SakuraScriptParser: Sendable {
                     tokens.append(.unknown(readUnknown(command: command, in: characters, index: &index)))
                 }
             case "c":
-                tokens.append(.clear)
+                if let argument = bracketArgument(in: characters, index: &index) {
+                    let arguments = splitArguments(argument)
+                    if arguments.count >= 2,
+                       let unit = SakuraScriptClearUnit(rawValue: arguments[0].lowercased()),
+                       let count = Int(arguments[1])
+                    {
+                        tokens.append(.partialClear(
+                            unit: unit,
+                            count: max(0, count),
+                            start: arguments.count >= 3 ? Int(arguments[2]) : nil
+                        ))
+                    } else {
+                        tokens.append(.unknown("\\c[\(argument)]"))
+                    }
+                } else {
+                    tokens.append(.clear)
+                }
             case "C":
                 tokens.append(.clearAll)
             case "&":
@@ -371,6 +397,11 @@ public struct SakuraScriptParser: Sendable {
                         } else {
                             tokens.append(.unknown("\\![\(argument)]"))
                         }
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "balloonmarker"
+                    {
+                        tokens.append(.balloonMarker(arguments.count >= 3 ? arguments[2] : ""))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "set",
                               arguments[1].lowercased() == "autoscroll",
@@ -391,6 +422,32 @@ public struct SakuraScriptParser: Sendable {
                             durationMilliseconds: max(0, namedDuration ?? positionalDuration ?? 0),
                             waitsForCompletion: options.contains { $0.lowercased() == "--wait" }
                         ))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "scaling",
+                              let horizontalPercent = Int(arguments[2])
+                    {
+                        let hasSeparateAxes = arguments.count >= 4 && Int(arguments[3]) != nil
+                        let verticalPercent = hasSeparateAxes ? Int(arguments[3])! : horizontalPercent
+                        let options = Array(arguments.dropFirst(hasSeparateAxes ? 4 : 3))
+                        let namedDuration = options.first { $0.lowercased().hasPrefix("--time=") }
+                            .flatMap { Int($0.dropFirst("--time=".count)) }
+                        let positionalDuration = options.first.flatMap(Int.init)
+                        tokens.append(.surfaceScaling(
+                            horizontalPercent: horizontalPercent,
+                            verticalPercent: verticalPercent,
+                            durationMilliseconds: max(0, namedDuration ?? positionalDuration ?? 0),
+                            waitsForCompletion: options.contains { $0.lowercased() == "--wait" }
+                        ))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "set",
+                              ["alignmentondesktop", "alignmenttodesktop"]
+                              .contains(arguments[1].lowercased()),
+                              let alignment = SakuraScriptDesktopAlignment(
+                                  rawValue: arguments[2].lowercased()
+                              )
+                    {
+                        tokens.append(.desktopAlignment(alignment))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "open",
                               arguments[1].lowercased() == "browser"
@@ -461,6 +518,19 @@ public struct SakuraScriptParser: Sendable {
                             locked: arguments[0].lowercased() == "lock",
                             manual: arguments.dropFirst(2).contains { $0.lowercased() == "manual" }
                         ))
+                    } else if arguments.count >= 2,
+                              ["lock", "unlock"].contains(arguments[0].lowercased()),
+                              arguments[1].lowercased() == "balloonrepaint"
+                    {
+                        tokens.append(.balloonRepaintLock(
+                            locked: arguments[0].lowercased() == "lock",
+                            manual: arguments.dropFirst(2).contains { $0.lowercased() == "manual" }
+                        ))
+                    } else if arguments.count >= 2,
+                              ["lock", "unlock"].contains(arguments[0].lowercased()),
+                              arguments[1].lowercased() == "balloonmove"
+                    {
+                        tokens.append(.balloonMoveLock(arguments[0].lowercased() == "lock"))
                     } else if arguments.count >= 3,
                               ["bind", "bind-noevent"].contains(arguments[0].lowercased())
                     {
@@ -534,6 +604,16 @@ public struct SakuraScriptParser: Sendable {
                               arguments[1].lowercased() == "headline"
                     {
                         tokens.append(.contentAction(.headline(arguments[2])))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "resetwindowpos"
+                    {
+                        tokens.append(.resetWindowPositions)
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "resetballoonpos"
+                    {
+                        tokens.append(.resetBalloonPositions)
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "open",
                               arguments[1].lowercased() == "inputbox"

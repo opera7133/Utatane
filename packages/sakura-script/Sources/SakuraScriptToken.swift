@@ -10,10 +10,23 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case waitForAnimation(String)
     case offsetAnimation(identifier: String, x: Int, y: Int)
     case repaintLock(locked: Bool, manual: Bool)
+    case balloonRepaintLock(locked: Bool, manual: Bool)
+    case balloonMoveLock(Bool)
     case surfaceAlpha(percent: Int?, durationMilliseconds: Int, waitsForCompletion: Bool)
+    case surfaceScaling(
+        horizontalPercent: Int,
+        verticalPercent: Int,
+        durationMilliseconds: Int,
+        waitsForCompletion: Bool
+    )
+    case desktopAlignment(SakuraScriptDesktopAlignment)
+    case resetWindowPositions
+    case resetBalloonPositions
     case balloonSurface(Int)
     case bind(category: String, part: String, enabled: Bool?, notifiesEvents: Bool)
-    case lineBreak
+    case lineBreak(scale: Double?)
+    case automaticLineBreak
+    case partialClear(unit: SakuraScriptClearUnit, count: Int, start: Int?)
     case wait(milliseconds: Int)
     case waitUntil(milliseconds: Int?)
     case waitForClick(clearOnResume: Bool)
@@ -24,6 +37,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case choiceTimeout(SakuraScriptChoiceTimeout)
     case balloonTimeout(SakuraScriptChoiceTimeout)
     case balloonWait(SakuraScriptBalloonWait)
+    case balloonMarker(String)
     case autoscroll(Bool)
     case anchorStart(id: String, arguments: [String])
     case anchorEnd
@@ -59,6 +73,20 @@ public enum SakuraScriptBalloonWait: Sendable, Equatable {
     case defaultValue
     case multiplier(Double)
     case milliseconds(Int)
+}
+
+public enum SakuraScriptDesktopAlignment: String, Sendable, Equatable {
+    case top
+    case bottom
+    case left
+    case right
+    case free
+    case defaultValue = "default"
+}
+
+public enum SakuraScriptClearUnit: String, Sendable, Equatable {
+    case character = "char"
+    case line
 }
 
 public enum SakuraScriptContentAction: Sendable, Equatable {

@@ -270,6 +270,38 @@ func `changes a surface alpha immediately and over time`() async throws {
 
 @Test
 @MainActor
+func `scales and flips a surface independently on each axis`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0.png"))
+
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { controller.hideAll() }
+
+    await controller.setRuntimeScale(horizontal: -0.5, vertical: 1.5, scope: 0)
+    #expect(controller.runtimeScale(for: 0) == NSSize(width: -0.5, height: 1.5))
+    #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 20, height: 120))
+
+    await controller.setRuntimeScale(
+        horizontal: 1,
+        vertical: 1,
+        scope: 0,
+        durationMilliseconds: 20
+    )
+    #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 40, height: 80))
+}
+
+@Test
+@MainActor
 func `renders synchronized text and line breaks in both scopes`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
@@ -507,6 +539,23 @@ func `surface placement stays on the desktop bottom and inside its screen`() {
 }
 
 @Test
+@MainActor
+func `removes a saved floating window position`() {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    positionStore.save(NSPoint(x: 100, y: 200), for: .surface, scope: 3)
+
+    positionStore.remove(for: .surface, scope: 3)
+
+    #expect(positionStore.restoredOrigin(
+        for: .surface,
+        scope: 3,
+        windowSize: NSSize(width: 50, height: 50),
+        screens: []
+    ) == nil)
+}
+
+@Test
 func `surface placement chooses the screen with the largest overlap`() {
     let left = NSRect(x: 0, y: 0, width: 500, height: 500)
     let right = NSRect(x: 500, y: 30, width: 700, height: 600)
@@ -518,6 +567,21 @@ func `surface placement chooses the screen with the largest overlap`() {
     )
 
     #expect(origin == NSPoint(x: 600, y: 30))
+}
+
+@Test
+func `surface placement supports every desktop edge`() {
+    let screen = NSRect(x: 100, y: 40, width: 800, height: 600)
+    let frame = NSRect(x: 300, y: 200, width: 200, height: 300)
+
+    #expect(FloatingWindowPlacementPolicy(edge: .top, keepsOnScreen: true)
+        .constrainedOrigin(for: frame, visibleFrames: [screen]) == NSPoint(x: 300, y: 340))
+    #expect(FloatingWindowPlacementPolicy(edge: .bottom, keepsOnScreen: true)
+        .constrainedOrigin(for: frame, visibleFrames: [screen]) == NSPoint(x: 300, y: 40))
+    #expect(FloatingWindowPlacementPolicy(edge: .left, keepsOnScreen: true)
+        .constrainedOrigin(for: frame, visibleFrames: [screen]) == NSPoint(x: 100, y: 200))
+    #expect(FloatingWindowPlacementPolicy(edge: .right, keepsOnScreen: true)
+        .constrainedOrigin(for: frame, visibleFrames: [screen]) == NSPoint(x: 700, y: 200))
 }
 
 @Test
@@ -695,6 +759,39 @@ func `clears dialogue text in every active scope`() async throws {
 
 @Test
 @MainActor
+func `partially clears characters and lines`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"abcdef\c[char,2]X\none\ntwo\nthree\c[line,1]\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(balloonController.textAndLinks(for: 0)?.0 == "abcdX\none\ntwo\n")
+}
+
+@Test
+@MainActor
 func `waits until elapsed playback time and resets the precise wait clock`() async {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
@@ -724,6 +821,10 @@ func `renders SakuraScript font styles by text range`() async throws {
     defer { try? FileManager.default.removeItem(at: directory) }
     try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
     try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    try FileManager.default.copyItem(
+        at: URL(fileURLWithPath: "/System/Library/Fonts/Menlo.ttc"),
+        to: directory.appending(path: "custom.ttc")
+    )
 
     let surfaceController = SurfaceWindowController(positionStore: positionStore)
     try surfaceController.show(
@@ -739,7 +840,7 @@ func `renders SakuraScript font styles by text range`() async throws {
     )
 
     await player.playAndWait(
-        SakuraScript(rawValue: #"A\f[color,#ff0000]B\f[bold,1]C\f[underline,true]D\f[sub,1]E\f[sup,1]F\f[sup,0]G\f[default]H\e"#),
+        SakuraScript(rawValue: #"\f[valign,bottom]A\f[color,#ff0000]B\f[bold,1]C\f[underline,true]D\f[sub,1]E\f[sup,1]F\f[sup,0]G\f[default]H\f[shadowcolor,#ffff00]I\f[shadowstyle,outline]J\f[shadowcolor,none]K\f[outline,true]L\f[outline,false]MN\f[align,right]O\n[half]P\f[name,custom.ttc]\f[height,large]Q\f[height,smaller]R\e"#),
         balloon: makeBalloon(directory: directory),
         characterDelayMilliseconds: 0
     )
@@ -755,6 +856,26 @@ func `renders SakuraScript font styles by text range`() async throws {
     #expect(supOffset > 0)
     #expect(balloonController.textAttributes(at: 6, scope: 0)?[.baselineOffset] == nil)
     #expect(balloonController.textAttributes(at: 7, scope: 0)?[.underlineStyle] == nil)
+    let shadow = try #require(balloonController.textAttributes(at: 8, scope: 0)?[.shadow] as? NSShadow)
+    #expect(shadow.shadowColor != nil)
+    #expect(balloonController.textAttributes(at: 9, scope: 0)?[.strokeWidth] as? Int == -3)
+    #expect(balloonController.textAttributes(at: 10, scope: 0)?[.shadow] == nil)
+    #expect(balloonController.textAttributes(at: 11, scope: 0)?[.strokeWidth] as? Int == 3)
+    #expect(balloonController.textAttributes(at: 12, scope: 0)?[.strokeWidth] == nil)
+    let aligned = try #require(
+        balloonController.textAttributes(at: 13, scope: 0)?[.paragraphStyle] as? NSParagraphStyle
+    )
+    #expect(aligned.alignment == .right)
+    let halfLine = try #require(
+        balloonController.textAttributes(at: 14, scope: 0)?[.paragraphStyle] as? NSParagraphStyle
+    )
+    #expect(abs(halfLine.minimumLineHeight - 7) < 0.1)
+    #expect(balloonController.textAttributes(at: 16, scope: 0)?[.paragraphStyle] == nil)
+    let largeFont = try #require(balloonController.textAttributes(at: 17, scope: 0)?[.font] as? NSFont)
+    let smallerFont = try #require(balloonController.textAttributes(at: 18, scope: 0)?[.font] as? NSFont)
+    #expect(largeFont.fontName.contains("Menlo"))
+    #expect(abs(largeFont.pointSize - 16.8) < 0.1)
+    #expect(abs(smallerFont.pointSize - 14) < 0.1)
 }
 
 @Test
@@ -783,20 +904,31 @@ func `renders an extended choice and appends its automatic newline`() async thro
     )
 
     await player.playAndWait(
-        SakuraScript(rawValue: #"\__q[OnSelect,arg]選択肢\__q次\e"#),
+        SakuraScript(rawValue: #"\__q[OnSelect,arg]選択肢\__q次\f[anchor.font.color,#00ff00]\_a[OnAnchor]錨\_a\e"#),
         balloon: makeBalloon(directory: directory),
         characterDelayMilliseconds: 0
     )
 
     let content = try #require(balloonController.textAndLinks(for: 0))
-    #expect(content.0 == "選択肢\n次")
+    #expect(content.0 == "選択肢\n次錨")
     #expect(content.1 == [
         BalloonTextLink(
             range: NSRange(location: 0, length: 3),
             id: "OnSelect",
             arguments: ["arg"]
+        ),
+        BalloonTextLink(
+            range: NSRange(location: 5, length: 1),
+            id: "OnAnchor",
+            arguments: [],
+            kind: .anchor,
+            fontColor: BalloonColor(red: 0, green: 255, blue: 0)
         )
     ])
+    let anchorColor = try #require(
+        balloonController.textAttributes(at: 5, scope: 0)?[.foregroundColor] as? NSColor
+    )
+    #expect(anchorColor.greenComponent > 0.9)
 }
 
 @Test
@@ -1050,6 +1182,52 @@ func `exposes time critical state only until playback ends`() async throws {
         try await Task.sleep(for: .milliseconds(5))
     }
     #expect(!player.isTimeCritical)
+}
+
+@Test
+@MainActor
+func `balloon repaint lock defers content and movement lock tracks state`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let controller = BalloonWindowController(positionStore: positionStore)
+    try controller.show(
+        balloon: makeBalloon(directory: directory),
+        text: "old",
+        near: NSRect(x: 500, y: 100, width: 40, height: 80)
+    )
+    defer { controller.hideAll() }
+
+    controller.setVerticalAlignment(.bottom, scope: 0)
+    #expect(try #require(controller.verticalContentInset(scope: 0)) > 0)
+    controller.setVerticalAlignment(.top, scope: 0)
+    #expect(controller.verticalContentInset(scope: 0) == 0)
+    controller.setMarkerText("更新中", scope: 0)
+    #expect(controller.markerText(scope: 0) == "更新中")
+    #expect(controller.displayedMarkerText(scope: 0) == "更新中")
+    controller.setMarkerText("", scope: 0)
+    #expect(controller.markerText(scope: 0) == nil)
+    #expect(controller.displayedMarkerText(scope: 0) == "")
+
+    controller.setRepaintLocked(true, scope: 0)
+    controller.updateContent(text: "new", links: [], scope: 0)
+    #expect(controller.isRepaintLocked(scope: 0))
+    #expect(controller.textAndLinks(for: 0)?.0 == "new")
+    #expect(controller.displayedText(for: 0) == "old")
+
+    controller.setRepaintLocked(false, scope: 0)
+    #expect(!controller.isRepaintLocked(scope: 0))
+    #expect(controller.displayedText(for: 0) == "new")
+
+    controller.setMovementLocked(true, scope: 0)
+    #expect(controller.isMovementLocked(scope: 0))
+    controller.setMovementLocked(false, scope: 0)
+    #expect(!controller.isMovementLocked(scope: 0))
 }
 
 private func makePNG(
