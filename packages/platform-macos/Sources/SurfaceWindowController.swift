@@ -159,6 +159,11 @@ public final class SurfaceWindowController {
         characters[scope]?.playAnimation(identifier: identifier)
     }
 
+    @discardableResult
+    public func playTalkAnimation(scope: Int = 0) -> Bool {
+        characters[scope]?.playTalkAnimation() ?? false
+    }
+
     public func playAnimationAndWait(identifier: String, scope: Int = 0) async {
         await characters[scope]?.playAnimationAndWait(identifier: identifier)
     }
@@ -523,6 +528,20 @@ private final class CharacterSurfaceController {
     func playAnimation(identifier: String) {
         guard let id = animationID(for: identifier) else { return }
         playAnimation(id: id)
+    }
+
+    @discardableResult
+    func playTalkAnimation() -> Bool {
+        guard animationTask == nil, !isAnimating else { return false }
+        let enabled = shell.map { $0.effectiveBindGroups(scope: scope, enabled: enabledBindGroups) } ?? []
+        let animations = currentSurfaceDefinition?.animations.filter { animation in
+            let components = Set((animation.interval ?? "").lowercased().split(separator: "+").map(String.init))
+            guard components.contains("talk") else { return false }
+            guard components.contains("bind") else { return true }
+            return enabled.contains(animation.id) || enabled.contains(animation.id - 1)
+        } ?? []
+        guard let animation = animations.randomElement() else { return false }
+        return startAnimation(id: animation.id, minimumFrameDurationMilliseconds: 0) != nil
     }
 
     func playAnimationAndWait(identifier: String) async {

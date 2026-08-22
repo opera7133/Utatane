@@ -8,6 +8,7 @@ public struct ShellDefinition: Sendable, Equatable {
     public let defaultBindGroups: [Int: Set<Int>]
     public let bindGroups: [Int: [Int: ShellBindGroup]]
     public let bindOptions: [Int: [String: ShellBindOptions]]
+    public let surfaceTable: SurfaceTable?
 
     public init(
         directory: URL,
@@ -18,6 +19,28 @@ public struct ShellDefinition: Sendable, Equatable {
         bindGroups: [Int: [Int: ShellBindGroup]] = [:],
         bindOptions: [Int: [String: ShellBindOptions]] = [:]
     ) {
+        self.init(
+            directory: directory,
+            surfaces: surfaces,
+            surfaceAliases: surfaceAliases,
+            usesSelfAlpha: usesSelfAlpha,
+            defaultBindGroups: defaultBindGroups,
+            bindGroups: bindGroups,
+            bindOptions: bindOptions,
+            surfaceTable: nil
+        )
+    }
+
+    public init(
+        directory: URL,
+        surfaces: [Int: SurfaceDefinition],
+        surfaceAliases: [Int: [String: [Int]]] = [:],
+        usesSelfAlpha: Bool = false,
+        defaultBindGroups: [Int: Set<Int>] = [:],
+        bindGroups: [Int: [Int: ShellBindGroup]] = [:],
+        bindOptions: [Int: [String: ShellBindOptions]] = [:],
+        surfaceTable: SurfaceTable?
+    ) {
         self.directory = directory
         self.surfaces = surfaces
         self.surfaceAliases = surfaceAliases
@@ -25,6 +48,7 @@ public struct ShellDefinition: Sendable, Equatable {
         self.defaultBindGroups = defaultBindGroups
         self.bindGroups = bindGroups
         self.bindOptions = bindOptions
+        self.surfaceTable = surfaceTable
     }
 
     public func resolveSurface(_ identifier: String, scope: Int) -> Int? {

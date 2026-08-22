@@ -1,3 +1,5 @@
+import Foundation
+
 public enum SakuraScriptToken: Sendable, Equatable {
     case text(String)
     case scope(Int)
@@ -37,7 +39,11 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case choiceTimeout(SakuraScriptChoiceTimeout)
     case balloonTimeout(SakuraScriptChoiceTimeout)
     case balloonWait(SakuraScriptBalloonWait)
+    case balloonOffset(x: SakuraScriptBalloonCoordinate, y: SakuraScriptBalloonCoordinate)
+    case balloonAlignment(SakuraScriptBalloonAlignment)
     case balloonMarker(String)
+    case balloonNumber(file: String, current: String, maximum: String)
+    case serikoTalk(Bool)
     case autoscroll(Bool)
     case anchorStart(id: String, arguments: [String])
     case anchorEnd
@@ -55,12 +61,82 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case timerEvent(milliseconds: Int, repeats: Bool, reflectsResponse: Bool, id: String, arguments: [String])
     case contentAction(SakuraScriptContentAction)
     case inputBox(id: String, timeoutMilliseconds: Int?, initialValue: String)
-    case httpGet(url: String, eventID: String)
+    case http(SakuraScriptHTTPRequest)
+    case networkDiagnostic(SakuraScriptNetworkDiagnostic)
+    case webSocket(SakuraScriptWebSocketCommand)
     case weatherGet(eventID: String)
     case clear
     case clearAll
     case end
     case unknown(String)
+}
+
+public enum SakuraScriptWebSocketCommand: Sendable, Equatable {
+    case connect(url: String, eventID: String, headers: [String], protocolName: String?)
+    case sendText(url: String, value: String)
+    case sendBinary(url: String, value: Data)
+    case close(url: String, code: Int)
+    case cancel(url: String)
+}
+
+public enum SakuraScriptNetworkDiagnostic: Sendable, Equatable {
+    case ping(host: String, eventID: String, count: Int, size: Int, timeoutMilliseconds: Int, ttl: Int?)
+    case nslookup(host: String, eventID: String)
+}
+
+public struct SakuraScriptHTTPRequest: Sendable, Equatable {
+    public let method: String
+    public let url: String
+    public let eventID: String?
+    public let waitsForCompletion: Bool
+    public let parameters: [String]
+    public let headers: [String]
+    public let timeoutSeconds: Double?
+    public let output: SakuraScriptHTTPOutput
+
+    public init(
+        method: String,
+        url: String,
+        eventID: String?,
+        waitsForCompletion: Bool,
+        parameters: [String] = [],
+        headers: [String] = [],
+        timeoutSeconds: Double? = nil,
+        output: SakuraScriptHTTPOutput = .file(nil)
+    ) {
+        self.method = method
+        self.url = url
+        self.eventID = eventID
+        self.waitsForCompletion = waitsForCompletion
+        self.parameters = parameters
+        self.headers = headers
+        self.timeoutSeconds = timeoutSeconds
+        self.output = output
+    }
+}
+
+public enum SakuraScriptHTTPOutput: Sendable, Equatable {
+    case file(String?)
+    case memory(characterEncoding: String?)
+}
+
+public struct SakuraScriptBalloonCoordinate: Sendable, Equatable {
+    public let value: Int
+    public let isRelative: Bool
+
+    public init(value: Int, isRelative: Bool) {
+        self.value = value
+        self.isRelative = isRelative
+    }
+}
+
+public enum SakuraScriptBalloonAlignment: String, Sendable, Equatable {
+    case left
+    case center
+    case top
+    case right
+    case bottom
+    case none
 }
 
 public enum SakuraScriptChoiceTimeout: Sendable, Equatable {

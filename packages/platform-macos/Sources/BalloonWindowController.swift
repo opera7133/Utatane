@@ -69,6 +69,14 @@ public enum BalloonVerticalAlignment: Sendable, Equatable {
     case bottom
 }
 
+public enum BalloonWindowAlignment: Sendable, Equatable {
+    case left
+    case center
+    case right
+    case bottom
+    case automatic
+}
+
 @MainActor
 public final class BalloonWindowController {
     private let balloonLoader = BalloonLoader()
@@ -78,6 +86,9 @@ public final class BalloonWindowController {
     private var repaintLockedScopes: Set<Int> = []
     private var movementLockedScopes: Set<Int> = []
     private var markerTextByScope: [Int: String] = [:]
+    private var numberTextByScope: [Int: String] = [:]
+    private var offsetByScope: [Int: NSPoint] = [:]
+    private var alignmentByScope: [Int: BalloonWindowAlignment] = [:]
     private var displayScale: CGFloat = 1
     private var textScale: CGFloat = 1
 
@@ -94,6 +105,9 @@ public final class BalloonWindowController {
         repaintLockedScopes.removeAll()
         movementLockedScopes.removeAll()
         markerTextByScope.removeAll()
+        numberTextByScope.removeAll()
+        offsetByScope.removeAll()
+        alignmentByScope.removeAll()
         positionStore.setContentID(contentID)
     }
 
@@ -139,6 +153,18 @@ public final class BalloonWindowController {
 
     func displayedMarkerText(scope: Int) -> String? {
         presentations[scope]?.contentView.markerText
+    }
+
+    func numberText(scope: Int) -> String? {
+        numberTextByScope[scope]
+    }
+
+    func offset(scope: Int) -> NSPoint? {
+        offsetByScope[scope]
+    }
+
+    func alignment(scope: Int) -> BalloonWindowAlignment? {
+        alignmentByScope[scope]
     }
 
     func textAndLinks(for scope: Int) -> (String, [BalloonTextLink])? {
@@ -194,6 +220,7 @@ public final class BalloonWindowController {
         }
         contentView.isMovementLocked = movementLockedScopes.contains(scope)
         contentView.setMarkerText(markerTextByScope[scope] ?? "")
+        contentView.setNumberText(numberTextByScope[scope] ?? "")
 
         let window = existingPresentation?.window ?? makeWindow(scope: scope)
         let existingOrigin = existingPresentation?.window.frame.origin
@@ -208,7 +235,7 @@ public final class BalloonWindowController {
         ) {
             window.setFrameOrigin(restoredOrigin)
         } else {
-            place(window, near: surfaceFrame)
+            place(window, near: surfaceFrame, scope: scope)
         }
         window.makeKeyAndOrderFront(nil)
         let presentation = BalloonPresentation(
@@ -329,6 +356,36 @@ public final class BalloonWindowController {
         presentations[scope]?.contentView.setMarkerText(text)
     }
 
+    public func setNumber(file: String, current: String, maximum: String, scope: Int) {
+        let components = [file, current, maximum].filter { !$0.isEmpty }
+        let text = if !current.isEmpty, !maximum.isEmpty {
+            [file, "\(current)/\(maximum)"].filter { !$0.isEmpty }.joined(separator: " ")
+        } else {
+            components.joined(separator: " ")
+        }
+        if text.isEmpty {
+            numberTextByScope.removeValue(forKey: scope)
+        } else {
+            numberTextByScope[scope] = text
+        }
+        presentations[scope]?.contentView.setNumberText(text)
+    }
+
+    public func setOffset(x: Int, y: Int, scope: Int) {
+        offsetByScope[scope] = NSPoint(x: x, y: y)
+        reposition(scope: scope)
+    }
+
+    public func resetOffset(scope: Int) {
+        offsetByScope.removeValue(forKey: scope)
+        reposition(scope: scope)
+    }
+
+    public func setAlignment(_ alignment: BalloonWindowAlignment, scope: Int) {
+        alignmentByScope[scope] = alignment
+        reposition(scope: scope)
+    }
+
     public func hide(scope: Int = 0) {
         presentations[scope]?.window.orderOut(nil)
     }
@@ -342,7 +399,7 @@ public final class BalloonWindowController {
     public func resetWindowPositions() {
         for (scope, presentation) in presentations {
             positionStore.remove(for: .balloon, scope: scope)
-            place(presentation.window, near: presentation.surfaceFrame)
+            place(presentation.window, near: presentation.surfaceFrame, scope: scope)
             positionStore.remove(for: .balloon, scope: scope)
         }
     }
@@ -362,20 +419,48 @@ public final class BalloonWindowController {
         return window
     }
 
-    private func place(_ window: NSWindow, near surfaceFrame: NSRect) {
+    private func reposition(scope: Int) {
+        guard let presentation = presentations[scope] else { return }
+        place(presentation.window, near: presentation.surfaceFrame, scope: scope)
+    }
+
+    private func place(_ window: NSWindow, near surfaceFrame: NSRect, scope: Int) {
         guard let visibleFrame = NSScreen.main?.visibleFrame else {
             window.center()
             return
         }
 
         let spacing: CGFloat = 8
-        let preferredX = surfaceFrame.minX - window.frame.width - spacing
-        let x = max(visibleFrame.minX, preferredX)
-        let preferredY = surfaceFrame.maxY - window.frame.height
-        let y = min(
-            max(visibleFrame.minY, preferredY),
-            visibleFrame.maxY - window.frame.height
-        )
+        let automaticAlignment: BalloonWindowAlignment = surfaceFrame.midX < visibleFrame.midX
+            ? .right
+            : .left
+        let requestedAlignment = alignmentByScope[scope] ?? .automatic
+        let alignment = requestedAlignment == .automatic ? automaticAlignment : requestedAlignment
+        var x: CGFloat
+        var y: CGFloat
+        switch alignment {
+        case .left:
+            x = surfaceFrame.minX - window.frame.width - spacing
+            y = surfaceFrame.maxY - window.frame.height
+        case .right:
+            x = surfaceFrame.maxX + spacing
+            y = surfaceFrame.maxY - window.frame.height
+        case .center:
+            x = surfaceFrame.midX - window.frame.width / 2
+            y = surfaceFrame.maxY + spacing
+        case .bottom:
+            x = surfaceFrame.midX - window.frame.width / 2
+            y = surfaceFrame.minY - window.frame.height - spacing
+        case .automatic:
+            assertionFailure("automatic alignment must be resolved before placement")
+            x = surfaceFrame.minX - window.frame.width - spacing
+            y = surfaceFrame.maxY - window.frame.height
+        }
+        let offset = offsetByScope[scope] ?? .zero
+        x += offset.x
+        y -= offset.y
+        x = min(max(visibleFrame.minX, x), visibleFrame.maxX - window.frame.width)
+        y = min(max(visibleFrame.minY, y), visibleFrame.maxY - window.frame.height)
         window.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
@@ -454,6 +539,7 @@ private final class BalloonContentView: NSView {
     private let arrowView: NSImageView?
     private let markerImage: NSImage?
     private let markerTextField = NSTextField(labelWithString: "")
+    private let numberTextField = NSTextField(labelWithString: "")
     private let textFont: NSFont
     private let textColor: NSColor
     private let displayScale: CGFloat
@@ -527,6 +613,11 @@ private final class BalloonContentView: NSView {
     func setMarkerText(_ text: String) {
         markerTextField.stringValue = text
         markerTextField.isHidden = text.isEmpty
+    }
+
+    func setNumberText(_ text: String) {
+        numberTextField.stringValue = text
+        numberTextField.isHidden = text.isEmpty
     }
 
     init(
@@ -614,6 +705,18 @@ private final class BalloonContentView: NSView {
             height: markerTextField.intrinsicContentSize.height
         )
         addSubview(markerTextField)
+
+        numberTextField.alignment = .center
+        numberTextField.font = markerTextField.font
+        numberTextField.textColor = textColor
+        numberTextField.drawsBackground = false
+        numberTextField.isBordered = false
+        numberTextField.isHidden = true
+        numberTextField.frame = markerTextField.frame.offsetBy(
+            dx: 0,
+            dy: -markerTextField.intrinsicContentSize.height
+        )
+        addSubview(numberTextField)
 
         if let arrowView {
             arrowView.imageScaling = .scaleAxesIndependently

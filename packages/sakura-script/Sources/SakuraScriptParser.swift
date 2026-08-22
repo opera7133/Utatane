@@ -1,3 +1,5 @@
+import Foundation
+
 public struct SakuraScriptParser: Sendable {
     public init() {}
 
@@ -399,9 +401,39 @@ public struct SakuraScriptParser: Sendable {
                         }
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "balloonoffset",
+                              arguments.count >= 4,
+                              let x = Self.balloonCoordinate(arguments[2]),
+                              let y = Self.balloonCoordinate(arguments[3])
+                    {
+                        tokens.append(.balloonOffset(x: x, y: y))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "balloonalign"
+                    {
+                        tokens.append(.balloonAlignment(
+                            SakuraScriptBalloonAlignment(rawValue: arguments[2].lowercased()) ?? .none
+                        ))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
                               arguments[1].lowercased() == "balloonmarker"
                     {
                         tokens.append(.balloonMarker(arguments.count >= 3 ? arguments[2] : ""))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "balloonnum"
+                    {
+                        tokens.append(.balloonNumber(
+                            file: arguments.count >= 3 ? arguments[2] : "",
+                            current: arguments.count >= 4 ? arguments[3] : "",
+                            maximum: arguments.count >= 5 ? arguments[4] : ""
+                        ))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "serikotalk",
+                              ["true", "false"].contains(arguments[2].lowercased())
+                    {
+                        tokens.append(.serikoTalk(arguments[2].lowercased() == "true"))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "set",
                               arguments[1].lowercased() == "autoscroll",
@@ -623,18 +655,111 @@ public struct SakuraScriptParser: Sendable {
                             timeoutMilliseconds: arguments.count >= 4 ? Int(arguments[3]) : nil,
                             initialValue: arguments.count >= 5 ? arguments[4] : ""
                         ))
-                    } else if arguments.count >= 4,
+                    } else if arguments.count >= 3,
                               arguments[0].lowercased() == "execute",
-                              arguments[1].lowercased() == "http-get",
-                              let asyncArgument = arguments.dropFirst(3).first(where: {
-                                  $0.lowercased().hasPrefix("--async=")
-                              }),
-                              let separator = asyncArgument.firstIndex(of: "=")
+                              ["http-get", "http-post", "http-head", "http-put", "http-delete", "http-patch", "http-options"]
+                              .contains(arguments[1].lowercased())
                     {
-                        tokens.append(.httpGet(
+                        let options = Array(arguments.dropFirst(3))
+                        let asyncID = Self.optionValue("async", in: options)
+                        let syncID = Self.optionValue("sync", in: options)
+                        let nofileOption = options.first(where: {
+                            $0.lowercased() == "--nofile" || $0.lowercased().hasPrefix("--nofile=")
+                        })
+                        let headers = options.compactMap { option -> String? in
+                            let lowercased = option.lowercased()
+                            if lowercased.hasPrefix("--header=") {
+                                return String(option.dropFirst(9))
+                            }
+                            let names = ["accept", "accept-language", "authorization", "cookie", "content-type"]
+                            guard let name = names.first(where: { lowercased.hasPrefix("--\($0)=") }) else {
+                                return lowercased == "--no-cache" ? "Cache-Control: no-cache" : nil
+                            }
+                            let value = String(option.dropFirst(name.count + 3))
+                            let headerName = [
+                                "accept": "Accept",
+                                "accept-language": "Accept-Language",
+                                "authorization": "Authorization",
+                                "cookie": "Cookie",
+                                "content-type": "Content-Type"
+                            ][name] ?? name
+                            return "\(headerName): \(value)"
+                        }
+                        tokens.append(.http(SakuraScriptHTTPRequest(
+                            method: String(arguments[1].dropFirst("http-".count)).uppercased(),
                             url: arguments[2],
-                            eventID: String(asyncArgument[asyncArgument.index(after: separator)...])
-                        ))
+                            eventID: syncID ?? asyncID,
+                            waitsForCompletion: syncID != nil,
+                            parameters: options.compactMap { option in
+                                option.lowercased().hasPrefix("--param=") ? String(option.dropFirst(8)) : nil
+                            } + (options.first?.hasPrefix("--") == false ? [options[0]] : []),
+                            headers: headers,
+                            timeoutSeconds: Self.optionValue("timeout", in: options).flatMap(Double.init),
+                            output: nofileOption.map { option in
+                                let encoding = option.firstIndex(of: "=").map {
+                                    String(option[option.index(after: $0)...])
+                                }
+                                return .memory(characterEncoding: encoding)
+                            } ?? .file(Self.optionValue("file", in: options))
+                        )))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "execute",
+                              ["ping", "nslookup"].contains(arguments[1].lowercased())
+                    {
+                        let options = Array(arguments.dropFirst(2))
+                        let host = Self.optionValue("host", in: options) ?? ""
+                        let eventID = Self.optionValue("event", in: options) ?? ""
+                        if arguments[1].lowercased() == "ping" {
+                            tokens.append(.networkDiagnostic(.ping(
+                                host: host,
+                                eventID: eventID,
+                                count: Self.optionValue("count", in: options).flatMap(Int.init) ?? 3,
+                                size: Self.optionValue("size", in: options).flatMap(Int.init) ?? 32,
+                                timeoutMilliseconds: Self.optionValue("timeout", in: options).flatMap(Int.init) ?? 5000,
+                                ttl: Self.optionValue("ttl", in: options).flatMap(Int.init)
+                            )))
+                        } else {
+                            tokens.append(.networkDiagnostic(.nslookup(host: host, eventID: eventID)))
+                        }
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "websocket"
+                    {
+                        let options = Array(arguments.dropFirst(3))
+                        tokens.append(.webSocket(.connect(
+                            url: arguments[2],
+                            eventID: Self.optionValue("event", in: options) ?? "",
+                            headers: options.compactMap { option in
+                                option.lowercased().hasPrefix("--header=") ? String(option.dropFirst(9)) : nil
+                            },
+                            protocolName: Self.optionValue("m_websocketProtocol", in: options)
+                        )))
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "send",
+                              arguments[1].lowercased() == "websocket"
+                    {
+                        tokens.append(.webSocket(.sendText(
+                            url: arguments[2], value: arguments.dropFirst(3).joined(separator: "\r\n")
+                        )))
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "send",
+                              arguments[1].lowercased() == "websocket-binary"
+                    {
+                        tokens.append(.webSocket(.sendBinary(
+                            url: arguments[2], value: Data(base64Encoded: arguments[3]) ?? Data()
+                        )))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "close",
+                              arguments[1].lowercased() == "websocket"
+                    {
+                        tokens.append(.webSocket(.close(
+                            url: arguments[2], code: arguments.count >= 4 ? Int(arguments[3]) ?? 1000 : 1000
+                        )))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "cancel",
+                              arguments[1].lowercased() == "websocket"
+                    {
+                        tokens.append(.webSocket(.cancel(url: arguments[2])))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "weather-get",
@@ -663,6 +788,18 @@ public struct SakuraScriptParser: Sendable {
 
         flushText()
         return tokens
+    }
+
+    private static func balloonCoordinate(_ rawValue: String) -> SakuraScriptBalloonCoordinate? {
+        let isRelative = rawValue.hasPrefix("@")
+        let number = isRelative ? String(rawValue.dropFirst()) : rawValue
+        guard let value = Int(number) else { return nil }
+        return SakuraScriptBalloonCoordinate(value: value, isRelative: isRelative)
+    }
+
+    private static func optionValue(_ name: String, in options: [String]) -> String? {
+        let prefix = "--\(name.lowercased())="
+        return options.first { $0.lowercased().hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
     }
 
     private func numericArgument(in characters: [Character], index: inout Int) -> Int? {

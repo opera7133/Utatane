@@ -171,9 +171,26 @@ func `base animation pattern temporarily replaces the whole surface`() async thr
             y: 0
         )]
     )
+    let talkAnimation = SurfaceAnimation(
+        id: 1,
+        name: "mouth",
+        interval: "talk",
+        patterns: [SurfaceAnimationPattern(
+            order: 0,
+            method: "base",
+            surfaceID: 6,
+            waitMilliseconds: 100,
+            x: 0,
+            y: 0
+        )]
+    )
     let shell = ShellDefinition(
         directory: directory,
-        surfaces: [0: SurfaceDefinition(id: 0, collisions: [], animations: [animation])],
+        surfaces: [0: SurfaceDefinition(
+            id: 0,
+            collisions: [],
+            animations: [animation, talkAnimation]
+        )],
         usesSelfAlpha: true
     )
     let controller = SurfaceWindowController(positionStore: positionStore)
@@ -214,6 +231,11 @@ func `base animation pattern temporarily replaces the whole surface`() async thr
     #expect(controller.renderedImage(for: 0) === pausedImage)
     controller.resumeAnimation(id: 0)
     await controller.waitForAnimation(id: 0)
+    #expect(controller.renderedImage(for: 0) === initialImage)
+
+    #expect(controller.playTalkAnimation(scope: 0))
+    #expect(!controller.playTalkAnimation(scope: 0))
+    await controller.waitForAnimation(id: 1, scope: 0)
     #expect(controller.renderedImage(for: 0) === initialImage)
 }
 
@@ -400,8 +422,8 @@ func `runs input box and asynchronous HTTP commands`() async {
         calls.append("input:\(id):\(timeout ?? -1):\(initialValue)")
         return nil
     }
-    player.onHTTPGet = { url, eventID in
-        calls.append("http:\(url):\(eventID)")
+    player.onHTTP = { request in
+        calls.append("http:\(request.method):\(request.url):\(request.eventID ?? "")")
         return nil
     }
     let balloon = BalloonDefinition(
@@ -423,7 +445,7 @@ func `runs input box and asynchronous HTTP commands`() async {
 
     #expect(calls == [
         "input:OnInput:0:初期値",
-        "http:https://example.com/data:OnLoaded"
+        "http:GET:https://example.com/data:OnLoaded"
     ])
 }
 
@@ -1213,6 +1235,16 @@ func `balloon repaint lock defers content and movement lock tracks state`() thro
     controller.setMarkerText("", scope: 0)
     #expect(controller.markerText(scope: 0) == nil)
     #expect(controller.displayedMarkerText(scope: 0) == "")
+    controller.setNumber(file: "download.zip", current: "2", maximum: "5", scope: 0)
+    #expect(controller.numberText(scope: 0) == "download.zip 2/5")
+    controller.setNumber(file: "", current: "", maximum: "", scope: 0)
+    #expect(controller.numberText(scope: 0) == nil)
+    controller.setOffset(x: 25, y: -10, scope: 0)
+    #expect(controller.offset(scope: 0) == NSPoint(x: 25, y: -10))
+    controller.resetOffset(scope: 0)
+    #expect(controller.offset(scope: 0) == nil)
+    controller.setAlignment(.bottom, scope: 0)
+    #expect(controller.alignment(scope: 0) == .bottom)
 
     controller.setRepaintLocked(true, scope: 0)
     controller.updateContent(text: "new", links: [], scope: 0)

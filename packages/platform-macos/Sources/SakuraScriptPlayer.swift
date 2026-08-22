@@ -33,7 +33,9 @@ public final class SakuraScriptPlayer {
     public var onChoiceTimeout: (@MainActor () -> Void)?
     public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
     public var onInputBox: (@MainActor (String, Int?, String) async -> SakuraScript?)?
-    public var onHTTPGet: (@MainActor (String, String) async -> SakuraScript?)?
+    public var onHTTP: (@MainActor (SakuraScriptHTTPRequest) async -> SakuraScript?)?
+    public var onNetworkDiagnostic: (@MainActor (SakuraScriptNetworkDiagnostic) async -> SakuraScript?)?
+    public var onWebSocket: (@MainActor (SakuraScriptWebSocketCommand) async -> Void)?
     public var onWeatherGet: (@MainActor (String) async -> SakuraScript?)?
     public var onOpen: (@MainActor (String) -> Void)?
     public var onContentAction: (@MainActor (SakuraScriptContentAction) -> Void)?
@@ -200,8 +202,11 @@ public final class SakuraScriptPlayer {
         var automaticLineWrappingByScope: [Int: Bool] = [:]
         var verticalAlignmentByScope: [Int: BalloonVerticalAlignment] = [:]
         var balloonMarkerScopes: Set<Int> = []
+        var balloonNumberScopes: Set<Int> = []
+        var balloonOffsetScopes: Set<Int> = []
         var currentCharacterDelayMilliseconds = characterDelayMilliseconds
         var preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
+        var isSerikoTalkEnabled = true
 
         func appendStyleRun(scope: Int, location: Int, length: Int) {
             guard length > 0 else { return }
@@ -307,6 +312,12 @@ public final class SakuraScriptPlayer {
             for markerScope in balloonMarkerScopes {
                 balloonWindowController.setMarkerText("", scope: markerScope)
             }
+            for numberScope in balloonNumberScopes {
+                balloonWindowController.setNumber(file: "", current: "", maximum: "", scope: numberScope)
+            }
+            for offsetScope in balloonOffsetScopes {
+                balloonWindowController.resetOffset(scope: offsetScope)
+            }
         }
 
         do {
@@ -347,6 +358,9 @@ public final class SakuraScriptPlayer {
                                 styles: styleRunsByScope[targetScope, default: []],
                                 autoscroll: autoscrollByScope[targetScope] ?? true
                             )
+                            if isSerikoTalkEnabled, !character.isWhitespace {
+                                surfaceWindowController.playTalkAnimation(scope: targetScope)
+                            }
                         }
                         if !fastForwardRequested, !isQuickSection {
                             try await sleep(milliseconds: currentCharacterDelayMilliseconds)
@@ -474,6 +488,28 @@ public final class SakuraScriptPlayer {
                 case let .balloonMarker(text):
                     balloonMarkerScopes.insert(scope)
                     balloonWindowController.setMarkerText(text, scope: scope)
+                case let .balloonNumber(file, current, maximum):
+                    balloonNumberScopes.insert(scope)
+                    balloonWindowController.setNumber(
+                        file: file,
+                        current: current,
+                        maximum: maximum,
+                        scope: scope
+                    )
+                case let .balloonOffset(x, y):
+                    balloonOffsetScopes.insert(scope)
+                    balloonWindowController.setOffset(x: x.value, y: y.value, scope: scope)
+                case let .balloonAlignment(alignment):
+                    let windowAlignment: BalloonWindowAlignment = switch alignment {
+                    case .left: .left
+                    case .center, .top: .center
+                    case .right: .right
+                    case .bottom: .bottom
+                    case .none: .automatic
+                    }
+                    balloonWindowController.setAlignment(windowAlignment, scope: scope)
+                case let .serikoTalk(enabled):
+                    isSerikoTalkEnabled = enabled
                 case let .autoscroll(enabled):
                     autoscrollByScope[scope] = enabled
                 case .balloonTimeout:
@@ -795,10 +831,16 @@ public final class SakuraScriptPlayer {
                     if let response = await onInputBox?(id, timeoutMilliseconds, initialValue) {
                         pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
                     }
-                case let .httpGet(url, eventID):
-                    if let response = await onHTTPGet?(url, eventID) {
+                case let .http(request):
+                    if let response = await onHTTP?(request) {
                         pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
                     }
+                case let .networkDiagnostic(command):
+                    if let response = await onNetworkDiagnostic?(command) {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                    }
+                case let .webSocket(command):
+                    await onWebSocket?(command)
                 case let .weatherGet(eventID):
                     if let response = await onWeatherGet?(eventID) {
                         pendingTokens.insert(contentsOf: parser.parse(response), at: 0)

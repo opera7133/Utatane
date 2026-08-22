@@ -71,10 +71,10 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\_l[x,y]` | ❌ | 描画位置変更 |
 | `\C` | ✅ | 全scopeの本文・リンクを消去し、Playerテストで確認 |
 | `\![set,autoscroll,...]` | ✅ | `disable` / `enable` をスコープ単位で反映 |
-| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | `balloonmarker`をscope別のバルーン下部追加情報として表示し、スクリプト終了時に解除。offset・align・numは未実装 |
+| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset（絶対・`@`相対構文）、left/center(top)/right/bottom/none配置、下部marker、受信数表示を実装。offset・marker・numはスクリプト終了時に解除、alignはゴースト終了まで保持。シェル・surfaces.txt固有offsetとの合成は未対応 |
 | `\![set,balloontimeout,...]` | ✅ | 表示完了後のバルーン消去時間を指定。0以下で無効、選択肢タイムアウトとの競合は早い方を採用 |
 | `\![set,balloonwait,...]` | ✅ | 倍率・百分率・`ms` 絶対値に対応し、スクリプト終了時に復帰 |
-| `\![set,serikotalk,...]` | ❌ | 発話中の SERIKO `talk` アニメーション駆動が未実装 |
+| `\![set,serikotalk,true/false]` | ✅ | 文字表示中に現在surfaceのSERIKO `talk` intervalを駆動。明示アニメーションとは競合させず、スクリプトごとにtrueへリセット |
 | `\![*]` | ✅ | scope別の `marker*.png` をインライン表示 |
 | online / nouserbreak mode | ❌ | `enter` / `leave` とも未実装 |
 | balloon repaint / move lock | ✅ | `balloonrepaint`は描画を保留してunlock時に最新内容を反映。通常lockは終端解除、manualは維持。`balloonmove`は明示解除までドラッグを抑止 |
@@ -179,15 +179,15 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\![execute,http-get,URL,...]` | 🟡 | `--async=イベントID` を含むGETのみ。結果一時ファイルを `Reference3` で返す |
-| http-post/head/put/delete/patch/options | ❌ | 未実装 |
+| `\![execute,http-get,URL,...]` | 🟡 | async/syncのID、param、主要header、timeout、no-cache、file/nofileを実装。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行って `Reference3` へ返す。非同期並行実行、multipart、streaming、progressは未対応 |
+| http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded bodyと主要共通オプションに対応。multipart、入力ファイル、証明書検証無効化は未対応 |
 | rss-get/rss-post | ❌ | RSS/Atom取得機能はあるがこのコマンド未接続 |
-| websocket execute/send/close/cancel | ❌ | 未実装 |
+| websocket execute/send/close/cancel | 🟡 | URL単位のws/wss接続、header・subprotocol、テキスト/バイナリ送信、受信イベント、close/cancelを実装。再接続とSSLInfoは未対応 |
 | cancel http | ❌ | 未実装 |
 | extract/compress archive | ❌ | NAR展開処理はあるが任意コマンドとしては未接続 |
 | dumpsurface | ❌ | 未実装 |
 | install path / URL | ❌ | ドロップによるNARインストールはあるがコマンド未接続 |
-| ping / nslookup | ❌ | 未実装 |
+| ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl、完了・失敗イベントに対応。ping progress、df/dataは未対応 |
 | createnar / createupdatedata | ❌ | 未実装 |
 | emptyrecyclebin / create shortcut | ➖ | OS依存かつ危険。原則対象外候補 |
 | passive / induction / select / collision mode | ❌ | 未実装 |
@@ -219,7 +219,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | Ghost `descript.txt` | 🟡 | 名前、SHIORI、scope、default surface、更新URLなど実利用キー中心。全キー表が必要 |
 | Shell `descript.txt` | 🟡 | 基本情報、scope、メニュー関係の一部。全キー未網羅 |
 | `surfaces.txt` | 🟡 | surface、alias、element、collision、主要animationを実装。SERIKOの全pattern・optionは要照合 |
-| `surfacetable.txt` | ❌ | 明示的な実装なし |
+| `surfacetable.txt` | ✅ | charsetを考慮してversion・option・group・scope・surface名を読み込み、`__disabled`・`__parts`・空名もシェルの開発用メタデータとして保持 |
 | Balloon `descript.txt` | 🟡 | 画像、位置、文字領域、フォント、cursor/anchorの主要設定。ROP、visited、全キー未対応 |
 | `balloon(s/k)*s.txt` | ❌ | 旧バルーン定義形式は未実装 |
 | Plugin `descript.txt` / PLUGIN | ❌ | プラグイン機構なし |
@@ -245,7 +245,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 1. 実在ゴーストで利用頻度が高いsoundオプションと、残る表示・入力系コマンド。
 2. 既存Utatane機能へ接続する update、change ghost/shell/balloon、headline、install。
 3. `surfaces.txt`、Balloon/Ghost/Shell `descript.txt`、SHIORI Eventの詳細対応表。
-4. HTTPメソッド、timerraise、Property Systemなど高度な互換機能。
+4. HTTPの高度なオプション、timerraise、Property Systemなど高度な互換機能。
 5. Windows・SSP固有UIに依存する項目は、macOS向け代替仕様を決めてから実装可否を判定する。
 
 ## 更新ルール

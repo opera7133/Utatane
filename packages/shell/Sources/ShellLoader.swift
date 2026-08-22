@@ -23,6 +23,7 @@ public enum ShellError: LocalizedError, Equatable {
 
 public struct ShellLoader: Sendable {
     private let parser = SurfacesParser()
+    private let surfaceTableParser = SurfaceTableParser()
 
     public init() {}
 
@@ -55,6 +56,10 @@ public struct ShellLoader: Sendable {
             existingSurfaceIDs: existingSurfaceIDs
         )
         let shellMetadata = metadata(in: shellDirectory)
+        let surfaceTableURL = shellDirectory.appending(path: "surfacetable.txt", directoryHint: .notDirectory)
+        let surfaceTable = fileManager.fileExists(atPath: surfaceTableURL.path)
+            ? try surfaceTableParser.parse(readText(from: surfaceTableURL))
+            : nil
         return ShellDefinition(
             directory: shellDirectory,
             surfaces: document.surfaces,
@@ -62,7 +67,8 @@ public struct ShellLoader: Sendable {
             usesSelfAlpha: shellMetadata.usesSelfAlpha,
             defaultBindGroups: shellMetadata.defaultBindGroups,
             bindGroups: shellMetadata.bindGroups,
-            bindOptions: shellMetadata.bindOptions
+            bindOptions: shellMetadata.bindOptions,
+            surfaceTable: surfaceTable
         )
     }
 

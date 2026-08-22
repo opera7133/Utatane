@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import UtataneSakuraScript
 
@@ -31,8 +32,55 @@ func `parses initial playback command set`() {
 
     #expect(tokens == [
         .inputBox(id: "OnNameInput", timeoutMilliseconds: 0, initialValue: "おにいちゃん"),
-        .httpGet(url: "https://example.com/feed.json", eventID: "OnLoaded"),
+        .http(SakuraScriptHTTPRequest(
+            method: "GET",
+            url: "https://example.com/feed.json",
+            eventID: "OnLoaded",
+            waitsForCompletion: false
+        )),
         .weatherGet(eventID: "OnWeather")
+    ])
+}
+
+@Test
+func `parses all HTTP methods and common request options`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,http-post,https://example.com/api,--sync=OnSaved,--param=a=1,--param=b=2,--authorization=Bearer token,--header=X-Test: yes,--content-type=application/json,--timeout=5,--no-cache,--nofile=Shift_JIS]\![execute,http-head,https://example.com,--file=headers.txt]\![execute,http-put,https://example.com,a=1]\![execute,http-delete,https://example.com]\![execute,http-patch,https://example.com,--async=result]\![execute,http-options,https://example.com]"#
+    ) == [
+        .http(SakuraScriptHTTPRequest(
+            method: "POST", url: "https://example.com/api", eventID: "OnSaved",
+            waitsForCompletion: true, parameters: ["a=1", "b=2"],
+            headers: ["Authorization: Bearer token", "X-Test: yes", "Content-Type: application/json", "Cache-Control: no-cache"],
+            timeoutSeconds: 5, output: .memory(characterEncoding: "Shift_JIS")
+        )),
+        .http(SakuraScriptHTTPRequest(method: "HEAD", url: "https://example.com", eventID: nil, waitsForCompletion: false, output: .file("headers.txt"))),
+        .http(SakuraScriptHTTPRequest(method: "PUT", url: "https://example.com", eventID: nil, waitsForCompletion: false, parameters: ["a=1"])),
+        .http(SakuraScriptHTTPRequest(method: "DELETE", url: "https://example.com", eventID: nil, waitsForCompletion: false)),
+        .http(SakuraScriptHTTPRequest(method: "PATCH", url: "https://example.com", eventID: "result", waitsForCompletion: false)),
+        .http(SakuraScriptHTTPRequest(method: "OPTIONS", url: "https://example.com", eventID: nil, waitsForCompletion: false))
+    ])
+}
+
+@Test
+func `parses ping and nslookup diagnostics`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,ping,--host=example.com,--event=OnChecked,--count=2,--size=64,--timeout=1000,--ttl=32]\![execute,nslookup,--host=127.0.0.1,--event=lookup]"#
+    ) == [
+        .networkDiagnostic(.ping(host: "example.com", eventID: "OnChecked", count: 2, size: 64, timeoutMilliseconds: 1000, ttl: 32)),
+        .networkDiagnostic(.nslookup(host: "127.0.0.1", eventID: "lookup"))
+    ])
+}
+
+@Test
+func `parses WebSocket lifecycle and frames`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,websocket,wss://example.com/chat,--event=OnChat,--header=Authorization: token,--m_websocketProtocol=chat]\![send,websocket,wss://example.com/chat,Hello,World]\![send,websocket-binary,wss://example.com/chat,SGVsbG8=]\![close,websocket,wss://example.com/chat,1001]\![cancel,websocket,wss://example.com/chat]"#
+    ) == [
+        .webSocket(.connect(url: "wss://example.com/chat", eventID: "OnChat", headers: ["Authorization: token"], protocolName: "chat")),
+        .webSocket(.sendText(url: "wss://example.com/chat", value: "Hello\r\nWorld")),
+        .webSocket(.sendBinary(url: "wss://example.com/chat", value: Data("Hello".utf8))),
+        .webSocket(.close(url: "wss://example.com/chat", code: 1001)),
+        .webSocket(.cancel(url: "wss://example.com/chat"))
     ])
 }
 
@@ -172,7 +220,7 @@ func `parses choice timeout controls`() {
 @Test
 func `parses balloon playback controls`() {
     #expect(SakuraScriptParser().parse(
-        #"\![set,balloontimeout,1200]\![set,balloontimeout,0]\![set,balloontimeout]\![set,balloonwait,1.5]\![set,balloonwait,75%]\![set,balloonwait,20ms]\![set,balloonwait]\![set,balloonmarker,更新中]\![set,balloonmarker]\![set,autoscroll,disable]\![set,autoscroll,enable]"#
+        #"\![set,balloontimeout,1200]\![set,balloontimeout,0]\![set,balloontimeout]\![set,balloonwait,1.5]\![set,balloonwait,75%]\![set,balloonwait,20ms]\![set,balloonwait]\![set,balloonoffset,@100,-50]\![set,balloonalign,top]\![set,balloonalign,invalid]\![set,balloonmarker,更新中]\![set,balloonmarker]\![set,balloonnum,download.zip,2,5]\![set,balloonnum,,,]\![set,serikotalk,false]\![set,serikotalk,true]\![set,autoscroll,disable]\![set,autoscroll,enable]"#
     ) == [
         .balloonTimeout(.milliseconds(1200)),
         .balloonTimeout(.disabled),
@@ -181,8 +229,18 @@ func `parses balloon playback controls`() {
         .balloonWait(.multiplier(0.75)),
         .balloonWait(.milliseconds(20)),
         .balloonWait(.defaultValue),
+        .balloonOffset(
+            x: SakuraScriptBalloonCoordinate(value: 100, isRelative: true),
+            y: SakuraScriptBalloonCoordinate(value: -50, isRelative: false)
+        ),
+        .balloonAlignment(.top),
+        .balloonAlignment(.none),
         .balloonMarker("更新中"),
         .balloonMarker(""),
+        .balloonNumber(file: "download.zip", current: "2", maximum: "5"),
+        .balloonNumber(file: "", current: "", maximum: ""),
+        .serikoTalk(false),
+        .serikoTalk(true),
         .autoscroll(false),
         .autoscroll(true)
     ])

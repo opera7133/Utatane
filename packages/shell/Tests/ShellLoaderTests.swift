@@ -90,3 +90,43 @@ func `parses bind names options defaults and add ids`() throws {
     #expect(shell.bindOptions[0]?["服"] == ShellBindOptions(mustSelect: true, multiple: true))
     #expect(shell.effectiveBindGroups(scope: 0, enabled: [10]) == [10, 20, 21])
 }
+
+@Test
+func `loads surfacetable development metadata without treating names as aliases`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: UUID().uuidString,
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data("surface0 {}".utf8).write(to: root.appending(path: "surfaces.txt"))
+    try Data("""
+    charset,UTF-8
+    version,1
+    option,DisableNoDefineSurfaces
+
+    group,__disabled
+    {
+        4000,__parts
+    }
+    group,[メイド]通常
+    {
+        scope,0
+        0,素
+        1,
+    }
+    """.utf8).write(to: root.appending(path: "surfacetable.txt"))
+
+    let shell = try ShellLoader().load(from: root)
+    let table = try #require(shell.surfaceTable)
+
+    #expect(table.version == 1)
+    #expect(table.disablesUndefinedSurfaces)
+    #expect(table.groups.count == 2)
+    #expect(table.groups[0].isDisabled)
+    #expect(table.groups[0].entries[0].isPart)
+    #expect(table.groups[1].scope == 0)
+    #expect(table.entriesByID[0]?.name == "素")
+    #expect(table.entriesByID[1]?.name == "")
+    #expect(shell.resolveSurface("素", scope: 0) == nil)
+}

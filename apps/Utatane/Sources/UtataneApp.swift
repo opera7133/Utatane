@@ -176,6 +176,7 @@ private struct UtataneRootView: View {
     @State private var startupGhostID: URL?
     @State private var isTransitioningGhost = false
     @State private var weatherTask: Task<Void, Never>?
+    @State private var webSocketManager = WebSocketSessionManager()
 
     var body: some View {
         Group {
@@ -631,8 +632,14 @@ private struct UtataneRootView: View {
                     references: [0: value]
                 ))
             }
-            scriptPlayer.onHTTPGet = { url, eventID in
-                await handleHTTPGet(url: url, eventID: eventID)
+            scriptPlayer.onHTTP = { request in
+                await handleHTTP(request)
+            }
+            scriptPlayer.onNetworkDiagnostic = { command in
+                await handleNetworkDiagnostic(command)
+            }
+            scriptPlayer.onWebSocket = { command in
+                await handleWebSocket(command)
             }
             scriptPlayer.onWeatherGet = { eventID in
                 weatherTask?.cancel()
@@ -708,28 +715,149 @@ private struct UtataneRootView: View {
         return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
     }
 
-    private func handleHTTPGet(url source: String, eventID: String) async -> SakuraScript? {
-        guard let activeSession = session else { return nil }
-        guard let url = URL(string: source), ["http", "https"].contains(url.scheme?.lowercased()) else {
-            return try? await activeSession.handle(event: .shiori(id: eventID, references: [:]))
+    private func handleHTTP(_ command: SakuraScriptHTTPRequest) async -> SakuraScript? {
+        guard let activeSession = session, let currentGhost else { return nil }
+        guard var url = URL(string: command.url), ["http", "https"].contains(url.scheme?.lowercased()) else {
+            return nil
         }
-        let temporaryURL = FileManager.default.temporaryDirectory
-            .appending(path: "utatane-http-get-\(UUID().uuidString)", directoryHint: .notDirectory)
-        defer { try? FileManager.default.removeItem(at: temporaryURL) }
+        if command.method == "GET", !command.parameters.isEmpty,
+           var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        {
+            let suffix = command.parameters.joined(separator: "&")
+            components.percentEncodedQuery = [components.percentEncodedQuery, suffix]
+                .compactMap(\.self).filter { !$0.isEmpty }.joined(separator: "&")
+            url = components.url ?? url
+        }
         do {
-            let (data, response) = try await URLSession.shared.data(from: url)
+            var request = URLRequest(url: url)
+            request.httpMethod = command.method
+            request.timeoutInterval = min(max(command.timeoutSeconds ?? 60, 0.1), 300)
+            for header in command.headers {
+                let fields = header.split(separator: ":", maxSplits: 1).map(String.init)
+                if fields.count == 2 {
+                    request.setValue(fields[1].trimmingCharacters(in: .whitespaces), forHTTPHeaderField: fields[0])
+                }
+            }
+            if !command.parameters.isEmpty, command.method != "GET" {
+                request.httpBody = Data(command.parameters.joined(separator: "&").utf8)
+                if request.value(forHTTPHeaderField: "Content-Type") == nil {
+                    request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+                }
+            }
+            let (data, response) = try await URLSession.shared.data(for: request)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard (200 ..< 300).contains(statusCode) else { throw URLError(.badServerResponse) }
-            try data.write(to: temporaryURL, options: .atomic)
-            return try await activeSession.handle(event: .shiori(id: eventID, references: [
-                0: source,
+            let result: String
+            switch command.output {
+            case let .file(requestedName):
+                let masterDirectory = currentGhost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
+                let varDirectory = masterDirectory.appending(path: "var", directoryHint: .isDirectory)
+                try FileManager.default.createDirectory(at: varDirectory, withIntermediateDirectories: true)
+                let fallbackName = url.lastPathComponent.isEmpty ? "index.html" : url.lastPathComponent
+                let filename = URL(fileURLWithPath: requestedName ?? fallbackName).lastPathComponent
+                let destination = varDirectory.appending(path: filename, directoryHint: .notDirectory)
+                try data.write(to: destination, options: .atomic)
+                result = destination.path
+            case let .memory(characterEncoding):
+                result = Self.httpResponseText(data.prefix(128 * 1024), encoding: characterEncoding)
+                    .replacingOccurrences(of: "\r\n", with: "\u{1}")
+                    .replacingOccurrences(of: "\r", with: "\u{1}")
+                    .replacingOccurrences(of: "\n", with: "\u{1}")
+            }
+            guard let eventID = command.eventID else { return nil }
+            let successID = eventID.hasPrefix("On") ? eventID : "OnExecuteHTTPComplete"
+            return try await activeSession.handle(event: .shiori(id: successID, references: [
+                0: command.url,
                 1: String(statusCode),
                 2: response.mimeType ?? "",
-                3: temporaryURL.path
+                3: result
             ]))
         } catch {
-            return try? await activeSession.handle(event: .shiori(id: eventID, references: [:]))
+            guard let eventID = command.eventID else { return nil }
+            let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExecuteHTTPFailure"
+            return try? await activeSession.handle(event: .shiori(id: failureID, references: [0: command.url]))
         }
+    }
+
+    private static func httpResponseText(_ data: Data.SubSequence, encoding: String?) -> String {
+        let normalized = encoding?.lowercased().replacingOccurrences(of: "-", with: "_")
+        let stringEncoding: String.Encoding = switch normalized {
+        case "shift_jis", "shiftjis", "sjis": .shiftJIS
+        case "euc_jp", "eucjp": .japaneseEUC
+        case "utf_16", "utf16", "unicode": .unicode
+        default: .utf8
+        }
+        return String(data: Data(data), encoding: stringEncoding) ?? ""
+    }
+
+    private func handleNetworkDiagnostic(_ command: SakuraScriptNetworkDiagnostic) async -> SakuraScript? {
+        guard let session else { return nil }
+        switch command {
+        case let .ping(host, eventID, count, size, timeout, ttl):
+            guard !host.isEmpty else { return nil }
+            let result = await NetworkDiagnosticRunner.ping(
+                host: host, count: count, size: size, timeoutMilliseconds: timeout, ttl: ttl
+            )
+            let summary = result.output.split(separator: "\n").first { $0.contains("packets transmitted") }
+            let numbers = summary?.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) } ?? []
+            let sent = numbers.first ?? count
+            let received = numbers.dropFirst().first ?? (result.succeeded ? sent : 0)
+            let id = eventID.hasPrefix("On") ? eventID : "OnPingComplete"
+            return try? await session.handle(event: .shiori(id: id, references: [
+                0: eventID,
+                1: [host, String(sent), String(received), String(max(0, sent - received))].joined(separator: "\u{1}"),
+                2: result.output.replacingOccurrences(of: "\n", with: "\u{1}")
+            ]))
+        case let .nslookup(host, eventID):
+            guard !host.isEmpty else { return nil }
+            let reverse = host.contains(":") || host.split(separator: ".").count == 4
+            let result = await NetworkDiagnosticRunner.nslookup(host: host)
+            let value = result.output.split(separator: "\n").compactMap { line -> String? in
+                let fields = line.split(separator: ":", maxSplits: 1).map(String.init)
+                guard fields.count == 2, ["name", "ip_address"].contains(fields[0]) else { return nil }
+                return fields[1].trimmingCharacters(in: .whitespaces)
+            }.joined(separator: "\u{1}")
+            let defaultID = result.succeeded && !value.isEmpty ? "OnNSLookupComplete" : "OnNSLookupFailure"
+            let id = eventID.hasPrefix("On") ? eventID : defaultID
+            return try? await session.handle(event: .shiori(id: id, references: [
+                0: eventID, 1: host, 2: reverse ? "reverse" : "lookup", 3: value
+            ]))
+        }
+    }
+
+    private func handleWebSocket(_ command: SakuraScriptWebSocketCommand) async {
+        switch command {
+        case let .connect(url, eventID, headerLines, protocolName):
+            await webSocketManager.connect(
+                url: url,
+                eventID: eventID,
+                headers: webSocketHeaders(headerLines),
+                protocolName: protocolName
+            ) { event in
+                await handleWebSocketEvent(event)
+            }
+        case let .sendText(url, value): await webSocketManager.sendText(url: url, value: value)
+        case let .sendBinary(url, value): await webSocketManager.sendBinary(url: url, value: value)
+        case let .close(url, code): await webSocketManager.close(url: url, code: code)
+        case let .cancel(url): await webSocketManager.cancel(url: url)
+        }
+    }
+
+    private func handleWebSocketEvent(_ event: WebSocketSessionEvent) async {
+        guard let session, let balloon else { return }
+        let payload = event.shioriEvent
+        guard let response = try? await session.handle(event: .shiori(id: payload.id, references: payload.references)),
+              !response.rawValue.isEmpty
+        else { return }
+        scriptPlayer.play(response, balloon: balloon)
+    }
+
+    private func webSocketHeaders(_ lines: [String]) -> [String: String] {
+        Dictionary(uniqueKeysWithValues: lines.compactMap { line -> (String, String)? in
+            let fields = line.split(separator: ":", maxSplits: 1).map(String.init)
+            guard fields.count == 2 else { return nil }
+            return (fields[0], fields[1].trimmingCharacters(in: .whitespaces))
+        })
     }
 
     private func fetchWeatherAndPlay(eventID: String) async {
