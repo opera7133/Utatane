@@ -540,3 +540,164 @@ func `parses balloon marker command`() {
         .choice(label: "選択肢", id: "OnChoice", arguments: [])
     ])
 }
+
+@Test
+func `parses close ghost, AITalk, stayontop and windowstate commands`() {
+    #expect(SakuraScriptParser().parse(#"\-\a\v\![set,windowstate,stayontop]\![set,windowstate,!stayontop]"#) == [
+        .contentAction(.closeGhost),
+        .raisedEvent(id: "OnAITalk", arguments: []),
+        .stayOnTop(true),
+        .stayOnTop(true),
+        .stayOnTop(false)
+    ])
+}
+
+@Test
+func `parses rss-get and rss-post commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,rss-get,https://example.test/feed.xml,--async=OnFeedLoaded]\![execute,rss-post,https://example.test/rss,--param=q=news]"#
+    ) == [
+        .http(SakuraScriptHTTPRequest(
+            method: "GET",
+            url: "https://example.test/feed.xml",
+            eventID: "OnFeedLoaded",
+            waitsForCompletion: false,
+            isFeed: true
+        )),
+        .http(SakuraScriptHTTPRequest(
+            method: "POST",
+            url: "https://example.test/rss",
+            eventID: nil,
+            waitsForCompletion: false,
+            parameters: ["q=news"],
+            isFeed: true
+        ))
+    ])
+}
+
+@Test
+func `parses http cancellation and inputbox close commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![cancel,http,https://example.test/file.zip]\![cancel,http]\![close,inputbox,OnNameInput]\![close,inputbox,__SYSTEM_ALL_INPUT__]"#
+    ) == [
+        .cancelHTTP(url: "https://example.test/file.zip"),
+        .cancelHTTP(url: nil),
+        .closeInputBox(id: "OnNameInput"),
+        .closeInputBox(id: "__SYSTEM_ALL_INPUT__")
+    ])
+}
+
+@Test
+func `parses other ghost timer commands and cancellation`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![timerraiseother,30000,0,Emily,OnRoastedPotato,sweet potato]\![timerraiseother,0,1,Emily]\![timernotifyother,1000,1,*,OnPing]"#
+    ) == [
+        .otherTimerEvent(
+            target: "Emily",
+            milliseconds: 30000,
+            repeats: true,
+            reflectsResponse: true,
+            id: "OnRoastedPotato",
+            arguments: ["sweet potato"]
+        ),
+        .otherTimerEvent(
+            target: "Emily",
+            milliseconds: 0,
+            repeats: false,
+            reflectsResponse: true,
+            id: "",
+            arguments: []
+        ),
+        .otherTimerEvent(
+            target: "*",
+            milliseconds: 1000,
+            repeats: false,
+            reflectsResponse: false,
+            id: "OnPing",
+            arguments: []
+        )
+    ])
+}
+
+@Test
+func `parses install and archive execution commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,install,path,/tmp/test.nar]\![execute,install,url,https://example.test/ghost.nar,nar]\![execute,extractarchive,/tmp/a.zip,/tmp/dest,--event=OnExtractComplete,--password=secret]\![execute,compressarchive,/tmp/out.zip,/tmp/src]"#
+    ) == [
+        .contentAction(.install(.path("/tmp/test.nar"))),
+        .contentAction(.install(.url("https://example.test/ghost.nar", type: "nar"))),
+        .archive(.extract(
+            archivePath: "/tmp/a.zip",
+            destinationPath: "/tmp/dest",
+            eventID: "OnExtractComplete",
+            password: "secret"
+        )),
+        .archive(.compress(
+            archivePath: "/tmp/out.zip",
+            sourceDirectoryPath: "/tmp/src",
+            eventID: nil,
+            password: nil
+        ))
+    ])
+}
+
+@Test
+func `parses expanded HTML and XML entity references`() {
+    #expect(SakuraScriptParser().parse(
+        #"\&[yen]\&[copy]\&[trade]\&[euro]\&[half_solidus]\&[deg]\&[plusmn]\&[hellip]"#
+    ) == [
+        .text("¥"),
+        .text("©"),
+        .text("™"),
+        .text("€"),
+        .text("/"),
+        .text("°"),
+        .text("±"),
+        .text("…")
+    ])
+}
+
+@Test
+func `parses other ghost talk and surface change commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![otherghosttalk,Emily,\0\s[0]こんにちは]\![othersurfacechange,Emily,0,10]"#
+    ) == [
+        .otherGhostTalk(target: "Emily", script: #"\0\s[0]こんにちは"#),
+        .otherSurfaceChange(target: "Emily", scope: 0, surfaceID: 10)
+    ])
+}
+
+@Test
+func `parses communicatebox and teachbox commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![open,communicatebox,おはよう]\![open,teachbox]"#
+    ) == [
+        .communicateBox(initialValue: "おはよう"),
+        .teachBox(initialValue: "")
+    ])
+}
+
+@Test
+func `parses reload content actions and createnar commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![reload,ghost]\![reload,shell]\![reload,balloon]\![execute,createnar,/tmp/out.nar,/tmp/target,--event=OnExported]"#
+    ) == [
+        .contentAction(.reloadGhost),
+        .contentAction(.reloadShell),
+        .contentAction(.reloadBalloon),
+        .archive(.createNar(
+            narPath: "/tmp/out.nar",
+            sourceDirectoryPath: "/tmp/target",
+            eventID: "OnExported"
+        ))
+    ])
+}
+
+@Test
+func `parses negative balloon surface ID for hiding balloon`() {
+    #expect(SakuraScriptParser().parse(#"\b[-1]"#) == [
+        .balloonSurface(-1)
+    ])
+}
+
+

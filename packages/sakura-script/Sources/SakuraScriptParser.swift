@@ -63,6 +63,12 @@ public struct SakuraScriptParser: Sendable {
             switch command {
             case "%":
                 tokens.append(.text("%"))
+            case "-":
+                tokens.append(.contentAction(.closeGhost))
+            case "a":
+                tokens.append(.raisedEvent(id: "OnAITalk", arguments: []))
+            case "v":
+                tokens.append(.stayOnTop(true))
             case "+":
                 tokens.append(.contentAction(.randomGhost))
             case "0", "h":
@@ -610,6 +616,66 @@ public struct SakuraScriptParser: Sendable {
                             arguments: Array(arguments.dropFirst(4))
                         ))
                     } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "windowstate"
+                    {
+                        if arguments[2].lowercased() == "stayontop" {
+                            tokens.append(.stayOnTop(true))
+                        } else if arguments[2].lowercased() == "!stayontop" {
+                            tokens.append(.stayOnTop(false))
+                        } else {
+                            tokens.append(.unknown("\\![\(argument)]"))
+                        }
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "cancel",
+                              ["http", "http-get"].contains(arguments[1].lowercased())
+                    {
+                        tokens.append(.cancelHTTP(url: arguments.count >= 3 && !arguments[2].isEmpty ? arguments[2] : nil))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "close",
+                              arguments[1].lowercased() == "inputbox"
+                    {
+                        tokens.append(.closeInputBox(id: arguments[2]))
+                    } else if arguments.count >= 5,
+                              ["timerraiseother", "timernotifyother"].contains(arguments[0].lowercased()),
+                              let milliseconds = Int(arguments[1]),
+                              let once = Int(arguments[2])
+                    {
+                        tokens.append(.otherTimerEvent(
+                            target: arguments[3],
+                            milliseconds: max(0, milliseconds),
+                            repeats: once == 0,
+                            reflectsResponse: arguments[0].lowercased() == "timerraiseother",
+                            id: arguments[4],
+                            arguments: Array(arguments.dropFirst(5))
+                        ))
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "timerraiseother",
+                              let milliseconds = Int(arguments[1]),
+                              let once = Int(arguments[2])
+                    {
+                        tokens.append(.otherTimerEvent(
+                            target: arguments[3],
+                            milliseconds: max(0, milliseconds),
+                            repeats: once == 0,
+                            reflectsResponse: true,
+                            id: "",
+                            arguments: []
+                        ))
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "timernotifyother",
+                              let milliseconds = Int(arguments[1]),
+                              let once = Int(arguments[2])
+                    {
+                        tokens.append(.otherTimerEvent(
+                            target: arguments[3],
+                            milliseconds: max(0, milliseconds),
+                            repeats: once == 0,
+                            reflectsResponse: false,
+                            id: "",
+                            arguments: []
+                        ))
+                    } else if arguments.count >= 3,
                               arguments[0].lowercased() == "change"
                     {
                         switch arguments[1].lowercased() {
@@ -636,6 +702,69 @@ public struct SakuraScriptParser: Sendable {
                               arguments[1].lowercased() == "headline"
                     {
                         tokens.append(.contentAction(.headline(arguments[2])))
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "install"
+                    {
+                        if arguments[2].lowercased() == "path" {
+                            tokens.append(.contentAction(.install(.path(arguments[3]))))
+                        } else if arguments[2].lowercased() == "url" {
+                            tokens.append(.contentAction(.install(.url(
+                                arguments[3],
+                                type: arguments.count >= 5 ? arguments[4] : nil
+                            ))))
+                        } else {
+                            tokens.append(.unknown("\\![\(argument)]"))
+                        }
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "execute",
+                              ["extractarchive", "compressarchive"].contains(arguments[1].lowercased())
+                    {
+                        let options = Array(arguments.dropFirst(4))
+                        let eventID = Self.optionValue("event", in: options)
+                        let password = Self.optionValue("password", in: options)
+                        if arguments[1].lowercased() == "extractarchive" {
+                            tokens.append(.archive(.extract(
+                                archivePath: arguments[2],
+                                destinationPath: arguments[3],
+                                eventID: eventID,
+                                password: password
+                            )))
+                        } else {
+                            tokens.append(.archive(.compress(
+                                archivePath: arguments[2],
+                                sourceDirectoryPath: arguments[3],
+                                eventID: eventID,
+                                password: password
+                            )))
+                        }
+                    } else if arguments.count >= 3, arguments[0].lowercased() == "otherghosttalk" {
+                        let script = arguments.dropFirst(2).joined(separator: ",")
+                        tokens.append(.otherGhostTalk(target: arguments[1], script: script))
+                    } else if arguments.count >= 4, arguments[0].lowercased() == "othersurfacechange" {
+                        tokens.append(.otherSurfaceChange(
+                            target: arguments[1],
+                            scope: Int(arguments[2]) ?? 0,
+                            surfaceID: Int(arguments[3]) ?? 0
+                        ))
+                    } else if arguments.count >= 2, arguments[0].lowercased() == "reload" {
+                        switch arguments[1].lowercased() {
+                        case "ghost": tokens.append(.contentAction(.reloadGhost))
+                        case "shell": tokens.append(.contentAction(.reloadShell))
+                        case "balloon": tokens.append(.contentAction(.reloadBalloon))
+                        default: tokens.append(.unknown("\\![\(argument)]"))
+                        }
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "createnar"
+                    {
+                        let options = Array(arguments.dropFirst(4))
+                        let eventID = Self.optionValue("event", in: options)
+                        tokens.append(.archive(.createNar(
+                            narPath: arguments[2],
+                            sourceDirectoryPath: arguments[3],
+                            eventID: eventID
+                        )))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "resetwindowpos"
@@ -646,9 +775,19 @@ public struct SakuraScriptParser: Sendable {
                               arguments[1].lowercased() == "resetballoonpos"
                     {
                         tokens.append(.resetBalloonPositions)
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "open",
+                              ["communicatebox", "teachbox"].contains(arguments[1].lowercased())
+                    {
+                        let initialValue = arguments.count >= 3 ? arguments[2] : ""
+                        if arguments[1].lowercased() == "communicatebox" {
+                            tokens.append(.communicateBox(initialValue: initialValue))
+                        } else {
+                            tokens.append(.teachBox(initialValue: initialValue))
+                        }
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "open",
-                              arguments[1].lowercased() == "inputbox"
+                              ["inputbox", "passwordinput", "dateinput", "sliderinput", "timeinput", "ipinput"].contains(arguments[1].lowercased())
                     {
                         tokens.append(.inputBox(
                             id: arguments[2],
@@ -657,9 +796,15 @@ public struct SakuraScriptParser: Sendable {
                         ))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "execute",
-                              ["http-get", "http-post", "http-head", "http-put", "http-delete", "http-patch", "http-options"]
+                              ["http-get", "http-post", "http-head", "http-put", "http-delete", "http-patch", "http-options", "rss-get", "rss-post"]
                               .contains(arguments[1].lowercased())
                     {
+                        let isFeed = ["rss-get", "rss-post"].contains(arguments[1].lowercased())
+                        let method = if isFeed {
+                            arguments[1].lowercased() == "rss-get" ? "GET" : "POST"
+                        } else {
+                            String(arguments[1].dropFirst("http-".count)).uppercased()
+                        }
                         let options = Array(arguments.dropFirst(3))
                         let asyncID = Self.optionValue("async", in: options)
                         let syncID = Self.optionValue("sync", in: options)
@@ -686,7 +831,7 @@ public struct SakuraScriptParser: Sendable {
                             return "\(headerName): \(value)"
                         }
                         tokens.append(.http(SakuraScriptHTTPRequest(
-                            method: String(arguments[1].dropFirst("http-".count)).uppercased(),
+                            method: method,
                             url: arguments[2],
                             eventID: syncID ?? asyncID,
                             waitsForCompletion: syncID != nil,
@@ -700,7 +845,8 @@ public struct SakuraScriptParser: Sendable {
                                     String(option[option.index(after: $0)...])
                                 }
                                 return .memory(characterEncoding: encoding)
-                            } ?? .file(Self.optionValue("file", in: options))
+                            } ?? .file(Self.optionValue("file", in: options)),
+                            isFeed: isFeed
                         )))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "execute",
@@ -817,13 +963,45 @@ public struct SakuraScriptParser: Sendable {
         guard index < characters.count, characters[index] == "[" else { return nil }
         index += 1
         var argument = ""
-        while index < characters.count, characters[index] != "]" {
-            argument.append(characters[index])
+        var depth = 1
+        var inQuotes = false
+        var isEscaped = false
+
+        while index < characters.count {
+            let character = characters[index]
+            if isEscaped {
+                argument.append(character)
+                isEscaped = false
+                index += 1
+                continue
+            }
+            if character == "\\" {
+                argument.append(character)
+                isEscaped = true
+                index += 1
+                continue
+            }
+            if character == "\"" {
+                inQuotes.toggle()
+                argument.append(character)
+                index += 1
+                continue
+            }
+            if !inQuotes {
+                if character == "[" {
+                    depth += 1
+                } else if character == "]" {
+                    depth -= 1
+                    if depth == 0 {
+                        index += 1
+                        return argument
+                    }
+                }
+            }
+            argument.append(character)
             index += 1
         }
-        guard index < characters.count else { return nil }
-        index += 1
-        return argument
+        return nil
     }
 
     private func encodedCharacter(
@@ -872,7 +1050,40 @@ public struct SakuraScriptParser: Sendable {
             "gt": ">",
             "lt": "<",
             "nbsp": "\u{00A0}",
-            "quot": "\""
+            "quot": "\"",
+            "yen": "¥",
+            "cent": "¢",
+            "pound": "£",
+            "euro": "€",
+            "copy": "©",
+            "reg": "®",
+            "trade": "™",
+            "deg": "°",
+            "plusmn": "±",
+            "sup1": "¹",
+            "sup2": "²",
+            "sup3": "³",
+            "frac14": "¼",
+            "frac12": "½",
+            "frac34": "¾",
+            "times": "×",
+            "divide": "÷",
+            "half_solidus": "/",
+            "bull": "•",
+            "hellip": "…",
+            "prime": "′",
+            "larr": "←",
+            "rarr": "→",
+            "uarr": "↑",
+            "darr": "↓",
+            "sect": "§",
+            "para": "¶",
+            "middot": "·",
+            "micro": "µ",
+            "laquo": "«",
+            "raquo": "»",
+            "iquest": "¿",
+            "iexcl": "¡"
         ]
     }
 

@@ -291,6 +291,14 @@ RiaRegisterPet
 	if ISVAR('ria_mood_saved') == 0 {
 		ria_mood_saved = 0
 	}
+	if ISVAR('ria_pet_timer') == 0 {
+		ria_pet_timer = 0
+	}
+	_now = GETTICKCOUNT
+	if (_now - TOINT(ria_pet_timer)) > 300000 {
+		ria_session_pet_count = 0
+	}
+	ria_pet_timer = _now
 	ria_pet_count_saved++
 	ria_session_pet_count++
 	ria_session_apology_count = 0

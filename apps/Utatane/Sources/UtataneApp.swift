@@ -177,6 +177,9 @@ private struct UtataneRootView: View {
     @State private var isTransitioningGhost = false
     @State private var weatherTask: Task<Void, Never>?
     @State private var webSocketManager = WebSocketSessionManager()
+    @State private var lastGhostName: String = ""
+    @State private var lastObjectName: String = ""
+    @State private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
 
     var body: some View {
         Group {
@@ -600,7 +603,9 @@ private struct UtataneRootView: View {
             scriptPlayer.configure(environmentVariables: [
                 "selfname": mainName,
                 "selfname2": mainName,
-                "keroname": ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+                "keroname": ghost.characters.first(where: { $0.scope == 1 })?.name ?? "",
+                "lastghostname": lastGhostName,
+                "lastobjectname": lastObjectName
             ])
             scriptPlayer.onContentAction = { action in
                 handleContentAction(action)
@@ -613,6 +618,12 @@ private struct UtataneRootView: View {
                     reflectsResponse: reflectsResponse,
                     excluding: ghost.id
                 )
+            }
+            scriptPlayer.onOtherGhostTalk = { target, script in
+                handleOtherGhostTalk(target: target, script: script, excluding: ghost.id)
+            }
+            scriptPlayer.onOtherSurfaceChange = { target, scope, surfaceID in
+                handleOtherSurfaceChange(target: target, scope: scope, surfaceID: surfaceID, excluding: ghost.id)
             }
             scriptPlayer.onEmbeddedEvent = { id, arguments in
                 guard let embeddedSession = session else { return nil }
@@ -632,14 +643,38 @@ private struct UtataneRootView: View {
                     references: [0: value]
                 ))
             }
+            scriptPlayer.onCommunicateBox = { initialValue in
+                guard let value = promptForText(initialValue: initialValue),
+                      let activeSession = session
+                else { return nil }
+                return try? await activeSession.handle(event: .shiori(
+                    id: "OnCommunicate",
+                    references: [0: value]
+                ))
+            }
+            scriptPlayer.onTeachBox = { initialValue in
+                guard let value = promptForText(initialValue: initialValue),
+                      let activeSession = session
+                else { return nil }
+                return try? await activeSession.handle(event: .shiori(
+                    id: "OnTeach",
+                    references: [0: value]
+                ))
+            }
             scriptPlayer.onHTTP = { request in
                 await handleHTTP(request)
+            }
+            scriptPlayer.onCancelHTTP = { url in
+                cancelHTTP(url: url)
             }
             scriptPlayer.onNetworkDiagnostic = { command in
                 await handleNetworkDiagnostic(command)
             }
             scriptPlayer.onWebSocket = { command in
                 await handleWebSocket(command)
+            }
+            scriptPlayer.onArchive = { command in
+                await handleArchive(command)
             }
             scriptPlayer.onWeatherGet = { eventID in
                 weatherTask?.cancel()
@@ -715,6 +750,17 @@ private struct UtataneRootView: View {
         return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
     }
 
+    private func cancelHTTP(url: String?) {
+        if let url {
+            inFlightHTTPTasks.removeValue(forKey: url)?.cancel()
+        } else {
+            for (_, task) in inFlightHTTPTasks {
+                task.cancel()
+            }
+            inFlightHTTPTasks.removeAll()
+        }
+    }
+
     private func handleHTTP(_ command: SakuraScriptHTTPRequest) async -> SakuraScript? {
         guard let activeSession = session, let currentGhost else { return nil }
         guard var url = URL(string: command.url), ["http", "https"].contains(url.scheme?.lowercased()) else {
@@ -747,6 +793,33 @@ private struct UtataneRootView: View {
             let (data, response) = try await URLSession.shared.data(for: request)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard (200 ..< 300).contains(statusCode) else { throw URLError(.badServerResponse) }
+
+            if command.isFeed {
+                do {
+                    let feed = try RSSFeedClient.parse(data)
+                    guard let eventID = command.eventID else { return nil }
+                    let successID = eventID.hasPrefix("On") ? eventID : "OnExecuteRSSComplete"
+                    var references: [Int: String] = [:]
+                    for (index, item) in feed.items.enumerated() {
+                        references[index] = [
+                            item.title,
+                            item.link,
+                            item.published,
+                            item.author,
+                            item.summary
+                        ].joined(separator: "\u{1}")
+                    }
+                    return try await activeSession.handle(event: .shiori(id: successID, references: references))
+                } catch {
+                    guard let eventID = command.eventID else { return nil }
+                    let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExecuteRSSFailure"
+                    return try? await activeSession.handle(event: .shiori(id: failureID, references: [
+                        0: command.url,
+                        4: "parse"
+                    ]))
+                }
+            }
+
             let result: String
             switch command.output {
             case let .file(requestedName):
@@ -774,8 +847,108 @@ private struct UtataneRootView: View {
             ]))
         } catch {
             guard let eventID = command.eventID else { return nil }
-            let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExecuteHTTPFailure"
+            let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : (command.isFeed ? "OnExecuteRSSFailure" : "OnExecuteHTTPFailure")
             return try? await activeSession.handle(event: .shiori(id: failureID, references: [0: command.url]))
+        }
+    }
+
+    private func handleArchive(_ command: SakuraScriptArchiveCommand) async -> SakuraScript? {
+        guard let activeSession = session, let currentGhost else { return nil }
+        let runner = ArchiveOperationRunner()
+        let masterDirectory = currentGhost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
+
+        func resolvePath(_ path: String) -> URL {
+            if path.hasPrefix("/") {
+                return URL(fileURLWithPath: path)
+            }
+            return masterDirectory.appending(path: path)
+        }
+
+        switch command {
+        case let .extract(archivePath, destinationPath, eventID, password):
+            let archiveURL = resolvePath(archivePath)
+            let destURL = resolvePath(destinationPath)
+            do {
+                let result = try runner.extract(archiveURL: archiveURL, destinationDirectoryURL: destURL, password: password)
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? eventID : "OnExtractArchiveComplete"
+                return try await activeSession.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: String(result.fileCount),
+                    2: String(result.compressedBytes),
+                    3: String(result.uncompressedBytes)
+                ]))
+            } catch let error as ArchiveOperationError {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExtractArchiveFailure"
+                return try? await activeSession.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: error.errorCode
+                ]))
+            } catch {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExtractArchiveFailure"
+                return try? await activeSession.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: "open failed"
+                ]))
+            }
+        case let .compress(archivePath, sourceDirectoryPath, eventID, password):
+            let archiveURL = resolvePath(archivePath)
+            let sourceURL = resolvePath(sourceDirectoryPath)
+            do {
+                let result = try runner.compress(destinationArchiveURL: archiveURL, sourceDirectoryURL: sourceURL, password: password)
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? eventID : "OnCompressArchiveComplete"
+                return try await activeSession.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: String(result.fileCount),
+                    2: String(result.compressedBytes),
+                    3: String(result.uncompressedBytes)
+                ]))
+            } catch let error as ArchiveOperationError {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCompressArchiveFailure"
+                return try? await activeSession.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: error.errorCode
+                ]))
+            } catch {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCompressArchiveFailure"
+                return try? await activeSession.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: "open failed"
+                ]))
+            }
+        case let .createNar(narPath, sourceDirectoryPath, eventID):
+            let archiveURL = resolvePath(narPath)
+            let sourceURL = resolvePath(sourceDirectoryPath)
+            do {
+                let result = try runner.compress(destinationArchiveURL: archiveURL, sourceDirectoryURL: sourceURL)
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? eventID : "OnCreateNarComplete"
+                return try await activeSession.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: String(result.fileCount),
+                    2: String(result.compressedBytes),
+                    3: String(result.uncompressedBytes)
+                ]))
+            } catch let error as ArchiveOperationError {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateNarFailure"
+                return try? await activeSession.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: error.errorCode
+                ]))
+            } catch {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateNarFailure"
+                return try? await activeSession.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: "open failed"
+                ]))
+            }
         }
     }
 
@@ -1034,12 +1207,101 @@ private struct UtataneRootView: View {
                 case .legacyDLL: await fetchLegacyHeadline(headline)
                 }
             }
+        case .closeGhost:
+            if let calledRuntime {
+                dismissCalledGhost(calledRuntime.ghost)
+            } else {
+                NSApplication.shared.terminate(nil)
+            }
+        case let .install(source):
+            switch source {
+            case let .path(filePath):
+                let fileURL = filePath.hasPrefix("/")
+                    ? URL(fileURLWithPath: filePath)
+                    : (currentGhost?.rootDirectory.appending(path: "ghost/master").appending(path: filePath) ?? URL(fileURLWithPath: filePath))
+                installNar(from: fileURL)
+            case let .url(urlString, _):
+                guard let downloadURL = URL(string: urlString), ["http", "https"].contains(downloadURL.scheme?.lowercased()) else { return }
+                Task {
+                    guard let (data, response) = try? await URLSession.shared.data(from: downloadURL),
+                          let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode)
+                    else { return }
+                    let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+                    try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+                    let filename = downloadURL.lastPathComponent.isEmpty ? "download.nar" : downloadURL.lastPathComponent
+                    let tempFile = tempDir.appending(path: filename)
+                    try? data.write(to: tempFile)
+                    installNar(from: tempFile)
+                }
+            }
+        case .reloadGhost:
+            if let calledRuntime {
+                let ghost = calledRuntime.ghost
+                dismissCalledGhost(ghost)
+                callGhost(ghost)
+            } else if let currentGhost {
+                let ghostID = currentGhost.id
+                selectedGhostID = nil
+                selectedGhostID = ghostID
+            }
+        case .reloadShell:
+            if let calledRuntime {
+                calledRuntime.select(shell: calledRuntime.shell)
+            } else if let selectedShell {
+                select(shell: selectedShell)
+            }
+        case .reloadBalloon:
+            if let calledRuntime {
+                calledRuntime.select(balloon: calledRuntime.balloon)
+            } else if let balloon {
+                select(balloon: balloon)
+            }
         }
     }
 
     private func matches(_ target: String, name: String, directory: URL) -> Bool {
         name.caseInsensitiveCompare(target) == .orderedSame
             || directory.lastPathComponent.caseInsensitiveCompare(target) == .orderedSame
+    }
+
+    private func handleOtherGhostTalk(
+        target: String,
+        script: String,
+        excluding originID: URL?
+    ) {
+        let isAll = target.caseInsensitiveCompare("__SYSTEM_ALL_GHOST__") == .orderedSame || target == "*"
+        if let currentGhost,
+           currentGhost.id != originID,
+           isAll || ghost(currentGhost, matches: target),
+           let balloon
+        {
+            scriptPlayer.play(SakuraScript(script), balloon: balloon)
+        }
+        for runtime in calledGhosts.values where runtime.ghost.id != originID
+            && (isAll || ghost(runtime.ghost, matches: target))
+        {
+            runtime.play(SakuraScript(script))
+        }
+    }
+
+    private func handleOtherSurfaceChange(
+        target: String,
+        scope: Int,
+        surfaceID: Int,
+        excluding originID: URL?
+    ) {
+        let isAll = target.caseInsensitiveCompare("__SYSTEM_ALL_GHOST__") == .orderedSame || target == "*"
+        if let currentGhost,
+           currentGhost.id != originID,
+           isAll || ghost(currentGhost, matches: target)
+        {
+            try? surfaceWindowController.changeSurface(to: surfaceID, scope: scope)
+        }
+        for runtime in calledGhosts.values where runtime.ghost.id != originID
+            && (isAll || ghost(runtime.ghost, matches: target))
+        {
+            runtime.changeSurface(to: surfaceID, scope: scope)
+        }
     }
 
     private func handleOtherEvent(
@@ -1286,6 +1548,12 @@ private struct UtataneRootView: View {
                         reflectsResponse: reflectsResponse,
                         excluding: ghost.id
                     )
+                }
+                runtime.onOtherGhostTalk = { [weak self] target, script in
+                    self?.handleOtherGhostTalk(target: target, script: script, excluding: ghost.id)
+                }
+                runtime.onOtherSurfaceChange = { [weak self] target, scope, surfaceID in
+                    self?.handleOtherSurfaceChange(target: target, scope: scope, surfaceID: surfaceID, excluding: ghost.id)
                 }
                 calledGhosts[ghost.id] = runtime
                 configureContextMenu()
@@ -1840,6 +2108,23 @@ private struct UtataneRootView: View {
                 installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonReadDirectories)
                 reloadHeadlines()
                 configureContextMenu()
+
+                if let lastGhost = installedItems.last(where: { $0.type == .ghost }) {
+                    lastGhostName = lastGhost.name
+                }
+                if let lastObject = installedItems.last {
+                    lastObjectName = lastObject.name
+                }
+                scriptPlayer.updateEnvironmentVariables([
+                    "lastghostname": lastGhostName,
+                    "lastobjectname": lastObjectName
+                ])
+                for runtime in calledGhosts.values {
+                    runtime.updateEnvironmentVariables([
+                        "lastghostname": lastGhostName,
+                        "lastobjectname": lastObjectName
+                    ])
+                }
 
                 let separator = "\u{1}"
                 _ = await playInstallationEvent(

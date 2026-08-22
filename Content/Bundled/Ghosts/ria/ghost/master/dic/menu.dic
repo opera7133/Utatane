@@ -15,6 +15,10 @@ OnRiaChoiceTalk
 
 OnRiaChoiceState
 {
+	_now = GETTICKCOUNT
+	if (_now - TOINT(ria_pet_timer)) > 30000 {
+		ria_session_pet_count = 0
+	}
 	_elapsed = RiaSessionSeconds
 	_hour = GETTIME[4]
 	_spoiling = RiaSpoilingActive

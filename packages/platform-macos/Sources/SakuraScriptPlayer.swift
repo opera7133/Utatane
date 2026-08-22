@@ -34,9 +34,16 @@ public final class SakuraScriptPlayer {
     public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
     public var onInputBox: (@MainActor (String, Int?, String) async -> SakuraScript?)?
     public var onHTTP: (@MainActor (SakuraScriptHTTPRequest) async -> SakuraScript?)?
+    public var onCancelHTTP: (@MainActor (String?) -> Void)?
     public var onNetworkDiagnostic: (@MainActor (SakuraScriptNetworkDiagnostic) async -> SakuraScript?)?
     public var onWebSocket: (@MainActor (SakuraScriptWebSocketCommand) async -> Void)?
     public var onWeatherGet: (@MainActor (String) async -> SakuraScript?)?
+    public var onArchive: (@MainActor (SakuraScriptArchiveCommand) async -> SakuraScript?)?
+    public var onCloseInputBox: (@MainActor (String) -> Void)?
+    public var onCommunicateBox: (@MainActor (String) async -> SakuraScript?)?
+    public var onTeachBox: (@MainActor (String) async -> SakuraScript?)?
+    public var onOtherGhostTalk: (@MainActor (String, String) -> Void)?
+    public var onOtherSurfaceChange: (@MainActor (String, Int, Int) -> Void)?
     public var onOpen: (@MainActor (String) -> Void)?
     public var onContentAction: (@MainActor (SakuraScriptContentAction) -> Void)?
     public var onOtherEvent: (@MainActor (String, String, [String], Bool) async -> Void)?
@@ -141,6 +148,12 @@ public final class SakuraScriptPlayer {
         self.environmentVariables = Dictionary(uniqueKeysWithValues: environmentVariables.map {
             ($0.key.lowercased(), $0.value)
         })
+    }
+
+    public func updateEnvironmentVariables(_ variables: [String: String]) {
+        for (key, value) in variables {
+            self.environmentVariables[key.lowercased()] = value
+        }
     }
 
     public func configurePlayback(
@@ -552,7 +565,9 @@ public final class SakuraScriptPlayer {
                     }
                 case let .balloonSurface(style):
                     balloonStyleByScope[scope] = style
-                    if activatedScopes.contains(scope) {
+                    if style < 0 {
+                        balloonWindowController.hide(scope: scope)
+                    } else if activatedScopes.contains(scope) {
                         try balloonWindowController.changeStyle(style, scope: scope)
                     }
                 case let .lineBreak(scale):
@@ -820,6 +835,38 @@ public final class SakuraScriptPlayer {
                         arguments: arguments,
                         balloon: balloon
                     )
+                case let .stayOnTop(stayOnTop):
+                    surfaceWindowController.setStayOnTop(stayOnTop)
+                    balloonWindowController.setStayOnTop(stayOnTop)
+                case let .otherGhostTalk(target, script):
+                    onOtherGhostTalk?(target, script)
+                case let .otherSurfaceChange(target, scope, surfaceID):
+                    onOtherSurfaceChange?(target, scope, surfaceID)
+                case let .otherTimerEvent(target, milliseconds, repeats, reflectsResponse, id, arguments):
+                    scheduleOtherEventTimer(
+                        target: target,
+                        milliseconds: milliseconds,
+                        repeats: repeats,
+                        reflectsResponse: reflectsResponse,
+                        id: id,
+                        arguments: arguments
+                    )
+                case let .cancelHTTP(url):
+                    onCancelHTTP?(url)
+                case let .closeInputBox(id):
+                    onCloseInputBox?(id)
+                case let .communicateBox(initialValue):
+                    if let response = await onCommunicateBox?(initialValue) {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                    }
+                case let .teachBox(initialValue):
+                    if let response = await onTeachBox?(initialValue) {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                    }
+                case let .archive(command):
+                    if let response = await onArchive?(command) {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                    }
                 case let .contentAction(action):
                     onContentAction?(action)
                 case .resetWindowPositions:
@@ -902,6 +949,32 @@ public final class SakuraScriptPlayer {
         }
     }
 
+    private func scheduleOtherEventTimer(
+        target: String,
+        milliseconds: Int,
+        repeats: Bool,
+        reflectsResponse: Bool,
+        id: String,
+        arguments: [String]
+    ) {
+        let timerKey = "other:\(target):\(id)"
+        eventTimers[timerKey]?.cancel()
+        eventTimers[timerKey] = nil
+        guard milliseconds > 0 else { return }
+        eventTimers[timerKey] = Task { [weak self] in
+            repeat {
+                do {
+                    try await Task.sleep(for: .milliseconds(milliseconds))
+                } catch {
+                    return
+                }
+                guard let self, !Task.isCancelled else { return }
+                await onOtherEvent?(target, id, arguments, reflectsResponse)
+            } while repeats && !Task.isCancelled
+            self?.eventTimers[timerKey] = nil
+        }
+    }
+
     private func environmentValue(for name: String) -> String {
         if let configured = environmentVariables[name] {
             return configured
@@ -918,6 +991,12 @@ public final class SakuraScriptPlayer {
         case "screenwidth": return String(Int((NSScreen.main ?? NSScreen.screens.first)?.frame.width ?? 0))
         case "screenheight": return String(Int((NSScreen.main ?? NSScreen.screens.first)?.frame.height ?? 0))
         case "exh": return String(Int(ProcessInfo.processInfo.systemUptime))
+        case "et":
+            return ["42年", "150分", "3世紀", "999日", "3000万秒", "一昨日からずっと"].randomElement()!
+        case "wronghour":
+            let currentHour = calendar.component(.hour, from: now)
+            let wrong = (currentHour + Int.random(in: 1...11)) % 24
+            return String(wrong)
         case "ms": return ["学生", "会社員", "旅人", "猫好き"].randomElement()!
         case "mz": return ["時計", "傘", "冷蔵庫", "パソコン"].randomElement()!
         case "ml": return ["人々", "鳥の群れ", "本の山", "星々"].randomElement()!

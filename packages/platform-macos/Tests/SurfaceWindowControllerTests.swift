@@ -1262,6 +1262,20 @@ func `balloon repaint lock defers content and movement lock tracks state`() thro
     #expect(!controller.isMovementLocked(scope: 0))
 }
 
+@Test
+@MainActor
+func `updates window level with stayOnTop`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+
+    surfaceController.setStayOnTop(false)
+    balloonController.setStayOnTop(false)
+    surfaceController.setStayOnTop(true)
+    balloonController.setStayOnTop(true)
+}
+
 private func makePNG(
     width: Int,
     height: Int,

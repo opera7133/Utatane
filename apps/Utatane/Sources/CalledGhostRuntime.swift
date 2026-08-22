@@ -32,6 +32,8 @@ final class CalledGhostRuntime {
     var onNarDrop: (([URL]) -> Void)?
     var onContentAction: ((SakuraScriptContentAction) -> Void)?
     var onOtherEvent: ((String, String, [String], Bool) async -> Void)?
+    var onOtherGhostTalk: ((String, String) -> Void)?
+    var onOtherSurfaceChange: ((String, Int, Int) -> Void)?
 
     init(
         ghost: InstalledGhost,
@@ -272,6 +274,24 @@ final class CalledGhostRuntime {
         player.onWebSocket = { [weak self] command in
             await self?.handleWebSocket(command)
         }
+        player.onArchive = { [weak self] command in
+            guard let self else { return nil }
+            return await handleArchive(command)
+        }
+        player.onCommunicateBox = { [weak self] initialValue in
+            guard let self, let value = promptForText(initialValue: initialValue) else { return nil }
+            return try? await session.handle(event: .shiori(id: "OnCommunicate", references: [0: value]))
+        }
+        player.onTeachBox = { [weak self] initialValue in
+            guard let self, let value = promptForText(initialValue: initialValue) else { return nil }
+            return try? await session.handle(event: .shiori(id: "OnTeach", references: [0: value]))
+        }
+        player.onOtherGhostTalk = { [weak self] target, script in
+            self?.onOtherGhostTalk?(target, script)
+        }
+        player.onOtherSurfaceChange = { [weak self] target, scope, surfaceID in
+            self?.onOtherSurfaceChange?(target, scope, surfaceID)
+        }
         player.onWeatherGet = { [weak self] eventID in
             guard let self else { return nil }
             weatherTask?.cancel()
@@ -280,6 +300,18 @@ final class CalledGhostRuntime {
             }
             return nil
         }
+    }
+
+    func play(_ script: SakuraScript) {
+        player.play(script, balloon: balloon)
+    }
+
+    func changeSurface(to surfaceID: Int, scope: Int = 0) {
+        try? surfaceController.changeSurface(to: surfaceID, scope: scope)
+    }
+
+    func updateEnvironmentVariables(_ variables: [String: String]) {
+        player.updateEnvironmentVariables(variables)
     }
 
     private func promptForText(initialValue: String) -> String? {
@@ -325,6 +357,33 @@ final class CalledGhostRuntime {
             let (data, response) = try await URLSession.shared.data(for: request)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             guard (200 ..< 300).contains(statusCode) else { throw URLError(.badServerResponse) }
+
+            if command.isFeed {
+                do {
+                    let feed = try RSSFeedClient.parse(data)
+                    guard let eventID = command.eventID else { return nil }
+                    let successID = eventID.hasPrefix("On") ? eventID : "OnExecuteRSSComplete"
+                    var references: [Int: String] = [:]
+                    for (index, item) in feed.items.enumerated() {
+                        references[index] = [
+                            item.title,
+                            item.link,
+                            item.published,
+                            item.author,
+                            item.summary
+                        ].joined(separator: "\u{1}")
+                    }
+                    return try await session.handle(event: .shiori(id: successID, references: references))
+                } catch {
+                    guard let eventID = command.eventID else { return nil }
+                    let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExecuteRSSFailure"
+                    return try? await session.handle(event: .shiori(id: failureID, references: [
+                        0: command.url,
+                        4: "parse"
+                    ]))
+                }
+            }
+
             let result: String
             switch command.output {
             case let .file(requestedName):
@@ -352,8 +411,107 @@ final class CalledGhostRuntime {
             ]))
         } catch {
             guard let eventID = command.eventID else { return nil }
-            let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExecuteHTTPFailure"
+            let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : (command.isFeed ? "OnExecuteRSSFailure" : "OnExecuteHTTPFailure")
             return try? await session.handle(event: .shiori(id: failureID, references: [0: command.url]))
+        }
+    }
+
+    private func handleArchive(_ command: SakuraScriptArchiveCommand) async -> SakuraScript? {
+        let runner = ArchiveOperationRunner()
+        let masterDirectory = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
+
+        func resolvePath(_ path: String) -> URL {
+            if path.hasPrefix("/") {
+                return URL(fileURLWithPath: path)
+            }
+            return masterDirectory.appending(path: path)
+        }
+
+        switch command {
+        case let .extract(archivePath, destinationPath, eventID, password):
+            let archiveURL = resolvePath(archivePath)
+            let destURL = resolvePath(destinationPath)
+            do {
+                let result = try runner.extract(archiveURL: archiveURL, destinationDirectoryURL: destURL, password: password)
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? eventID : "OnExtractArchiveComplete"
+                return try await session.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: String(result.fileCount),
+                    2: String(result.compressedBytes),
+                    3: String(result.uncompressedBytes)
+                ]))
+            } catch let error as ArchiveOperationError {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExtractArchiveFailure"
+                return try? await session.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: error.errorCode
+                ]))
+            } catch {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExtractArchiveFailure"
+                return try? await session.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: "open failed"
+                ]))
+            }
+        case let .compress(archivePath, sourceDirectoryPath, eventID, password):
+            let archiveURL = resolvePath(archivePath)
+            let sourceURL = resolvePath(sourceDirectoryPath)
+            do {
+                let result = try runner.compress(destinationArchiveURL: archiveURL, sourceDirectoryURL: sourceURL, password: password)
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? eventID : "OnCompressArchiveComplete"
+                return try await session.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: String(result.fileCount),
+                    2: String(result.compressedBytes),
+                    3: String(result.uncompressedBytes)
+                ]))
+            } catch let error as ArchiveOperationError {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCompressArchiveFailure"
+                return try? await session.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: error.errorCode
+                ]))
+            } catch {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCompressArchiveFailure"
+                return try? await session.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: "open failed"
+                ]))
+            }
+        case let .createNar(narPath, sourceDirectoryPath, eventID):
+            let archiveURL = resolvePath(narPath)
+            let sourceURL = resolvePath(sourceDirectoryPath)
+            do {
+                let result = try runner.compress(destinationArchiveURL: archiveURL, sourceDirectoryURL: sourceURL)
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? eventID : "OnCreateNarComplete"
+                return try await session.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: String(result.fileCount),
+                    2: String(result.compressedBytes),
+                    3: String(result.uncompressedBytes)
+                ]))
+            } catch let error as ArchiveOperationError {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateNarFailure"
+                return try? await session.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: error.errorCode
+                ]))
+            } catch {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateNarFailure"
+                return try? await session.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: "open failed"
+                ]))
+            }
         }
     }
 

@@ -35,6 +35,7 @@ public final class SurfaceWindowController {
     private var displayScale: CGFloat = 1
     private var locksToDesktopBottom = true
     private var keepsOnScreen = true
+    private var stayOnTop = true
 
     public var onMouseClick: (@MainActor (Int, String?) -> Void)?
     public var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
@@ -43,6 +44,13 @@ public final class SurfaceWindowController {
 
     public init(positionStore: WindowPositionStore = WindowPositionStore()) {
         self.positionStore = positionStore
+    }
+
+    public func setStayOnTop(_ stayOnTop: Bool) {
+        self.stayOnTop = stayOnTop
+        for character in characters.values {
+            character.setStayOnTop(stayOnTop)
+        }
     }
 
     public func setPositionContentID(_ contentID: URL?) {
@@ -360,6 +368,7 @@ public final class SurfaceWindowController {
         character.contextMenuItems = { [weak self] in
             self?.contextMenuItems?() ?? []
         }
+        character.setStayOnTop(stayOnTop)
         characters[scope] = character
         return character
     }
@@ -443,7 +452,13 @@ private final class CharacterSurfaceController {
     private(set) var runtimeScaleY: CGFloat = 1
     private var locksToDesktopBottom: Bool
     private var keepsOnScreen: Bool
+    private var stayOnTop = true
     private var desktopAlignment: SurfaceDesktopAlignment = .defaultValue
+
+    func setStayOnTop(_ stayOnTop: Bool) {
+        self.stayOnTop = stayOnTop
+        window?.level = stayOnTop ? .floating : .normal
+    }
 
     var onMouseClick: (@MainActor (String?) -> Void)?
     var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
@@ -967,7 +982,7 @@ private final class CharacterSurfaceController {
         window.hasShadow = false
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
-        window.level = .floating
+        window.level = stayOnTop ? .floating : .normal
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         return window
     }

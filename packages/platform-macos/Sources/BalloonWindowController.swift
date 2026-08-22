@@ -91,12 +91,20 @@ public final class BalloonWindowController {
     private var alignmentByScope: [Int: BalloonWindowAlignment] = [:]
     private var displayScale: CGFloat = 1
     private var textScale: CGFloat = 1
+    private var stayOnTop = true
 
     public var onClick: (@MainActor (Int) -> Void)?
     public var onLinkClick: (@MainActor (String, [String]) -> Void)?
 
     public init(positionStore: WindowPositionStore = WindowPositionStore()) {
         self.positionStore = positionStore
+    }
+
+    public func setStayOnTop(_ stayOnTop: Bool) {
+        self.stayOnTop = stayOnTop
+        for presentation in presentations.values {
+            presentation.window.level = stayOnTop ? .floating : .normal
+        }
     }
 
     public func setPositionContentID(_ contentID: URL?) {
@@ -306,6 +314,10 @@ public final class BalloonWindowController {
 
     public func changeStyle(_ style: Int, scope: Int = 0) throws {
         guard let presentation = presentations[scope] else { return }
+        if style < 0 {
+            hide(scope: scope)
+            return
+        }
         let wasVisible = presentation.window.isVisible
         try show(
             balloon: presentation.balloon,
@@ -414,7 +426,7 @@ public final class BalloonWindowController {
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         window.acceptsMouseMovedEvents = true
-        window.level = .floating
+        window.level = stayOnTop ? .floating : .normal
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         return window
     }

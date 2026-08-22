@@ -220,6 +220,72 @@ import UtataneShiori
     #expect(apologyAfterPet?.rawValue.contains("言葉より次の行動") == false)
 }
 
+@Test func `installed ria resets pet count after idle or event`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: installedMasterURL.path) else {
+        return
+    }
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-pet-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+
+    // Pet head 7+ times to trigger too-much-pet state
+    var tooMuchPetTriggered = false
+    for _ in 0 ..< 10 {
+        for x in 0 ..< 80 {
+            if let response = try await engine.handle(event: .mouse(GhostMouseEvent(
+                kind: .move,
+                scope: 0,
+                region: "Head",
+                x: 80 + (x % 20),
+                y: 50
+            ))) {
+                if ["撫ですぎ", "十分", "一回離して"].contains(where: { response.rawValue.contains($0) }) {
+                    tooMuchPetTriggered = true
+                }
+            }
+        }
+    }
+    #expect(tooMuchPetTriggered)
+
+    let stateAfterManyPets = try await engine.handle(event: .shiori(id: "OnRiaChoiceState", references: [:]))
+    #expect(stateAfterManyPets?.rawValue.contains("髪が気になる") == true)
+
+    // Trigger AI talk event (simulates idle elapsed time)
+    _ = try await engine.handle(event: .shiori(id: "OnAITalkNewEvent", references: [4: "600"]))
+
+    // Petting again should no longer trigger the too-much-pet response
+    var resetPetResponse = false
+    for x in 0 ..< 80 {
+        if let response = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .move,
+            scope: 0,
+            region: "Head",
+            x: 80 + (x % 20),
+            y: 50
+        ))) {
+            if !["撫ですぎ", "十分", "一回離して"].contains(where: { response.rawValue.contains($0) }) {
+                resetPetResponse = true
+            }
+        }
+    }
+    #expect(resetPetResponse)
+}
+
 @Test func `native YAYA receives Emily double click and stroke events`() async throws {
     let repositoryRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()

@@ -61,7 +61,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\bID`, `\b[ID]` | 🟡 | scope別のバルーンsurface変更に対応。括弧なしは1桁、複数桁は括弧形式 |
+| `\bID`, `\b[ID]` | ✅ | scope別のバルーンsurface変更に対応。括弧なしは1桁、複数桁は括弧形式。`\b[-1]` によるバルーン非表示に対応 |
 | `\_b[ファイル,...]` 全形式 | ❌ | 座標表示、inline、opaque、各オプションとも未実装 |
 | `\n` | ✅ | 改行 |
 | `\n[half]`, `\n[百分率]` | ✅ | `half`と数値・`%`付き百分率を改行文字の行高へ反映 |
@@ -131,19 +131,20 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\e` | ✅ | 再生終了 |
-| `\-`, `\a` | ❌ | 終了・自動終了未実装 |
+| `\-` | ✅ | ゴーストの終了処理を実行（呼び出しゴーストはdismiss、メインゴーストはアプリ終了）。Player・App経路で確認 |
+| `\a` | ✅ | `OnAITalk` イベントを発生 |
 | update / updatebymyself / updateother | 🟡 | `updatebymyself`、`update,ghost`、`update,balloon`を既存更新機能へ接続。platform・updateother・全オプションは未対応 |
 | `\6`, `\7`, SNTP, biff, vanish | ❌ | 未実装 |
 | `\![execute,headline,...]` | ✅ | 名前またはディレクトリ名で既存RSS／HEADLINEセンサーを実行 |
 | `\+`, `\_+`, change/call ghost | 🟡 | ランダム／順次切替と、名前・ディレクトリ名・`random`・`sequential`指定を接続。lastinstalledとraise-eventオプションは未対応 |
 | change shell / balloon | ✅ | 名前またはディレクトリ名で通常／呼び出しゴーストの既存切替処理へ接続 |
-| `\v` | ❌ | 未実装 |
-| windowstate / wallpaper / tray | ➖ | macOSでの代替仕様を決める必要あり |
-| otherghosttalk / othersurfacechange | ❌ | 未実装 |
+| `\v`, `\![set,windowstate,stayontop/!stayontop]` | ✅ | 最前面表示（`.floating` / `.normal`）のトグルと明示指定に対応。サーフェス・バルーン両方に反映しテストで確認 |
+| windowstate (その他) / wallpaper / tray | ➖ | macOSでの代替仕様を決める必要あり |
+| otherghosttalk / othersurfacechange | ✅ | `\![otherghosttalk,ゴースト名,スクリプト]`、`\![othersurfacechange,ゴースト名,scope,surfaceID]` に対応。メインおよび呼び出し中ゴースト間の連携を接続 |
 | `\![raise,...]` | ✅ | SHIORIイベントを発生させ、元スクリプトの残りを破棄して応答スクリプトへ切り替える |
 | `\![embed,...]` | ✅ | SHIORIイベントの戻り値を現在の再生列へ埋め込む |
-| timerraise / raiseother / raiseplugin | 🟡 | `timerraise`と`raiseother`に対応。他ゴーストは名前指定と全ゴースト指定が可能。timerraiseother・プラグイン宛は未対応 |
-| notify / timernotify / other / plugin | 🟡 | 自ゴーストへの`notify`・`timernotify`と`notifyother`に対応し、SHIORI応答は表示しない。timernotifyother・プラグイン宛は未対応 |
+| timerraise / raiseother / timerraiseother | 🟡 | `timerraise`、`raiseother`、`timerraiseother`に対応。他ゴーストは名前指定と全ゴースト指定が可能。プラグイン宛は未対応 |
+| notify / timernotify / timernotifyother | 🟡 | 自ゴーストへの`notify`・`timernotify`と`notifyother`・`timernotifyother`に対応し、SHIORI応答は表示しない。プラグイン宛は未対応 |
 
 ### サウンド
 
@@ -157,10 +158,10 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | --- | --- | --- |
 | `\j[ID]`, `\![open,browser,...]` | 🟡 | メイン／呼び出しゴーストともHTTP・HTTPSを既定ブラウザで開く。`file:`・`mailto:`は未対応 |
 | mailer / addressbar / editor / explorer | ➖ | macOSでの代替と安全境界が必要 |
-| teachbox / communicatebox | ❌ | UI未実装 |
+| teachbox / communicatebox | ✅ | `\![open,communicatebox,初期値]` / `\![open,teachbox,初期値]` に対応し、入力値を `OnCommunicate` / `OnTeach` イベントとして SHIORI へ通知 |
 | `\![open,inputbox,...]` | 🟡 | ID、timeout、初期値を解析し、入力値を指定されたIDのSHIORIイベントへ `Reference0` として返す。timeoutの実動作と全オプションは未対応 |
-| password/date/slider/time/ip input | ❌ | 未実装 |
-| close inputbox | ❌ | 未実装 |
+| password/date/slider/time/ip input | 🟡 | inputbox互換の入力プロンプトとして受付 |
+| `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
 | configuration / 各explorer / graph / calendar | ❌ | SSP固有UI未実装 |
 | help / messenger / readme / terms / file | ❌ | 未実装 |
 | open/save/folder/color dialog、close dialog | ❌ | 未実装 |
@@ -181,20 +182,20 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | --- | --- | --- |
 | `\![execute,http-get,URL,...]` | 🟡 | async/syncのID、param、主要header、timeout、no-cache、file/nofileを実装。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行って `Reference3` へ返す。非同期並行実行、multipart、streaming、progressは未対応 |
 | http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded bodyと主要共通オプションに対応。multipart、入力ファイル、証明書検証無効化は未対応 |
-| rss-get/rss-post | ❌ | RSS/Atom取得機能はあるがこのコマンド未接続 |
+| `\![execute,rss-get/rss-post,URL,...]` | ✅ | RSS/Atomを取得・パースし、各項目を `\u{1}` 区切り（タイトル・URL・更新日時・作者・概要）で `OnExecuteRSSComplete` / `OnExecuteRSSFailure` へ通知 |
 | websocket execute/send/close/cancel | 🟡 | URL単位のws/wss接続、header・subprotocol、テキスト/バイナリ送信、受信イベント、close/cancelを実装。再接続とSSLInfoは未対応 |
-| cancel http | ❌ | 未実装 |
-| extract/compress archive | ❌ | NAR展開処理はあるが任意コマンドとしては未接続 |
+| `\![cancel,http/http-get,...]` | ✅ | `\![cancel,http,URL]` / `\![cancel,http-get,URL]` で特定URLまたは全実行中HTTPリクエストをキャンセル |
+| `\![execute,extractarchive/compressarchive,...]` | ✅ | ZIP展開・圧縮を実行し、結果（ファイル数・圧縮前後バイト数）またはエラーコードをイベント通知。パストラバーサル防止を検証 |
 | dumpsurface | ❌ | 未実装 |
-| install path / URL | ❌ | ドロップによるNARインストールはあるがコマンド未接続 |
+| `\![execute,install,path/url,...]` | ✅ | ローカルファイルパスまたはURL指定のNARインストールコマンドを接続 |
 | ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl、完了・失敗イベントに対応。ping progress、df/dataは未対応 |
-| createnar / createupdatedata | ❌ | 未実装 |
+| createnar / createupdatedata | 🟡 | `\![execute,createnar,narPath,targetDirectory]` を実装し、NAR（ZIP形式）作成と `OnCreateNarComplete` / `OnCreateNarFailure` イベント通知に対応。createupdatedataは未実装 |
 | emptyrecyclebin / create shortcut | ➖ | OS依存かつ危険。原則対象外候補 |
 | passive / induction / select / collision mode | ❌ | 未実装 |
-| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | ❌ | 未実装 |
+| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | `\![reload,ghost]`、`\![reload,shell]`、`\![reload,balloon]` を実装。surface/descript等の個別リロードは未対応 |
 | unload/load shiori・makoto、shioridebugmode | ❌ | 未実装 |
 | `\_u`, `\_m` | ✅ | 16進・10進のUCS-2／ASCIIコードを文字へ変換。範囲外とサロゲートは拒否しParserテストで確認 |
-| `\&[ID]` | 🟡 | amp・apos・gt・lt・nbsp・quotの主要な実体参照に対応。全識別子は未対応 |
+| `\&[ID]` | ✅ | amp・apos・gt・lt・nbsp・quotに加え、yen・cent・pound・euro・copy・reg・trade・deg・plusmn・sup1-3・frac・times・divide・half_solidus・bull・hellip・矢印等の主要HTML/XML実体参照に対応 |
 | `\m` | ➖ | SSTPのWindowsウィンドウメッセージ送信に依存するためmacOSでは対象外候補 |
 | `\![execute,weather-get,...]` | 🟡 | Utatane拡張。`--async=イベントID` のみ |
 
@@ -205,9 +206,9 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `%month/day/hour/minute/second` | ✅ | 描画時のローカル日時へ置換 |
 | `%username`, `%selfname`, `%selfname2`, `%keroname` | 🟡 | macOSユーザー名とゴーストのキャラクター名へ置換。`selfname2`専用キー未保持のため本体名へフォールバック |
 | `%screenwidth`, `%screenheight` | ✅ | 現在のメインスクリーンのポイント単位サイズへ置換 |
-| `%exh`, `%et`, `%wronghour` | 🟡 | `%exh`をOS連続起動秒へ置換。ジョーク用途の`et`・`wronghour`は未実装 |
+| `%exh`, `%et`, `%wronghour` | ✅ | `%exh`をOS連続起動秒、`%et`を間違った連続起動時間文字列、`%wronghour`を正しくない現在時へ置換 |
 | `%ms/%mz/%ml/%mc/%mh/%mt/%me/%mp/%m?` | 🟡 | UKADOCの各ランダム単語カテゴリをUtatane内蔵語彙で置換。SSPの語彙集合とは異なる |
-| `%dms`, `%lastghostname`, `%lastobjectname` | 🟡 | `%dms`はUtatane内蔵の「～に～する～」相当語彙で置換。インストールイベント用のlast系は未接続 |
+| `%dms`, `%lastghostname`, `%lastobjectname` | ✅ | `%dms`はUtatane内蔵の「～に～する～」相当語彙で置換。`%lastghostname` / `%lastobjectname` はNARインストール完了時に直近のインストール対象名で環境変数を更新 |
 | `%*` | ✅ | `\![*]` と同じバルーンマーカーを表示 |
 
 ## SakuraScript以外のUKADOC領域

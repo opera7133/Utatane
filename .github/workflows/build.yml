@@ -279,8 +279,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          vt_note=$'\n\n### 🛡️ VirusTotal Scan\n- **Status:** '"$VT_STATUS"'\n- **SHA-256:** `'"$VT_SHA256"'`\n- **Report:** '"$VT_URL"
-
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" \
               dist/Utatane-macOS.zip \
@@ -289,7 +287,6 @@ jobs:
 
             existing_body=$(gh release view "$GITHUB_REF_NAME" --json body -q .body)
             clean_body=$(printf '%s\n' "$existing_body" | sed '/### 🛡️ VirusTotal Scan/,$d' | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')
-            gh release edit "$GITHUB_REF_NAME" --notes "${clean_body}${vt_note}"
           else
             gh release create "$GITHUB_REF_NAME" \
               dist/Utatane-macOS.zip \
@@ -298,9 +295,21 @@ jobs:
               --generate-notes \
               --prerelease
 
-            generated_body=$(gh release view "$GITHUB_REF_NAME" --json body -q .body)
-            gh release edit "$GITHUB_REF_NAME" --notes "${generated_body}${vt_note}"
+            existing_body=$(gh release view "$GITHUB_REF_NAME" --json body -q .body)
+            clean_body=$(printf '%s\n' "$existing_body" | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')
           fi
+
+          {
+            if [ -n "$clean_body" ]; then
+              printf '%s\n\n' "$clean_body"
+            fi
+            echo "### 🛡️ VirusTotal Scan"
+            echo "- **Status:** $VT_STATUS"
+            echo "- **SHA-256:** \`$VT_SHA256\`"
+            echo "- **Report:** $VT_URL"
+          } > release_notes.md
+
+          gh release edit "$GITHUB_REF_NAME" --notes-file release_notes.md
 
       - name: Publish updates to dl.wmsci.com
         if: startsWith(github.ref, 'refs/tags/v')
@@ -322,8 +331,6 @@ jobs:
           set ssl:verify-certificate true
           set net:max-retries 3
           set net:timeout 20
-          mkdir -p "$DEPLOY_PATH/content/ria"
-          mkdir -p "$DEPLOY_PATH/content/balloon-ria"
           mirror --reverse --ignore-time --parallel=4 \
             --exclude-glob updates2.dau \
             dist/content/ria "$DEPLOY_PATH/content/ria"

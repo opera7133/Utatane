@@ -54,13 +54,22 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case synchronizeScopes([Int]?)
     case open(String)
     case sound(SakuraScriptSoundCommand)
+    case contentAction(SakuraScriptContentAction)
     case embeddedEvent(id: String, arguments: [String])
     case raisedEvent(id: String, arguments: [String])
     case notifyEvent(id: String, arguments: [String])
     case otherEvent(target: String, id: String, arguments: [String], reflectsResponse: Bool)
     case timerEvent(milliseconds: Int, repeats: Bool, reflectsResponse: Bool, id: String, arguments: [String])
-    case contentAction(SakuraScriptContentAction)
+    case otherGhostTalk(target: String, script: String)
+    case otherSurfaceChange(target: String, scope: Int, surfaceID: Int)
+    case stayOnTop(Bool)
+    case closeInputBox(id: String)
+    case otherTimerEvent(target: String, milliseconds: Int, repeats: Bool, reflectsResponse: Bool, id: String, arguments: [String])
+    case archive(SakuraScriptArchiveCommand)
+    case cancelHTTP(url: String?)
     case inputBox(id: String, timeoutMilliseconds: Int?, initialValue: String)
+    case communicateBox(initialValue: String)
+    case teachBox(initialValue: String)
     case http(SakuraScriptHTTPRequest)
     case networkDiagnostic(SakuraScriptNetworkDiagnostic)
     case webSocket(SakuraScriptWebSocketCommand)
@@ -69,6 +78,17 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case clearAll
     case end
     case unknown(String)
+}
+
+public enum SakuraScriptInstallSource: Sendable, Equatable {
+    case path(String)
+    case url(String, type: String?)
+}
+
+public enum SakuraScriptArchiveCommand: Sendable, Equatable {
+    case extract(archivePath: String, destinationPath: String, eventID: String?, password: String?)
+    case compress(archivePath: String, sourceDirectoryPath: String, eventID: String?, password: String?)
+    case createNar(narPath: String, sourceDirectoryPath: String, eventID: String?)
 }
 
 public enum SakuraScriptWebSocketCommand: Sendable, Equatable {
@@ -93,6 +113,7 @@ public struct SakuraScriptHTTPRequest: Sendable, Equatable {
     public let headers: [String]
     public let timeoutSeconds: Double?
     public let output: SakuraScriptHTTPOutput
+    public let isFeed: Bool
 
     public init(
         method: String,
@@ -102,7 +123,8 @@ public struct SakuraScriptHTTPRequest: Sendable, Equatable {
         parameters: [String] = [],
         headers: [String] = [],
         timeoutSeconds: Double? = nil,
-        output: SakuraScriptHTTPOutput = .file(nil)
+        output: SakuraScriptHTTPOutput = .file(nil),
+        isFeed: Bool = false
     ) {
         self.method = method
         self.url = url
@@ -112,6 +134,7 @@ public struct SakuraScriptHTTPRequest: Sendable, Equatable {
         self.headers = headers
         self.timeoutSeconds = timeoutSeconds
         self.output = output
+        self.isFeed = isFeed
     }
 }
 
@@ -175,6 +198,11 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case updateGhost
     case updateBalloon
     case headline(String)
+    case closeGhost
+    case install(SakuraScriptInstallSource)
+    case reloadGhost
+    case reloadShell
+    case reloadBalloon
 }
 
 public enum SakuraScriptSoundCommand: Sendable, Equatable {
