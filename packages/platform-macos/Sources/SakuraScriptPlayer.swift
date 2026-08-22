@@ -39,6 +39,9 @@ public final class SakuraScriptPlayer {
     public var onWebSocket: (@MainActor (SakuraScriptWebSocketCommand) async -> Void)?
     public var onWeatherGet: (@MainActor (String) async -> SakuraScript?)?
     public var onArchive: (@MainActor (SakuraScriptArchiveCommand) async -> SakuraScript?)?
+    public var onPropertyValue: (@MainActor (String) async -> String?)?
+    public var onGetProperties: (@MainActor (String, [String]) async -> SakuraScript?)?
+    public var onSetProperty: (@MainActor (String, String) async -> Void)?
     public var onCloseInputBox: (@MainActor (String) -> Void)?
     public var onCommunicateBox: (@MainActor (String) async -> SakuraScript?)?
     public var onTeachBox: (@MainActor (String) async -> SakuraScript?)?
@@ -746,6 +749,14 @@ public final class SakuraScriptPlayer {
                     updateContent(scope: scope)
                 case let .environmentVariable(name):
                     pendingTokens.insert(.text(environmentValue(for: name)), at: 0)
+                case let .property(property):
+                    await pendingTokens.insert(.text(onPropertyValue?(property) ?? ""), at: 0)
+                case let .getProperties(eventID, properties):
+                    if let response = await onGetProperties?(eventID, properties) {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                    }
+                case let .setProperty(property, value):
+                    await onSetProperty?(property, value)
                 case let .font(name, arguments):
                     if name == "valign" {
                         let alignment: BalloonVerticalAlignment = switch arguments.first?.lowercased() {
@@ -1032,7 +1043,6 @@ public final class SakuraScriptPlayer {
         default: return "%\(name)"
         }
     }
-
 
     private func resolveInlineImage(path: String) -> NSImage? {
         if path.hasPrefix("data:image/") {

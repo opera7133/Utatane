@@ -111,7 +111,8 @@ struct SurfaceImageLoader {
 
     func loadUsingTopLeftTransparency(_ url: URL) throws -> NSImage {
         if let data = try? Data(contentsOf: url),
-           let rep = NSBitmapImageRep.imageReps(with: data).compactMap({ $0 as? NSBitmapImageRep }).first {
+           let rep = NSBitmapImageRep.imageReps(with: data).compactMap({ $0 as? NSBitmapImageRep }).first
+        {
             let image = NSImage(size: NSSize(width: rep.pixelsWide, height: rep.pixelsHigh))
             image.addRepresentation(rep)
             return try applyingTopLeftTransparency(to: image, sourceURL: url)

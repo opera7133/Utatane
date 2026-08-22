@@ -85,6 +85,17 @@ func `parses WebSocket lifecycle and frames`() {
 }
 
 @Test
+func `parses property system environment and commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"%property[baseware.name]\![get,property,OnProperties,system.year,currentghost.name]\![set,property,currentghost.shelllist(master).menu,hidden]"#
+    ) == [
+        .property("baseware.name"),
+        .getProperties(eventID: "OnProperties", properties: ["system.year", "currentghost.name"]),
+        .setProperty(property: "currentghost.shelllist(master).menu", value: "hidden")
+    ])
+}
+
+@Test
 func `supports aliases short arguments and escaped backslash`() {
     let tokens = SakuraScriptParser().parse(#"\h\s1A\\B\u\p[2]C"#)
 

@@ -49,6 +49,9 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case anchorEnd
     case marker
     case environmentVariable(String)
+    case property(String)
+    case getProperties(eventID: String, properties: [String])
+    case setProperty(property: String, value: String)
     case font(name: String, arguments: [String])
     case quickSection(Bool?)
     case synchronizeScopes([Int]?)

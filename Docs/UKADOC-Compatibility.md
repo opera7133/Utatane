@@ -171,9 +171,9 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\![set,property,...]` | ❌ | Property System自体が未実装 |
-| `\![get,property,...]` | ❌ | MCPでも意図的に提供していない |
-| `%property[...]` | ❌ | 未実装 |
+| `\![set,property,...]` | 🟡 | 構文・書込可否検証・Property Systemへの書き込み経路を実装。個別のUI／サウンド状態setterは未実装 |
+| `\![get,property,...]` | 🟡 | 複数プロパティを解決して指定イベントのReference0以降へ通知。日時・OS・CPU・メモリ・カーソル・モニター・テーマ、baseware、currentghost、ghostlist、shelllistの基本値に対応 |
+| `%property[...]` | 🟡 | Property Systemの値を再生中に展開。日時・OS・CPU・メモリ・カーソル・モニター・テーマ、baseware、currentghost、ghostlist、shelllistの基本値に対応 |
 
 ### HTTP、WebSocket、アーカイブなど
 
@@ -182,7 +182,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\![execute,http-get,URL,...]` | 🟡 | async/syncのID、param、主要header、timeout、no-cache、file/nofileを実装。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行って `Reference3` へ返す。非同期並行実行、multipart、streaming、progressは未対応 |
 | http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded bodyと主要共通オプションに対応。multipart、入力ファイル、証明書検証無効化は未対応 |
 | `\![execute,rss-get/rss-post,URL,...]` | 🟡 | RSS/Atomの取得・基本パースと完了/失敗通知に対応。日時形式・全オプション・SSL情報は未照合 |
-| websocket execute/send/close/cancel | 🟡 | URL単位のws/wss接続、header・subprotocol、テキスト/バイナリ送信、受信イベント、close/cancelを実装。再接続とSSLInfoは未対応 |
+| websocket execute/send/close/cancel | 🟡 | URL単位のws/wss接続、HTTP 101確立後のOpen通知、header・subprotocol、テキスト/バイナリ送受信、close/cancelを実装。自動再接続とSSLInfoは未対応 |
 | `\![cancel,http/http-get,...]` | ✅ | `\![cancel,http,URL]` / `\![cancel,http-get,URL]` で特定URLまたは全実行中HTTPリクエストをキャンセル |
 | `\![execute,extractarchive/compressarchive,...]` | 🟡 | ghost/master配下に限定してZIP展開・圧縮を実行し、結果またはエラーコードをイベント通知。パストラバーサル・シンボリックリンクを拒否。SSP管理下の他フォルダと暗号化方式の完全互換は未対応 |
 | dumpsurface | 🟡 | 表示中サーフェスのPNG出力と完了通知に対応。scope・surface列挙・prefix・cropなどUKADOCの全引数は未実装 |
@@ -238,7 +238,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | FMO / MUTEX | ❌ | Windows固有FMOは対象外。macOS向け互換公開方式も未設計 |
 | 更新定義ファイル | 🟡 | `updates2.dau` / `updates.txt`、MD5、ロールバック対応。全オプション未照合 |
 | Web関連 | 🟡 | homeurl更新、RSS/Atom、SSTP over HTTP中心。全仕様未照合 |
-| Property System | ❌ | 未実装 |
+| Property System | 🟡 | 大文字小文字を無視する値解決、組み込みsystem/baseware値、動的な値登録、書込可否管理をコアに実装。SakuraScript・ゴースト一覧・UI状態との接続は未完 |
 
 ## 優先順位案
 

@@ -150,6 +150,10 @@ private struct UtataneRootView: View {
     let statusWindowController: StatusWindowController
     let alertController: ApplicationAlertController
     private let weatherProvider = CurrentWeatherProvider()
+    private let propertySystem = PropertySystem(configuration: .init(
+        basewareName: "Utatane",
+        basewareVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
+    ))
     @ObservedObject var networkSettings: UtataneSettingsStore
     let applicationDelegate: UtataneApplicationDelegate
 
@@ -390,6 +394,42 @@ private struct UtataneRootView: View {
         .onChange(of: showsOnboarding) {
             updateDebugWindowVisibility()
         }
+    }
+
+    private func registerCurrentGhostProperties() async {
+        var values = MacOSPropertySnapshot.values()
+        values["ghostlist.count"] = String(model.ghosts.count)
+        for (index, ghost) in model.ghosts.enumerated() {
+            values["ghostlist.index(\(index)).name"] = ghost.name
+            values["ghostlist.index(\(index)).sakuraname"] = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+            values["ghostlist.index(\(index)).keroname"] = ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+            values["ghostlist.index(\(index)).path"] = ghost.rootDirectory.path
+            values["ghostlist.index(\(index)).index"] = String(index)
+        }
+        if let currentGhost {
+            values["currentghost.name"] = currentGhost.name
+            values["currentghost.sakuraname"] = currentGhost.characters.first(where: { $0.scope == 0 })?.name ?? currentGhost.name
+            values["currentghost.keroname"] = currentGhost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+            values["currentghost.path"] = currentGhost.rootDirectory.path
+            values["currentghost.shelllist.count"] = String(currentGhost.shells.count)
+            for (index, shell) in currentGhost.shells.enumerated() {
+                let prefix = "currentghost.shelllist.index(\(index))"
+                values["\(prefix).name"] = shell.name
+                values["\(prefix).path"] = shell.directory.path
+                values["\(prefix).index"] = String(index)
+                values["currentghost.shelllist(\(shell.name)).name"] = shell.name
+                values["currentghost.shelllist(\(shell.name)).path"] = shell.directory.path
+                values["currentghost.shelllist(\(shell.name)).index"] = String(index)
+            }
+            if let selectedShell {
+                values["currentghost.shelllist.current.name"] = selectedShell.name
+                values["currentghost.shelllist.current.path"] = selectedShell.directory.path
+                values["currentghost.shelllist.current.index"] = String(
+                    currentGhost.shells.firstIndex(of: selectedShell) ?? 0
+                )
+            }
+        }
+        await propertySystem.register(values: values)
     }
 
     private func sendEvent(_ event: GhostEvent) {
@@ -633,6 +673,22 @@ private struct UtataneRootView: View {
                         ($0.offset, $0.element)
                     })
                 ))
+            }
+            scriptPlayer.onPropertyValue = { property in
+                await registerCurrentGhostProperties()
+                return try? await propertySystem.value(for: property)
+            }
+            scriptPlayer.onGetProperties = { eventID, properties in
+                guard let activeSession = session else { return nil }
+                await registerCurrentGhostProperties()
+                let values = await propertySystem.values(for: properties)
+                return try? await activeSession.handle(event: .shiori(
+                    id: eventID,
+                    references: Dictionary(uniqueKeysWithValues: values.enumerated().map { ($0.offset, $0.element) })
+                ))
+            }
+            scriptPlayer.onSetProperty = { property, value in
+                try? await propertySystem.setValue(value, for: property)
             }
             scriptPlayer.onInputBox = { id, _, initialValue in
                 guard let value = promptForText(initialValue: initialValue),

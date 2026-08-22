@@ -88,9 +88,13 @@ public actor WebSocketSessionManager {
 private final class WebSocketConnection: @unchecked Sendable {
     private let originalURL: String
     private let eventID: String
-    private let task: URLSessionWebSocketTask
     private let onEvent: WebSocketSessionManager.EventHandler
+    private var session: URLSession?
+    private var task: URLSessionWebSocketTask?
+    private var delegate: WebSocketDelegate?
     private var receiveTask: Task<Void, Never>?
+    private let stateLock = NSLock()
+    private var didNotifyClose = false
 
     init(
         url: URL,
@@ -110,13 +114,20 @@ private final class WebSocketConnection: @unchecked Sendable {
         if let protocolName {
             request.setValue(protocolName, forHTTPHeaderField: "Sec-WebSocket-Protocol")
         }
-        task = URLSession.shared.webSocketTask(with: request)
+        let delegate = WebSocketDelegate(
+            onOpen: { [weak self] in self?.notifyOpen() },
+            onClose: { [weak self] code in self?.notifyClose(reason: String(code)) }
+        )
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+        self.delegate = delegate
+        self.session = session
+        task = session.webSocketTask(with: request)
     }
 
     func start() {
+        guard let task else { return }
         task.resume()
         receiveTask = Task { [task, originalURL, eventID, onEvent] in
-            await onEvent(.open(url: originalURL, eventID: eventID))
             do {
                 while !Task.isCancelled {
                     switch try await task.receive() {
@@ -133,20 +144,62 @@ private final class WebSocketConnection: @unchecked Sendable {
     }
 
     func send(_ message: URLSessionWebSocketTask.Message) async throws {
-        try await task.send(message)
+        try await task?.send(message)
     }
 
     func close(code: Int) {
         receiveTask?.cancel()
-        task.cancel(with: URLSessionWebSocketTask.CloseCode(rawValue: code) ?? .normalClosure, reason: nil)
-        Task { await onEvent(.close(url: originalURL, eventID: eventID, reason: String(code))) }
+        task?.cancel(with: URLSessionWebSocketTask.CloseCode(rawValue: code) ?? .normalClosure, reason: nil)
+        notifyClose(reason: String(code))
     }
 
     func cancel(notifies: Bool) {
         receiveTask?.cancel()
-        task.cancel()
+        task?.cancel()
+        session?.invalidateAndCancel()
         if notifies {
-            Task { await onEvent(.close(url: originalURL, eventID: eventID, reason: "userbreak")) }
+            notifyClose(reason: "userbreak")
         }
+    }
+
+    private func notifyOpen() {
+        Task { await onEvent(.open(url: originalURL, eventID: eventID)) }
+    }
+
+    private func notifyClose(reason: String) {
+        let shouldNotify = stateLock.withLock {
+            guard !didNotifyClose else { return false }
+            didNotifyClose = true
+            return true
+        }
+        guard shouldNotify else { return }
+        Task { await onEvent(.close(url: originalURL, eventID: eventID, reason: reason)) }
+    }
+}
+
+private final class WebSocketDelegate: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
+    private let onOpen: @Sendable () -> Void
+    private let onClose: @Sendable (Int) -> Void
+
+    init(onOpen: @escaping @Sendable () -> Void, onClose: @escaping @Sendable (Int) -> Void) {
+        self.onOpen = onOpen
+        self.onClose = onClose
+    }
+
+    func urlSession(
+        _: URLSession,
+        webSocketTask _: URLSessionWebSocketTask,
+        didOpenWithProtocol _: String?
+    ) {
+        onOpen()
+    }
+
+    func urlSession(
+        _: URLSession,
+        webSocketTask _: URLSessionWebSocketTask,
+        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
+        reason _: Data?
+    ) {
+        onClose(closeCode.rawValue)
     }
 }

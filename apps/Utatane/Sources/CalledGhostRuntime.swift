@@ -20,6 +20,7 @@ final class CalledGhostRuntime {
     private let selectionStore: ContentSelectionStore
     private let weatherProvider = CurrentWeatherProvider()
     private let webSocketManager = WebSocketSessionManager()
+    private let propertySystem: PropertySystem
     private var weatherTask: Task<Void, Never>?
     private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
     private(set) var shell: InstalledShell
@@ -50,6 +51,11 @@ final class CalledGhostRuntime {
         self.ghost = ghost
         self.shellLoader = shellLoader
         self.selectionStore = selectionStore
+        propertySystem = PropertySystem(configuration: .init(
+            basewareName: "Utatane",
+            basewareVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+            values: Self.propertyValues(for: ghost).merging(MacOSPropertySnapshot.values()) { current, _ in current }
+        ))
 
         guard let selectedShell = selectionStore.resolveShell(for: ghost) else {
             throw AppError.missingResource("shell")
@@ -262,6 +268,24 @@ final class CalledGhostRuntime {
                 })
             ))
         }
+        player.onPropertyValue = { [weak self] property in
+            guard let self else { return nil }
+            await propertySystem.register(values: MacOSPropertySnapshot.values())
+            return try? await propertySystem.value(for: property)
+        }
+        player.onGetProperties = { [weak self] eventID, properties in
+            guard let self else { return nil }
+            await propertySystem.register(values: MacOSPropertySnapshot.values())
+            let values = await propertySystem.values(for: properties)
+            return try? await session.handle(event: .shiori(
+                id: eventID,
+                references: Dictionary(uniqueKeysWithValues: values.enumerated().map { ($0.offset, $0.element) })
+            ))
+        }
+        player.onSetProperty = { [weak self] property, value in
+            guard let self else { return }
+            try? await propertySystem.setValue(value, for: property)
+        }
         player.onInputBox = { [weak self] id, _, initialValue in
             guard let self, let value = promptForText(initialValue: initialValue) else { return nil }
             return try? await session.handle(event: .shiori(id: id, references: [0: value]))
@@ -317,6 +341,29 @@ final class CalledGhostRuntime {
             }
             return nil
         }
+    }
+
+    private static func propertyValues(for ghost: InstalledGhost) -> [String: String] {
+        var values = [
+            "currentghost.name": ghost.name,
+            "currentghost.sakuraname": ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+            "currentghost.keroname": ghost.characters.first(where: { $0.scope == 1 })?.name ?? "",
+            "currentghost.path": ghost.rootDirectory.path,
+            "currentghost.shelllist.count": String(ghost.shells.count)
+        ]
+        for (index, shell) in ghost.shells.enumerated() {
+            let prefix = "currentghost.shelllist.index(\(index))"
+            values["\(prefix).name"] = shell.name
+            values["\(prefix).path"] = shell.directory.path
+            values["\(prefix).index"] = String(index)
+            values["currentghost.shelllist(\(shell.name)).name"] = shell.name
+            values["currentghost.shelllist(\(shell.name)).path"] = shell.directory.path
+            values["currentghost.shelllist(\(shell.name)).index"] = String(index)
+        }
+        values["currentghost.shelllist.current.name"] = ghost.shells.first?.name ?? ""
+        values["currentghost.shelllist.current.path"] = ghost.shells.first?.directory.path ?? ""
+        values["currentghost.shelllist.current.index"] = "0"
+        return values
     }
 
     func play(_ script: SakuraScript) {

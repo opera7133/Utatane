@@ -21,6 +21,19 @@ public struct SakuraScriptParser: Sendable {
 
         while index < characters.count {
             if characters[index] == "%" {
+                let propertyPrefix = Array("property")
+                let propertyEnd = index + 1 + propertyPrefix.count
+                if propertyEnd < characters.count,
+                   Array(characters[(index + 1) ..< propertyEnd]).map({ $0.lowercased() }) == propertyPrefix.map({ $0.lowercased() })
+                {
+                    var argumentIndex = propertyEnd
+                    if let property = bracketArgument(in: characters, index: &argumentIndex) {
+                        flushText()
+                        tokens.append(.property(property))
+                        index = argumentIndex
+                        continue
+                    }
+                }
                 let names = [
                     "screenheight", "screenwidth", "lastobjectname", "lastghostname",
                     "selfname2", "wronghour", "username", "selfname", "keroname",
@@ -633,6 +646,16 @@ public struct SakuraScriptParser: Sendable {
                             enabled: value == "1" ? true : value == "0" ? false : nil,
                             notifiesEvents: arguments[0].lowercased() == "bind"
                         ))
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "property"
+                    {
+                        tokens.append(.setProperty(property: arguments[2], value: arguments.dropFirst(3).joined(separator: ",")))
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "get",
+                              arguments[1].lowercased() == "property"
+                    {
+                        tokens.append(.getProperties(eventID: arguments[2], properties: Array(arguments.dropFirst(3))))
                     } else if arguments.count >= 2, arguments[0].lowercased() == "embed" {
                         tokens.append(.embeddedEvent(
                             id: arguments[1],
