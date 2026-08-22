@@ -24,3 +24,31 @@ func `compresses and extracts zip archives`() throws {
     #expect(extractResult.fileCount == 1)
     #expect(FileManager.default.fileExists(atPath: dest.appending(path: "test.txt").path))
 }
+
+@Test
+func `rejects symbolic links in arbitrary zip extraction`() throws {
+    let temp = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: temp, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temp) }
+    let source = temp.appending(path: "src", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(
+        at: source.appending(path: "escape"),
+        withDestinationURL: URL(fileURLWithPath: "/tmp")
+    )
+    let archive = temp.appending(path: "links.zip")
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
+    process.arguments = ["-q", "-y", archive.path, "escape"]
+    process.currentDirectoryURL = source
+    try process.run()
+    process.waitUntilExit()
+    #expect(process.terminationStatus == 0)
+
+    #expect(throws: ArchiveOperationError.self) {
+        try ArchiveOperationRunner().extract(
+            archiveURL: archive,
+            destinationDirectoryURL: temp.appending(path: "destination")
+        )
+    }
+}

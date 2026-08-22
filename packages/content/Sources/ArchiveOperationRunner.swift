@@ -64,6 +64,7 @@ public struct ArchiveOperationRunner: Sendable {
                 throw ArchiveOperationError.unsafeEntry(entry)
             }
         }
+        try validateArchiveEntryTypes(at: archiveURL)
         do {
             try FileManager.default.createDirectory(at: destinationDirectoryURL, withIntermediateDirectories: true)
         } catch {
@@ -158,6 +159,24 @@ public struct ArchiveOperationRunner: Sendable {
             ?? String(data: output, encoding: .shiftJIS)
         else { throw ArchiveOperationError.corrupted }
         return listing.split(whereSeparator: \.isNewline).map(String.init)
+    }
+
+    private func validateArchiveEntryTypes(at archiveURL: URL) throws {
+        let output = try run(
+            executable: "/usr/bin/unzip",
+            arguments: ["-Z", "-l", archiveURL.path],
+            capturesOutput: true
+        )
+        guard let listing = String(data: output, encoding: .utf8)
+            ?? String(data: output, encoding: .shiftJIS)
+        else { throw ArchiveOperationError.corrupted }
+        for line in listing.components(separatedBy: .newlines) where line.count >= 10 {
+            let mode = line.prefix(10)
+            guard mode.dropFirst().allSatisfy({ "rwxstST-".contains($0) }) else { continue }
+            guard let type = mode.first, type == "-" || type == "d" else {
+                throw ArchiveOperationError.unsafeEntry("symbolic link or special file")
+            }
+        }
     }
 
     @discardableResult

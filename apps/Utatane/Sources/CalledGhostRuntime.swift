@@ -21,6 +21,7 @@ final class CalledGhostRuntime {
     private let weatherProvider = CurrentWeatherProvider()
     private let webSocketManager = WebSocketSessionManager()
     private var weatherTask: Task<Void, Never>?
+    private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
     private(set) var shell: InstalledShell
     private(set) var balloon: BalloonDefinition
 
@@ -169,6 +170,7 @@ final class CalledGhostRuntime {
 
     func stop() async {
         await webSocketManager.cancelAll()
+        cancelHTTP(url: nil)
         if let script = try? await session.stop(reason: .close) {
             await player.playAndWait(script, balloon: balloon)
         }
@@ -266,8 +268,22 @@ final class CalledGhostRuntime {
         }
         player.onHTTP = { [weak self] request in
             guard let self else { return nil }
-            return await handleHTTP(request)
+            if request.waitsForCompletion {
+                return await handleHTTP(request)
+            }
+            cancelHTTP(url: request.url)
+            inFlightHTTPTasks[request.url] = Task { [weak self] in
+                guard let self else { return }
+                let response = await handleHTTP(request)
+                guard !Task.isCancelled else { return }
+                inFlightHTTPTasks.removeValue(forKey: request.url)
+                if let response, !response.rawValue.isEmpty {
+                    player.play(response, balloon: balloon)
+                }
+            }
+            return nil
         }
+        player.onCancelHTTP = { [weak self] url in self?.cancelHTTP(url: url) }
         player.onNetworkDiagnostic = { [weak self] command in
             guard let self else { return nil }
             return await handleNetworkDiagnostic(command)
@@ -356,7 +372,8 @@ final class CalledGhostRuntime {
                 }
             }
             let (data, response) = try await URLSession.shared.data(for: request)
-            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let httpResponse = response as? HTTPURLResponse
+            let statusCode = httpResponse?.statusCode ?? 0
             guard (200 ..< 300).contains(statusCode) else { throw URLError(.badServerResponse) }
 
             if command.isFeed {
@@ -405,16 +422,31 @@ final class CalledGhostRuntime {
             guard let eventID = command.eventID else { return nil }
             let successID = eventID.hasPrefix("On") ? eventID : "OnExecuteHTTPComplete"
             return try await session.handle(event: .shiori(id: successID, references: [
-                0: command.url,
-                1: String(statusCode),
-                2: response.mimeType ?? "",
-                3: result
+                0: command.method,
+                1: eventID,
+                2: command.url,
+                3: result,
+                4: String(statusCode),
+                5: httpResponse?.value(forHTTPHeaderField: "Set-Cookie") ?? "",
+                6: Self.httpResponseHeaders(httpResponse)
             ]))
         } catch {
             guard let eventID = command.eventID else { return nil }
             let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : (command.isFeed ? "OnExecuteRSSFailure" : "OnExecuteHTTPFailure")
-            return try? await session.handle(event: .shiori(id: failureID, references: [0: command.url]))
+            return try? await session.handle(event: .shiori(id: failureID, references: [
+                0: command.method,
+                1: eventID,
+                2: command.url,
+                4: String(describing: error)
+            ]))
         }
+    }
+
+    private static func httpResponseHeaders(_ response: HTTPURLResponse?) -> String {
+        response?.allHeaderFields
+            .map { "\($0.key): \($0.value)" }
+            .sorted()
+            .joined(separator: "\u{1}") ?? ""
     }
 
     private func handleArchive(_ command: SakuraScriptArchiveCommand) async -> SakuraScript? {
@@ -422,10 +454,15 @@ final class CalledGhostRuntime {
         let masterDirectory = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
 
         func resolvePath(_ path: String) -> URL {
-            if path.hasPrefix("/") {
-                return URL(fileURLWithPath: path)
+            let candidate = path.hasPrefix("/")
+                ? URL(fileURLWithPath: path)
+                : masterDirectory.appending(path: path)
+            let rootPath = masterDirectory.resolvingSymlinksInPath().standardizedFileURL.path
+            let candidatePath = candidate.resolvingSymlinksInPath().standardizedFileURL.path
+            guard candidatePath == rootPath || candidatePath.hasPrefix(rootPath + "/") else {
+                return masterDirectory.appending(path: "var/.utatane-rejected-path")
             }
-            return masterDirectory.appending(path: path)
+            return candidate
         }
 
         switch command {
@@ -513,6 +550,62 @@ final class CalledGhostRuntime {
                     1: "open failed"
                 ]))
             }
+        case let .dumpSurface(path, eventID):
+            let destinationURL: URL
+            if let path, !path.isEmpty {
+                let resolved = resolvePath(path)
+                var isDir: ObjCBool = false
+                if FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDir), isDir.boolValue {
+                    destinationURL = resolved.appending(path: "surface0.png")
+                } else if path.hasSuffix("/") {
+                    destinationURL = resolved.appending(path: "surface0.png")
+                } else {
+                    destinationURL = resolved
+                }
+            } else {
+                destinationURL = masterDirectory.appending(path: "var/surface0.png")
+            }
+
+            do {
+                guard let image = surfaceController.renderedImage(for: 0),
+                      let tiffData = image.tiffRepresentation,
+                      let bitmap = NSBitmapImageRep(data: tiffData),
+                      let pngData = bitmap.representation(using: .png, properties: [:])
+                else {
+                    throw CocoaError(.fileWriteUnknown)
+                }
+                try FileManager.default.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try pngData.write(to: destinationURL, options: .atomic)
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? eventID : "OnDumpSurfaceComplete"
+                return try await session.handle(event: .shiori(id: id, references: [
+                    0: destinationURL.path
+                ]))
+            } catch {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnDumpSurfaceFailure"
+                return try? await session.handle(event: .shiori(id: id, references: [
+                    0: destinationURL.path
+                ]))
+            }
+        case let .createUpdateData(directoryPath, eventID):
+            let targetURL = directoryPath.map(resolvePath) ?? ghost.rootDirectory
+            do {
+                let generator = UpdateDataGenerator()
+                let result = try generator.generate(in: targetURL)
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? eventID : "OnCreateUpdateDataComplete"
+                return try await session.handle(event: .shiori(id: id, references: [
+                    0: String(result.fileCount),
+                    1: targetURL.path
+                ]))
+            } catch {
+                guard let eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateUpdateDataFailure"
+                return try? await session.handle(event: .shiori(id: id, references: [
+                    0: targetURL.path
+                ]))
+            }
         }
     }
 
@@ -525,6 +618,15 @@ final class CalledGhostRuntime {
         default: .utf8
         }
         return String(data: Data(data), encoding: stringEncoding) ?? ""
+    }
+
+    private func cancelHTTP(url: String?) {
+        if let url {
+            inFlightHTTPTasks.removeValue(forKey: url)?.cancel()
+        } else {
+            inFlightHTTPTasks.values.forEach { $0.cancel() }
+            inFlightHTTPTasks.removeAll()
+        }
     }
 
     private func handleNetworkDiagnostic(_ command: SakuraScriptNetworkDiagnostic) async -> SakuraScript? {

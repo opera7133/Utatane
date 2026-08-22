@@ -36,6 +36,7 @@ public final class SurfaceWindowController {
     private var locksToDesktopBottom = true
     private var keepsOnScreen = true
     private var stayOnTop = true
+    private var stickyGroups: [Set<Int>] = []
 
     public var onMouseClick: (@MainActor (Int, String?) -> Void)?
     public var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
@@ -104,7 +105,7 @@ public final class SurfaceWindowController {
         characters[scope]?.currentSurfaceID
     }
 
-    func renderedImage(for scope: Int) -> NSImage? {
+    public func renderedImage(for scope: Int = 0) -> NSImage? {
         characters[scope]?.renderedImage
     }
 
@@ -250,6 +251,99 @@ public final class SurfaceWindowController {
         }
     }
 
+    public func moveSurface(
+        scope: Int = 0,
+        x: Int?,
+        y: Int?,
+        time: Int,
+        isAsync: Bool,
+        options: [String] = []
+    ) async {
+        guard let character = characters[scope], let currentFrame = character.windowFrame else { return }
+        let targetX = x.map { CGFloat($0) } ?? currentFrame.minX
+        let targetY = y.map { CGFloat($0) } ?? currentFrame.minY
+        let targetOrigin = NSPoint(x: targetX, y: targetY)
+
+        if isAsync {
+            Task { @MainActor in
+                await character.moveOrigin(to: targetOrigin, durationMilliseconds: time)
+            }
+        } else {
+            await character.moveOrigin(to: targetOrigin, durationMilliseconds: time)
+        }
+    }
+
+    public func separateCharacters(scope: Int = 0) async {
+        guard let currentFrame = characters[scope]?.windowFrame else { return }
+        let otherScope = scope == 0 ? 1 : 0
+        guard let otherFrame = characters[otherScope]?.windowFrame else { return }
+
+        let moveDelta: CGFloat = currentFrame.midX < otherFrame.midX ? -60 : 60
+        let targetOrigin = NSPoint(x: currentFrame.minX + moveDelta, y: currentFrame.minY)
+        await characters[scope]?.moveOrigin(to: targetOrigin, durationMilliseconds: 300)
+    }
+
+    public func approachCharacters(scope: Int = 0) async {
+        guard let currentFrame = characters[scope]?.windowFrame else { return }
+        let otherScope = scope == 0 ? 1 : 0
+        guard let otherFrame = characters[otherScope]?.windowFrame else { return }
+
+        let targetX: CGFloat = if currentFrame.midX < otherFrame.midX {
+            otherFrame.minX - currentFrame.width
+        } else {
+            otherFrame.maxX
+        }
+        let targetOrigin = NSPoint(x: targetX, y: currentFrame.minY)
+        await characters[scope]?.moveOrigin(to: targetOrigin, durationMilliseconds: 300)
+    }
+
+    public func setStickyWindows(scopes: [Int]) {
+        if scopes.isEmpty {
+            stickyGroups = [Set(characters.keys)]
+        } else {
+            stickyGroups.append(Set(scopes))
+        }
+    }
+
+    public func resetStickyWindows() {
+        stickyGroups.removeAll()
+    }
+
+    private func handleWindowDragDelta(scope: Int, delta: NSPoint) {
+        for group in stickyGroups where group.contains(scope) {
+            for otherScope in group where otherScope != scope {
+                characters[otherScope]?.moveBy(delta: delta)
+            }
+        }
+    }
+
+    public func setZOrder(_ order: [String]) {
+        var previousWindowNumber: Int?
+        for item in order {
+            let scope: Int?
+            if let directScope = Int(item) {
+                scope = directScope
+            } else if item.lowercased().hasPrefix("s") || item.lowercased().hasPrefix("surface") {
+                let suffix = item.lowercased().replacingOccurrences(of: "surface", with: "").replacingOccurrences(of: "s", with: "")
+                scope = Int(suffix)
+            } else {
+                scope = nil
+            }
+            if let scope, let character = characters[scope], let windowNumber = character.windowNumber {
+                if let previousWindowNumber {
+                    character.orderAbove(relativeTo: previousWindowNumber)
+                }
+                previousWindowNumber = windowNumber
+            }
+        }
+    }
+
+    public func resetZOrder() {
+        for (_, character) in characters.sorted(by: { $0.key < $1.key }) {
+            character.setStayOnTop(stayOnTop)
+        }
+    }
+
     public func unlockRepaint() {
         for character in characters.values {
             character.setRepaintLocked(false)
@@ -364,6 +458,9 @@ public final class SurfaceWindowController {
         }
         character.onNarDrop = { [weak self] urls in
             self?.onNarDrop?(scope, urls)
+        }
+        character.onWindowDragDelta = { [weak self] delta in
+            self?.handleWindowDragDelta(scope: scope, delta: delta)
         }
         character.contextMenuItems = { [weak self] in
             self?.contextMenuItems?() ?? []
@@ -812,12 +909,45 @@ private final class CharacterSurfaceController {
         )
     }
 
+    var onWindowDragDelta: ((_ delta: NSPoint) -> Void)?
+
+    var windowNumber: Int? {
+        window?.windowNumber
+    }
+
+    func orderAbove(relativeTo otherWindowNumber: Int) {
+        window?.order(.above, relativeTo: otherWindowNumber)
+    }
+
+    func moveBy(delta: NSPoint) {
+        guard let window else { return }
+        let currentOrigin = window.frame.origin
+        window.setFrameOrigin(NSPoint(x: currentOrigin.x + delta.x, y: currentOrigin.y + delta.y))
+    }
+
     func center() {
         window?.center()
     }
 
     func setOrigin(_ origin: NSPoint) {
         window?.setFrameOrigin(origin)
+    }
+
+    func moveOrigin(to targetOrigin: NSPoint, durationMilliseconds: Int) async {
+        guard let window else { return }
+        guard durationMilliseconds > 0 else {
+            window.setFrameOrigin(targetOrigin)
+            return
+        }
+        await withCheckedContinuation { continuation in
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = Double(durationMilliseconds) / 1000
+                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                window.animator().setFrameOrigin(targetOrigin)
+            } completionHandler: {
+                continuation.resume()
+            }
+        }
     }
 
     private func render(
@@ -881,6 +1011,9 @@ private final class CharacterSurfaceController {
         }
         imageView.onNarDrop = { [weak self] urls in
             self?.onNarDrop?(urls)
+        }
+        imageView.onWindowDragDelta = { [weak self] delta in
+            self?.onWindowDragDelta?(delta)
         }
         return (boundImage, imageView)
     }
@@ -1142,6 +1275,7 @@ private final class SurfaceImageView: NSImageView {
     var onMouseEvent: ((GhostMouseEvent.Kind, String?, Int, Int, Int) -> Void)?
     var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
     var onNarDrop: (([URL]) -> Void)?
+    var onWindowDragDelta: ((NSPoint) -> Void)?
     var locksVerticalMovement = true
     var locksHorizontalMovement = false
     private var hoveredRegion: String?
@@ -1198,10 +1332,14 @@ private final class SurfaceImageView: NSImageView {
         let deltaX = currentMouseLocation.x - startMouseLocation.x
         let deltaY = currentMouseLocation.y - startMouseLocation.y
         didDrag = didDrag || hypot(deltaX, deltaY) >= 2
-        window.setFrameOrigin(NSPoint(
-            x: locksHorizontalMovement ? startWindowOrigin.x : startWindowOrigin.x + deltaX,
-            y: locksVerticalMovement ? startWindowOrigin.y : startWindowOrigin.y + deltaY
-        ))
+        let currentOrigin = window.frame.origin
+        let newX = locksHorizontalMovement ? startWindowOrigin.x : startWindowOrigin.x + deltaX
+        let newY = locksVerticalMovement ? startWindowOrigin.y : startWindowOrigin.y + deltaY
+        let moveDelta = NSPoint(x: newX - currentOrigin.x, y: newY - currentOrigin.y)
+        window.setFrameOrigin(NSPoint(x: newX, y: newY))
+        if moveDelta.x != 0 || moveDelta.y != 0 {
+            onWindowDragDelta?(moveDelta)
+        }
     }
 
     override func updateTrackingAreas() {

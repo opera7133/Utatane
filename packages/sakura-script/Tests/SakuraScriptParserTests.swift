@@ -699,3 +699,80 @@ func `parses negative balloon surface ID for hiding balloon`() {
         .balloonSurface(-1)
     ])
 }
+
+@Test
+func `parses character separation and approach commands`() {
+    #expect(SakuraScriptParser().parse(#"\4\5"#) == [
+        .separateCharacters,
+        .approachCharacters
+    ])
+}
+
+@Test
+func `parses old format choice commands with and without marker`() {
+    #expect(SakuraScriptParser().parse(#"\q[0][はい]\q*[1][いいえ]"#) == [
+        .choice(label: "はい", id: "0", arguments: []),
+        .lineBreak(scale: nil),
+        .marker,
+        .choice(label: "いいえ", id: "1", arguments: []),
+        .lineBreak(scale: nil)
+    ])
+}
+
+@Test
+func `parses move commands`() {
+    #expect(SakuraScriptParser().parse(#"\![move,100,200,1000]\![moveasync,--X=50,--Y=60,--time=500]"#) == [
+        .moveSurface(x: 100, y: 200, time: 1000, isAsync: false, options: ["100", "200", "1000"]),
+        .moveSurface(x: 50, y: 60, time: 500, isAsync: true, options: ["--X=50", "--Y=60", "--time=500"])
+    ])
+}
+
+@Test
+func `parses open ui dialog and utility commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![open,configurationdialog]\![open,readme]\![open,help]\![open,file,/tmp/a.txt]\![open,folder,/tmp]\![execute,dumpsurface,/tmp/out.png,--event=OnDumped]\![execute,createupdatedata,/tmp/dir,--event=OnUpdated]"#
+    ) == [
+        .contentAction(.openConfigurationDialog),
+        .contentAction(.openReadme),
+        .contentAction(.openHelp),
+        .contentAction(.openFile("/tmp/a.txt")),
+        .contentAction(.openFolder("/tmp")),
+        .archive(.dumpSurface(path: "/tmp/out.png", eventID: "OnDumped")),
+        .archive(.createUpdateData(directoryPath: "/tmp/dir", eventID: "OnUpdated"))
+    ])
+}
+
+@Test
+func `parses createupdatedata without arguments for the current ghost`() {
+    #expect(SakuraScriptParser().parse(#"\![execute,createupdatedata]"#) == [
+        .archive(.createUpdateData(directoryPath: nil, eventID: nil))
+    ])
+}
+
+@Test
+func `parses async sound playback and sound wait commands`() {
+    #expect(SakuraScriptParser().parse(#"\_v[test.wav]\_V"#) == [
+        .sound(.play(file: "test.wav", loop: false, options: [])),
+        .sound(.wait)
+    ])
+}
+
+@Test
+func `parses inline balloon image commands`() {
+    #expect(SakuraScriptParser().parse(#"\_b[test.png,inline]\_b[sample.png,inline,opaque]"#) == [
+        .inlineImage(path: "test.png", isOpaque: false, options: []),
+        .inlineImage(path: "sample.png", isOpaque: true, options: ["opaque"])
+    ])
+}
+
+@Test
+func `parses zorder and sticky window commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![set,zorder,1,0]\![reset,zorder]\![set,sticky-window,1,0]\![reset,sticky-window]"#
+    ) == [
+        .setZOrder(["1", "0"]),
+        .resetZOrder,
+        .setStickyWindows([1, 0]),
+        .resetStickyWindows
+    ])
+}

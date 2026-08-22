@@ -1276,6 +1276,46 @@ func `updates window level with stayOnTop`() {
     balloonController.setStayOnTop(true)
 }
 
+@Test
+@MainActor
+func `handles zorder and sticky window configuration`() {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+
+    surfaceController.setStickyWindows(scopes: [0, 1])
+    surfaceController.resetStickyWindows()
+    surfaceController.setZOrder(["1", "0"])
+    surfaceController.resetZOrder()
+}
+
+@Test
+@MainActor
+func `renders inline balloon images`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    try makePNG(width: 16, height: 16).write(to: directory.appending(path: "icon.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    player.configure(resourceBaseDirectory: directory)
+
+    player.play(
+        SakuraScript(rawValue: #"画像\_b[icon.png,inline]表示\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+}
+
 private func makePNG(
     width: Int,
     height: Int,

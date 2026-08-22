@@ -203,6 +203,7 @@ public final class SakuraScriptPlayer {
         var choicesByScope: [Int: ActiveAnchor] = [:]
         var textStyleByScope: [Int: BalloonTextStyle] = [:]
         var styleRunsByScope: [Int: [BalloonTextStyleRun]] = [:]
+        var inlineImagesByScope: [Int: [NSRange: NSImage]] = [:]
         var balloonStyleByScope = defaultBalloonSurfaceIDs
         var activatedScopes = Set<Int>()
         var isQuickSection = false
@@ -369,6 +370,7 @@ public final class SakuraScriptPlayer {
                                 text: textByScope[targetScope, default: ""],
                                 links: linksByScope[targetScope, default: []],
                                 styles: styleRunsByScope[targetScope, default: []],
+                                inlineImages: inlineImagesByScope[targetScope, default: [:]],
                                 autoscroll: autoscrollByScope[targetScope] ?? true
                             )
                             if isSerikoTalkEnabled, !character.isWhitespace {
@@ -838,6 +840,54 @@ public final class SakuraScriptPlayer {
                 case let .stayOnTop(stayOnTop):
                     surfaceWindowController.setStayOnTop(stayOnTop)
                     balloonWindowController.setStayOnTop(stayOnTop)
+                case let .moveSurface(x, y, time, isAsync, options):
+                    await surfaceWindowController.moveSurface(
+                        scope: scope,
+                        x: x,
+                        y: y,
+                        time: time,
+                        isAsync: isAsync,
+                        options: options
+                    )
+                case .separateCharacters:
+                    await surfaceWindowController.separateCharacters(scope: scope)
+                case .approachCharacters:
+                    await surfaceWindowController.approachCharacters(scope: scope)
+                case let .setZOrder(order):
+                    surfaceWindowController.setZOrder(order)
+                case .resetZOrder:
+                    surfaceWindowController.resetZOrder()
+                case let .setStickyWindows(scopes):
+                    surfaceWindowController.setStickyWindows(scopes: scopes)
+                case .resetStickyWindows:
+                    surfaceWindowController.resetStickyWindows()
+                case let .inlineImage(path, _, _):
+                    if let image = resolveInlineImage(path: path) {
+                        let targetScope = scope
+                        let currentLength = (textByScope[targetScope, default: ""] as NSString).length
+                        textByScope[targetScope, default: ""].append("\u{FFFC}")
+                        var currentImages = inlineImagesByScope[targetScope, default: [:]]
+                        currentImages[NSRange(location: currentLength, length: 1)] = image
+                        inlineImagesByScope[targetScope] = currentImages
+
+                        try activateIfNeeded(
+                            scope: targetScope,
+                            balloon: balloon,
+                            text: textByScope[targetScope, default: ""],
+                            links: linksByScope[targetScope, default: []],
+                            style: balloonStyleByScope[targetScope] ?? 0,
+                            verticalAlignment: verticalAlignmentByScope[targetScope] ?? .top,
+                            activatedScopes: &activatedScopes
+                        )
+                        updateContent(
+                            scope: targetScope,
+                            text: textByScope[targetScope, default: ""],
+                            links: linksByScope[targetScope, default: []],
+                            styles: styleRunsByScope[targetScope, default: []],
+                            inlineImages: inlineImagesByScope[targetScope, default: [:]],
+                            autoscroll: autoscrollByScope[targetScope] ?? true
+                        )
+                    }
                 case let .otherGhostTalk(target, script):
                     onOtherGhostTalk?(target, script)
                 case let .otherSurfaceChange(target, scope, surfaceID):
@@ -898,6 +948,7 @@ public final class SakuraScriptPlayer {
                     anchorsByScope[scope] = nil
                     choicesByScope[scope] = nil
                     styleRunsByScope[scope] = []
+                    inlineImagesByScope[scope] = [:]
                     updateContent(scope: scope, text: "", links: [], styles: [])
                 case .clearAll:
                     for activeScope in activatedScopes {
@@ -908,6 +959,7 @@ public final class SakuraScriptPlayer {
                     anchorsByScope.removeAll()
                     choicesByScope.removeAll()
                     styleRunsByScope.removeAll()
+                    inlineImagesByScope.removeAll()
                 case .end:
                     return
                 case .unknown:
@@ -1058,15 +1110,35 @@ public final class SakuraScriptPlayer {
         text: String,
         links: [BalloonTextLink],
         styles: [BalloonTextStyleRun] = [],
+        inlineImages: [NSRange: NSImage] = [:],
         autoscroll: Bool = true
     ) {
         balloonWindowController.updateContent(
             text: text,
             links: links,
             styles: styles,
+            inlineImages: inlineImages,
             autoscroll: autoscroll,
             scope: scope
         )
+    }
+
+    private func resolveInlineImage(path: String) -> NSImage? {
+        if path.hasPrefix("data:image/") {
+            if let commaIndex = path.firstIndex(of: ",") {
+                let base64String = String(path[path.index(after: commaIndex)...])
+                if let data = Data(base64Encoded: base64String, options: .ignoreUnknownCharacters) {
+                    return NSImage(data: data)
+                }
+            }
+        }
+        guard let baseDirectory = resourceBaseDirectory else { return nil }
+        let normalizedPath = path.replacingOccurrences(of: "\\", with: "/")
+        let url = baseDirectory.appending(path: normalizedPath)
+        if FileManager.default.fileExists(atPath: url.path) {
+            return NSImage(contentsOf: url)
+        }
+        return nil
     }
 
     private func applyFontCommand(

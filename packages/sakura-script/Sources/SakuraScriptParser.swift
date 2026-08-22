@@ -143,20 +143,39 @@ public struct SakuraScriptParser: Sendable {
                 tokens.append(.waitForClick(clearOnResume: argument?.lowercased() != "noclear"))
             case "t":
                 tokens.append(.timeCritical)
+            case "4":
+                tokens.append(.separateCharacters)
+            case "5":
+                tokens.append(.approachCharacters)
             case "q":
-                if let argument = bracketArgument(in: characters, index: &index) {
-                    let arguments = splitArguments(argument)
-                    if arguments.count >= 2 {
-                        tokens.append(.choice(
-                            label: arguments[0],
-                            id: arguments[1],
-                            arguments: Array(arguments.dropFirst(2))
-                        ))
+                let hasStar = index < characters.count && characters[index] == "*"
+                if hasStar {
+                    index += 1
+                }
+                if let firstArg = bracketArgument(in: characters, index: &index) {
+                    if index < characters.count, characters[index] == "[", let secondArg = bracketArgument(in: characters, index: &index) {
+                        if hasStar {
+                            tokens.append(.marker)
+                        }
+                        tokens.append(.choice(label: secondArg, id: firstArg, arguments: []))
+                        tokens.append(.lineBreak(scale: nil))
                     } else {
-                        tokens.append(.unknown("\\q[\(argument)]"))
+                        let arguments = splitArguments(firstArg)
+                        if arguments.count >= 2 {
+                            if hasStar {
+                                tokens.append(.marker)
+                            }
+                            tokens.append(.choice(
+                                label: arguments[0],
+                                id: arguments[1],
+                                arguments: Array(arguments.dropFirst(2))
+                            ))
+                        } else {
+                            tokens.append(.unknown("\\q\(hasStar ? "*" : "")[\(firstArg)]"))
+                        }
                     }
                 } else {
-                    tokens.append(.unknown("\\q"))
+                    tokens.append(.unknown("\\q\(hasStar ? "*" : "")"))
                 }
             case "j":
                 if let argument = bracketArgument(in: characters, index: &index), !argument.isEmpty {
@@ -298,6 +317,20 @@ public struct SakuraScriptParser: Sendable {
                 } else if index < characters.count, characters[index] == "V" {
                     index += 1
                     tokens.append(.sound(.wait))
+                } else if index < characters.count, characters[index] == "b" {
+                    index += 1
+                    if let argument = bracketArgument(in: characters, index: &index) {
+                        let arguments = splitArguments(argument)
+                        if arguments.count >= 2, arguments[1].lowercased() == "inline" {
+                            let isOpaque = arguments.count >= 3 && arguments[2].lowercased() == "opaque"
+                            let options = Array(arguments.dropFirst(2))
+                            tokens.append(.inlineImage(path: arguments[0], isOpaque: isOpaque, options: options))
+                        } else {
+                            tokens.append(.unknown("\\_b[\(argument)]"))
+                        }
+                    } else {
+                        tokens.append(.unknown("\\_b"))
+                    }
                 } else if index < characters.count, characters[index] == "a" {
                     index += 1
                     if let argument = bracketArgument(in: characters, index: &index) {
@@ -486,6 +519,27 @@ public struct SakuraScriptParser: Sendable {
                               )
                     {
                         tokens.append(.desktopAlignment(alignment))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "zorder"
+                    {
+                        tokens.append(.setZOrder(Array(arguments.dropFirst(2))))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "reset",
+                              arguments[1].lowercased() == "zorder"
+                    {
+                        tokens.append(.resetZOrder)
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "sticky-window"
+                    {
+                        let scopes = arguments.dropFirst(2).compactMap(Int.init)
+                        tokens.append(.setStickyWindows(scopes))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "reset",
+                              arguments[1].lowercased() == "sticky-window"
+                    {
+                        tokens.append(.resetStickyWindows)
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "open",
                               arguments[1].lowercased() == "browser"
@@ -765,6 +819,34 @@ public struct SakuraScriptParser: Sendable {
                             sourceDirectoryPath: arguments[3],
                             eventID: eventID
                         )))
+                    } else if arguments.count >= 1, ["move", "moveasync"].contains(arguments[0].lowercased()) {
+                        let isAsync = arguments[0].lowercased() == "moveasync"
+                        let options = Array(arguments.dropFirst())
+                        let x = Self.optionValue("x", in: options).flatMap(Int.init)
+                            ?? (options.count >= 1 ? Int(options[0]) : nil)
+                        let y = Self.optionValue("y", in: options).flatMap(Int.init)
+                            ?? (options.count >= 2 ? Int(options[1]) : nil)
+                        let time = Self.optionValue("time", in: options).flatMap(Int.init)
+                            ?? (options.count >= 3 ? Int(options[2]) : nil)
+                            ?? 0
+                        tokens.append(.moveSurface(x: x, y: y, time: max(0, time), isAsync: isAsync, options: options))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "dumpsurface"
+                    {
+                        let options = Array(arguments.dropFirst(2))
+                        let path = options.first { !$0.hasPrefix("--") }
+                        let eventID = Self.optionValue("event", in: options)
+                        tokens.append(.archive(.dumpSurface(path: path, eventID: eventID)))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "createupdatedata"
+                    {
+                        let operands = Array(arguments.dropFirst(2))
+                        let directoryPath = operands.first { !$0.hasPrefix("--") }
+                        let options = operands.filter { $0.hasPrefix("--") }
+                        let eventID = Self.optionValue("event", in: options)
+                        tokens.append(.archive(.createUpdateData(directoryPath: directoryPath, eventID: eventID)))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "resetwindowpos"
@@ -775,6 +857,31 @@ public struct SakuraScriptParser: Sendable {
                               arguments[1].lowercased() == "resetballoonpos"
                     {
                         tokens.append(.resetBalloonPositions)
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "open",
+                              ["configurationdialog", "settingdialog", "preference"].contains(arguments[1].lowercased())
+                    {
+                        tokens.append(.contentAction(.openConfigurationDialog))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "readme"
+                    {
+                        tokens.append(.contentAction(.openReadme))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "help"
+                    {
+                        tokens.append(.contentAction(.openHelp))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "file"
+                    {
+                        tokens.append(.contentAction(.openFile(arguments[2])))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "folder"
+                    {
+                        tokens.append(.contentAction(.openFolder(arguments[2])))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "open",
                               ["communicatebox", "teachbox"].contains(arguments[1].lowercased())

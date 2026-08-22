@@ -274,17 +274,20 @@ public final class BalloonWindowController {
         text: String,
         links: [BalloonTextLink],
         styles: [BalloonTextStyleRun],
+        inlineImages: [NSRange: NSImage] = [:],
         autoscroll: Bool = true,
         scope: Int = 0
     ) {
         presentations[scope]?.text = text
         presentations[scope]?.links = links
         presentations[scope]?.styles = styles
+        presentations[scope]?.inlineImages = inlineImages
         guard !repaintLockedScopes.contains(scope) else { return }
         presentations[scope]?.contentView.update(
             text: text,
             links: links,
             styles: styles,
+            inlineImages: inlineImages,
             autoscroll: autoscroll
         )
     }
@@ -299,7 +302,8 @@ public final class BalloonWindowController {
         presentation.contentView.update(
             text: presentation.text,
             links: presentation.links,
-            styles: presentation.styles
+            styles: presentation.styles,
+            inlineImages: presentation.inlineImages
         )
     }
 
@@ -520,6 +524,7 @@ private final class BalloonPresentation {
     var text: String
     var links: [BalloonTextLink] = []
     var styles: [BalloonTextStyleRun] = []
+    var inlineImages: [NSRange: NSImage] = [:]
     var isWaitingForClick = false
 
     init(
@@ -823,6 +828,7 @@ private extension BalloonContentView {
         text: String,
         links: [BalloonTextLink],
         styles: [BalloonTextStyleRun] = [],
+        inlineImages: [NSRange: NSImage] = [:],
         autoscroll: Bool = true
     ) {
         let attributedText = NSMutableAttributedString(
@@ -849,28 +855,29 @@ private extension BalloonContentView {
             )
             linkTargets[token] = link
         }
-        if let markerImage {
-            let source = attributedText.string as NSString
-            var searchRange = NSRange(location: 0, length: source.length)
-            while searchRange.length > 0 {
-                let range = source.range(of: "\u{FFFC}", options: [], range: searchRange)
-                guard range.location != NSNotFound else { break }
+        let source = attributedText.string as NSString
+        var searchRange = NSRange(location: 0, length: source.length)
+        while searchRange.length > 0 {
+            let range = source.range(of: "\u{FFFC}", options: [], range: searchRange)
+            guard range.location != NSNotFound else { break }
+            let image = inlineImages[range] ?? markerImage
+            if let image {
                 let attachment = NSTextAttachment()
-                attachment.image = markerImage
-                let markerHeight = min(markerImage.size.height * displayScale, textFont.pointSize)
-                let markerWidth = markerImage.size.height > 0
-                    ? markerImage.size.width * markerHeight / markerImage.size.height
-                    : markerHeight
+                attachment.image = image
+                let imgHeight = min(image.size.height * displayScale, textFont.pointSize * 2)
+                let imgWidth = image.size.height > 0
+                    ? image.size.width * imgHeight / image.size.height
+                    : imgHeight
                 attachment.bounds = NSRect(
                     x: 0,
                     y: textFont.descender,
-                    width: markerWidth,
-                    height: markerHeight
+                    width: imgWidth,
+                    height: imgHeight
                 )
                 attributedText.addAttribute(.attachment, value: attachment, range: range)
-                let nextLocation = NSMaxRange(range)
-                searchRange = NSRange(location: nextLocation, length: source.length - nextLocation)
             }
+            let nextLocation = NSMaxRange(range)
+            searchRange = NSRange(location: nextLocation, length: source.length - nextLocation)
         }
         textView.linkTargets = linkTargets
         textView.textStorage?.setAttributedString(attributedText)

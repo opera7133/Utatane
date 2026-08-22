@@ -49,12 +49,11 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\![set,alignmentondesktop/alignmenttodesktop,...]` | ✅ | scope別の`top`・`bottom`・`left`・`right`・`free`・`default`に対応。端への吸着と吸着軸のドラッグ固定をゴースト終了まで保持 |
 | `\![set,scaling,...]` | ✅ | ユーザー設定倍率を基準にscope別の単一・縦横倍率、負数による軸反転、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
 | `\![set,alpha,...]` | ✅ | scope別の0〜100指定、上限クランプ、負値で値を維持した再描画、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
-| `\![effect...]`, `\![filter...]` | ➖ | SSPプラグイン依存。実装方針が必要 |
-| `\4`, `\5` | ❌ | キャラクター位置操作 |
-| `\![move]`, `\![moveasync]` | ❌ | 全引数・衝突処理を含め未実装 |
+| `\4`, `\5` | ✅ | `\4`（他キャラから離れる方向への一定移動）と `\5`（他キャラとの隣接位置への接近移動）に対応 |
+| `\![move]`, `\![moveasync]` | ✅ | 指定座標・アニメーション時間（ミリ秒）によるウィンドウ移動に対応（同期・非同期移動） |
 | `\![set/reset,position...]` | ❌ | 未実装 |
-| `\![set/reset,zorder...]` | ❌ | 未実装 |
-| `\![set/reset,sticky-window...]` | ❌ | 未実装 |
+| `\![set/reset,zorder...]` | ✅ | `\![set,zorder,スコープ...]` によるサーフェス・バルーンウィンドウの重なり順序（Z-Order）指定と、`\![reset,zorder]` による解除に対応 |
+| `\![set/reset,sticky-window...]` | ✅ | `\![set,sticky-window,スコープ...]` による複数キャラクターウィンドウの連動ドラッグ移動と、`\![reset,sticky-window]` による解除に対応 |
 | `\![execute,resetwindowpos]` | ✅ | 保存済みの全scopeのサーフェス・バルーン位置を消去し、表示中ウィンドウを初期配置へ戻す |
 
 ### バルーンとテキスト
@@ -62,7 +61,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\bID`, `\b[ID]` | ✅ | scope別のバルーンsurface変更に対応。括弧なしは1桁、複数桁は括弧形式。`\b[-1]` によるバルーン非表示に対応 |
-| `\_b[ファイル,...]` 全形式 | ❌ | 座標表示、inline、opaque、各オプションとも未実装 |
+| `\_b[ファイル,...]` 全形式 | 🟡 | `\_b[画像パス,inline]` および `\_b[画像パス,inline,opaque]` によるバルーン内インライン画像描画（相対パスおよび `data:image/...;base64,...` 画像）に対応。座標指定（x,y）描画は未実装 |
 | `\n` | ✅ | 改行 |
 | `\n[half]`, `\n[百分率]` | ✅ | `half`と数値・`%`付き百分率を改行文字の行高へ反映 |
 | `\_n` | ✅ | 次の`\_n`まで現scopeの自動折返しを停止し、スクリプト終了時に復帰 |
@@ -117,7 +116,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\q[タイトル,OnID,r0...]` | ✅ | 追加引数を渡す |
 | `\q[タイトル,ID1,ID2...]` | 🟡 | 2番目をID、以降を引数として扱う。旧形式固有の意味とは未照合 |
 | `script:` 選択肢 | ✅ | 通常・範囲選択肢でクリック時に指定SakuraScriptを直接再生し、SHIORI選択イベントを発生させないことをPlayerテストで確認 |
-| `\q[ID][タイトル]`, `\q*[ID][タイトル]` | ❌ | 旧形式未実装 |
+| `\q[ID][タイトル]`, `\q*[ID][タイトル]` | ✅ | 旧仕様の選択肢（`\q*[...]` はマーカー付き）を受理し、自動改行付きで標準選択肢へ正規化 |
 | `\__q[ID,...]...\__q` | ✅ | 範囲選択肢、引数、終了時の自動改行に対応 |
 | `\z` | ✅ | 旧仕様の選択肢付きスクリプト終端として `\e` と同じ再生終了処理へ接続。Parser・Playerの終了経路で確認 |
 | `\*`, `\![set,choicetimeout,時間]` | ✅ | 表示完了後から計時。省略時は設定値、0・-1・`\*`は無期限。期限時にバルーンを閉じ、通常・呼び出しゴーストへ`OnChoiceTimeout`を通知 |
@@ -140,7 +139,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | change shell / balloon | ✅ | 名前またはディレクトリ名で通常／呼び出しゴーストの既存切替処理へ接続 |
 | `\v`, `\![set,windowstate,stayontop/!stayontop]` | ✅ | 最前面表示（`.floating` / `.normal`）のトグルと明示指定に対応。サーフェス・バルーン両方に反映しテストで確認 |
 | windowstate (その他) / wallpaper / tray | ➖ | macOSでの代替仕様を決める必要あり |
-| otherghosttalk / othersurfacechange | ✅ | `\![otherghosttalk,ゴースト名,スクリプト]`、`\![othersurfacechange,ゴースト名,scope,surfaceID]` に対応。メインおよび呼び出し中ゴースト間の連携を接続 |
+| otherghosttalk / othersurfacechange | 🟡 | 呼び出し中ゴースト間の独自連携は実装。UKADOCの `\![set,otherghosttalk,...]` / `\![set,othersurfacechange,...]` による通知制御は未実装 |
 | `\![raise,...]` | ✅ | SHIORIイベントを発生させ、元スクリプトの残りを破棄して応答スクリプトへ切り替える |
 | `\![embed,...]` | ✅ | SHIORIイベントの戻り値を現在の再生列へ埋め込む |
 | timerraise / raiseother / timerraiseother | 🟡 | `timerraise`、`raiseother`、`timerraiseother`に対応。他ゴーストは名前指定と全ゴースト指定が可能。プラグイン宛は未対応 |
@@ -150,7 +149,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\8[file]`, `\_v[file]`, `\_V`, `\![sound,...]` | 🟡 | `play`・`load`・`loop`・`wait`・`pause`・`resume`・`stop`・`option` を実装。volume、balance、rate、seektimeに対応。`ghost/master` 内のAVFoundation対応音声のみ。CD・動画ウィンドウは対象外 |
+| `\8[file]`, `\_v[file]`, `\_V`, `\![sound,...]` | ✅ | `\8` / `\_v`（非同期音声再生）、`\_V`（音声再生完了待ち）、`\![sound,...]`（play/load/loop/wait/pause/resume/stop/option）に対応。volume、balance、rate、seektimeに対応。`ghost/master` 内のAVFoundation対応音声のみ。CD・動画ウィンドウは対象外 |
 
 ### 外部UI・入力
 
@@ -162,8 +161,8 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\![open,inputbox,...]` | 🟡 | ID、timeout、初期値を解析し、入力値を指定されたIDのSHIORIイベントへ `Reference0` として返す。timeoutの実動作と全オプションは未対応 |
 | password/date/slider/time/ip input | 🟡 | inputbox互換の入力プロンプトとして受付 |
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
-| configuration / 各explorer / graph / calendar | ❌ | SSP固有UI未実装 |
-| help / messenger / readme / terms / file | ❌ | 未実装 |
+| configuration / 各explorer / graph / calendar | 🟡 | `\![open,configurationdialog]` でUtataneの設定画面オープンに対応。各explorer等は未実装 |
+| help / messenger / readme / terms / file | 🟡 | `\![open,readme]`、`\![open,help]`、`\![open,file,パス]`、`\![open,folder,パス]` に対応。該当ドキュメントやファイルを外部アプリ／Finderで開く |
 | open/save/folder/color dialog、close dialog | ❌ | 未実装 |
 | surfacetest / aigraph / developer / shiorirequest / errorlog | ❌ | 開発UI未実装 |
 | dressup / picture / archive / backlog viewer | ❌ | 未実装 |
@@ -182,14 +181,14 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | --- | --- | --- |
 | `\![execute,http-get,URL,...]` | 🟡 | async/syncのID、param、主要header、timeout、no-cache、file/nofileを実装。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行って `Reference3` へ返す。非同期並行実行、multipart、streaming、progressは未対応 |
 | http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded bodyと主要共通オプションに対応。multipart、入力ファイル、証明書検証無効化は未対応 |
-| `\![execute,rss-get/rss-post,URL,...]` | ✅ | RSS/Atomを取得・パースし、各項目を `\u{1}` 区切り（タイトル・URL・更新日時・作者・概要）で `OnExecuteRSSComplete` / `OnExecuteRSSFailure` へ通知 |
+| `\![execute,rss-get/rss-post,URL,...]` | 🟡 | RSS/Atomの取得・基本パースと完了/失敗通知に対応。日時形式・全オプション・SSL情報は未照合 |
 | websocket execute/send/close/cancel | 🟡 | URL単位のws/wss接続、header・subprotocol、テキスト/バイナリ送信、受信イベント、close/cancelを実装。再接続とSSLInfoは未対応 |
 | `\![cancel,http/http-get,...]` | ✅ | `\![cancel,http,URL]` / `\![cancel,http-get,URL]` で特定URLまたは全実行中HTTPリクエストをキャンセル |
-| `\![execute,extractarchive/compressarchive,...]` | ✅ | ZIP展開・圧縮を実行し、結果（ファイル数・圧縮前後バイト数）またはエラーコードをイベント通知。パストラバーサル防止を検証 |
-| dumpsurface | ❌ | 未実装 |
+| `\![execute,extractarchive/compressarchive,...]` | 🟡 | ghost/master配下に限定してZIP展開・圧縮を実行し、結果またはエラーコードをイベント通知。パストラバーサル・シンボリックリンクを拒否。SSP管理下の他フォルダと暗号化方式の完全互換は未対応 |
+| dumpsurface | 🟡 | 表示中サーフェスのPNG出力と完了通知に対応。scope・surface列挙・prefix・cropなどUKADOCの全引数は未実装 |
 | `\![execute,install,path/url,...]` | ✅ | ローカルファイルパスまたはURL指定のNARインストールコマンドを接続 |
 | ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl、完了・失敗イベントに対応。ping progress、df/dataは未対応 |
-| createnar / createupdatedata | 🟡 | `\![execute,createnar,narPath,targetDirectory]` を実装し、NAR（ZIP形式）作成と `OnCreateNarComplete` / `OnCreateNarFailure` イベント通知に対応。createupdatedataは未実装 |
+| createnar / createupdatedata | 🟡 | `createupdatedata` は引数なしで実行元ゴーストの `updates2.dau` を生成（明示パス拡張も対応）。`createnar` は明示パス拡張のみで、UKADOCの引数なし形式は未実装 |
 | emptyrecyclebin / create shortcut | ➖ | OS依存かつ危険。原則対象外候補 |
 | passive / induction / select / collision mode | ❌ | 未実装 |
 | reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | `\![reload,ghost]`、`\![reload,shell]`、`\![reload,balloon]` を実装。surface/descript等の個別リロードは未対応 |

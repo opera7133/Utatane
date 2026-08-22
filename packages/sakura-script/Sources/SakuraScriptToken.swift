@@ -60,6 +60,14 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case notifyEvent(id: String, arguments: [String])
     case otherEvent(target: String, id: String, arguments: [String], reflectsResponse: Bool)
     case timerEvent(milliseconds: Int, repeats: Bool, reflectsResponse: Bool, id: String, arguments: [String])
+    case moveSurface(x: Int?, y: Int?, time: Int, isAsync: Bool, options: [String])
+    case separateCharacters
+    case approachCharacters
+    case setZOrder([String])
+    case resetZOrder
+    case setStickyWindows([Int])
+    case resetStickyWindows
+    case inlineImage(path: String, isOpaque: Bool, options: [String])
     case otherGhostTalk(target: String, script: String)
     case otherSurfaceChange(target: String, scope: Int, surfaceID: Int)
     case stayOnTop(Bool)
@@ -89,6 +97,8 @@ public enum SakuraScriptArchiveCommand: Sendable, Equatable {
     case extract(archivePath: String, destinationPath: String, eventID: String?, password: String?)
     case compress(archivePath: String, sourceDirectoryPath: String, eventID: String?, password: String?)
     case createNar(narPath: String, sourceDirectoryPath: String, eventID: String?)
+    case dumpSurface(path: String?, eventID: String?)
+    case createUpdateData(directoryPath: String?, eventID: String?)
 }
 
 public enum SakuraScriptWebSocketCommand: Sendable, Equatable {
@@ -203,6 +213,11 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case reloadGhost
     case reloadShell
     case reloadBalloon
+    case openConfigurationDialog
+    case openReadme
+    case openHelp
+    case openFile(String)
+    case openFolder(String)
 }
 
 public enum SakuraScriptSoundCommand: Sendable, Equatable {
