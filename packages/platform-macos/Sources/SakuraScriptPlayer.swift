@@ -152,7 +152,7 @@ public final class SakuraScriptPlayer {
 
     public func updateEnvironmentVariables(_ variables: [String: String]) {
         for (key, value) in variables {
-            self.environmentVariables[key.lowercased()] = value
+            environmentVariables[key.lowercased()] = value
         }
     }
 
@@ -995,7 +995,7 @@ public final class SakuraScriptPlayer {
             return ["42年", "150分", "3世紀", "999日", "3000万秒", "一昨日からずっと"].randomElement()!
         case "wronghour":
             let currentHour = calendar.component(.hour, from: now)
-            let wrong = (currentHour + Int.random(in: 1...11)) % 24
+            let wrong = (currentHour + Int.random(in: 1 ... 11)) % 24
             return String(wrong)
         case "ms": return ["学生", "会社員", "旅人", "猫好き"].randomElement()!
         case "mz": return ["時計", "傘", "冷蔵庫", "パソコン"].randomElement()!

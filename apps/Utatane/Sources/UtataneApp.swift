@@ -1238,7 +1238,7 @@ private struct UtataneRootView: View {
             if let calledRuntime {
                 let ghost = calledRuntime.ghost
                 dismissCalledGhost(ghost)
-                callGhost(ghost)
+                call(ghost)
             } else if let currentGhost {
                 let ghostID = currentGhost.id
                 selectedGhostID = nil
@@ -1275,12 +1275,12 @@ private struct UtataneRootView: View {
            isAll || ghost(currentGhost, matches: target),
            let balloon
         {
-            scriptPlayer.play(SakuraScript(script), balloon: balloon)
+            scriptPlayer.play(SakuraScript(rawValue: script), balloon: balloon)
         }
         for runtime in calledGhosts.values where runtime.ghost.id != originID
             && (isAll || ghost(runtime.ghost, matches: target))
         {
-            runtime.play(SakuraScript(script))
+            runtime.play(SakuraScript(rawValue: script))
         }
     }
 
@@ -1295,7 +1295,7 @@ private struct UtataneRootView: View {
            currentGhost.id != originID,
            isAll || ghost(currentGhost, matches: target)
         {
-            try? surfaceWindowController.changeSurface(to: surfaceID, scope: scope)
+            try? surfaceWindowController.changeSurface(scope: scope, to: surfaceID)
         }
         for runtime in calledGhosts.values where runtime.ghost.id != originID
             && (isAll || ghost(runtime.ghost, matches: target))
@@ -1549,11 +1549,11 @@ private struct UtataneRootView: View {
                         excluding: ghost.id
                     )
                 }
-                runtime.onOtherGhostTalk = { [weak self] target, script in
-                    self?.handleOtherGhostTalk(target: target, script: script, excluding: ghost.id)
+                runtime.onOtherGhostTalk = { target, script in
+                    handleOtherGhostTalk(target: target, script: script, excluding: ghost.id)
                 }
-                runtime.onOtherSurfaceChange = { [weak self] target, scope, surfaceID in
-                    self?.handleOtherSurfaceChange(target: target, scope: scope, surfaceID: surfaceID, excluding: ghost.id)
+                runtime.onOtherSurfaceChange = { target, scope, surfaceID in
+                    handleOtherSurfaceChange(target: target, scope: scope, surfaceID: surfaceID, excluding: ghost.id)
                 }
                 calledGhosts[ghost.id] = runtime
                 configureContextMenu()

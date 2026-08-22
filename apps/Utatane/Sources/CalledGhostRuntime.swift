@@ -1,5 +1,6 @@
 import AppKit
 import UtataneBalloon
+import UtataneContent
 import UtataneCore
 import UtataneNetwork
 import UtatanePlatformMacOS
@@ -307,7 +308,7 @@ final class CalledGhostRuntime {
     }
 
     func changeSurface(to surfaceID: Int, scope: Int = 0) {
-        try? surfaceController.changeSurface(to: surfaceID, scope: scope)
+        try? surfaceController.changeSurface(scope: scope, to: surfaceID)
     }
 
     func updateEnvironmentVariables(_ variables: [String: String]) {

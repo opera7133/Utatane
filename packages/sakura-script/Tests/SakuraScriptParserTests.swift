@@ -699,5 +699,3 @@ func `parses negative balloon surface ID for hiding balloon`() {
         .balloonSurface(-1)
     ])
 }
-
-

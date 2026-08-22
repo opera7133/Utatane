@@ -1264,7 +1264,7 @@ func `balloon repaint lock defers content and movement lock tracks state`() thro
 
 @Test
 @MainActor
-func `updates window level with stayOnTop`() throws {
+func `updates window level with stayOnTop`() {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
     let surfaceController = SurfaceWindowController(positionStore: positionStore)
