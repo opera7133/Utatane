@@ -1291,17 +1291,24 @@ func `handles zorder and sticky window configuration`() {
 
 @Test
 @MainActor
-func `renders inline balloon images`() throws {
+func `renders inline balloon images`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 100, height: 100).write(to: directory.appending(path: "surface0.png"))
     try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
     try makePNG(width: 16, height: 16).write(to: directory.appending(path: "icon.png"))
 
     let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
     let balloonController = BalloonWindowController(positionStore: positionStore)
     let player = SakuraScriptPlayer(
         surfaceWindowController: surfaceController,
@@ -1309,11 +1316,55 @@ func `renders inline balloon images`() throws {
     )
     player.configure(resourceBaseDirectory: directory)
 
-    player.play(
+    await player.playAndWait(
         SakuraScript(rawValue: #"画像\_b[icon.png,inline]表示\e"#),
         balloon: makeBalloon(directory: directory),
         characterDelayMilliseconds: 0
     )
+
+    let attachment = try #require(balloonController.textAttributes(at: 2, scope: 0)?[.attachment] as? NSTextAttachment)
+    let font = try #require(balloonController.textAttributes(at: 2, scope: 0)?[.font] as? NSFont)
+    #expect(attachment.bounds.height == 16)
+    #expect(attachment.bounds.origin.y == (font.capHeight - 16) / 2)
+}
+
+@Test
+@MainActor
+func `renders choice marker aligned with text cap height`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 100, height: 100).write(to: directory.appending(path: "surface0.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    try makePNG(width: 8, height: 8).write(to: directory.appending(path: "marker.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    player.configure(resourceBaseDirectory: directory)
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\_q\![*]\q[選択肢,choice_id]\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    let attachment = try #require(balloonController.textAttributes(at: 0, scope: 0)?[.attachment] as? NSTextAttachment)
+    let font = try #require(balloonController.textAttributes(at: 0, scope: 0)?[.font] as? NSFont)
+    #expect(attachment.bounds.height == 8)
+    #expect(attachment.bounds.origin.y == (font.capHeight - 8) / 2)
 }
 
 private func makePNG(

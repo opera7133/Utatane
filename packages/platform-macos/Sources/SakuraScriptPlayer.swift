@@ -311,6 +311,53 @@ public final class SakuraScriptPlayer {
                 return NSRange(location: location, length: end - location)
             }
         }
+
+        func updateContent(
+            scope: Int,
+            autoscroll: Bool = true
+        ) {
+            balloonWindowController.updateContent(
+                text: textByScope[scope, default: ""],
+                links: linksByScope[scope, default: []],
+                styles: styleRunsByScope[scope, default: []],
+                inlineImages: inlineImagesByScope[scope, default: [:]],
+                autoscroll: autoscroll,
+                scope: scope
+            )
+        }
+
+        func activate(scope: Int, style: Int) throws {
+            guard let surfaceFrame = surfaceWindowController.windowFrame(for: scope)
+                ?? surfaceWindowController.windowFrame
+            else { return }
+            let speaker: BalloonSpeaker = switch scope {
+            case 0: .sakura
+            case 1: .kero
+            default: .character(scope: scope)
+            }
+            try balloonWindowController.show(
+                balloon: balloon,
+                text: textByScope[scope, default: ""],
+                scope: scope,
+                speaker: speaker,
+                style: style,
+                near: surfaceFrame
+            )
+            updateContent(scope: scope)
+        }
+
+        func activateIfNeeded(scope: Int) throws {
+            let text = textByScope[scope, default: ""]
+            guard text.contains(where: { !$0.isWhitespace }) else { return }
+            guard activatedScopes.insert(scope).inserted else { return }
+            onDialogueContent?()
+            try activate(scope: scope, style: balloonStyleByScope[scope] ?? 0)
+            balloonWindowController.setVerticalAlignment(
+                verticalAlignmentByScope[scope] ?? .top,
+                scope: scope
+            )
+        }
+
         defer {
             isWaitingForClick = false
             balloonWindowController.setWaitingForClick(false)
@@ -352,25 +399,13 @@ public final class SakuraScriptPlayer {
                                 location: start,
                                 length: character.utf16.count
                             )
-                            try activateIfNeeded(
-                                scope: targetScope,
-                                balloon: balloon,
-                                text: textByScope[targetScope, default: ""],
-                                links: linksByScope[targetScope, default: []],
-                                style: balloonStyleByScope[targetScope] ?? 0,
-                                verticalAlignment: verticalAlignmentByScope[targetScope] ?? .top,
-                                activatedScopes: &activatedScopes
-                            )
+                            try activateIfNeeded(scope: targetScope)
                             balloonWindowController.setAutomaticLineWrapping(
                                 automaticLineWrappingByScope[targetScope] ?? true,
                                 scope: targetScope
                             )
                             updateContent(
                                 scope: targetScope,
-                                text: textByScope[targetScope, default: ""],
-                                links: linksByScope[targetScope, default: []],
-                                styles: styleRunsByScope[targetScope, default: []],
-                                inlineImages: inlineImagesByScope[targetScope, default: [:]],
                                 autoscroll: autoscrollByScope[targetScope] ?? true
                             )
                             if isSerikoTalkEnabled, !character.isWhitespace {
@@ -588,25 +623,12 @@ public final class SakuraScriptPlayer {
                                 style: breakStyle
                             ))
                         }
-                        try activateIfNeeded(
-                            scope: targetScope,
-                            balloon: balloon,
-                            text: textByScope[targetScope, default: ""],
-                            links: linksByScope[targetScope, default: []],
-                            style: balloonStyleByScope[targetScope] ?? 0,
-                            verticalAlignment: verticalAlignmentByScope[targetScope] ?? .top,
-                            activatedScopes: &activatedScopes
-                        )
+                        try activateIfNeeded(scope: targetScope)
                         balloonWindowController.setAutomaticLineWrapping(
                             automaticLineWrappingByScope[targetScope] ?? true,
                             scope: targetScope
                         )
-                        updateContent(
-                            scope: targetScope,
-                            text: textByScope[targetScope, default: ""],
-                            links: linksByScope[targetScope, default: []],
-                            styles: styleRunsByScope[targetScope, default: []]
-                        )
+                        updateContent(scope: targetScope)
                         textStyleByScope[targetScope, default: BalloonTextStyle()].alignment = nil
                     }
                 case .automaticLineBreak:
@@ -620,9 +642,6 @@ public final class SakuraScriptPlayer {
                     )
                     updateContent(
                         scope: scope,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []],
-                        styles: styleRunsByScope[scope, default: []],
                         autoscroll: autoscrollByScope[scope] ?? true
                     )
                 case let .wait(milliseconds):
@@ -675,21 +694,8 @@ public final class SakuraScriptPlayer {
                             fontColor: nil
                         )
                     )
-                    try activateIfNeeded(
-                        scope: scope,
-                        balloon: balloon,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []],
-                        style: balloonStyleByScope[scope] ?? 0,
-                        verticalAlignment: verticalAlignmentByScope[scope] ?? .top,
-                        activatedScopes: &activatedScopes
-                    )
-                    updateContent(
-                        scope: scope,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []],
-                        styles: styleRunsByScope[scope, default: []]
-                    )
+                    try activateIfNeeded(scope: scope)
+                    updateContent(scope: scope)
                 case let .choiceStart(id, arguments):
                     choicesByScope[scope] = ActiveAnchor(
                         id: id,
@@ -710,12 +716,7 @@ public final class SakuraScriptPlayer {
                         )
                     )
                     textByScope[scope, default: ""].append("\n")
-                    updateContent(
-                        scope: scope,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []],
-                        styles: styleRunsByScope[scope, default: []]
-                    )
+                    updateContent(scope: scope)
                 case .choiceTimeout:
                     continue
                 case let .anchorStart(id, arguments):
@@ -738,29 +739,11 @@ public final class SakuraScriptPlayer {
                             fontColor: anchor.fontColor
                         )
                     )
-                    updateContent(
-                        scope: scope,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []],
-                        styles: styleRunsByScope[scope, default: []]
-                    )
+                    updateContent(scope: scope)
                 case .marker:
                     textByScope[scope, default: ""].append("\u{FFFC}")
-                    try activateIfNeeded(
-                        scope: scope,
-                        balloon: balloon,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []],
-                        style: balloonStyleByScope[scope] ?? 0,
-                        verticalAlignment: verticalAlignmentByScope[scope] ?? .top,
-                        activatedScopes: &activatedScopes
-                    )
-                    updateContent(
-                        scope: scope,
-                        text: textByScope[scope, default: ""],
-                        links: linksByScope[scope, default: []],
-                        styles: styleRunsByScope[scope, default: []]
-                    )
+                    try activateIfNeeded(scope: scope)
+                    updateContent(scope: scope)
                 case let .environmentVariable(name):
                     pendingTokens.insert(.text(environmentValue(for: name)), at: 0)
                 case let .font(name, arguments):
@@ -794,12 +777,7 @@ public final class SakuraScriptPlayer {
                                 range: NSRange(location: lineStart, length: length),
                                 style: alignmentStyle
                             ))
-                            updateContent(
-                                scope: scope,
-                                text: textByScope[scope, default: ""],
-                                links: linksByScope[scope, default: []],
-                                styles: styleRunsByScope[scope, default: []]
-                            )
+                            updateContent(scope: scope)
                         }
                     }
                 case let .quickSection(enabled):
@@ -870,21 +848,9 @@ public final class SakuraScriptPlayer {
                         currentImages[NSRange(location: currentLength, length: 1)] = image
                         inlineImagesByScope[targetScope] = currentImages
 
-                        try activateIfNeeded(
-                            scope: targetScope,
-                            balloon: balloon,
-                            text: textByScope[targetScope, default: ""],
-                            links: linksByScope[targetScope, default: []],
-                            style: balloonStyleByScope[targetScope] ?? 0,
-                            verticalAlignment: verticalAlignmentByScope[targetScope] ?? .top,
-                            activatedScopes: &activatedScopes
-                        )
+                        try activateIfNeeded(scope: targetScope)
                         updateContent(
                             scope: targetScope,
-                            text: textByScope[targetScope, default: ""],
-                            links: linksByScope[targetScope, default: []],
-                            styles: styleRunsByScope[targetScope, default: []],
-                            inlineImages: inlineImagesByScope[targetScope, default: [:]],
                             autoscroll: autoscrollByScope[targetScope] ?? true
                         )
                     }
@@ -949,10 +915,14 @@ public final class SakuraScriptPlayer {
                     choicesByScope[scope] = nil
                     styleRunsByScope[scope] = []
                     inlineImagesByScope[scope] = [:]
-                    updateContent(scope: scope, text: "", links: [], styles: [])
+                    updateContent(scope: scope)
                 case .clearAll:
                     for activeScope in activatedScopes {
-                        updateContent(scope: activeScope, text: "", links: [], styles: [])
+                        textByScope[activeScope] = ""
+                        linksByScope[activeScope] = []
+                        styleRunsByScope[activeScope] = []
+                        inlineImagesByScope[activeScope] = [:]
+                        updateContent(scope: activeScope)
                     }
                     textByScope.removeAll()
                     linksByScope.removeAll()
@@ -1063,65 +1033,6 @@ public final class SakuraScriptPlayer {
         }
     }
 
-    private func activate(
-        scope: Int,
-        balloon: BalloonDefinition,
-        text: String,
-        links: [BalloonTextLink],
-        style: Int
-    ) throws {
-        guard let surfaceFrame = surfaceWindowController.windowFrame(for: scope)
-            ?? surfaceWindowController.windowFrame
-        else { return }
-        let speaker: BalloonSpeaker = switch scope {
-        case 0: .sakura
-        case 1: .kero
-        default: .character(scope: scope)
-        }
-        try balloonWindowController.show(
-            balloon: balloon,
-            text: text,
-            scope: scope,
-            speaker: speaker,
-            style: style,
-            near: surfaceFrame
-        )
-        updateContent(scope: scope, text: text, links: links)
-    }
-
-    private func activateIfNeeded(
-        scope: Int,
-        balloon: BalloonDefinition,
-        text: String,
-        links: [BalloonTextLink],
-        style: Int,
-        verticalAlignment: BalloonVerticalAlignment,
-        activatedScopes: inout Set<Int>
-    ) throws {
-        guard text.contains(where: { !$0.isWhitespace }) else { return }
-        guard activatedScopes.insert(scope).inserted else { return }
-        onDialogueContent?()
-        try activate(scope: scope, balloon: balloon, text: text, links: links, style: style)
-        balloonWindowController.setVerticalAlignment(verticalAlignment, scope: scope)
-    }
-
-    private func updateContent(
-        scope: Int,
-        text: String,
-        links: [BalloonTextLink],
-        styles: [BalloonTextStyleRun] = [],
-        inlineImages: [NSRange: NSImage] = [:],
-        autoscroll: Bool = true
-    ) {
-        balloonWindowController.updateContent(
-            text: text,
-            links: links,
-            styles: styles,
-            inlineImages: inlineImages,
-            autoscroll: autoscroll,
-            scope: scope
-        )
-    }
 
     private func resolveInlineImage(path: String) -> NSImage? {
         if path.hasPrefix("data:image/") {

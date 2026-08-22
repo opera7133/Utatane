@@ -110,6 +110,12 @@ struct SurfaceImageLoader {
     }
 
     func loadUsingTopLeftTransparency(_ url: URL) throws -> NSImage {
+        if let data = try? Data(contentsOf: url),
+           let rep = NSBitmapImageRep.imageReps(with: data).compactMap({ $0 as? NSBitmapImageRep }).first {
+            let image = NSImage(size: NSSize(width: rep.pixelsWide, height: rep.pixelsHigh))
+            image.addRepresentation(rep)
+            return try applyingTopLeftTransparency(to: image, sourceURL: url)
+        }
         guard let source = NSImage(contentsOf: url) else {
             throw SurfaceImageError.invalidImage(url)
         }
@@ -123,6 +129,7 @@ struct SurfaceImageLoader {
         guard let sourceRepresentation = source.representations
             .compactMap({ $0 as? NSBitmapImageRep })
             .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh })
+            ?? source.cgImage(forProposedRect: nil, context: nil, hints: nil).map({ NSBitmapImageRep(cgImage: $0) })
         else {
             throw SurfaceImageError.invalidImage(sourceURL)
         }

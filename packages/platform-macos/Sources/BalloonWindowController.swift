@@ -864,13 +864,14 @@ private extension BalloonContentView {
             if let image {
                 let attachment = NSTextAttachment()
                 attachment.image = image
-                let imgHeight = min(image.size.height * displayScale, textFont.pointSize * 2)
+                let font = (attributedText.attribute(.font, at: range.location, effectiveRange: nil) as? NSFont) ?? textFont
+                let imgHeight = min(image.size.height * displayScale, font.pointSize * 2)
                 let imgWidth = image.size.height > 0
                     ? image.size.width * imgHeight / image.size.height
                     : imgHeight
                 attachment.bounds = NSRect(
                     x: 0,
-                    y: textFont.descender,
+                    y: (font.capHeight - imgHeight) / 2,
                     width: imgWidth,
                     height: imgHeight
                 )
