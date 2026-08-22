@@ -59,3 +59,29 @@ import Testing
     #expect(ContentNetworkUpdater.homeURL(in: ghost)?.absoluteString == "https://example.test/ghost/")
     #expect(ContentNetworkUpdater.homeURL(in: balloon)?.absoluteString == "https://example.test/balloon/")
 }
+
+@Test func `throws downloadFailed when file fetch fails`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let hash = "d41d8cd98f00b204e9800998ecf8427e"
+    let delimiter = "\u{1}"
+    let manifest = Data("missing.txt\(delimiter)\(hash)\(delimiter)\n".utf8)
+    let updater = ContentNetworkUpdater { url in
+        if url.lastPathComponent == "updates2.dau" {
+            return manifest
+        }
+        throw NetworkFetchError.unsuccessfulStatus(404)
+    }
+
+    do {
+        _ = try await updater.update(rootDirectory: root, homeURL: #require(URL(string: "https://example.test/ghost/")))
+        #expect(Bool(false), "Expected update to throw downloadFailed")
+    } catch let ContentNetworkUpdateError.downloadFailed(path, errorDescription) {
+        #expect(path == "missing.txt")
+        #expect(errorDescription.contains("404"))
+    } catch {
+        #expect(Bool(false), "Unexpected error: \(error)")
+    }
+}

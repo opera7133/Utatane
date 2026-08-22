@@ -125,6 +125,12 @@ final class CalledGhostRuntime {
                 }
                 forwardCommunication(response)
             } catch {
+                AppLogStore.shared.error(
+                    "SHIORIイベント処理エラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: "Event: \(event)\nError: \(error)",
+                    ghostName: ghost.name
+                )
                 onError?(error)
             }
         }
@@ -146,6 +152,12 @@ final class CalledGhostRuntime {
                 }
                 forwardCommunication(response)
             } catch {
+                AppLogStore.shared.error(
+                    "OnSecondChangeエラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: String(describing: error),
+                    ghostName: ghost.name
+                )
                 onError?(error)
             }
         }
@@ -193,6 +205,12 @@ final class CalledGhostRuntime {
                 1: newShell.directory.lastPathComponent
             ]))
         } catch {
+            AppLogStore.shared.error(
+                "シェル切り替えエラー「\(newShell.name)」: \(error.localizedDescription)",
+                category: "Shell",
+                details: String(describing: error),
+                ghostName: ghost.name
+            )
             onError?(error)
         }
     }
@@ -232,7 +250,16 @@ final class CalledGhostRuntime {
             send(.mouse(event))
         }
         surfaceController.onNarDrop = { [weak self] _, urls in self?.onNarDrop?(urls) }
-        player.onError = { [weak self] error in self?.onError?(error) }
+        player.onError = { [weak self] error in
+            guard let self else { return }
+            AppLogStore.shared.error(
+                "スクリプト実行エラー: \(error.localizedDescription)",
+                category: "Script",
+                details: String(describing: error),
+                ghostName: ghost.name
+            )
+            onError?(error)
+        }
         player.onDialogueContent = { [weak self] in self?.surfaceController.setPresentationHidden(false) }
         player.onPlaybackFinished = { [weak self] in self?.surfaceController.setPresentationHidden(false) }
         player.onDialogueDismissed = { [weak self] in

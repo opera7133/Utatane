@@ -499,7 +499,7 @@ struct UtataneSettingsView: View {
             ) {
                 Section("開発用") {
                     Toggle("デバッグ画面を表示", isOn: $settings.showsDebugWindow)
-                    Text("ゴースト一覧、クリック判定、再生操作を表示する。通常の利用では非表示でよい。")
+                    Text("エラーや警告などのログ、クリック判定、再生操作を表示する。通常の利用では非表示でよい。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

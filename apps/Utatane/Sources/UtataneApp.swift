@@ -194,40 +194,24 @@ private struct UtataneRootView: View {
                     showContentFolder: showContentFolder
                 )
             } else {
-                VStack(spacing: 0) {
-                    GhostListView(model: model, selection: $selectedGhostID)
-                    Divider()
-                    HStack {
-                        Text("クリック判定")
-                        Spacer()
-                        Text(lastClickedRegion ?? "未検出")
-                            .foregroundStyle(.secondary)
-                        Button("ゆっくり再生") {
-                            surfaceWindowController.playAnimation(
-                                id: 0,
-                                minimumFrameDurationMilliseconds: 3000
-                            )
-                        }
-                        Button("ランダムトーク") {
-                            sendEvent(.randomTalk)
-                        }
-                        .disabled(session == nil)
-                        Button("進む") {
-                            scriptPlayer.advance()
-                        }
-                        Button("停止") {
-                            scriptPlayer.cancel()
-                        }
-                        Button("リロード") {
-                            reloadCurrentGhost()
-                        }
-                        .disabled(currentGhost == nil || isTransitioningGhost)
-                        Button("NARをインストール") {
-                            isImportingNar = true
-                        }
+                DebugConsoleView(
+                    model: model,
+                    selectedGhostID: $selectedGhostID,
+                    lastClickedRegion: lastClickedRegion,
+                    isSessionAvailable: session != nil,
+                    isReloadDisabled: currentGhost == nil || isTransitioningGhost,
+                    onPlayRandomTalk: { sendEvent(.randomTalk) },
+                    onAdvanceScript: { scriptPlayer.advance() },
+                    onCancelScript: { scriptPlayer.cancel() },
+                    onReloadGhost: { reloadCurrentGhost() },
+                    onInstallNar: { isImportingNar = true },
+                    onPlaySlowAnimation: {
+                        surfaceWindowController.playAnimation(
+                            id: 0,
+                            minimumFrameDurationMilliseconds: 3000
+                        )
                     }
-                    .padding(12)
-                }
+                )
             }
         }
         .task {
@@ -442,6 +426,12 @@ private struct UtataneRootView: View {
                 }
                 forwardCommunication(from: currentGhost, response: response)
             } catch {
+                AppLogStore.shared.error(
+                    "SHIORIイベント処理エラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: "Event: \(event)\nError: \(error)",
+                    ghostName: currentGhost?.name
+                )
                 previewError = error.localizedDescription
             }
         }
@@ -466,6 +456,12 @@ private struct UtataneRootView: View {
                     }
                     forwardCommunication(from: currentGhost, response: response)
                 } catch {
+                    AppLogStore.shared.error(
+                        "OnSecondChangeエラー: \(error.localizedDescription)",
+                        category: "SHIORI",
+                        details: String(describing: error),
+                        ghostName: currentGhost?.name
+                    )
                     previewError = error.localizedDescription
                 }
             }
@@ -512,8 +508,15 @@ private struct UtataneRootView: View {
         guard !Task.isCancelled else { return }
         switch await activate(ghost) {
         case .success:
+            AppLogStore.shared.info("「\(ghost.name)」の起動が完了しました", category: "Ghost", ghostName: ghost.name)
             return
         case let .failure(error):
+            AppLogStore.shared.error(
+                "「\(ghost.name)」の起動に失敗しました: \(error.localizedDescription)",
+                category: "Ghost",
+                details: String(describing: error),
+                ghostName: ghost.name
+            )
             let fallbackCandidates = ([previousGhost].compactMap(\.self) + model.ghosts)
                 .reduce(into: [InstalledGhost]()) { result, candidate in
                     guard candidate.id != ghost.id,
@@ -550,6 +553,12 @@ private struct UtataneRootView: View {
             guard !Task.isCancelled else { return }
             try? await Task.sleep(for: .seconds(1))
         } catch {
+            AppLogStore.shared.warning(
+                "ゴースト終了時のイベント処理エラー: \(error.localizedDescription)",
+                category: "Ghost",
+                details: String(describing: error),
+                ghostName: currentGhost?.name
+            )
             if !isTransitioningGhost {
                 previewError = error.localizedDescription
             }
@@ -557,6 +566,7 @@ private struct UtataneRootView: View {
     }
 
     private func activate(_ ghost: InstalledGhost) async -> Result<Void, any Error> {
+        AppLogStore.shared.info("「\(ghost.name)」の起動を開始しました", category: "Ghost", ghostName: ghost.name)
         scriptPlayer.cancel()
         surfaceWindowController.hideAll()
         surfaceWindowController.setPresentationHidden(true)
@@ -602,6 +612,12 @@ private struct UtataneRootView: View {
             balloon = loadedBalloon
             configureContextMenu()
             scriptPlayer.onError = { error in
+                AppLogStore.shared.error(
+                    "スクリプト実行エラー: \(error.localizedDescription)",
+                    category: "Script",
+                    details: String(describing: error),
+                    ghostName: ghost.name
+                )
                 previewError = error.localizedDescription
             }
             scriptPlayer.onDialogueContent = {
@@ -1865,6 +1881,7 @@ private struct UtataneRootView: View {
 
         let directoryName = ghost.rootDirectory.lastPathComponent
         networkSettings.recordContentUpdateAttempt(kind: .ghost, directoryName: directoryName)
+        AppLogStore.shared.info("「\(ghost.name)」の更新確認を開始しました", category: "Update", ghostName: ghost.name)
         let statusToken = isAutomatic ? nil : statusWindowController.show("「\(ghost.name)」を更新中…")
         defer {
             if let statusToken {
@@ -1888,11 +1905,18 @@ private struct UtataneRootView: View {
             } else {
                 throw ContentNetworkUpdateError.invalidHomeURL
             }
+            AppLogStore.shared.info("更新URL: \(homeURL.absoluteString)", category: "Update", ghostName: ghost.name)
             let result = try await ContentNetworkUpdater().update(
                 rootDirectory: ghost.rootDirectory,
                 homeURL: homeURL
             )
             networkSettings.recordContentUpdateSuccess(kind: .ghost, directoryName: directoryName)
+            AppLogStore.shared.info(
+                result.changedFiles.isEmpty ? "「\(ghost.name)」は最新です" : "「\(ghost.name)」を更新しました (\(result.changedFiles.count)ファイル)",
+                category: "Update",
+                details: result.changedFiles.isEmpty ? nil : result.changedFiles.joined(separator: "\n"),
+                ghostName: ghost.name
+            )
             _ = await playInstallationEvent(
                 .shiori(id: "OnUpdateComplete", references: [
                     0: result.changedFiles.isEmpty ? "none" : "changed",
@@ -1902,6 +1926,12 @@ private struct UtataneRootView: View {
                 balloon: updateBalloon
             )
         } catch {
+            AppLogStore.shared.error(
+                "「\(ghost.name)」の更新に失敗しました: \(error.localizedDescription)",
+                category: "Update",
+                details: String(describing: error),
+                ghostName: ghost.name
+            )
             let handled = await playInstallationEvent(
                 .shiori(id: "OnUpdateFailure", references: [0: "download"]),
                 session: updateSession,
@@ -1920,6 +1950,7 @@ private struct UtataneRootView: View {
 
         let directoryName = updateBalloon.directory.lastPathComponent
         networkSettings.recordContentUpdateAttempt(kind: .balloon, directoryName: directoryName)
+        AppLogStore.shared.info("バルーン「\(updateBalloon.name)」の更新確認を開始しました", category: "Update")
         let statusToken = isAutomatic
             ? nil
             : statusWindowController.show("バルーン「\(updateBalloon.name)」を更新中…")
@@ -1933,12 +1964,18 @@ private struct UtataneRootView: View {
             guard let homeURL = ContentNetworkUpdater.homeURL(in: updateBalloon.directory) else {
                 throw ContentNetworkUpdateError.invalidHomeURL
             }
+            AppLogStore.shared.info("バルーン更新URL: \(homeURL.absoluteString)", category: "Update")
             let result = try await ContentNetworkUpdater().update(
                 rootDirectory: updateBalloon.directory,
                 homeURL: homeURL
             )
             try reloadInstalledBalloons(preserving: updateBalloon.directory)
             networkSettings.recordContentUpdateSuccess(kind: .balloon, directoryName: directoryName)
+            AppLogStore.shared.info(
+                result.changedFiles.isEmpty ? "バルーン「\(updateBalloon.name)」は最新です" : "バルーン「\(updateBalloon.name)」を更新しました (\(result.changedFiles.count)ファイル)",
+                category: "Update",
+                details: result.changedFiles.isEmpty ? nil : result.changedFiles.joined(separator: "\n")
+            )
             if !isAutomatic {
                 if let statusToken {
                     statusWindowController.hide(token: statusToken)
@@ -1952,6 +1989,11 @@ private struct UtataneRootView: View {
                 statusWindowController.hide(token: completionToken)
             }
         } catch {
+            AppLogStore.shared.error(
+                "バルーン「\(updateBalloon.name)」の更新に失敗しました: \(error.localizedDescription)",
+                category: "Update",
+                details: String(describing: error)
+            )
             if !isAutomatic {
                 previewError = error.localizedDescription
             }
@@ -1985,6 +2027,7 @@ private struct UtataneRootView: View {
 
     private func fetchRSS(url: URL) async {
         guard let rssSession = session, let rssBalloon = balloon else { return }
+        AppLogStore.shared.info("RSS/Atomフィード取得開始: \(url.absoluteString)", category: "Headline")
         do {
             let siteName = url.host ?? "RSS"
             _ = await playInstallationEvent(
@@ -2004,12 +2047,18 @@ private struct UtataneRootView: View {
                     sanitizeNetworkText(item.summary)
                 ].joined(separator: "\u{1}")
             }
+            AppLogStore.shared.info("RSS/Atomフィード取得完了: \(feed.title) (\(feed.items.count)件)", category: "Headline")
             _ = await playInstallationEvent(
                 .shiori(id: "OnRSSComplete", references: references),
                 session: rssSession,
                 balloon: rssBalloon
             )
         } catch {
+            AppLogStore.shared.error(
+                "RSS/Atom取得エラー (\(url.absoluteString)): \(error.localizedDescription)",
+                category: "Headline",
+                details: String(describing: error)
+            )
             let handled = await playInstallationEvent(
                 .shiori(id: "OnRSSFailure", references: [0: "can't analyze"]),
                 session: rssSession,
@@ -2024,15 +2073,18 @@ private struct UtataneRootView: View {
     private func fetchLegacyHeadline(_ headline: InstalledHeadline) async {
         guard let headlineSession = session, let headlineBalloon = balloon else { return }
         guard let sourceURL = headline.siteURL else {
+            AppLogStore.shared.warning("HEADLINEセンサーの取得URLが未設定: \(headline.name)", category: "Headline")
             previewError = "HEADLINEセンサーの取得URLが設定されていない"
             return
         }
         let usesNativeConfig = ConfigHeadlineSensor.canLoad(headline)
         let windowsConfiguration = ContentRoot.windowsHeadlineConfiguration()
         guard usesNativeConfig || windowsConfiguration != nil else {
+            AppLogStore.shared.warning("HEADLINE DLLの実行にWine設定が必要: \(headline.name)", category: "Headline")
             previewError = "このHEADLINE DLLを使うにはWine設定が必要"
             return
         }
+        AppLogStore.shared.info("HEADLINE取得開始: \(headline.name) (\(sourceURL.absoluteString))", category: "Headline")
         _ = await playInstallationEvent(
             .shiori(id: "OnHeadlinesenseBegin", references: [
                 0: headline.name,
@@ -2073,6 +2125,7 @@ private struct UtataneRootView: View {
             try data.write(to: cacheURL, options: .atomic)
 
             let displayedItems = Array(items.prefix(50))
+            AppLogStore.shared.info("HEADLINE取得完了: \(headline.name) (\(displayedItems.count)件)", category: "Headline")
             guard !displayedItems.isEmpty else {
                 _ = await playInstallationEvent(
                     .shiori(id: "OnHeadlinesenseComplete", references: [0: "no update"]),
@@ -2104,6 +2157,11 @@ private struct UtataneRootView: View {
             }
         } catch {
             let reason = error is NetworkFetchError ? "can't download" : "can't analyze"
+            AppLogStore.shared.error(
+                "HEADLINEセンサーエラー (\(headline.name)): \(error.localizedDescription)",
+                category: "Headline",
+                details: String(describing: error)
+            )
             let handled = await playInstallationEvent(
                 .shiori(id: "OnHeadlinesenseFailure", references: [0: reason]),
                 session: headlineSession,
@@ -2132,6 +2190,8 @@ private struct UtataneRootView: View {
     }
 
     private func handleSSTP(_ request: SSTPRequest) async -> SSTPResponse {
+        let headerSummary = request.headers.map { "\($0.name): \($0.value)" }.joined(separator: "\n")
+        AppLogStore.shared.debug("SSTP \(request.method) \(request.version)", category: "SSTP", details: headerSummary)
         if let command = request.value(for: "Command") {
             return handleMCPBridgeCommand(
                 command,
@@ -2140,6 +2200,7 @@ private struct UtataneRootView: View {
             )
         }
         guard let activeSession = session, let activeBalloon = balloon else {
+            AppLogStore.shared.warning("SSTP: セッションなしのため 503 応答", category: "SSTP")
             return SSTPResponse(statusCode: 503, reason: "Service Unavailable")
         }
         var script: SakuraScript?
@@ -2154,7 +2215,11 @@ private struct UtataneRootView: View {
         if script == nil, let fallback = request.value(for: "Script") {
             script = SakuraScript(rawValue: fallback)
         }
-        guard let script else { return SSTPResponse(statusCode: 204, reason: "No Content") }
+        guard let script else {
+            AppLogStore.shared.debug("SSTP: レスポンスなし 204", category: "SSTP")
+            return SSTPResponse(statusCode: 204, reason: "No Content")
+        }
+        AppLogStore.shared.info("SSTPスクリプト再生", category: "SSTP", details: script.rawValue)
         scriptPlayer.play(script, balloon: activeBalloon)
         return SSTPResponse(script: script.rawValue)
     }
@@ -2266,6 +2331,7 @@ private struct UtataneRootView: View {
                     url.stopAccessingSecurityScopedResource()
                 }
             }
+            AppLogStore.shared.info("NARインストール開始 (\(urls.count)件)", category: "Install", details: urls.map(\.path).joined(separator: "\n"))
             do {
                 _ = await playInstallationEvent(
                     .shiori(id: "OnInstallBegin", references: [:]),
@@ -2316,6 +2382,11 @@ private struct UtataneRootView: View {
                 }
 
                 let separator = "\u{1}"
+                AppLogStore.shared.info(
+                    "NARインストール完了 (\(installedItems.count)件)",
+                    category: "Install",
+                    details: installedItems.map { "\($0.type): \($0.name)" }.joined(separator: "\n")
+                )
                 _ = await playInstallationEvent(
                     .shiori(id: "OnInstallCompleteEx", references: [
                         0: installedItems.map(\.type.rawValue).joined(separator: separator),
@@ -2333,6 +2404,11 @@ private struct UtataneRootView: View {
                 try? await Task.sleep(for: .seconds(2))
                 statusWindowController.hide(token: completionToken)
             } catch {
+                AppLogStore.shared.error(
+                    "NARインストール失敗: \(error.localizedDescription)",
+                    category: "Install",
+                    details: String(describing: error)
+                )
                 _ = await playInstallationEvent(
                     .shiori(id: "OnInstallFailure", references: [0: installFailureReason(error)]),
                     session: installSession,

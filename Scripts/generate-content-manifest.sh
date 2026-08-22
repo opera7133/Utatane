@@ -23,8 +23,8 @@ hash_file() {
   fi
 }
 
-temporary_file="${output_file}.tmp"
-: > "$temporary_file"
+temporary_file=$(mktemp)
+trap 'rm -f "$temporary_file"' EXIT
 
 while IFS= read -r -d '' file; do
   relative_path=${file#"$content_directory"/}
@@ -35,8 +35,12 @@ done < <(
     ! -name '.DS_Store' \
     ! -name '*_variable.cfg' \
     ! -name 'updates2.dau' \
+    ! -name 'updates.txt' \
+    ! -name '*.tmp' \
+    ! -name '*.bak' \
     -print0 \
     | LC_ALL=C sort -z
 )
 
-mv "$temporary_file" "$output_file"
+mkdir -p "$(dirname "$output_file")"
+cp "$temporary_file" "$output_file"

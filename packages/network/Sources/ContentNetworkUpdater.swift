@@ -27,6 +27,7 @@ public enum ContentNetworkUpdateError: LocalizedError, Equatable, Sendable {
     case tooManyFiles
     case updateTooLarge
     case checksumMismatch(String)
+    case downloadFailed(path: String, underlyingError: String)
 
     public var errorDescription: String? {
         switch self {
@@ -37,6 +38,7 @@ public enum ContentNetworkUpdateError: LocalizedError, Equatable, Sendable {
         case .tooManyFiles: "更新ファイル数が上限を超えている"
         case .updateTooLarge: "更新サイズが上限を超えている"
         case let .checksumMismatch(path): "MD5が一致しない: \(path)"
+        case let .downloadFailed(path, error): "ファイル取得失敗 (\(path)): \(error)"
         }
     }
 }
@@ -84,7 +86,12 @@ public struct ContentNetworkUpdater: Sendable {
                 continue
             }
             let remote = manifestURL.deletingLastPathComponent().appending(path: entry.path)
-            let data = try await fetch(remote)
+            let data: Data
+            do {
+                data = try await fetch(remote)
+            } catch {
+                throw ContentNetworkUpdateError.downloadFailed(path: entry.path, underlyingError: error.localizedDescription)
+            }
             totalBytes += data.count
             guard totalBytes <= maximumTotalBytes else { throw ContentNetworkUpdateError.updateTooLarge }
             guard Self.md5(data) == entry.md5 else {
