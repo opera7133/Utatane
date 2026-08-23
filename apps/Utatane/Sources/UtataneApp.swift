@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 import UtataneBalloon
 import UtataneContent
 import UtataneCore
+import UtataneFirstNative
 import UtataneGhostKit
 import UtataneKawariNative
 import UtataneNetwork
@@ -175,10 +176,11 @@ private struct UtataneRootView: View {
     @State private var debugWindow: NSWindow?
     @State private var showsOnboarding = false
     @State private var isImportingSSPDirectory = false
+    @State private var isShowingApplicationAlert = false
     @State private var calledGhosts: [URL: CalledGhostRuntime] = [:]
-    @State private var showsStartupGhostPicker = false
-    @State private var startupGhostID: URL?
+    @State private var contentPickerController = ContentPickerWindowController()
     @State private var isTransitioningGhost = false
+    @State private var isClosingCurrentGhost = false
     @State private var weatherTask: Task<Void, Never>?
     @State private var webSocketManager = WebSocketSessionManager()
     @State private var lastGhostName: String = ""
@@ -193,6 +195,9 @@ private struct UtataneRootView: View {
                     importSSP: { isImportingSSPDirectory = true },
                     showContentFolder: showContentFolder
                 )
+            } else if isPresentingAuxiliaryUI {
+                Color.clear
+                    .frame(minWidth: 520, minHeight: 430)
             } else {
                 DebugConsoleView(
                     model: model,
@@ -231,8 +236,9 @@ private struct UtataneRootView: View {
                 }
                 selectedGhostID = selectedGhostID ?? restoredGhost?.id ?? model.ghosts.first?.id
             case .choose:
-                startupGhostID = model.ghosts.first?.id
-                showsStartupGhostPicker = !model.ghosts.isEmpty
+                if !model.ghosts.isEmpty {
+                    showGhostPicker(requiresSelection: true)
+                }
             case .random:
                 selectedGhostID = model.ghosts.randomElement()?.id
             }
@@ -327,16 +333,6 @@ private struct UtataneRootView: View {
                 }
             }
         }
-        .sheet(isPresented: $showsStartupGhostPicker) {
-            StartupGhostPicker(
-                ghosts: model.ghosts,
-                selection: $startupGhostID,
-                start: {
-                    selectedGhostID = startupGhostID
-                    showsStartupGhostPicker = false
-                }
-            )
-        }
         .fileImporter(
             isPresented: $isImportingSSPDirectory,
             allowedContentTypes: [.folder]
@@ -353,7 +349,9 @@ private struct UtataneRootView: View {
         .onChange(of: previewError) { _, message in
             guard let message else { return }
             previewError = nil
+            isShowingApplicationAlert = true
             alertController.showError(message)
+            isShowingApplicationAlert = false
         }
         .alert("RSS/Atomを取得", isPresented: $isEnteringRSSURL) {
             TextField("https://example.com/feed.xml", text: $rssURLText)
@@ -372,8 +370,8 @@ private struct UtataneRootView: View {
                 updateDebugWindowVisibility()
             }
         }
-        .onChange(of: networkSettings.showsDebugWindow) {
-            updateDebugWindowVisibility()
+        .onChange(of: networkSettings.showsDebugWindow) { _, isShown in
+            updateDebugWindowVisibility(bringForward: isShown)
         }
         .onChange(of: showsOnboarding) {
             updateDebugWindowVisibility()
@@ -416,6 +414,15 @@ private struct UtataneRootView: View {
         await propertySystem.register(values: values)
     }
 
+    private var isPresentingAuxiliaryUI: Bool {
+        !showsOnboarding && (
+            isImportingNar
+                || isImportingSSPDirectory
+                || isEnteringRSSURL
+                || isShowingApplicationAlert
+        )
+    }
+
     private func sendEvent(_ event: GhostEvent) {
         guard !isTransitioningGhost, let session, let balloon else { return }
         Task {
@@ -443,7 +450,8 @@ private struct UtataneRootView: View {
         if let session {
             let canTalk = !scriptPlayer.isDialogueActive
             var primaryReferences = references
-            primaryReferences[3] = canTalk ? "1" : "0"
+            // SSP uses 0 for talkable and 1 while a script is being played.
+            primaryReferences[3] = canTalk ? "0" : "1"
             Task {
                 do {
                     guard let response = try await session.response(for: .shiori(
@@ -633,6 +641,14 @@ private struct UtataneRootView: View {
                 if ["configuration", "configurationdialog"].contains(id.lowercased()) {
                     networkSettings.selectedPane = .advanced
                     openSettings()
+                } else if id.caseInsensitiveCompare("ghostexplorer") == .orderedSame {
+                    showGhostPicker()
+                } else if id.caseInsensitiveCompare("shellexplorer") == .orderedSame {
+                    showShellPicker()
+                } else if id.caseInsensitiveCompare("balloonexplorer") == .orderedSame {
+                    showBalloonPicker()
+                } else if id.caseInsensitiveCompare("On_Update") == .orderedSame {
+                    Task { await updateCurrentGhost() }
                 } else if let url = URL(string: id), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) {
                     NSWorkspace.shared.open(url)
                 } else if id.caseInsensitiveCompare("CANCEL_NOTALK") == .orderedSame {
@@ -806,6 +822,9 @@ private struct UtataneRootView: View {
         }
         if POSIXShioriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try POSIXShioriPersonalityEngine(masterDirectoryURL: masterDirectory)
+        }
+        if NativeFirstPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
+            return try NativeFirstPersonalityEngine(masterDirectoryURL: masterDirectory)
         }
         if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),
            let configuration = ContentRoot.materiaFirstConfiguration(for: ghost)
@@ -1263,6 +1282,13 @@ private struct UtataneRootView: View {
         let statusToken = statusWindowController.show("「\(shell.name)」に切り替え中…")
         defer { statusWindowController.hide(token: statusToken) }
         do {
+            sendEvent(.shiori(
+                id: "OnShellChanging",
+                references: [
+                    0: shell.name,
+                    1: shell.directory.lastPathComponent
+                ]
+            ))
             try show(shell: shell)
             sendEvent(.shiori(
                 id: "OnShellChanged",
@@ -1286,6 +1312,10 @@ private struct UtataneRootView: View {
             )
         }
         configureContextMenu()
+        sendEvent(.shiori(id: "OnBalloonChange", references: [
+            0: selectedBalloon.name,
+            1: selectedBalloon.directory.lastPathComponent
+        ]))
     }
 
     private func handleContentAction(
@@ -1371,8 +1401,8 @@ private struct UtataneRootView: View {
         case .closeGhost:
             if let calledRuntime {
                 dismissCalledGhost(calledRuntime.ghost)
-            } else {
-                NSApplication.shared.terminate(nil)
+            } else if !isTransitioningGhost, !isClosingCurrentGhost {
+                dismissCurrentGhost()
             }
         case let .install(source):
             switch source {
@@ -1461,6 +1491,62 @@ private struct UtataneRootView: View {
             if FileManager.default.fileExists(atPath: folderURL.path) {
                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
             }
+        }
+    }
+
+    private func dismissCurrentGhost() {
+        guard !isClosingCurrentGhost else { return }
+        isClosingCurrentGhost = true
+        Task {
+            defer { isClosingCurrentGhost = false }
+            await closeCurrentGhost(reason: .close)
+            scriptPlayer.cancel()
+            surfaceWindowController.hideAll()
+            balloonWindowController.hideAll()
+            session = nil
+            currentGhost = nil
+            selectedShell = nil
+            balloon = nil
+            selectedGhostID = nil
+            showGhostPicker(requiresSelection: true)
+            configureContextMenu()
+        }
+    }
+
+    private func showGhostPicker(requiresSelection: Bool = false) {
+        contentPickerController.show(
+            title: "ゴーストを選択",
+            entries: model.ghosts.map { .init(id: $0.id, name: $0.name) },
+            selectedID: currentGhost?.id ?? selectedGhostID,
+            actionTitle: "切り替え",
+            allowsCancel: !requiresSelection
+        ) { id in
+            selectedGhostID = id
+        }
+    }
+
+    private func showShellPicker() {
+        guard let currentGhost else { return }
+        contentPickerController.show(
+            title: "シェルを選択",
+            entries: currentGhost.shells.map { .init(id: $0.id, name: $0.name) },
+            selectedID: selectedShell?.id,
+            actionTitle: "切り替え"
+        ) { id in
+            guard let shell = currentGhost.shells.first(where: { $0.id == id }) else { return }
+            select(shell: shell)
+        }
+    }
+
+    private func showBalloonPicker() {
+        contentPickerController.show(
+            title: "バルーンを選択",
+            entries: installedBalloons.map { .init(id: $0.directory, name: $0.name) },
+            selectedID: balloon?.directory,
+            actionTitle: "切り替え"
+        ) { id in
+            guard let selectedBalloon = installedBalloons.first(where: { $0.directory == id }) else { return }
+            select(balloon: selectedBalloon)
         }
     }
 
@@ -1639,7 +1725,7 @@ private struct UtataneRootView: View {
                 ),
                 .action(title: "デバッグ画面を表示", handler: {
                     networkSettings.showsDebugWindow = true
-                    updateDebugWindowVisibility()
+                    updateDebugWindowVisibility(bringForward: true)
                 }),
                 .action(
                     title: "現在のゴーストを再読み込み",
@@ -1857,10 +1943,14 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func updateDebugWindowVisibility() {
+    private func updateDebugWindowVisibility(bringForward: Bool = false) {
         guard let debugWindow else { return }
-        if showsOnboarding || networkSettings.showsDebugWindow {
+        if showsOnboarding || bringForward {
             debugWindow.makeKeyAndOrderFront(nil)
+        } else if networkSettings.showsDebugWindow {
+            // SwiftUI can reconnect the root window after presenting a panel.
+            // Keep an already-enabled debug window visible without stealing focus.
+            debugWindow.orderBack(nil)
         } else {
             debugWindow.orderOut(nil)
         }
@@ -2572,28 +2662,110 @@ private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate 
     }
 }
 
-private struct StartupGhostPicker: View {
-    let ghosts: [InstalledGhost]
-    @Binding var selection: URL?
-    let start: () -> Void
+@MainActor
+private final class ContentPickerWindowController: NSObject, NSWindowDelegate {
+    struct Entry: Identifiable {
+        let id: URL
+        let name: String
+    }
+
+    private var window: NSWindow?
+
+    func show(
+        title: String,
+        entries: [Entry],
+        selectedID: URL?,
+        actionTitle: String,
+        allowsCancel: Bool = true,
+        onSelect: @escaping (URL) -> Void
+    ) {
+        window?.close()
+        let picker = ContentPickerView(
+            title: title,
+            entries: entries,
+            selectedID: selectedID,
+            actionTitle: actionTitle,
+            allowsCancel: allowsCancel,
+            onSelect: { [weak self] id in
+                self?.window?.close()
+                onSelect(id)
+            },
+            onCancel: { [weak self] in self?.window?.close() }
+        )
+        let styleMask: NSWindow.StyleMask = allowsCancel
+            ? [.titled, .closable]
+            : [.titled]
+        let window = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 360),
+            styleMask: styleMask,
+            backing: .buffered,
+            defer: false
+        )
+        window.title = title
+        window.contentViewController = NSHostingController(rootView: picker)
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        self.window = window
+    }
+
+    func windowWillClose(_: Notification) {
+        window = nil
+    }
+}
+
+private struct ContentPickerView: View {
+    let title: String
+    let entries: [ContentPickerWindowController.Entry]
+    @State private var selection: URL?
+    let actionTitle: String
+    let allowsCancel: Bool
+    let onSelect: (URL) -> Void
+    let onCancel: () -> Void
+
+    init(
+        title: String,
+        entries: [ContentPickerWindowController.Entry],
+        selectedID: URL?,
+        actionTitle: String,
+        allowsCancel: Bool,
+        onSelect: @escaping (URL) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.title = title
+        self.entries = entries
+        _selection = State(initialValue: selectedID)
+        self.actionTitle = actionTitle
+        self.allowsCancel = allowsCancel
+        self.onSelect = onSelect
+        self.onCancel = onCancel
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("起動するゴーストを選択")
+            Text(title)
                 .font(.title2.weight(.semibold))
-            List(ghosts, selection: $selection) { ghost in
-                Text(ghost.name).tag(ghost.id)
+            List(entries, selection: $selection) { entry in
+                Text(entry.name).tag(entry.id)
             }
             HStack {
+                if allowsCancel {
+                    Button("キャンセル", action: onCancel)
+                        .keyboardShortcut(.cancelAction)
+                }
                 Spacer()
-                Button("起動", action: start)
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(selection == nil)
+                Button(actionTitle) {
+                    guard let selection else { return }
+                    onSelect(selection)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(selection == nil)
             }
         }
         .padding(20)
         .frame(width: 420, height: 360)
-        .interactiveDismissDisabled()
     }
 }
 
@@ -2616,7 +2788,7 @@ enum AppError: LocalizedError {
         case let .unsupportedShiori(filename):
             "このゴーストのSHIORIにはまだ対応していない: \(filename ?? "SHIORI不明")"
         case .windowsShioriUnavailable:
-            "FIRSTを起動するためのWine設定またはMateria互換ファイルが足りない。設定の「Windows SHIORI」とREADMEの追加手順を確認して"
+            "この版のFIRSTにはネイティブ対応していない。配布版ではMateria用Wineホストも利用できない"
         }
     }
 }
@@ -2709,9 +2881,7 @@ enum ContentRoot {
             contentDirectory,
             ghostsDirectory,
             balloonsDirectory,
-            headlinesDirectory,
-            materiaCompatibilityDirectory,
-            materiaHostDirectory
+            headlinesDirectory
         ] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
@@ -2837,25 +3007,13 @@ enum ContentRoot {
                 URL(filePath: $0, directoryHint: .notDirectory)
             } ?? local.appending(path: "materia.exe", directoryHint: .notDirectory)
         #else
-            if let hostPath = environment["UTATANE_MATERIA_HOST"] {
-                hostExecutableURL = URL(filePath: hostPath, directoryHint: .notDirectory)
-            } else if let bundledHost = Bundle.main.url(
-                forResource: "materia",
-                withExtension: "exe",
-                subdirectory: "MateriaHost"
-            ) ?? Bundle.main.url(forResource: "materia", withExtension: "exe"),
-                let installedHost = installMateriaHost(from: bundledHost)
-            {
-                hostExecutableURL = installedHost
-            } else {
+            guard let hostPath = environment["UTATANE_MATERIA_HOST"],
+                  let materiaPath = environment["UTATANE_MATERIA_EXE"]
+            else {
                 return nil
             }
-            materiaExecutableURL = environment["UTATANE_MATERIA_EXE"].map {
-                URL(filePath: $0, directoryHint: .notDirectory)
-            } ?? materiaCompatibilityDirectory.appending(
-                path: "materia.exe",
-                directoryHint: .notDirectory
-            )
+            hostExecutableURL = URL(filePath: hostPath, directoryHint: .notDirectory)
+            materiaExecutableURL = URL(filePath: materiaPath, directoryHint: .notDirectory)
         #endif
 
         let shioriDLLURL = ghost.rootDirectory
@@ -2945,37 +3103,6 @@ enum ContentRoot {
         #else
             return [ghostsDirectory]
         #endif
-    }
-
-    static var materiaCompatibilityDirectory: URL {
-        contentDirectory.appending(
-            path: "Compatibility/Materia",
-            directoryHint: .isDirectory
-        )
-    }
-
-    static var materiaHostDirectory: URL {
-        materiaCompatibilityDirectory.appending(path: "Host", directoryHint: .isDirectory)
-    }
-
-    private static func installMateriaHost(from bundledURL: URL) -> URL? {
-        let destination = materiaHostDirectory.appending(
-            path: "materia.exe",
-            directoryHint: .notDirectory
-        )
-        do {
-            try FileManager.default.createDirectory(
-                at: materiaHostDirectory,
-                withIntermediateDirectories: true
-            )
-            let bundledData = try Data(contentsOf: bundledURL)
-            if (try? Data(contentsOf: destination)) != bundledData {
-                try bundledData.write(to: destination, options: .atomic)
-            }
-            return destination
-        } catch {
-            return nil
-        }
     }
 
     static var balloonsDirectory: URL {

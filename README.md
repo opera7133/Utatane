@@ -35,7 +35,7 @@ Utataneは、伺かをmacOSで動かすための本体アプリです。
 - ゴーストとバルーンの手動ネットワーク更新と、設定した日数ごとの自動更新
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
 - `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
-- MateriaのFIRSTを設定したWine経由で実行（開発用）
+- Materiaの「さくら」を、利用者が用意した`first.dll`からWineなしで実行
 
 ## まだ無理なこと
 
@@ -51,7 +51,7 @@ Utataneは、伺かをmacOSで動かすための本体アプリです。
 <summary>実験的な機能</summary>
 
 - 利用者がビルドしたAosoraのmacOS用モジュールを外部から読み込めます
-- MateriaのFIRSTは専用ホストとWineを設定した場合のみ起動できます
+- 対応版と一致しないFIRSTは、専用ホストとWineを設定した場合だけ互換経路を利用できます
 - 独自Windows HEADLINE DLLはWineへフォールバックできます
 
 詳しくは[Native SHIORI / SAORI](Docs/Native-SHIORI.md)を参照してください。
@@ -87,41 +87,36 @@ SSPから持ってくる場合は、SSP本体のZIPを展開して、そのフ�
 ```
 
 <details>
-<summary>元祖さくらとうにゅうをどうしても動かす</summary>
+<summary>元祖さくらとうにゅうを動かす</summary>
 
-これは一般のWindowsゴースト互換機能ではなく、Materia付属のFIRST専用です。32-bit Windowsアプリを実行できるWineと、正規に入手したMateria一式が要ります。
+これは一般のWindowsゴースト互換機能ではなく、Materia付属のfirst(さくら)専用です。Utataneはfirstのファイルを同梱していないため、正規に入手したfirstを利用者自身で用意してください。対応版の`first.dll`は実行せず、必要な会話データを起動時に読み取るのでWineは不要です。
 
 1. Utataneを一度起動し、右クリックメニューからコンテンツフォルダをFinderで開く
-2. 元の`materia.exe`を次の場所へコピーする
-
-   ```text
-   ~/Library/Application Support/Utatane/Compatibility/Materia/materia.exe
-   ```
-
-3. Materiaに付属するFIRSTを、次の構成になるようコピーする
+2. Materiaに付属するFIRSTを、次の構成になるようコピーする
 
    ```text
    ~/Library/Application Support/Utatane/Ghosts/first/
-   ├── ghost/master/first.dll
-   └── shell/master/
+   ├── descript.txt
+   ├── ghost/master/
+   │   ├── descript.txt
+   │   ├── first.dll
+   │   └── var/first.txt（あれば初期値として参照）
+   └── shell/master/...
    ```
 
-4. 必要なバルーンも`~/Library/Application Support/Utatane/Balloons/`へコピーする
-5. Utataneの「設定 → 詳細 → Windows SHIORI」で、Wine実行ファイルと専用のWINEPREFIXを指定する
-6. ゴースト一覧からFIRSTを選択する
+3. 必要なバルーンも`~/Library/Application Support/Utatane/Balloons/`へコピーする
+4. ゴースト一覧からさくらを選択する
 
-配布版にはWindows SHIORIホストが入っています。初回利用時に`Compatibility/Materia/Host/`へ勝手に出てくるので、手動配置は不要です。Wine実行ファイルには、Windows exeのパスを引数に取れるものを指定してください。WINEPREFIXはFIRST専用がおすすめです。
+現在ネイティブ対応しているのは、Utataneが解析・検証したオリジナル版FIRSTの`first.dll`です。別版の場合は誤ったセリフを組み立てないよう起動を拒否します。配布版にはMateria用のWine互換ホストを同梱しません。
 
 ソースからのDebugビルドでは、ローカル検証データを次のように配置します。
 
 ```text
 Content/Local/
-├── materia.exe
-├── Ghosts/first/
-└── MateriaBridge/materia.exe
+└── Ghosts/first/
 ```
 
-最後の`MateriaBridge/materia.exe`は、`tools/materia-shiori-host/README.md`の手順でビルドします。
+ネイティブ経路は元の`first.dll`や`var/first.txt`を書き換えません。眠気に関係する値など、Utatane上で変化した状態は`~/Library/Application Support/Utatane/State/FIRST/`へ別保存します。現時点の対応範囲と技術的な制約は[Native SHIORI / SAORI](Docs/Native-SHIORI.md)を参照してください。
 
 </details>
 
@@ -130,6 +125,7 @@ Content/Local/
 - [開発・ビルド](Docs/Development.md)
 - [ゴースト互換状況](Docs/Compatibility.md)
 - [Native SHIORI / SAORI](Docs/Native-SHIORI.md)
+- [SakuraScript対応状況](Docs/UKADOC-Compatibility.md)
 
 ## ライセンス
 

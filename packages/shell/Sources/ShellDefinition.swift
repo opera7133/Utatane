@@ -52,10 +52,10 @@ public struct ShellDefinition: Sendable, Equatable {
     }
 
     public func resolveSurface(_ identifier: String, scope: Int) -> Int? {
-        if let surfaceID = Int(identifier) {
-            return surfaceID
+        if let aliasedSurfaceID = surfaceAliases[scope]?[identifier]?.randomElement() {
+            return aliasedSurfaceID
         }
-        return surfaceAliases[scope]?[identifier]?.randomElement()
+        return Int(identifier)
     }
 
     public func effectiveBindGroups(scope: Int, enabled: Set<Int>) -> Set<Int> {

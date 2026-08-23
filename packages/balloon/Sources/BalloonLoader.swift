@@ -74,8 +74,18 @@ public struct BalloonLoader: Sendable {
         return BalloonDefinition(
             directory: directory,
             name: values["name"] ?? directory.lastPathComponent,
-            originX: integer("validrect.left", in: values, default: integer("origin.x", in: values, default: 14)),
-            originY: integer("validrect.top", in: values, default: integer("origin.y", in: values, default: 14)),
+            originX: textOrigin(
+                originKey: "origin.x",
+                validRectKey: "validrect.left",
+                in: values,
+                default: 14
+            ),
+            originY: textOrigin(
+                originKey: "origin.y",
+                validRectKey: "validrect.top",
+                in: values,
+                default: 14
+            ),
             wordWrapPointX: integer("wordwrappoint.x", in: values, default: -14),
             wordWrapPointY: integer("wordwrappoint.y", in: values, default: 0),
             fontHeight: integer("font.height", in: values, default: 12),
@@ -141,6 +151,18 @@ public struct BalloonLoader: Sendable {
         default defaultValue: Int
     ) -> Int {
         values[key].flatMap(Int.init) ?? defaultValue
+    }
+
+    private func textOrigin(
+        originKey: String,
+        validRectKey: String,
+        in values: [String: String],
+        default defaultValue: Int
+    ) -> Int {
+        if let origin = values[originKey].flatMap(Int.init), origin != 0 {
+            return origin
+        }
+        return integer(validRectKey, in: values, default: defaultValue)
     }
 
     private func linkAppearance(

@@ -66,6 +66,7 @@ packages/shiori/          SHIORIメッセージとイベント変換
 packages/yaya-native/     YAYAネイティブブリッジ
 packages/satori-native/   SATORIネイティブブリッジ
 packages/kawari-native/   KAWARIネイティブブリッジ
+packages/first-native/    利用者所有のFIRST DLLを読み取る専用ネイティブ人格
 packages/posix-shiori/    Aosora外部モジュールローダー
 packages/windows-shiori/  Wine互換ホストとの通信
 packages/mcp-server/      stdio MCPサーバー
@@ -91,6 +92,13 @@ Content/Local/Headline/
 ```
 
 同梱対象でない実ゴーストや配布素材はコミットしないでください。利用条件を確認して、手元だけで使います。ネイティブSHIORIとSAORIは[Native-SHIORI.md](Native-SHIORI.md)に分けました。
+
+firstのネイティブ解析テストは、実物をFixtureへコピーせず環境変数で指定します。未指定なら実物依存部分だけスキップされます。
+
+```sh
+UTATANE_FIRST_DLL="$HOME/Library/Application Support/Utatane/Ghosts/first/ghost/master/first.dll" \
+swift test --package-path packages --filter UtataneFirstNativeTests
+```
 
 ## MCPサーバー
 

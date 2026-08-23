@@ -30,10 +30,9 @@ description = "Run all local checks"
 depends = ["lint", "test", "build"]
 
 [tasks.build-hosts]
-description = "Build Windows helper binaries with zig"
+description = "Build the Windows DLL helper binary with zig"
 run = """
-mkdir -p apps/Utatane/Resources/MateriaHost apps/Utatane/Resources/WindowsDLLHost
-zig cc -target x86-windows-gnu -Os tools/materia-shiori-host/main.c -o apps/Utatane/Resources/MateriaHost/materia.exe
+mkdir -p apps/Utatane/Resources/WindowsDLLHost
 zig cc -target x86-windows-gnu -Os tools/windows-dll-host/main.c -o apps/Utatane/Resources/WindowsDLLHost/utatane-dll-host.exe
 """
 
@@ -43,8 +42,7 @@ run = "swift build --package-path packages --configuration release --arch arm64 
 
 [tasks.build-release]
 description = "Build universal macOS app in Release configuration"
-depends = ["build-hosts", "generate"]
-run = "xcodebuild -project Utatane.xcodeproj -scheme Utatane -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build"
+run = "xcodegen generate && xcodebuild -project Utatane.xcodeproj -scheme Utatane -configuration Release -destination 'generic/platform=macOS' -derivedDataPath build ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO build && mkdir -p .generated-hosts && rm -f .generated-hosts/utatane-dll-host.exe && zig cc -target x86-windows-gnu -Os tools/windows-dll-host/main.c -o .generated-hosts/utatane-dll-host.exe && cp .generated-hosts/utatane-dll-host.exe build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe"
 
 [tasks.package]
 description = "Package Release app into dist/Utatane-macOS.zip"

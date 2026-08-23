@@ -35,21 +35,6 @@ jobs:
       - name: Test
         run: swift test --package-path packages
 
-      - name: Build Materia SHIORI host
-        run: |
-          mkdir -p apps/Utatane/Resources/MateriaHost
-          zig cc \
-            -target x86-windows-gnu \
-            -Os \
-            tools/materia-shiori-host/main.c \
-            -o apps/Utatane/Resources/MateriaHost/materia.exe
-          mkdir -p apps/Utatane/Resources/WindowsDLLHost
-          zig cc \
-            -target x86-windows-gnu \
-            -Os \
-            tools/windows-dll-host/main.c \
-            -o apps/Utatane/Resources/WindowsDLLHost/utatane-dll-host.exe
-
       - name: Generate Xcode project
         run: xcodegen generate
 
@@ -69,6 +54,14 @@ jobs:
             CURRENT_PROJECT_VERSION="$UTATANE_BUILD_NUMBER" \
             build
 
+      - name: Build Windows DLL host
+        run: |
+          zig cc \
+            -target x86-windows-gnu \
+            -Os \
+            tools/windows-dll-host/main.c \
+            -o build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe
+
       - name: Build universal MCP server
         run: |
           swift build \
@@ -78,11 +71,8 @@ jobs:
             --arch x86_64 \
             --product utatane-mcp
 
-      - name: Verify Materia SHIORI host
+      - name: Verify Windows DLL host
         run: |
-          test -f build/Build/Products/Release/Utatane.app/Contents/Resources/materia.exe
-          file build/Build/Products/Release/Utatane.app/Contents/Resources/materia.exe \
-            | grep -q "PE32 executable"
           test -f build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe
           file build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe \
             | grep -q "PE32 executable"

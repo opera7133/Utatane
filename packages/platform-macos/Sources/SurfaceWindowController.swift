@@ -351,14 +351,15 @@ public final class SurfaceWindowController {
     }
 
     public func changeSurface(scope: Int = 0, to surfaceID: Int) throws {
+        let resolvedSurfaceID = shell?.resolveSurface(String(surfaceID), scope: scope) ?? surfaceID
         if let character = characters[scope] {
-            try character.changeSurface(to: surfaceID)
+            try character.changeSurface(to: resolvedSurfaceID)
             return
         }
 
-        guard surfaceID >= 0, let shell else { return }
+        guard resolvedSurfaceID >= 0, let shell else { return }
         let character = characterController(for: scope)
-        try character.show(shell: shell, surfaceID: surfaceID)
+        try character.show(shell: shell, surfaceID: resolvedSurfaceID)
         placeInitialWindow(for: scope)
     }
 

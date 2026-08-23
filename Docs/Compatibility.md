@@ -10,7 +10,7 @@
 | 酒の神さま | SATORI | 起動と`kenonoke.dll`のキーワード分類をテスト済み | 音声系SAORI、画面効果 |
 | COLORSβ | KAWARI | 起動、シェル、クリップボードをテスト済み | COLORS専用SAORIは後回し |
 | Aosora demo | Aosora | 外部macOSモジュールで実際に起動確認済み | 上流変更への追従、配布方法 |
-| さくらとうにゅう（FIRST） | Materia FIRST | Wine経由の専用実験対応 | 起動が遅い、Wine依存、互換範囲狭め |
+| さくら | Materia first | 対応版`first.dll`をWineなしで起動。会話、クリック、眠気・睡眠・入浴、主要メニューと状態保存を確認 | Materia固有のニュース、メール、Windows終了・再起動など |
 
 ## SAORI
 

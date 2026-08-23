@@ -1,6 +1,8 @@
 # Materia SHIORI probe
 
-`first.dll`を32-bit Windows環境でロードする検証ツール兼、Utatane接続用の常駐ホスト。かなり専用品。
+`first.dll`を32-bit Windows環境でロードする検証ツール兼、Utatane接続用の開発用常駐ホスト。かなり専用品。
+
+解析済みのオリジナル版FIRSTは`packages/first-native`でWineなしに動くため、このホストは通常利用には不要。現在は本物のSHIORI応答を隔離環境で観測する場合だけに残しており、リリース版には同梱しない。
 
 ## Build
 
@@ -28,7 +30,7 @@ Content/Local/
 
 `serve [original-materia.exe shiori.dll]`を指定すると、標準入出力の常駐IPCモードになる。起動完了時に長さ0のフレームを返し、以後は「4バイトlittle-endian長 + SHIORIデータ」のフレームを送受信する。診断ログは`MateriaBridge/host.log`へ出力し、標準出力にはフレーム以外を書かない。
 
-ReleaseビルドではGitHub ActionsがこのホストをPE32としてビルドし、アプリのResourcesへ同梱する。実行時は書込み可能な`~/Library/Application Support/Utatane/Compatibility/Materia/Host/`へコピーし、そこで補助DLLとログを管理する。元のMateria本体は同梱せず、ユーザーが`Compatibility/Materia/materia.exe`へ配置する。
+ローカルで常駐モードを試す場合は`UTATANE_MATERIA_HOST`、`UTATANE_MATERIA_EXE`、`UTATANE_WINE_EXECUTABLE`、`UTATANE_WINE_PREFIX`を明示する。元のMateria本体、FIRST、生成したホストはすべてローカル検証データとして扱い、配布物へ入れない。
 
 ## Current scope
 

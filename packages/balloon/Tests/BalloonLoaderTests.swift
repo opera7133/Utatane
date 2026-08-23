@@ -51,6 +51,29 @@ func `uses valid rect as the text inset when available`() throws {
 }
 
 @Test
+func `explicit text origin takes precedence over valid rect`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    charset,UTF-8
+    type,balloon
+    name,SSP Compatible Balloon
+    origin.x,20
+    origin.y,40
+    validrect.left,0
+    validrect.top,30
+    wordwrappoint.x,-34
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+
+    let balloon = try BalloonLoader().load(from: directory)
+
+    #expect(balloon.originX == 20)
+    #expect(balloon.originY == 40)
+}
+
+@Test
 func `loads SSP choice and anchor appearances`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

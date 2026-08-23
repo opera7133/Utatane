@@ -139,7 +139,8 @@ final class CalledGhostRuntime {
     func sendSecondChange(references: [Int: String]) {
         let canTalk = !player.isDialogueActive
         var references = references
-        references[3] = canTalk ? "1" : "0"
+        // SSP uses 0 for talkable and 1 while a script is being played.
+        references[3] = canTalk ? "0" : "1"
         Task {
             do {
                 guard let response = try await session.response(for: .shiori(
@@ -199,6 +200,10 @@ final class CalledGhostRuntime {
 
     func select(shell newShell: InstalledShell) {
         do {
+            send(.shiori(id: "OnShellChanging", references: [
+                0: newShell.name,
+                1: newShell.directory.lastPathComponent
+            ]))
             try show(shell: newShell)
             send(.shiori(id: "OnShellChanged", references: [
                 0: newShell.name,
@@ -219,6 +224,10 @@ final class CalledGhostRuntime {
         player.cancel()
         balloon = newBalloon
         selectionStore.setBalloonDirectoryName(newBalloon.directory.lastPathComponent, for: ghost.id)
+        send(.shiori(id: "OnBalloonChange", references: [
+            0: newBalloon.name,
+            1: newBalloon.directory.lastPathComponent
+        ]))
     }
 
     func configurePlayback(characterDelayMilliseconds: Int, dismissalMilliseconds: Int) {

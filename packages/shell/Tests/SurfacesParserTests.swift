@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import UtataneShell
 
@@ -69,6 +70,7 @@ func `parses ranges exclusions append definitions and aliases`() {
     sakura.surface.alias
     {
     smile,[1,3]
+    3,[1]
     }
 
     kero.surface.alias
@@ -83,7 +85,14 @@ func `parses ranges exclusions append definitions and aliases`() {
     #expect(document.surfaces[0]?.collisions.map(\.name) == ["Base", "Added"])
     #expect(document.surfaces[3]?.collisions.map(\.name) == ["Base", "Added"])
     #expect(document.aliases[0]?["smile"] == [1, 3])
+    #expect(document.aliases[0]?["3"] == [1])
     #expect(document.aliases[1]?["normal"] == [10])
+    let shell = ShellDefinition(
+        directory: URL(filePath: "/tmp/numeric-alias-test"),
+        surfaces: document.surfaces,
+        surfaceAliases: document.aliases
+    )
+    #expect(shell.resolveSurface("3", scope: 0) == 1)
 }
 
 @Test
