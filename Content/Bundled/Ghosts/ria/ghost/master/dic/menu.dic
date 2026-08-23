@@ -63,7 +63,16 @@ OnRiaScriptLabAnchor
 
 OnRiaChoiceOutfit
 {
-	"\0\s[103]着替え？\w5好きなの選べば。\n\n\![*]\q[自動で決める,OnRiaChoiceOutfitAuto]\n\![*]\q[普段着,OnRiaChoiceOutfitHome]\n\![*]\q[外出着,OnRiaChoiceOutfitOuting]\n\![*]\q[冬服,OnRiaChoiceOutfitWinter]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e"
+	_txt = "\0\s[103]着替え？\w5好きなの選べば。\n\n"
+	_txt += "\![*]\q[自動で決める,OnRiaChoiceOutfitAuto]\n"
+	_txt += "\![*]\q[普段着,OnRiaChoiceOutfitHome]\n"
+	_txt += "\![*]\q[外出着,OnRiaChoiceOutfitOuting]\n"
+	_txt += "\![*]\q[冬服,OnRiaChoiceOutfitWinter]\n"
+	if ISFUNC('RiaChoiceOutfitLocalMenu') {
+		_txt += EVAL('RiaChoiceOutfitLocalMenu')
+	}
+	_txt += "\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e"
+	_txt
 }
 
 OnRiaChoiceOutfitAuto

@@ -17,3 +17,9 @@ dist
 build
 apps/Utatane/Resources/*Host
 website
+
+# Ghost local extensions
+Content/Bundled/Ghosts/*/shell/master/*_local.*
+Content/Bundled/Ghosts/*/shell/master/surface[3-9]*.png
+Content/Bundled/Ghosts/*/ghost/master/dic/*_local.dic
+Content/Bundled/Ghosts/*/ghost/master/dic/local.dic

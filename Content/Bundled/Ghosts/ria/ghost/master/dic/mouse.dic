@@ -4,6 +4,14 @@ OnMouseDoubleClick
 		return
 	}
 
+	if ISFUNC('RiaLocalDoubleClick') {
+		_local_res = EVAL('RiaLocalDoubleClick')
+		if STRLEN(_local_res) > 0 {
+			_local_res
+			return
+		}
+	}
+
 	if RiaRegisterTouchSequence {
 		if ria_mood_saved >= 4 && (TOINT(ria_secret_talk_count_saved) % 3) == 0 {
 			RiaStartSpoilingMode
@@ -21,6 +29,9 @@ OnMouseDoubleClick
 		}
 		else {
 			_talks = RiaHeadDoubleClickTalks
+			if ISFUNC('RiaLocalHeadDoubleClickTalks') {
+				_talks ,= EVAL('RiaLocalHeadDoubleClickTalks')
+			}
 			_talks[RAND(ARRAYSIZE(_talks))]
 		}
 	}
@@ -31,16 +42,29 @@ OnMouseDoubleClick
 		}
 		else {
 			_talks = RiaFaceDoubleClickTalks
+			if ISFUNC('RiaLocalFaceDoubleClickTalks') {
+				_talks ,= EVAL('RiaLocalFaceDoubleClickTalks')
+			}
 			_talks[RAND(ARRAYSIZE(_talks))]
 		}
 	}
 	elseif reference4 == 'Bust' {
 		if TOINT(ria_spoiling_until) > GETSECCOUNT() {
 			_talks = RiaSpoilingBustDoubleClickTalks
+			if ISFUNC('RiaLocalSpoilingBustTalks') {
+				_talks ,= EVAL('RiaLocalSpoilingBustTalks')
+			}
 			_talks[RAND(ARRAYSIZE(_talks))]
 			return
 		}
 		RiaRegisterBustPoke
+		if ISFUNC('RiaLocalBustDoubleClickTalks') {
+			_local_bust = EVAL('RiaLocalBustDoubleClickTalks')
+			if ARRAYSIZE(_local_bust) > 0 {
+				_local_bust[RAND(ARRAYSIZE(_local_bust))]
+				return
+			}
+		}
 		if TOINT(ria_outfit_active) && ria_session_bust_poke_count < 3 {
 			'\0\s[9]パーカーの上からでも、そこはそこだから。\w5触らないで。\e'
 			return
@@ -54,7 +78,29 @@ OnMouseDoubleClick
 			_talks[RAND(ARRAYSIZE(_talks))]
 		}
 	}
-	elseif reference4 == 'Hand' {
+	elseif reference4 == 'Leg' {
+		if TOINT(ria_spoiling_until) > GETSECCOUNT() {
+			_talks = RiaSpoilingLegDoubleClickTalks
+			if ISFUNC('RiaLocalSpoilingLegTalks') {
+				_talks ,= EVAL('RiaLocalSpoilingLegTalks')
+			}
+			_talks[RAND(ARRAYSIZE(_talks))]
+			return
+		}
+		elseif TOINT(ria_outfit_active) && RAND(3) == 0 {
+			'\0\s[202]スカートの裾、気になる？\w5私は別に。お兄が触らなければ。\e'
+			return
+		}
+		else {
+			_talks = RiaLegDoubleClickTalks
+			if ISFUNC('RiaLocalLegDoubleClickTalks') {
+				_talks ,= EVAL('RiaLocalLegDoubleClickTalks')
+			}
+			_talks[RAND(ARRAYSIZE(_talks))]
+		}
+	}
+	else {
+		// Hand, Body, Other, または判定外のダブルクリックはメニューまたは甘え/怒りリアクション
 		if TOINT(ria_spoiling_until) > GETSECCOUNT() {
 			RiaSpoilingHandMenu
 		}
@@ -64,28 +110,9 @@ OnMouseDoubleClick
 		}
 		else {
 			_talks = RiaHandDoubleClickTalks
-			_talks[RAND(ARRAYSIZE(_talks))]
-		}
-	}
-	elseif reference4 == 'Leg' {
-		if TOINT(ria_spoiling_until) > GETSECCOUNT() {
-			_talks = RiaSpoilingLegDoubleClickTalks
-			_talks[RAND(ARRAYSIZE(_talks))]
-		}
-		elseif TOINT(ria_outfit_active) && RAND(3) == 0 {
-			'\0\s[202]スカートの裾、気になる？\w5私は別に。お兄が触らなければ。\e'
-			return
-		}
-		_talks = RiaLegDoubleClickTalks
-		_talks[RAND(ARRAYSIZE(_talks))]
-	}
-	else {
-		if TOINT(ria_spoiling_until) > GETSECCOUNT() {
-			_talks = RiaSpoilingOtherDoubleClickTalks
-			_talks[RAND(ARRAYSIZE(_talks))]
-		}
-		else {
-			_talks = RiaOtherDoubleClickTalks
+			if ISFUNC('RiaLocalHandDoubleClickTalks') {
+				_talks ,= EVAL('RiaLocalHandDoubleClickTalks')
+			}
 			_talks[RAND(ARRAYSIZE(_talks))]
 		}
 	}
@@ -333,6 +360,9 @@ RiaHeadPetTalk
 {
 	if TOINT(ria_spoiling_until) > GETSECCOUNT() {
 		_talks = RiaSpoilingPetTalks
+		if ISFUNC('RiaLocalSpoilingPetTalks') {
+			_talks ,= EVAL('RiaLocalSpoilingPetTalks')
+		}
 		_talks[RAND(ARRAYSIZE(_talks))]
 		return
 	}
@@ -346,6 +376,9 @@ RiaHeadPetTalk
 	}
 	else {
 		_talks = RiaHeadPetTalks
+		if ISFUNC('RiaLocalHeadPetTalks') {
+			_talks ,= EVAL('RiaLocalHeadPetTalks')
+		}
 		_talks[RAND(ARRAYSIZE(_talks))]
 	}
 }
@@ -385,10 +418,16 @@ RiaHairStrokeTalk
 {
 	if TOINT(ria_spoiling_until) > GETSECCOUNT() {
 		_talks = RiaSpoilingHairStrokeTalks
+		if ISFUNC('RiaLocalSpoilingHairStrokeTalks') {
+			_talks ,= EVAL('RiaLocalSpoilingHairStrokeTalks')
+		}
 		_talks[RAND(ARRAYSIZE(_talks))]
 		return
 	}
 	_talks = RiaHairStrokeTalks
+	if ISFUNC('RiaLocalHairStrokeTalks') {
+		_talks ,= EVAL('RiaLocalHairStrokeTalks')
+	}
 	_talks[RAND(ARRAYSIZE(_talks))]
 }
 

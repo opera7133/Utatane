@@ -8,4 +8,6 @@ craftmanurl,https://catbottle.sakura.ne.jp/
 seriko.use_self_alpha,1
 sakura.seriko.alignmenttodesktop,free
 sakura.balloon.alignment,none
+sakura.bindgroup10.name,アクセサリー,メガネ,glasses.png
+sakura.bindgroup10.default,0
 

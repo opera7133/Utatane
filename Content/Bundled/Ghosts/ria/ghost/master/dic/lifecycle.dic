@@ -105,6 +105,13 @@ OnSecondChange
 
 RiaSelectOutfit
 {
+	if ISFUNC('RiaSelectOutfitLocal') {
+		_handled = EVAL('RiaSelectOutfitLocal')
+		if _handled {
+			ria_outfit_active = (TOINT(ria_outfit_offset) != 0)
+			return
+		}
+	}
 	if ria_outfit_mode_saved == 'outing' {
 		ria_outfit_offset = 10000
 	}
@@ -163,6 +170,9 @@ RiaSelectTalk
 	_spoiling = RiaSpoilingActive
 	if TOINT(_spoiling) {
 		_talks = RiaSpoilingTalks
+		if ISFUNC('RiaLocalSpoilingTalks') {
+			_talks ,= EVAL('RiaLocalSpoilingTalks')
+		}
 		_talks[RAND(ARRAYSIZE(_talks))]
 		return
 	}
@@ -180,6 +190,9 @@ RiaSelectTalk
 	_talks ,= RiaSeasonTalk
 	_talks ,= RiaDateTalk
 	_talks ,= RiaWeatherTalk
+	if ISFUNC('RiaLocalTalks') {
+		_talks ,= EVAL('RiaLocalTalks')
+	}
 
 	_index = RAND(ARRAYSIZE(_talks))
 	if ARRAYSIZE(_talks) > 1 && _index == ria_last_talk_index_saved {
@@ -281,6 +294,9 @@ RiaStateTalk
 	elseif ria_mood_saved <= -3 {
 		_talks ,= '\0\s[9]今はあんまり機嫌よくない。\w5誰のせいとは言わないけど。\e'
 		_talks ,= '\0\s[6]ちょっと静かにしてたい。\w5そのうち戻るから、放っといて。\e'
+	}
+	if ISFUNC('RiaLocalStateTalks') {
+		_talks ,= EVAL('RiaLocalStateTalks')
 	}
 	_talks
 }
