@@ -29,13 +29,12 @@ Utataneは、伺かをmacOSで動かすための本体アプリです。
 
 ### 人格とかネットワークとか
 
-- YAYA / SATORIを使うゴーストのネイティブ実行
-- KAWARIを使うゴーストのネイティブ実行
+- YAYA / SATORI / KAWARIを使うゴーストのネイティブ実行 (Aosoraについては"実験的な機能"を参照)
 - SSU、`saori_cpuid`、`kenonoke`、`textcopy2`のネイティブSAORI互換
 - ゴーストとバルーンの手動ネットワーク更新と、設定した日数ごとの自動更新
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
 - `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
-- Materiaの「さくら」を、利用者が用意した`first.dll`からWineなしで実行
+- Materiaの「さくら」をWineなしで実行
 
 ## まだ無理なこと
 

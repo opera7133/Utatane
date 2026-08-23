@@ -13,9 +13,11 @@ public actor NativeKawariPersonalityEngine: PersonalityEngine {
     }
 
     public static func supports(masterDirectoryURL: URL) -> Bool {
-        FileManager.default.fileExists(
-            atPath: masterDirectoryURL.appending(path: "kawarirc.kis").path
-        )
+        ["kawarirc.kis", "kawari.ini"].contains { filename in
+            FileManager.default.fileExists(
+                atPath: masterDirectoryURL.appending(path: filename).path
+            )
+        }
     }
 
     public func handle(event: GhostEvent) async throws -> SakuraScript? {

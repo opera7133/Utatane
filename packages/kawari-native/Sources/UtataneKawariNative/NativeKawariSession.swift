@@ -22,10 +22,13 @@ public enum NativeKawariError: LocalizedError, Equatable, Sendable {
 
 public final class NativeKawariSession: @unchecked Sendable {
     private let handle: UInt32
+    private let compatibilityDirectoryURL: URL?
 
     public init(masterDirectoryURL: URL) throws {
         Self.installNativeSaoriCallback()
-        let path = masterDirectoryURL.standardizedFileURL.path + "/"
+        let preparedDirectory = try Self.prepareDirectoryIfNeeded(masterDirectoryURL)
+        compatibilityDirectoryURL = preparedDirectory == masterDirectoryURL ? nil : preparedDirectory
+        let path = preparedDirectory.standardizedFileURL.path + "/"
         guard let data = path.data(using: .shiftJIS) else {
             throw NativeKawariError.loadFailed
         }
@@ -46,6 +49,67 @@ public final class NativeKawariSession: @unchecked Sendable {
 
     deinit {
         _ = utatane_kawari_dispose(handle)
+        if let compatibilityDirectoryURL {
+            try? FileManager.default.removeItem(at: compatibilityDirectoryURL)
+        }
+    }
+
+    private static func prepareDirectoryIfNeeded(_ masterDirectoryURL: URL) throws -> URL {
+        let currentConfig = masterDirectoryURL.appending(path: "kawarirc.kis")
+        guard !FileManager.default.fileExists(atPath: currentConfig.path) else {
+            return masterDirectoryURL
+        }
+
+        let legacyConfig = masterDirectoryURL.appending(path: "kawari.ini")
+        guard FileManager.default.fileExists(atPath: legacyConfig.path) else {
+            return masterDirectoryURL
+        }
+        let data = try Data(contentsOf: legacyConfig)
+        guard let source = String(data: data, encoding: .shiftJIS) else {
+            throw NativeKawariError.loadFailed
+        }
+
+        let legacyRequestSetup = (["ID", "SecurityLevel"] + (0 ... 7).map { "Reference\($0)" })
+            .map { "$(set system.\($0) ${System.Request.\($0)})" }
+            .joined()
+        var commands = [
+            "System.Callback.OnGET : \(legacyRequestSetup)${event.${System.Request.ID}}",
+            "=kis"
+        ]
+        for rawLine in source.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix(";"),
+                  let colon = line.firstIndex(of: ":")
+            else { continue }
+            let command = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+            let argument = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+            switch command {
+            case "set": commands.append("set \(argument);")
+            case "dict", "include": commands.append("load \(argument);")
+            default: continue
+            }
+        }
+        commands.append("=end")
+
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "Utatane-KAWARI-\(UUID().uuidString)", directoryHint: .isDirectory)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            for item in try FileManager.default.contentsOfDirectory(at: masterDirectoryURL, includingPropertiesForKeys: nil) {
+                try FileManager.default.createSymbolicLink(
+                    at: directory.appending(path: item.lastPathComponent),
+                    withDestinationURL: item
+                )
+            }
+            guard let configData = commands.joined(separator: "\r\n").data(using: .shiftJIS) else {
+                throw NativeKawariError.loadFailed
+            }
+            try configData.write(to: directory.appending(path: "kawarirc.kis"), options: .atomic)
+            return directory
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            throw error
+        }
     }
 
     public func request(_ request: ShioriRequest) throws -> ShioriResponse {

@@ -550,7 +550,13 @@ private struct UtataneRootView: View {
                 statusWindowController.hide(token: fallbackToken)
                 if case .success = fallbackResult {
                     selectedGhostID = fallback.id
-                    previewError = "「\(ghost.name)」を起動できなかったため「\(fallback.name)」へ切り替えた。\n\(error.localizedDescription)"
+                    AppLogStore.shared.warning(
+                        "起動失敗のため「\(fallback.name)」へ切り替えました",
+                        category: "Ghost",
+                        details: "Failed ghost: \(ghost.name)\nError: \(error)",
+                        ghostName: ghost.name
+                    )
+                    previewError = "「\(ghost.name)」は起動できませんでした。現在は代わりに「\(fallback.name)」を表示しています。\n\n原因: \(error.localizedDescription)"
                     return
                 }
             }

@@ -39,4 +39,21 @@ struct NativeKawariSessionTests {
         guard FileManager.default.fileExists(atPath: master.path) else { return }
         #expect(NativeKawariPersonalityEngine.supports(masterDirectoryURL: master))
     }
+
+    @Test func `loads a legacy kawari ini ghost and answers OnBoot`() throws {
+        let master = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appending(path: "Content/Local/Ghosts/mayura/ghost/master", directoryHint: .isDirectory)
+        guard FileManager.default.fileExists(atPath: master.appending(path: "kawari.ini").path) else { return }
+
+        #expect(NativeKawariPersonalityEngine.supports(masterDirectoryURL: master))
+        let session = try NativeKawariSession(masterDirectoryURL: master)
+        let response = try session.request(GhostEventShioriAdapter().request(for: .boot))
+        #expect((200 ..< 300).contains(response.statusCode))
+        #expect(response.value?.isEmpty == false)
+        #expect(response.value?.contains("�") != true)
+    }
 }
