@@ -51,6 +51,16 @@ OnRiaChoiceActivity
 	_talks[RAND(ARRAYSIZE(_talks))]
 }
 
+OnRiaChoiceScriptLab
+{
+	'\0\s[103]\![set,balloonwait,20ms]表示の実験ね。\w5\_qこの一文は一気に出る。\_q\n次はクリック待ち。\x\c\s[2]消えた。\w5今度は表情を少しずつ変える。\w5\s[3]……。\w5\s[8]はい終わり。\n\n\_a[OnRiaScriptLabAnchor]アンカーも押せる\_a。\e'
+}
+
+OnRiaScriptLabAnchor
+{
+	'\0\s[1]ちゃんと押せた。\w5これでアンカーのイベントも確認できたでしょ。\e'
+}
+
 OnRiaChoiceOutfit
 {
 	"\0\s[103]着替え？\w5好きなの選べば。\n\n\![*]\q[自動で決める,OnRiaChoiceOutfitAuto]\n\![*]\q[普段着,OnRiaChoiceOutfitHome]\n\![*]\q[外出着,OnRiaChoiceOutfitOuting]\n\![*]\q[冬服,OnRiaChoiceOutfitWinter]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e"

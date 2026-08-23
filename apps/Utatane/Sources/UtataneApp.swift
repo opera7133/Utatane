@@ -2,6 +2,7 @@ import AppKit
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
+import UtataneAI
 import UtataneBalloon
 import UtataneContent
 import UtataneCore
@@ -375,6 +376,13 @@ private struct UtataneRootView: View {
         }
         .onChange(of: showsOnboarding) {
             updateDebugWindowVisibility()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { notification in
+            guard let closingWindow = notification.object as? NSWindow,
+                  closingWindow === debugWindow,
+                  !showsOnboarding
+            else { return }
+            networkSettings.showsDebugWindow = false
         }
     }
 
@@ -806,6 +814,20 @@ private struct UtataneRootView: View {
             path: "ghost/master",
             directoryHint: .isDirectory
         )
+        if AIGhostManifestLoader.supports(masterDirectoryURL: masterDirectory) {
+            let baseURL = networkSettings.aiBaseURL.isEmpty
+                ? nil : URL(string: networkSettings.aiBaseURL)
+            let configuration = AIProviderConfiguration(
+                kind: networkSettings.aiProvider,
+                baseURL: baseURL,
+                model: networkSettings.aiModel,
+                apiKey: networkSettings.aiAPIKey
+            )
+            return try AIPersonalityEngine(
+                manifest: AIGhostManifestLoader.load(masterDirectoryURL: masterDirectory),
+                client: AIProviderClientFactory.make(configuration: configuration)
+            )
+        }
         if NativeYayaPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try NativeYayaPersonalityEngine(
                 masterDirectoryURL: ContentRoot.writableYayaMasterDirectory(
@@ -1723,10 +1745,14 @@ private struct UtataneRootView: View {
                         openSettings()
                     }
                 ),
-                .action(title: "デバッグ画面を表示", handler: {
-                    networkSettings.showsDebugWindow = true
-                    updateDebugWindowVisibility(bringForward: true)
-                }),
+                .action(
+                    title: "デバッグ画面を表示",
+                    isSelected: networkSettings.showsDebugWindow,
+                    handler: {
+                        networkSettings.showsDebugWindow.toggle()
+                        updateDebugWindowVisibility(bringForward: networkSettings.showsDebugWindow)
+                    }
+                ),
                 .action(
                     title: "現在のゴーストを再読み込み",
                     isEnabled: currentGhost != nil && !isTransitioningGhost,

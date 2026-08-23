@@ -14,6 +14,7 @@ let package = Package(
         .library(name: "UtataneNetwork", targets: ["UtataneNetwork"]),
         .library(name: "UtataneShell", targets: ["UtataneShell"]),
         .library(name: "UtataneRuntime", targets: ["UtataneRuntime"]),
+        .library(name: "UtataneAI", targets: ["UtataneAI"]),
         .library(name: "UtataneShiori", targets: ["UtataneShiori"]),
         .library(name: "UtataneWindowsShiori", targets: ["UtataneWindowsShiori"]),
         .library(name: "UtatanePOSIXShiori", targets: ["UtatanePOSIXShiori"]),
@@ -41,6 +42,11 @@ let package = Package(
             name: "UtataneRuntime",
             dependencies: ["UtataneCore", "UtataneSakuraScript"],
             path: "runtime/Sources"
+        ),
+        .target(
+            name: "UtataneAI",
+            dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript"],
+            path: "ai/Sources"
         ),
         .target(
             name: "UtataneGhostKit",
@@ -289,6 +295,11 @@ let package = Package(
             name: "UtataneRuntimeTests",
             dependencies: ["UtataneCore", "UtataneRuntime"],
             path: "runtime/Tests"
+        ),
+        .testTarget(
+            name: "UtataneAITests",
+            dependencies: ["UtataneAI", "UtataneCore"],
+            path: "ai/Tests"
         ),
         .testTarget(
             name: "UtataneGhostKitTests",

@@ -1,5 +1,6 @@
 import Sparkle
 import SwiftUI
+import UtataneAI
 import UtataneBalloon
 import UtataneNetwork
 
@@ -59,6 +60,9 @@ final class UtataneSettingsStore: ObservableObject {
         static let showsDebugWindow = "debug.showsWindow"
         static let wineExecutablePath = "windowsShiori.wineExecutablePath"
         static let winePrefixPath = "windowsShiori.winePrefixPath"
+        static let aiProvider = "ai.provider"
+        static let aiModel = "ai.model"
+        static let aiBaseURL = "ai.baseURL"
     }
 
     @Published var automaticHeadlineRefresh: Bool {
@@ -147,6 +151,22 @@ final class UtataneSettingsStore: ObservableObject {
         didSet { defaults.set(winePrefixPath, forKey: Key.winePrefixPath) }
     }
 
+    @Published var aiProvider: AIProviderKind {
+        didSet { defaults.set(aiProvider.rawValue, forKey: Key.aiProvider) }
+    }
+
+    @Published var aiModel: String {
+        didSet { defaults.set(aiModel, forKey: Key.aiModel) }
+    }
+
+    @Published var aiBaseURL: String {
+        didSet { defaults.set(aiBaseURL, forKey: Key.aiBaseURL) }
+    }
+
+    @Published var aiAPIKey: String {
+        didSet { AIAPIKeyStore.save(aiAPIKey) }
+    }
+
     @Published var selectedPane: Pane = .general
     @Published private(set) var activeGhostName: String?
 
@@ -189,6 +209,10 @@ final class UtataneSettingsStore: ObservableObject {
         showsDebugWindow = defaults.bool(forKey: Key.showsDebugWindow)
         wineExecutablePath = defaults.string(forKey: Key.wineExecutablePath) ?? ""
         winePrefixPath = defaults.string(forKey: Key.winePrefixPath) ?? ""
+        aiProvider = AIProviderKind(rawValue: defaults.string(forKey: Key.aiProvider) ?? "") ?? .openAICompatible
+        aiModel = defaults.string(forKey: Key.aiModel) ?? "llama3.2"
+        aiBaseURL = defaults.string(forKey: Key.aiBaseURL) ?? ""
+        aiAPIKey = AIAPIKeyStore.load()
     }
 
     private static func positiveValue(_ value: Int, fallback: Int) -> Int {
@@ -451,6 +475,21 @@ struct UtataneSettingsView: View {
                         Text("6時間").tag(360)
                     }
                     .disabled(!settings.automaticHeadlineRefresh)
+                }
+
+                Section("生成AIゴースト") {
+                    Picker("プロバイダー", selection: $settings.aiProvider) {
+                        Text("OpenAI").tag(AIProviderKind.openAI)
+                        Text("Claude (Anthropic)").tag(AIProviderKind.anthropic)
+                        Text("Gemini").tag(AIProviderKind.gemini)
+                        Text("OpenAI互換 / ローカル").tag(AIProviderKind.openAICompatible)
+                    }
+                    TextField("モデル", text: $settings.aiModel)
+                    TextField("Base URL", text: $settings.aiBaseURL)
+                    SecureField("APIキー（Keychainに保存）", text: $settings.aiAPIKey)
+                    Text("OpenAI互換ではAPIキーを空にできる。設定変更後はAIゴーストを再読み込みする。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 AppUpdateSettingsView(updater: appUpdater)

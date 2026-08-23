@@ -150,6 +150,24 @@ import UtataneShiori
         id: "OnInstallFailure",
         references: [0: "extraction"]
     ))
+    let ghostChanging = try await engine.handle(event: .ghostChanging(name: "テストゴースト"))
+    let headlineBegin = try await engine.handle(event: .shiori(
+        id: "OnHeadlinesenseBegin",
+        references: [0: "テストニュース", 1: "https://example.test/"]
+    ))
+    let headlineItem = try await engine.handle(event: .shiori(
+        id: "OnHeadlinesense.OnFind",
+        references: [
+            0: "テストニュース", 1: "https://example.test/article", 2: "First and Last", 3: "見出し"
+        ]
+    ))
+    let rss = try await engine.handle(event: .shiori(
+        id: "OnRSSComplete",
+        references: [
+            0: "テストフィード", 1: "https://example.test/", 2: "記事\u{1}https://example.test/article\u{1}\u{1}\u{1}概要"
+        ]
+    ))
+    let scriptLab = try await engine.handle(event: .shiori(id: "OnRiaChoiceScriptLab", references: [:]))
     let outfitMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceOutfit", references: [:]))
     let winter = try await engine.handle(event: .shiori(id: "OnRiaChoiceOutfitWinter", references: [:]))
     let winterRestore = try await engine.handle(event: .shiori(id: "OnSurfaceRestore", references: [:]))
@@ -206,6 +224,14 @@ import UtataneShiori
     #expect(installBegin?.rawValue.isEmpty == false)
     #expect(installComplete?.rawValue.contains("テストゴースト") == true)
     #expect(installFailure?.rawValue.contains("展開できなかった") == true)
+    #expect(ghostChanging?.rawValue.contains("テストゴースト") == true)
+    #expect(headlineBegin?.rawValue.contains("テストニュース") == true)
+    #expect(headlineItem?.rawValue.contains("見出し") == true)
+    #expect(headlineItem?.rawValue.contains("https://example.test/article") == true)
+    #expect(rss?.rawValue.contains("記事") == true)
+    #expect(rss?.rawValue.contains("https://example.test/article") == true)
+    #expect(scriptLab?.rawValue.contains("\\_q") == true)
+    #expect(scriptLab?.rawValue.contains("\\_a[OnRiaScriptLabAnchor]") == true)
     #expect(outfitMenu?.rawValue.contains("外出着") == true)
     #expect(outfitMenu?.rawValue.contains("冬服") == true)
     #expect(winter?.rawValue.contains("\\s[20000]") == true)

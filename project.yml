@@ -77,6 +77,8 @@ targets:
       - package: UtataneKit
         product: UtataneCore
       - package: UtataneKit
+        product: UtataneAI
+      - package: UtataneKit
         product: UtataneContent
       - package: UtataneKit
         product: UtataneNetwork

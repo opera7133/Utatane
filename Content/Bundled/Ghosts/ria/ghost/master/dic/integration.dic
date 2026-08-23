@@ -35,3 +35,99 @@ OnUpdateFailure
 {
 	'\0\s[6]更新、うまくいかなかった。\w5ネットか配布元を確認して。\e'
 }
+
+OnGhostChanging
+{
+	_name = reference0
+	if _name {
+		_talks = RiaGhostChangingTalksNamed
+		REPLACE(_talks[RAND(ARRAYSIZE(_talks))], '%ghost%', _name)
+	}
+	else {
+		_talks = RiaGhostChangingTalks
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+}
+
+RiaGhostChangingTalksNamed : array
+{
+	'\0\s[4]%ghost%に替えるんだ。\w5ふーん。\w5\s[103]まあ、用が済んだらまた呼べば。\e'
+	'\0\s[9]次は%ghost%ね。\w5別に止めないけど、私の途中だった話は忘れないでよ。\e'
+	'\0\s[103]%ghost%のところ行くの。\w5はいはい、いってらっしゃい。\w5\s[3]私は少し休んでる。\e'
+}
+
+RiaGhostChangingTalks : array
+{
+	'\0\s[4]別のゴーストに替えるの。\w5まあ、好きにすれば。\e'
+	'\0\s[103]交代ね。\w5用が済んだら、また呼べばいいでしょ。\e'
+}
+
+OnGhostChanged
+{
+	_name = reference0
+	if _name {
+		"\0\s[103]%(_name)から私に戻したんだ。\w5ふーん。\w5\s[0]それで、今度は何。\e"
+	}
+	else {
+		'\0\s[103]おかえり。\w5……別に待ってたわけじゃないけど。\e'
+	}
+}
+
+OnHeadlinesenseBegin
+{
+	"\0\s[103]%(reference0)の見出し、取ってくる。\w5少し待って。\e"
+}
+
+OnHeadlinesense.OnFind
+{
+	"\0\s[0]\b[2]\![set,choicetimeout,-1]%(reference3)\n\n\![*]\q[記事を開く,%(reference1)]"
+	--
+	if reference2 != 'Last' && reference2 != 'First and Last' {
+		'\n\![>]\q[次の見出し,]'
+	}
+	--
+	'\n\![X]\q[ここまで,CANCEL_NOTALK]\e'
+}
+
+OnHeadlinesenseComplete
+{
+	'\0\s[103]新しい見出しはなかった。\w5まあ、平和ってことでいいんじゃない。\e'
+}
+
+OnHeadlinesenseFailure
+{
+	if reference0 == "can't download" {
+		'\0\s[6]見出しを取りに行けなかった。\w5ネットか配布元の調子を見て。\e'
+	}
+	else {
+		'\0\s[6]見出しは取れたけど、うまく読めなかった。\w5サイト側が変わったのかも。\e'
+	}
+}
+
+OnRSSBegin
+{
+	'\0\s[103]RSSを確認してくる。\w5未読が多くても、私は知らないからね。\e'
+}
+
+OnRSSComplete
+{
+	if ARRAYSIZE(reference) <= 2 {
+		'\0\s[103]RSSに新しい記事はなかった。\w5閉じて作業に戻れば。\e'
+		return
+	}
+	"\0\s[0]\b[2]\![set,choicetimeout,-1]%(reference0)\n\n"
+	--
+	for _i = 2 ; _i < ARRAYSIZE(reference) ; _i++ {
+		_item = SPLIT(reference[_i], CHR(1))
+		if ARRAYSIZE(_item) >= 2 {
+			"\![*]\q[%(_item[0]),%(_item[1])]\n"
+		}
+	}
+	--
+	'\n\![X]\q[閉じる,CANCEL_NOTALK]\e'
+}
+
+OnRSSFailure
+{
+	'\0\s[6]RSSを読めなかった。\w5URLかネットの調子、どっちか確認したら。\e'
+}
