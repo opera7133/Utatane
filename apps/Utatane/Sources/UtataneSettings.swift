@@ -381,8 +381,8 @@ struct UtataneSettingsView: View {
 
             SettingsPage(
                 title: "ゴーストごとの設定",
-                description: settings.activeGhostName.map { "「\($0)」にだけ適用する設定。" }
-                    ?? "現在表示しているゴーストにだけ適用する設定。"
+                description: settings.activeGhostName.map { LocalizedStringKey("「\($0)」にだけ適用する設定。") }
+                    ?? LocalizedStringKey("現在表示しているゴーストにだけ適用する設定。")
             ) {
                 Section("自動会話") {
                     Picker("会話間隔", selection: $settings.randomTalkIntervalMinutes) {
@@ -585,8 +585,8 @@ struct UtataneSettingsView: View {
 }
 
 private struct SettingsPage<Content: View>: View {
-    let title: String
-    let description: String
+    let title: LocalizedStringKey
+    let description: LocalizedStringKey
     @ViewBuilder let content: Content
 
     var body: some View {

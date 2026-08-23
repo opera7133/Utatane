@@ -139,8 +139,8 @@ final class CalledGhostRuntime {
     func sendSecondChange(references: [Int: String]) {
         let canTalk = !player.isDialogueActive
         var references = references
-        // SSP uses 0 for talkable and 1 while a script is being played.
-        references[3] = canTalk ? "0" : "1"
+        // UKADOC / SSP standard: 1 for talkable, 0 while dialogue is being played.
+        references[3] = canTalk ? "1" : "0"
         Task {
             do {
                 guard let response = try await session.response(for: .shiori(
@@ -416,9 +416,9 @@ final class CalledGhostRuntime {
 
     private func promptForText(initialValue: String) -> String? {
         let alert = NSAlert()
-        alert.messageText = "文字を入力"
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "キャンセル")
+        alert.messageText = String(localized: "文字を入力")
+        alert.addButton(withTitle: String(localized: "OK"))
+        alert.addButton(withTitle: String(localized: "キャンセル"))
         let field = NSTextField(string: initialValue)
         field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
         alert.accessoryView = field

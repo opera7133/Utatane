@@ -378,3 +378,33 @@ import UtataneShiori
     ))
     #expect(failure?.rawValue.isEmpty == false)
 }
+
+@Test func `installed ria respects canTalk reference in OnSecondChange`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: installedMasterURL.path) else {
+        return
+    }
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-talkable-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+
+    let silent = try await engine.handle(event: .shiori(
+        id: "OnSecondChange",
+        references: [0: "0", 1: "0", 2: "0", 3: "0"]
+    ))
+    #expect(silent == nil)
+}

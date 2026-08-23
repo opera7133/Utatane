@@ -56,7 +56,7 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
         if case let .shiori(id, references) = event,
            id.caseInsensitiveCompare("OnSecondChange") == .orderedSame
         {
-            return try handleSecondChange(canTalk: references[3] == "0")
+            return try handleSecondChange(canTalk: references[3] != "0")
         }
         if let mouse = doubleClick(from: event) {
             if mouse.scope == 0 {

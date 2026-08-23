@@ -1,0 +1,57 @@
+{
+  "sourceLanguage" : "ja",
+  "strings" : {
+    "CFBundleDisplayName" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utatane"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Utatane"
+          }
+        }
+      }
+    },
+    "NSLocationUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used by ghosts to provide local weather info. Location data is only used during weather fetch."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。"
+          }
+        }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used by ghosts to provide local weather info. Location data is only used during weather fetch."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

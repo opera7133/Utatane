@@ -119,17 +119,19 @@ struct UtataneApp: App {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         let credits = NSAttributedString(
-            string: "macOS向け伺か互換ベースウェア",
+            string: String(localized: "macOS向け伺か互換ベースウェア"),
             attributes: [
                 .font: NSFont.systemFont(ofSize: NSFont.smallSystemFontSize),
                 .foregroundColor: NSColor.secondaryLabelColor,
                 .paragraphStyle: paragraph
             ]
         )
+        let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-"
+        let buildVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-"
         var options: [NSApplication.AboutPanelOptionKey: Any] = [
             .applicationName: "Utatane",
-            .applicationVersion: "バージョン \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "-")",
-            .version: "ビルド \(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "-")",
+            .applicationVersion: String(localized: "バージョン \(appVersion)"),
+            .version: String(localized: "ビルド \(buildVersion)"),
             .credits: credits
         ]
         if let applicationIcon = NSApplication.shared.applicationIconImage {
@@ -458,8 +460,8 @@ private struct UtataneRootView: View {
         if let session {
             let canTalk = !scriptPlayer.isDialogueActive
             var primaryReferences = references
-            // SSP uses 0 for talkable and 1 while a script is being played.
-            primaryReferences[3] = canTalk ? "0" : "1"
+            // UKADOC / SSP standard: 1 for talkable, 0 while dialogue is being played.
+            primaryReferences[3] = canTalk ? "1" : "0"
             Task {
                 do {
                     guard let response = try await session.response(for: .shiori(
@@ -865,9 +867,9 @@ private struct UtataneRootView: View {
 
     private func promptForText(initialValue: String) -> String? {
         let alert = NSAlert()
-        alert.messageText = "文字を入力"
-        alert.addButton(withTitle: "OK")
-        alert.addButton(withTitle: "キャンセル")
+        alert.messageText = String(localized: "文字を入力")
+        alert.addButton(withTitle: String(localized: "OK"))
+        alert.addButton(withTitle: String(localized: "キャンセル"))
         let field = NSTextField(string: initialValue)
         field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
         alert.accessoryView = field
@@ -1537,10 +1539,10 @@ private struct UtataneRootView: View {
 
     private func showGhostPicker(requiresSelection: Bool = false) {
         contentPickerController.show(
-            title: "ゴーストを選択",
+            title: String(localized: "ゴーストを選択"),
             entries: model.ghosts.map { .init(id: $0.id, name: $0.name) },
             selectedID: currentGhost?.id ?? selectedGhostID,
-            actionTitle: "切り替え",
+            actionTitle: String(localized: "切り替え"),
             allowsCancel: !requiresSelection
         ) { id in
             selectedGhostID = id
@@ -1550,10 +1552,10 @@ private struct UtataneRootView: View {
     private func showShellPicker() {
         guard let currentGhost else { return }
         contentPickerController.show(
-            title: "シェルを選択",
+            title: String(localized: "シェルを選択"),
             entries: currentGhost.shells.map { .init(id: $0.id, name: $0.name) },
             selectedID: selectedShell?.id,
-            actionTitle: "切り替え"
+            actionTitle: String(localized: "切り替え")
         ) { id in
             guard let shell = currentGhost.shells.first(where: { $0.id == id }) else { return }
             select(shell: shell)
@@ -1562,10 +1564,10 @@ private struct UtataneRootView: View {
 
     private func showBalloonPicker() {
         contentPickerController.show(
-            title: "バルーンを選択",
+            title: String(localized: "バルーンを選択"),
             entries: installedBalloons.map { .init(id: $0.directory, name: $0.name) },
             selectedID: balloon?.directory,
-            actionTitle: "切り替え"
+            actionTitle: String(localized: "切り替え")
         ) { id in
             guard let selectedBalloon = installedBalloons.first(where: { $0.directory == id }) else { return }
             select(balloon: selectedBalloon)
@@ -1654,7 +1656,7 @@ private struct UtataneRootView: View {
         surfaceWindowController.contextMenuItems = {
             [
                 .submenu(
-                    title: "ゴースト切り替え",
+                    title: String(localized: "ゴースト切り替え"),
                     items: model.ghosts.map { ghost in
                         .action(
                             title: ghost.name,
@@ -1665,7 +1667,7 @@ private struct UtataneRootView: View {
                 ),
                 callGhostMenu(),
                 .submenu(
-                    title: "Shell",
+                    title: String(localized: "Shell"),
                     items: (currentGhost?.shells ?? []).map { shell in
                         .action(
                             title: shell.name,
@@ -1675,7 +1677,7 @@ private struct UtataneRootView: View {
                     }
                 ),
                 .submenu(
-                    title: "バルーン",
+                    title: String(localized: "バルーン"),
                     items: installedBalloons.map { candidate in
                         .action(
                             title: candidate.name,
@@ -1686,38 +1688,38 @@ private struct UtataneRootView: View {
                 ),
                 .separator,
                 .action(
-                    title: "ランダムトーク",
+                    title: String(localized: "ランダムトーク"),
                     isEnabled: session != nil,
                     handler: { sendEvent(.randomTalk) }
                 ),
-                .action(title: "バルーンを閉じる", handler: { scriptPlayer.cancel() }),
+                .action(title: String(localized: "バルーンを閉じる"), handler: { scriptPlayer.cancel() }),
                 .submenu(
-                    title: "コンテンツ管理",
+                    title: String(localized: "コンテンツ管理"),
                     items: [
-                        .action(title: "NARをインストール…", handler: { isImportingNar = true }),
-                        .action(title: "SSPフォルダから取り込む…", handler: {
+                        .action(title: String(localized: "NARをインストール…"), handler: { isImportingNar = true }),
+                        .action(title: String(localized: "SSPフォルダから取り込む…"), handler: {
                             isImportingSSPDirectory = true
                         }),
-                        .action(title: "Finderで表示", handler: showContentFolder)
+                        .action(title: String(localized: "Finderで表示"), handler: showContentFolder)
                     ]
                 ),
                 .submenu(
-                    title: "ネットワーク更新",
+                    title: String(localized: "ネットワーク更新"),
                     items: [
                         .action(
-                            title: "ゴーストを更新",
+                            title: String(localized: "ゴーストを更新"),
                             isEnabled: currentGhost != nil && session != nil && !isUpdatingContent,
                             handler: { Task { await updateCurrentGhost() } }
                         ),
                         .action(
-                            title: "バルーンを更新",
+                            title: String(localized: "バルーンを更新"),
                             isEnabled: balloon != nil && !isUpdatingContent,
                             handler: { Task { await updateCurrentBalloon() } }
                         )
                     ]
                 ),
                 .submenu(
-                    title: "RSS / ヘッドライン",
+                    title: String(localized: "RSS / ヘッドライン"),
                     items: installedHeadlines.map { headline in
                         switch headline.kind {
                         case let .rss(feedURL):
@@ -1735,18 +1737,18 @@ private struct UtataneRootView: View {
                         }
                     } + [
                         .separator,
-                        .action(title: "URLを指定して取得…", handler: { isEnteringRSSURL = true })
+                        .action(title: String(localized: "URLを指定して取得…"), handler: { isEnteringRSSURL = true })
                     ]
                 ),
                 .action(
-                    title: "設定",
+                    title: String(localized: "設定"),
                     handler: {
                         networkSettings.selectedPane = .general
                         openSettings()
                     }
                 ),
                 .action(
-                    title: "デバッグ画面を表示",
+                    title: String(localized: "デバッグ画面を表示"),
                     isSelected: networkSettings.showsDebugWindow,
                     handler: {
                         networkSettings.showsDebugWindow.toggle()
@@ -1754,12 +1756,12 @@ private struct UtataneRootView: View {
                     }
                 ),
                 .action(
-                    title: "現在のゴーストを再読み込み",
+                    title: String(localized: "現在のゴーストを再読み込み"),
                     isEnabled: currentGhost != nil && !isTransitioningGhost,
                     handler: { reloadCurrentGhost() }
                 ),
                 .separator,
-                .action(title: "Utataneを終了", handler: { NSApplication.shared.terminate(nil) })
+                .action(title: String(localized: "Utataneを終了"), handler: { NSApplication.shared.terminate(nil) })
             ]
         }
         for runtime in calledGhosts.values {
@@ -1769,7 +1771,7 @@ private struct UtataneRootView: View {
 
     private func callGhostMenu() -> SurfaceContextMenuItem {
         .submenu(
-            title: "ゴーストを呼ぶ",
+            title: String(localized: "ゴーストを呼ぶ"),
             items: model.ghosts.filter { ghost in
                 ghost.id != currentGhost?.id && calledGhosts[ghost.id] == nil
             }.map { ghost in
@@ -1781,7 +1783,7 @@ private struct UtataneRootView: View {
     private func calledGhostContextMenu(for runtime: CalledGhostRuntime) -> [SurfaceContextMenuItem] {
         [
             .submenu(
-                title: "ゴースト切り替え",
+                title: String(localized: "ゴースト切り替え"),
                 items: model.ghosts.map { ghost in
                     .action(
                         title: ghost.name,
@@ -1792,7 +1794,7 @@ private struct UtataneRootView: View {
             ),
             callGhostMenu(),
             .submenu(
-                title: "Shell",
+                title: String(localized: "Shell"),
                 items: runtime.ghost.shells.map { shell in
                     .action(
                         title: shell.name,
@@ -1805,7 +1807,7 @@ private struct UtataneRootView: View {
                 }
             ),
             .submenu(
-                title: "バルーン",
+                title: String(localized: "バルーン"),
                 items: installedBalloons.map { balloon in
                     .action(
                         title: balloon.name,
@@ -1818,14 +1820,14 @@ private struct UtataneRootView: View {
                 }
             ),
             .separator,
-            .action(title: "ランダムトーク", handler: { runtime.send(.randomTalk) }),
-            .action(title: "このゴーストを閉じる", handler: { dismissCalledGhost(runtime.ghost) }),
-            .action(title: "設定", handler: {
+            .action(title: String(localized: "ランダムトーク"), handler: { runtime.send(.randomTalk) }),
+            .action(title: String(localized: "このゴーストを閉じる"), handler: { dismissCalledGhost(runtime.ghost) }),
+            .action(title: String(localized: "設定"), handler: {
                 networkSettings.selectedPane = .general
                 openSettings()
             }),
             .separator,
-            .action(title: "Utataneを終了", handler: { NSApplication.shared.terminate(nil) })
+            .action(title: String(localized: "Utataneを終了"), handler: { NSApplication.shared.terminate(nil) })
         ]
     }
 
@@ -2810,11 +2812,11 @@ enum AppError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case let .missingResource(name):
-            "アプリ内リソースが見つからない: \(name)"
+            String(localized: "アプリ内リソースが見つからない: \(name)")
         case let .unsupportedShiori(filename):
-            "このゴーストのSHIORIにはまだ対応していない: \(filename ?? "SHIORI不明")"
+            String(localized: "このゴーストのSHIORIにはまだ対応していない: \(filename ?? "SHIORI不明")")
         case .windowsShioriUnavailable:
-            "この版のFIRSTにはネイティブ対応していない。配布版ではMateria用Wineホストも利用できない"
+            String(localized: "この版のFIRSTにはネイティブ対応していない。配布版ではMateria用Wineホストも利用できない")
         }
     }
 }
