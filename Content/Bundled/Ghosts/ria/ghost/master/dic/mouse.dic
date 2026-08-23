@@ -55,27 +55,27 @@ OnMouseDoubleClick
 				_talks ,= EVAL('RiaLocalSpoilingBustTalks')
 			}
 			_talks[RAND(ARRAYSIZE(_talks))]
-			return
-		}
-		RiaRegisterBustPoke
-		if ISFUNC('RiaLocalBustDoubleClickTalks') {
-			_local_bust = EVAL('RiaLocalBustDoubleClickTalks')
-			if ARRAYSIZE(_local_bust) > 0 {
-				_local_bust[RAND(ARRAYSIZE(_local_bust))]
-				return
-			}
-		}
-		if TOINT(ria_outfit_active) && ria_session_bust_poke_count < 3 {
-			'\0\s[9]パーカーの上からでも、そこはそこだから。\w5触らないで。\e'
-			return
-		}
-		if ria_session_bust_poke_count >= 3 {
-			_talks = RiaRepeatedBustDoubleClickTalks
-			_talks[RAND(ARRAYSIZE(_talks))]
 		}
 		else {
-			_talks = RiaBustDoubleClickTalks
-			_talks[RAND(ARRAYSIZE(_talks))]
+			RiaRegisterBustPoke
+			_local_bust = IARRAY
+			if ISFUNC('RiaLocalBustDoubleClickTalks') {
+				_local_bust = EVAL('RiaLocalBustDoubleClickTalks')
+			}
+			if ARRAYSIZE(_local_bust) > 0 {
+				_local_bust[RAND(ARRAYSIZE(_local_bust))]
+			}
+			elseif TOINT(ria_outfit_active) && ria_session_bust_poke_count < 3 {
+				'\0\s[9]パーカーの上からでも、そこはそこだから。\w5触らないで。\e'
+			}
+			elseif ria_session_bust_poke_count >= 3 {
+				_talks = RiaRepeatedBustDoubleClickTalks
+				_talks[RAND(ARRAYSIZE(_talks))]
+			}
+			else {
+				_talks = RiaBustDoubleClickTalks
+				_talks[RAND(ARRAYSIZE(_talks))]
+			}
 		}
 	}
 	elseif reference4 == 'Leg' {
@@ -85,11 +85,9 @@ OnMouseDoubleClick
 				_talks ,= EVAL('RiaLocalSpoilingLegTalks')
 			}
 			_talks[RAND(ARRAYSIZE(_talks))]
-			return
 		}
 		elseif TOINT(ria_outfit_active) && RAND(3) == 0 {
 			'\0\s[202]スカートの裾、気になる？\w5私は別に。お兄が触らなければ。\e'
-			return
 		}
 		else {
 			_talks = RiaLegDoubleClickTalks
@@ -223,9 +221,9 @@ RiaRegisterBustPoke
 
 RiaHandDoubleClickTalks : array
 {
-	'\0\s[2]手？\w5\s[0]何か用。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[表示の実験,OnRiaChoiceScriptLab]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
+	'\0\s[0]何か用。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[表示の実験,OnRiaChoiceScriptLab]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
 	'\0\s[103]はいはい。\w5選ぶならこのへん。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[表示の実験,OnRiaChoiceScriptLab]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
-	'\0\s[4]手をつつくより、用件を言えばいいのに。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[表示の実験,OnRiaChoiceScriptLab]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
+	'\0\s[4]つつくより、用件を言えばいいのに。\n\n\![*]\q[着替える,OnRiaChoiceOutfit]\n\![*]\q[少し出かける,OnRiaChoiceGoOut]\n\![*]\q[今の天気,OnRiaChoiceWeather]\n\![*]\q[今何時？,OnRiaChoiceTime]\n\![*]\q[今日は何曜日？,OnRiaChoiceWeekday]\n\![*]\q[今どんな感じ？,OnRiaChoiceState]\n\![*]\q[記録を見せて,OnRiaChoiceProfile]\n\![*]\q[何してた？,OnRiaChoiceActivity]\n\![*]\q[表示の実験,OnRiaChoiceScriptLab]\n\![*]\q[何か話して,OnRiaChoiceTalk]\n\![*]\q[悪かった,OnRiaChoiceApology]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e'
 }
 
 RiaSpoilingHandMenu

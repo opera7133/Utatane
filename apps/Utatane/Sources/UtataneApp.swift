@@ -163,7 +163,6 @@ private struct UtataneRootView: View {
 
     @Environment(\.openSettings) private var openSettings
 
-    @State private var previewError: String?
     @State private var lastClickedRegion: String?
     @State private var balloon: BalloonDefinition?
     @State private var session: GhostSession?
@@ -171,17 +170,13 @@ private struct UtataneRootView: View {
     @State private var currentGhost: InstalledGhost?
     @State private var selectedShell: InstalledShell?
     @State private var installedBalloons: [BalloonDefinition] = []
-    @State private var isImportingNar = false
-    @State private var isEnteringRSSURL = false
-    @State private var rssURLText = ""
     @State private var installedHeadlines: [InstalledHeadline] = []
     @State private var isUpdatingContent = false
     @State private var debugWindow: NSWindow?
     @State private var showsOnboarding = false
-    @State private var isImportingSSPDirectory = false
-    @State private var isShowingApplicationAlert = false
     @State private var calledGhosts: [URL: CalledGhostRuntime] = [:]
     @State private var contentPickerController = ContentPickerWindowController()
+    @State private var textInputWindowController = TextInputWindowController()
     @State private var isTransitioningGhost = false
     @State private var isClosingCurrentGhost = false
     @State private var weatherTask: Task<Void, Never>?
@@ -194,13 +189,10 @@ private struct UtataneRootView: View {
         Group {
             if showsOnboarding {
                 WelcomeView(
-                    installNar: { isImportingNar = true },
-                    importSSP: { isImportingSSPDirectory = true },
+                    installNar: selectAndInstallNar,
+                    importSSP: selectAndImportSSPDirectory,
                     showContentFolder: showContentFolder
                 )
-            } else if isPresentingAuxiliaryUI {
-                Color.clear
-                    .frame(minWidth: 520, minHeight: 430)
             } else {
                 DebugConsoleView(
                     model: model,
@@ -212,7 +204,7 @@ private struct UtataneRootView: View {
                     onAdvanceScript: { scriptPlayer.advance() },
                     onCancelScript: { scriptPlayer.cancel() },
                     onReloadGhost: { reloadCurrentGhost() },
-                    onInstallNar: { isImportingNar = true },
+                    onInstallNar: selectAndInstallNar,
                     onPlaySlowAnimation: {
                         surfaceWindowController.playAnimation(
                             id: 0,
@@ -252,7 +244,7 @@ private struct UtataneRootView: View {
                     await handleSSTP(request)
                 }
             } catch {
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
         }
         .task(id: "\(networkSettings.characterDelayMilliseconds)-\(networkSettings.dialogueDismissalSeconds)") {
@@ -323,46 +315,6 @@ private struct UtataneRootView: View {
                 }
             }
         }
-        .fileImporter(
-            isPresented: $isImportingNar,
-            allowedContentTypes: [UTType(filenameExtension: "nar") ?? .data]
-        ) { result in
-            switch result {
-            case let .success(url):
-                installNar(from: url)
-            case let .failure(error):
-                if !error.isUserCancelledFileImport {
-                    previewError = error.localizedDescription
-                }
-            }
-        }
-        .fileImporter(
-            isPresented: $isImportingSSPDirectory,
-            allowedContentTypes: [.folder]
-        ) { result in
-            switch result {
-            case let .success(url):
-                importSSPContents(from: url)
-            case let .failure(error):
-                if !error.isUserCancelledFileImport {
-                    previewError = error.localizedDescription
-                }
-            }
-        }
-        .onChange(of: previewError) { _, message in
-            guard let message else { return }
-            previewError = nil
-            isShowingApplicationAlert = true
-            alertController.showError(message)
-            isShowingApplicationAlert = false
-        }
-        .alert("RSS/Atomを取得", isPresented: $isEnteringRSSURL) {
-            TextField("https://example.com/feed.xml", text: $rssURLText)
-            Button("取得") { fetchRSS() }
-            Button("キャンセル", role: .cancel) {}
-        } message: {
-            Text("RSSまたはAtomフィードのURL")
-        }
         .onDisappear {
             scriptPlayer.cancel()
             sstpServer.stop()
@@ -424,15 +376,6 @@ private struct UtataneRootView: View {
         await propertySystem.register(values: values)
     }
 
-    private var isPresentingAuxiliaryUI: Bool {
-        !showsOnboarding && (
-            isImportingNar
-                || isImportingSSPDirectory
-                || isEnteringRSSURL
-                || isShowingApplicationAlert
-        )
-    }
-
     private func sendEvent(_ event: GhostEvent) {
         guard !isTransitioningGhost, let session, let balloon else { return }
         Task {
@@ -449,7 +392,7 @@ private struct UtataneRootView: View {
                     details: "Event: \(event)\nError: \(error)",
                     ghostName: currentGhost?.name
                 )
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
         }
     }
@@ -480,7 +423,7 @@ private struct UtataneRootView: View {
                         details: String(describing: error),
                         ghostName: currentGhost?.name
                     )
-                    previewError = error.localizedDescription
+                    showError(error.localizedDescription)
                 }
             }
         }
@@ -556,13 +499,13 @@ private struct UtataneRootView: View {
                         details: "Failed ghost: \(ghost.name)\nError: \(error)",
                         ghostName: ghost.name
                     )
-                    previewError = "「\(ghost.name)」は起動できませんでした。現在は代わりに「\(fallback.name)」を表示しています。\n\n原因: \(error.localizedDescription)"
+                    showError("「\(ghost.name)」は起動できませんでした。現在は代わりに「\(fallback.name)」を表示しています。\n\n原因: \(error.localizedDescription)")
                     return
                 }
             }
             currentGhost = nil
             selectedGhostID = nil
-            previewError = "「\(ghost.name)」を起動できず、代わりに起動できるゴーストも見つからなかった。\n\(error.localizedDescription)"
+            showError("「\(ghost.name)」を起動できず、代わりに起動できるゴーストも見つからなかった。\n\(error.localizedDescription)")
         }
     }
 
@@ -584,7 +527,7 @@ private struct UtataneRootView: View {
                 ghostName: currentGhost?.name
             )
             if !isTransitioningGhost {
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
         }
     }
@@ -642,7 +585,7 @@ private struct UtataneRootView: View {
                     details: String(describing: error),
                     ghostName: ghost.name
                 )
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
             scriptPlayer.onDialogueContent = {
                 surfaceWindowController.setPresentationHidden(false)
@@ -739,17 +682,29 @@ private struct UtataneRootView: View {
                 try? await propertySystem.setValue(value, for: property)
             }
             scriptPlayer.onInputBox = { id, _, initialValue in
-                guard let value = promptForText(initialValue: initialValue),
-                      let activeSession = session
+                guard let activeSession = session,
+                      let value = await textInputWindowController.showPrompt(
+                          id: id,
+                          title: String(localized: "文字を入力"),
+                          initialValue: initialValue,
+                          actionTitle: String(localized: "OK")
+                      )
                 else { return nil }
                 return try? await activeSession.handle(event: .shiori(
                     id: id,
                     references: [0: value]
                 ))
             }
+            scriptPlayer.onCloseInputBox = { id in
+                textInputWindowController.close(id: id)
+            }
             scriptPlayer.onCommunicateBox = { initialValue in
-                guard let value = promptForText(initialValue: initialValue),
-                      let activeSession = session
+                guard let activeSession = session,
+                      let value = await textInputWindowController.showPrompt(
+                          title: String(localized: "文字を入力"),
+                          initialValue: initialValue,
+                          actionTitle: String(localized: "OK")
+                      )
                 else { return nil }
                 return try? await activeSession.handle(event: .shiori(
                     id: "OnCommunicate",
@@ -757,8 +712,12 @@ private struct UtataneRootView: View {
                 ))
             }
             scriptPlayer.onTeachBox = { initialValue in
-                guard let value = promptForText(initialValue: initialValue),
-                      let activeSession = session
+                guard let activeSession = session,
+                      let value = await textInputWindowController.showPrompt(
+                          title: String(localized: "文字を入力"),
+                          initialValue: initialValue,
+                          actionTitle: String(localized: "OK")
+                      )
                 else { return nil }
                 return try? await activeSession.handle(event: .shiori(
                     id: "OnTeach",
@@ -869,18 +828,6 @@ private struct UtataneRootView: View {
         }
         let catalog = try DialogueCatalogLoader().load(from: dialogueURL)
         return DialoguePersonalityEngine(catalog: catalog)
-    }
-
-    private func promptForText(initialValue: String) -> String? {
-        let alert = NSAlert()
-        alert.messageText = String(localized: "文字を入力")
-        alert.addButton(withTitle: String(localized: "OK"))
-        alert.addButton(withTitle: String(localized: "キャンセル"))
-        let field = NSTextField(string: initialValue)
-        field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
-        alert.accessoryView = field
-        alert.window.initialFirstResponder = field
-        return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
     }
 
     private func cancelHTTP(url: String?) {
@@ -1328,7 +1275,7 @@ private struct UtataneRootView: View {
                 ]
             ))
         } catch {
-            previewError = error.localizedDescription
+            showError(error.localizedDescription)
         }
     }
 
@@ -1702,10 +1649,8 @@ private struct UtataneRootView: View {
                 .submenu(
                     title: String(localized: "コンテンツ管理"),
                     items: [
-                        .action(title: String(localized: "NARをインストール…"), handler: { isImportingNar = true }),
-                        .action(title: String(localized: "SSPフォルダから取り込む…"), handler: {
-                            isImportingSSPDirectory = true
-                        }),
+                        .action(title: String(localized: "NARをインストール…"), handler: selectAndInstallNar),
+                        .action(title: String(localized: "SSPフォルダから取り込む…"), handler: selectAndImportSSPDirectory),
                         .action(title: String(localized: "Finderで表示"), handler: showContentFolder)
                     ]
                 ),
@@ -1743,7 +1688,7 @@ private struct UtataneRootView: View {
                         }
                     } + [
                         .separator,
-                        .action(title: String(localized: "URLを指定して取得…"), handler: { isEnteringRSSURL = true })
+                        .action(title: String(localized: "URLを指定して取得…"), handler: showRSSInput)
                     ]
                 ),
                 .action(
@@ -1857,7 +1802,7 @@ private struct UtataneRootView: View {
                     characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
                     dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000
                 )
-                runtime.onError = { previewError = $0.localizedDescription }
+                runtime.onError = { showError($0.localizedDescription) }
                 runtime.onNarDrop = { installNars(from: $0) }
                 runtime.onCommunication = { target, sentence in
                     deliverCommunication(from: ghost, target: target, sentence: sentence)
@@ -1893,7 +1838,7 @@ private struct UtataneRootView: View {
             } catch {
                 calledGhosts[ghost.id] = nil
                 configureContextMenu()
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
         }
     }
@@ -2062,7 +2007,7 @@ private struct UtataneRootView: View {
                 balloon: updateBalloon
             )
             if !handled, !isAutomatic {
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
         }
     }
@@ -2119,7 +2064,7 @@ private struct UtataneRootView: View {
                 details: String(describing: error)
             )
             if !isAutomatic {
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
         }
     }
@@ -2141,12 +2086,21 @@ private struct UtataneRootView: View {
         configureContextMenu()
     }
 
-    private func fetchRSS() {
-        guard let url = URL(string: rssURLText) else {
-            previewError = "RSS/AtomのURLが不正"
-            return
-        }
-        Task { await fetchRSS(url: url) }
+    private func showRSSInput() {
+        textInputWindowController.show(.init(
+            title: String(localized: "RSS/Atomを取得"),
+            prompt: String(localized: "RSSまたはAtomフィードのURL"),
+            placeholder: "https://example.com/feed.xml",
+            actionTitle: String(localized: "取得"),
+            onCommit: { text in
+                let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard let url = URL(string: trimmed), url.scheme != nil else {
+                    showError(String(localized: "RSS/AtomのURLが不正"))
+                    return
+                }
+                Task { await fetchRSS(url: url) }
+            }
+        ))
     }
 
     private func fetchRSS(url: URL) async {
@@ -2189,7 +2143,7 @@ private struct UtataneRootView: View {
                 balloon: rssBalloon
             )
             if !handled {
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
         }
     }
@@ -2198,14 +2152,14 @@ private struct UtataneRootView: View {
         guard let headlineSession = session, let headlineBalloon = balloon else { return }
         guard let sourceURL = headline.siteURL else {
             AppLogStore.shared.warning("HEADLINEセンサーの取得URLが未設定: \(headline.name)", category: "Headline")
-            previewError = "HEADLINEセンサーの取得URLが設定されていない"
+            showError("HEADLINEセンサーの取得URLが設定されていない")
             return
         }
         let usesNativeConfig = ConfigHeadlineSensor.canLoad(headline)
         let windowsConfiguration = ContentRoot.windowsHeadlineConfiguration()
         guard usesNativeConfig || windowsConfiguration != nil else {
             AppLogStore.shared.warning("HEADLINE DLLの実行にWine設定が必要: \(headline.name)", category: "Headline")
-            previewError = "このHEADLINE DLLを使うにはWine設定が必要"
+            showError("このHEADLINE DLLを使うにはWine設定が必要")
             return
         }
         AppLogStore.shared.info("HEADLINE取得開始: \(headline.name) (\(sourceURL.absoluteString))", category: "Headline")
@@ -2292,9 +2246,36 @@ private struct UtataneRootView: View {
                 balloon: headlineBalloon
             )
             if !handled {
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
         }
+    }
+
+    private func selectAndInstallNar() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [UTType(filenameExtension: "nar") ?? .data]
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.prompt = String(localized: "インストール")
+        if panel.runModal() == .OK {
+            installNars(from: panel.urls)
+        }
+    }
+
+    private func selectAndImportSSPDirectory() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = String(localized: "選択")
+        if panel.runModal() == .OK, let url = panel.url {
+            importSSPContents(from: url)
+        }
+    }
+
+    private func showError(_ message: String) {
+        alertController.showError(message)
     }
 
     private func reloadHeadlines() {
@@ -2538,7 +2519,7 @@ private struct UtataneRootView: View {
                     session: installSession,
                     balloon: installBalloon
                 )
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
         }
     }
@@ -2550,7 +2531,7 @@ private struct UtataneRootView: View {
             guard let refreshedGhost = model.ghosts.first(where: {
                 $0.id.standardizedFileURL == activeGhost.id.standardizedFileURL
             }) else {
-                previewError = "再読み込み対象のゴーストが見つからない: \(activeGhost.name)"
+                showError("再読み込み対象のゴーストが見つからない: \(activeGhost.name)")
                 return
             }
             selectedGhostID = refreshedGhost.id
@@ -2582,7 +2563,7 @@ private struct UtataneRootView: View {
                 showsOnboarding = model.ghosts.isEmpty
                 updateDebugWindowVisibility()
             } catch {
-                previewError = error.localizedDescription
+                showError(error.localizedDescription)
             }
         }
     }
@@ -2595,7 +2576,7 @@ private struct UtataneRootView: View {
             )
             NSWorkspace.shared.open(ContentRoot.contentDirectory)
         } catch {
-            previewError = error.localizedDescription
+            showError(error.localizedDescription)
         }
     }
 
@@ -2693,120 +2674,6 @@ private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate 
             pendingNarURLs.append(contentsOf: urls)
         }
         sender.reply(toOpenOrPrint: .success)
-    }
-}
-
-@MainActor
-private final class ContentPickerWindowController: NSObject, NSWindowDelegate {
-    struct Entry: Identifiable {
-        let id: URL
-        let name: String
-    }
-
-    private var window: NSWindow?
-
-    func show(
-        title: String,
-        entries: [Entry],
-        selectedID: URL?,
-        actionTitle: String,
-        allowsCancel: Bool = true,
-        onSelect: @escaping (URL) -> Void
-    ) {
-        window?.close()
-        let picker = ContentPickerView(
-            title: title,
-            entries: entries,
-            selectedID: selectedID,
-            actionTitle: actionTitle,
-            allowsCancel: allowsCancel,
-            onSelect: { [weak self] id in
-                self?.window?.close()
-                onSelect(id)
-            },
-            onCancel: { [weak self] in self?.window?.close() }
-        )
-        let styleMask: NSWindow.StyleMask = allowsCancel
-            ? [.titled, .closable]
-            : [.titled]
-        let window = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 420, height: 360),
-            styleMask: styleMask,
-            backing: .buffered,
-            defer: false
-        )
-        window.title = title
-        window.contentViewController = NSHostingController(rootView: picker)
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        self.window = window
-    }
-
-    func windowWillClose(_: Notification) {
-        window = nil
-    }
-}
-
-private struct ContentPickerView: View {
-    let title: String
-    let entries: [ContentPickerWindowController.Entry]
-    @State private var selection: URL?
-    let actionTitle: String
-    let allowsCancel: Bool
-    let onSelect: (URL) -> Void
-    let onCancel: () -> Void
-
-    init(
-        title: String,
-        entries: [ContentPickerWindowController.Entry],
-        selectedID: URL?,
-        actionTitle: String,
-        allowsCancel: Bool,
-        onSelect: @escaping (URL) -> Void,
-        onCancel: @escaping () -> Void
-    ) {
-        self.title = title
-        self.entries = entries
-        _selection = State(initialValue: selectedID)
-        self.actionTitle = actionTitle
-        self.allowsCancel = allowsCancel
-        self.onSelect = onSelect
-        self.onCancel = onCancel
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(title)
-                .font(.title2.weight(.semibold))
-            List(entries, selection: $selection) { entry in
-                Text(entry.name).tag(entry.id)
-            }
-            HStack {
-                if allowsCancel {
-                    Button("キャンセル", action: onCancel)
-                        .keyboardShortcut(.cancelAction)
-                }
-                Spacer()
-                Button(actionTitle) {
-                    guard let selection else { return }
-                    onSelect(selection)
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(selection == nil)
-            }
-        }
-        .padding(20)
-        .frame(width: 420, height: 360)
-    }
-}
-
-private extension Error {
-    var isUserCancelledFileImport: Bool {
-        let error = self as NSError
-        return error.domain == NSCocoaErrorDomain && error.code == NSUserCancelledError
     }
 }
 

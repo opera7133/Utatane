@@ -21,6 +21,7 @@ final class CalledGhostRuntime {
     private let weatherProvider = CurrentWeatherProvider()
     private let webSocketManager = WebSocketSessionManager()
     private let propertySystem: PropertySystem
+    private let textInputWindowController = TextInputWindowController()
     private var weatherTask: Task<Void, Never>?
     private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
     private(set) var shell: InstalledShell
@@ -323,8 +324,19 @@ final class CalledGhostRuntime {
             try? await propertySystem.setValue(value, for: property)
         }
         player.onInputBox = { [weak self] id, _, initialValue in
-            guard let self, let value = promptForText(initialValue: initialValue) else { return nil }
+            guard let self else { return nil }
+            guard let value = await textInputWindowController.showPrompt(
+                id: id,
+                title: String(localized: "文字を入力"),
+                initialValue: initialValue,
+                actionTitle: String(localized: "OK")
+            ) else {
+                return nil
+            }
             return try? await session.handle(event: .shiori(id: id, references: [0: value]))
+        }
+        player.onCloseInputBox = { [weak self] id in
+            self?.textInputWindowController.close(id: id)
         }
         player.onHTTP = { [weak self] request in
             guard let self else { return nil }
@@ -356,11 +368,25 @@ final class CalledGhostRuntime {
             return await handleArchive(command)
         }
         player.onCommunicateBox = { [weak self] initialValue in
-            guard let self, let value = promptForText(initialValue: initialValue) else { return nil }
+            guard let self else { return nil }
+            guard let value = await textInputWindowController.showPrompt(
+                title: String(localized: "文字を入力"),
+                initialValue: initialValue,
+                actionTitle: String(localized: "OK")
+            ) else {
+                return nil
+            }
             return try? await session.handle(event: .shiori(id: "OnCommunicate", references: [0: value]))
         }
         player.onTeachBox = { [weak self] initialValue in
-            guard let self, let value = promptForText(initialValue: initialValue) else { return nil }
+            guard let self else { return nil }
+            guard let value = await textInputWindowController.showPrompt(
+                title: String(localized: "文字を入力"),
+                initialValue: initialValue,
+                actionTitle: String(localized: "OK")
+            ) else {
+                return nil
+            }
             return try? await session.handle(event: .shiori(id: "OnTeach", references: [0: value]))
         }
         player.onOtherGhostTalk = { [weak self] target, script in
@@ -412,18 +438,6 @@ final class CalledGhostRuntime {
 
     func updateEnvironmentVariables(_ variables: [String: String]) {
         player.updateEnvironmentVariables(variables)
-    }
-
-    private func promptForText(initialValue: String) -> String? {
-        let alert = NSAlert()
-        alert.messageText = String(localized: "文字を入力")
-        alert.addButton(withTitle: String(localized: "OK"))
-        alert.addButton(withTitle: String(localized: "キャンセル"))
-        let field = NSTextField(string: initialValue)
-        field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
-        alert.accessoryView = field
-        alert.window.initialFirstResponder = field
-        return alert.runModal() == .alertFirstButtonReturn ? field.stringValue : nil
     }
 
     private func handleHTTP(_ command: SakuraScriptHTTPRequest) async -> SakuraScript? {
