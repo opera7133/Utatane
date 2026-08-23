@@ -23,11 +23,14 @@ public enum NativeKawariError: LocalizedError, Equatable, Sendable {
 public final class NativeKawariSession: @unchecked Sendable {
     private let handle: UInt32
     private let compatibilityDirectoryURL: URL?
+    private let usesLegacyCompatibility: Bool
 
     public init(masterDirectoryURL: URL) throws {
         Self.installNativeSaoriCallback()
-        let preparedDirectory = try Self.prepareDirectoryIfNeeded(masterDirectoryURL)
-        compatibilityDirectoryURL = preparedDirectory == masterDirectoryURL ? nil : preparedDirectory
+        let preparation = try Self.prepareDirectoryIfNeeded(masterDirectoryURL)
+        let preparedDirectory = preparation.directory
+        compatibilityDirectoryURL = preparation.isLegacy ? preparedDirectory : nil
+        usesLegacyCompatibility = preparation.isLegacy
         let path = preparedDirectory.standardizedFileURL.path + "/"
         guard let data = path.data(using: .shiftJIS) else {
             throw NativeKawariError.loadFailed
@@ -54,28 +57,23 @@ public final class NativeKawariSession: @unchecked Sendable {
         }
     }
 
-    private static func prepareDirectoryIfNeeded(_ masterDirectoryURL: URL) throws -> URL {
+    private static func prepareDirectoryIfNeeded(_ masterDirectoryURL: URL) throws -> (directory: URL, isLegacy: Bool) {
         let currentConfig = masterDirectoryURL.appending(path: "kawarirc.kis")
         guard !FileManager.default.fileExists(atPath: currentConfig.path) else {
-            return masterDirectoryURL
+            return (masterDirectoryURL, false)
         }
 
         let legacyConfig = masterDirectoryURL.appending(path: "kawari.ini")
         guard FileManager.default.fileExists(atPath: legacyConfig.path) else {
-            return masterDirectoryURL
+            return (masterDirectoryURL, false)
         }
         let data = try Data(contentsOf: legacyConfig)
         guard let source = String(data: data, encoding: .shiftJIS) else {
             throw NativeKawariError.loadFailed
         }
 
-        let legacyRequestSetup = (["ID", "SecurityLevel"] + (0 ... 7).map { "Reference\($0)" })
-            .map { "$(set system.\($0) ${System.Request.\($0)})" }
-            .joined()
-        var commands = [
-            "System.Callback.OnGET : \(legacyRequestSetup)${event.${System.Request.ID}}",
-            "=kis"
-        ]
+        var startupCommands: [String] = []
+        var dictionaryFilenames: [String] = []
         for rawLine in source.components(separatedBy: .newlines) {
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix(";"),
@@ -84,11 +82,56 @@ public final class NativeKawariSession: @unchecked Sendable {
             let command = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
             let argument = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
             switch command {
-            case "set": commands.append("set \(argument);")
-            case "dict", "include": commands.append("load \(argument);")
+            case "set": startupCommands.append("set \(argument);")
+            case "dict", "include":
+                dictionaryFilenames.append(argument)
             default: continue
             }
         }
+
+        var eventIDs = Set<String>()
+        var generatedDictionaries: [(filename: String, data: Data)] = []
+        for (dictionaryIndex, filename) in dictionaryFilenames.enumerated() {
+            let dictionaryURL = masterDirectoryURL.appending(path: filename)
+            guard let data = try? Data(contentsOf: dictionaryURL),
+                  var dictionary = String(data: data, encoding: .shiftJIS)
+            else { continue }
+            for index in (0 ... 7).reversed() {
+                dictionary = dictionary.replacingOccurrences(
+                    of: "system.Reference\(index)",
+                    with: "System.Request.Reference\(index + 1)"
+                )
+            }
+            for rawLine in dictionary.components(separatedBy: .newlines) {
+                let line = rawLine.trimmingCharacters(in: .whitespaces)
+                guard line.hasPrefix("event."), let colon = line.firstIndex(of: ":") else {
+                    continue
+                }
+                let name = line[line.index(line.startIndex, offsetBy: 6) ..< colon]
+                    .trimmingCharacters(in: .whitespaces)
+                if !name.isEmpty {
+                    eventIDs.insert(name)
+                }
+            }
+            for (lineIndex, rawLine) in dictionary.components(separatedBy: .newlines).enumerated() {
+                let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !line.isEmpty, !line.hasPrefix("#"), line.contains(":") else {
+                    continue
+                }
+                let generatedFilename = "legacy-\(dictionaryIndex)-\(lineIndex).dat"
+                guard let lineData = (line + "\r\n").data(using: .shiftJIS) else {
+                    continue
+                }
+                generatedDictionaries.append((generatedFilename, lineData))
+                startupCommands.append("load \(generatedFilename);")
+            }
+        }
+        var compatibilityEntries: [String] = []
+        if !eventIDs.contains("OnAITalk") {
+            compatibilityEntries.append("event.OnAITalk : ${talk}")
+        }
+        var commands = compatibilityEntries + ["=kis", "debugger on;"]
+        commands.append(contentsOf: startupCommands)
         commands.append("=end")
 
         let directory = FileManager.default.temporaryDirectory
@@ -96,16 +139,20 @@ public final class NativeKawariSession: @unchecked Sendable {
         do {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             for item in try FileManager.default.contentsOfDirectory(at: masterDirectoryURL, includingPropertiesForKeys: nil) {
-                try FileManager.default.createSymbolicLink(
-                    at: directory.appending(path: item.lastPathComponent),
-                    withDestinationURL: item
+                let destination = directory.appending(path: item.lastPathComponent)
+                try FileManager.default.createSymbolicLink(at: destination, withDestinationURL: item)
+            }
+            for generated in generatedDictionaries {
+                try generated.data.write(
+                    to: directory.appending(path: generated.filename),
+                    options: .atomic
                 )
             }
             guard let configData = commands.joined(separator: "\r\n").data(using: .shiftJIS) else {
                 throw NativeKawariError.loadFailed
             }
             try configData.write(to: directory.appending(path: "kawarirc.kis"), options: .atomic)
-            return directory
+            return (directory, true)
         } catch {
             try? FileManager.default.removeItem(at: directory)
             throw error
@@ -113,7 +160,30 @@ public final class NativeKawariSession: @unchecked Sendable {
     }
 
     public func request(_ request: ShioriRequest) throws -> ShioriResponse {
-        try ShioriMessageParser.parseResponse(self.request(request.serialized()))
+        guard usesLegacyCompatibility, let id = request.id else {
+            return try ShioriMessageParser.parseResponse(self.request(request.serialized()))
+        }
+        let effectiveRequest = legacyEchoRequest(
+            expression: "${event.\(id)}",
+            originalRequest: request
+        )
+        return try ShioriMessageParser.parseResponse(self.request(effectiveRequest.serialized()))
+    }
+
+    private func legacyEchoRequest(expression: String, originalRequest request: ShioriRequest) -> ShioriRequest {
+        var headers = ShioriHeaders([
+            ShioriHeader(name: "Charset", value: "Shift_JIS"),
+            ShioriHeader(name: "Sender", value: request.headers["Sender"] ?? "Utatane"),
+            ShioriHeader(name: "SecurityLevel", value: request.headers["SecurityLevel"] ?? "local"),
+            ShioriHeader(name: "ID", value: "ShioriEcho"),
+            ShioriHeader(name: "Reference0", value: expression)
+        ])
+        for index in 0 ... 7 {
+            if let value = request.reference(index) {
+                headers.append(name: "Reference\(index + 1)", value: value)
+            }
+        }
+        return ShioriRequest(method: "GET", headers: headers)
     }
 
     public func request(_ request: String) throws -> String {

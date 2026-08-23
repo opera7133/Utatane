@@ -51,9 +51,32 @@ struct NativeKawariSessionTests {
 
         #expect(NativeKawariPersonalityEngine.supports(masterDirectoryURL: master))
         let session = try NativeKawariSession(masterDirectoryURL: master)
+        let initialMenu = try session.request(GhostEventShioriAdapter().request(for: .mouse(GhostMouseEvent(
+            kind: .doubleClick,
+            scope: 0,
+            region: "cap",
+            x: 200,
+            y: 80
+        ))))
+        #expect(initialMenu.value?.contains("メニュー") == true)
         let response = try session.request(GhostEventShioriAdapter().request(for: .boot))
         #expect((200 ..< 300).contains(response.statusCode))
         #expect(response.value?.isEmpty == false)
         #expect(response.value?.contains("�") != true)
+
+        let menu = try session.request(GhostEventShioriAdapter().request(for: .mouse(GhostMouseEvent(
+            kind: .doubleClick,
+            scope: 0,
+            region: "cap",
+            x: 200,
+            y: 80
+        ))))
+        #expect(menu.value?.contains("メニュー") == true)
+
+        let choice = try session.request(GhostEventShioriAdapter().request(for: .choice(id: "menu.status", arguments: [])))
+        #expect(choice.value?.isEmpty == false)
+
+        let randomTalk = try session.request(GhostEventShioriAdapter().request(for: .randomTalk))
+        #expect(randomTalk.value?.isEmpty == false)
     }
 }
