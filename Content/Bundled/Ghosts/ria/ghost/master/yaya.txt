@@ -7,7 +7,11 @@ charset.extension, UTF-8
 include, system_config.txt
 dic, dic/lifecycle.dic, UTF-8
 dic, dic/talk.dic, UTF-8
+dic, dic/talk_daily.dic, UTF-8
+dic, dic/talk_hobbies.dic, UTF-8
+dic, dic/talk_tech.dic, UTF-8
 dic, dic/mouse.dic, UTF-8
 dic, dic/menu.dic, UTF-8
 dic, dic/integration.dic, UTF-8
+dic, dic/system_events.dic, UTF-8
 ignoreiolog,SHIORI/

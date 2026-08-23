@@ -167,6 +167,13 @@ RiaSelectTalk
 		return
 	}
 	_talks = RiaRandomTalk
+	_talks ,= RiaHomeTalks
+	_talks ,= RiaUniversityTalks
+	_talks ,= RiaFoodTalks
+	_talks ,= RiaHobbyTalks
+	_talks ,= RiaMediaTalks
+	_talks ,= RiaTechTalks
+	_talks ,= RiaSiblingTalks
 	_talks ,= RiaStateTalk
 	_talks ,= RiaTimeTalk
 	_talks ,= RiaWeekdayTalk

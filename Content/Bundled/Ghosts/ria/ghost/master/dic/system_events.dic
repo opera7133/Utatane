@@ -1,0 +1,120 @@
+OnShellChanging
+{
+	_talks = RiaShellChangingTalks
+	_talks[RAND(ARRAYSIZE(_talks))]
+}
+
+RiaShellChangingTalks : array
+{
+	'\0\s[103]着替えるの。\w5次の服、変じゃないよね。\e'
+	'\0\s[4]また着替え？\w5まあ、一瞬ならいいけど。\e'
+	'\0\s[0]シェル変更ね。\w5分かったから、あんまり急かさないで。\e'
+}
+
+OnShellChanged
+{
+	"\0\s[105]これが%(reference0)か。\w5どう、似合ってる？\w5……返事は別にいい。\e"
+}
+
+OnBalloonChange
+{
+	_talks = RiaBalloonChangeTalks
+	_talks[RAND(ARRAYSIZE(_talks))]
+}
+
+RiaBalloonChangeTalks : array
+{
+	'\0\s[103]吹き出し替えたんだ。\w5読みやすいなら何でもいいよ。\e'
+	'\0\s[1]これ、前より私っぽい？\w5基準は知らないけど。\e'
+	'\0\s[0]新しいバルーンね。\w5文字が端にはみ出してなければいい。\e'
+}
+
+OnChoiceTimeout
+{
+	_talks = RiaChoiceTimeoutTalks
+	_talks[RAND(ARRAYSIZE(_talks))]
+}
+
+RiaChoiceTimeoutTalks : array
+{
+	'\0\s[103]選ばないなら閉じるよ。\w5ずっと待つほどの話でもないし。\e'
+	'\0\s[4]考えてるうちに時間切れ。\w5必要ならもう一回開いて。\e'
+	'\0\s[0]返事なしね。\w5じゃ、なかったことにする。\e'
+}
+
+OnGhostCalling
+{
+	"\0\s[103]%(reference0)を呼ぶの。\w5部屋、少し片づけた方がよくない？\e"
+}
+
+OnGhostCallComplete
+{
+	"\0\s[105]%(reference0)来たみたい。\w5私は普通にしてるから、お兄が話して。\e"
+}
+
+OnGhostCalled
+{
+	"\0\s[4]呼ばれた。\w5%(reference0)のところ？\w5まあ、行くけど。\e"
+}
+
+OnOtherGhostClosed
+{
+	_talks = RiaOtherGhostClosedTalks
+	_talks[RAND(ARRAYSIZE(_talks))]
+}
+
+RiaOtherGhostClosedTalks : array
+{
+	'\0\s[103]帰ったみたい。\w5急に静かになったね。\e'
+	'\0\s[0]お見送りくらいした？\w5もう遅いけど。\e'
+	'\0\s[3]二人に戻った。\w5だからって特に話はないけど。\e'
+}
+
+OnCommunicate
+{
+	_text = reference0
+	if _text == '' {
+		'\0\s[103]何か言いかけた？\w5聞こえなかった。\e'
+	}
+	elseif _text == 'こんにちは' || _text == 'こんばんは' || _text == 'おはよう' {
+		"\0\s[0]%(_text)。\w5わざわざちゃんと挨拶するんだ。\e"
+	}
+	elseif _text == 'ありがとう' || _text == 'ありがと' {
+		'\0\s[1]ん。\w5どういたしまして。\w5そんな改まらなくていいけど。\e'
+	}
+	elseif _text == 'ごめん' || _text == 'ごめんなさい' {
+		OnRiaChoiceApology
+	}
+	else {
+		_talks = RiaCommunicateTalks
+		REPLACE(_talks[RAND(ARRAYSIZE(_talks))], '%text%', _text)
+	}
+}
+
+RiaCommunicateTalks : array
+{
+	'\0\s[103]「%text%」ね。\w5聞いてる。続けて。\e'
+	'\0\s[0]%text%？\w5急に言われても、もう少し説明ないと分からない。\e'
+	'\0\s[3]ふーん、%text%か。\w5お兄はそれ、どう思ってるの。\e'
+	'\0\s[103]一応覚えとく。\w5今すぐ役に立つかは知らないけど。\e'
+}
+
+OnTeach
+{
+	"\0\s[103]「%(reference0)」を教えたいの。\w5覚える機能はまだないけど、今は聞いた。\e"
+}
+
+OnUpdate.OnMD5CompareFailure
+{
+	'\0\s[6]更新ファイルの中身が合ってない。\w5壊れたまま入れない方がいいよ。\e'
+}
+
+OnUpdate.OnDownloadFailure
+{
+	'\0\s[6]更新ファイルを落とせなかった。\w5回線が戻ってからもう一回でいい。\e'
+}
+
+OnUpdate.OnCryptingFailure
+{
+	'\0\s[6]更新の確認に失敗した。\w5配布側のファイルが変なのかも。\e'
+}

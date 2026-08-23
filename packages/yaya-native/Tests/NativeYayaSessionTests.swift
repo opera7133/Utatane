@@ -168,6 +168,18 @@ import UtataneShiori
         ]
     ))
     let scriptLab = try await engine.handle(event: .shiori(id: "OnRiaChoiceScriptLab", references: [:]))
+    let shellChange = try await engine.handle(event: .shiori(
+        id: "OnShellChanged",
+        references: [0: "テストシェル"]
+    ))
+    let balloonChange = try await engine.handle(event: .shiori(
+        id: "OnBalloonChange",
+        references: [0: "テストバルーン"]
+    ))
+    let communicate = try await engine.handle(event: .shiori(
+        id: "OnCommunicate",
+        references: [0: "こんにちは"]
+    ))
     let outfitMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceOutfit", references: [:]))
     let winter = try await engine.handle(event: .shiori(id: "OnRiaChoiceOutfitWinter", references: [:]))
     let winterRestore = try await engine.handle(event: .shiori(id: "OnSurfaceRestore", references: [:]))
@@ -232,6 +244,9 @@ import UtataneShiori
     #expect(rss?.rawValue.contains("https://example.test/article") == true)
     #expect(scriptLab?.rawValue.contains("\\_q") == true)
     #expect(scriptLab?.rawValue.contains("\\_a[OnRiaScriptLabAnchor]") == true)
+    #expect(shellChange?.rawValue.contains("テストシェル") == true)
+    #expect(balloonChange?.rawValue.isEmpty == false)
+    #expect(communicate?.rawValue.contains("こんにちは") == true)
     #expect(outfitMenu?.rawValue.contains("外出着") == true)
     #expect(outfitMenu?.rawValue.contains("冬服") == true)
     #expect(winter?.rawValue.contains("\\s[20000]") == true)
@@ -244,6 +259,38 @@ import UtataneShiori
     #expect(receivedHairStrokeResponse)
     let apologyAfterPet = try await engine.handle(event: .shiori(id: "OnRiaChoiceApology", references: [:]))
     #expect(apologyAfterPet?.rawValue.contains("言葉より次の行動") == false)
+}
+
+@Test func `installed ria offers a broad random talk pool`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-talk-pool-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+    var talks = Set<String>()
+    for _ in 0 ..< 600 {
+        if let talk = try await engine.handle(event: .randomTalk), !talk.rawValue.isEmpty {
+            talks.insert(talk.rawValue)
+        }
+    }
+
+    #expect(talks.count >= 150)
+    #expect(talks.contains { $0.contains("講義") || $0.contains("課題") })
+    #expect(talks.contains { $0.contains("コード") || $0.contains("テスト") || $0.contains("エラー") })
+    #expect(talks.contains { $0.contains("お兄") })
 }
 
 @Test func `installed ria resets pet count after idle or event`() async throws {
