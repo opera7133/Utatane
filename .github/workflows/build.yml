@@ -212,17 +212,17 @@ jobs:
 
             if [ -n "$analysis_id" ]; then
               echo "Analysis ID: $analysis_id"
-              echo "Waiting for scan completion (up to 60s)..."
+              echo "Waiting for scan completion (up to 360s)..."
 
               completed=false
-              for i in {1..12}; do
-                sleep 5
+              for i in {1..24}; do
+                sleep 15
                 analysis_res=$(curl -s --request GET \
                   --url "https://www.virustotal.com/api/v3/analyses/$analysis_id" \
                   --header "x-apikey: $VT_API_KEY")
 
                 status=$(echo "$analysis_res" | jq -r '.data.attributes.status // empty')
-                echo "Check $i: status = $status"
+                echo "Check $i (elapsed $((i * 15))s): status = $status"
 
                 if [ "$status" = "completed" ]; then
                   completed=true
