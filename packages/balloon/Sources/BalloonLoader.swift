@@ -94,6 +94,14 @@ public struct BalloonLoader: Sendable {
                 green: integer("font.color.g", in: values, default: 0),
                 blue: integer("font.color.b", in: values, default: 0)
             ),
+            fontName: values["font.name"],
+            fontShadowColor: color(prefix: "font.shadowcolor", in: values),
+            fontShadowStyle: values["font.shadowstyle"]?.lowercased(),
+            fontBold: boolean("font.bold", in: values),
+            fontItalic: boolean("font.italic", in: values),
+            fontUnderline: boolean("font.underline", in: values),
+            fontStrike: boolean("font.strike", in: values),
+            fontOutline: boolean("font.outline", in: values),
             arrow0X: integer("arrow0.x", in: values, default: 0),
             arrow0Y: integer("arrow0.y", in: values, default: 0),
             arrow1X: integer("arrow1.x", in: values, default: 0),
@@ -163,6 +171,11 @@ public struct BalloonLoader: Sendable {
             return origin
         }
         return integer(validRectKey, in: values, default: defaultValue)
+    }
+
+    private func boolean(_ key: String, in values: [String: String]) -> Bool {
+        guard let value = values[key]?.lowercased() else { return false }
+        return value == "1" || value == "true" || value == "on"
     }
 
     private func linkAppearance(

@@ -23,7 +23,7 @@ public struct UpdateDataGenerator: Sendable {
             throw CocoaError(.fileNoSuchFile)
         }
 
-        var entries: [(relativePath: String, md5: String)] = []
+        var entries: [(relativePath: String, md5: String, size: Int, date: String)] = []
 
         let enumerator = FileManager.default.enumerator(
             at: directoryURL,
@@ -55,14 +55,22 @@ public struct UpdateDataGenerator: Sendable {
 
             let data = try Data(contentsOf: fileURL)
             let md5 = Insecure.MD5.hash(data: data).map { String(format: "%02x", $0) }.joined()
-            entries.append((relativePath: relativePath, md5: md5))
+            let modifiedValues = try? fileURL.resourceValues(forKeys: [.contentModificationDateKey])
+            let modified = modifiedValues?.contentModificationDate ?? Date(timeIntervalSince1970: 0)
+            entries.append((
+                relativePath: relativePath,
+                md5: md5,
+                size: data.count,
+                date: ISO8601DateFormatter().string(from: modified)
+            ))
         }
 
         entries.sort { $0.relativePath < $1.relativePath }
 
         var manifestContent = ""
-        for entry in entries {
-            manifestContent += "\(entry.relativePath)\u{1}\(entry.md5)\u{1}\n"
+        for (index, entry) in entries.enumerated() {
+            let charset = index == 0 ? "charset=UTF-8\u{1}" : ""
+            manifestContent += "\(entry.relativePath)\u{1}\(entry.md5)\u{1}size=\(entry.size)\u{1}date=\(entry.date)\u{1}\(charset)\r\n"
         }
 
         let manifestURL = directoryURL.appending(path: manifestFilename)

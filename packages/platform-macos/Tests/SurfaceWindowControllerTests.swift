@@ -955,6 +955,63 @@ func `renders an extended choice and appends its automatic newline`() async thro
 
 @Test
 @MainActor
+func `applies balloon default font decoration`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    let balloon = BalloonDefinition(
+        directory: directory,
+        name: "decorated",
+        originX: 10,
+        originY: 10,
+        wordWrapPointX: -10,
+        wordWrapPointY: -10,
+        fontHeight: 14,
+        fontColor: BalloonColor(red: 0, green: 0, blue: 0),
+        fontShadowColor: BalloonColor(red: 10, green: 20, blue: 30),
+        fontShadowStyle: "outline",
+        fontBold: true,
+        fontItalic: true,
+        fontUnderline: true,
+        fontStrike: true
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"装飾\e"#),
+        balloon: balloon,
+        characterDelayMilliseconds: 0
+    )
+
+    let attributes = try #require(balloonController.textAttributes(at: 0, scope: 0))
+    let font = try #require(attributes[.font] as? NSFont)
+    let traits = NSFontManager.shared.traits(of: font)
+    #expect(traits.contains(.boldFontMask))
+    #expect(attributes[.obliqueness] as? Double == 0.2)
+    #expect(attributes[.underlineStyle] as? Int == 1)
+    #expect(attributes[.strikethroughStyle] as? Int == 1)
+    #expect(attributes[.strokeWidth] as? Int == -3)
+}
+
+@Test
+@MainActor
 func `runs a script choice directly without dispatching a SHIORI choice`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

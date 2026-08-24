@@ -23,8 +23,13 @@ func `generates updates2.dau manifest with MD5 hashes`() throws {
     #expect(FileManager.default.fileExists(atPath: result.manifestURL.path))
 
     let content = try String(contentsOf: result.manifestURL, encoding: .utf8)
-    let lines = content.split(separator: "\n").map(String.init)
+    let lines = content.components(separatedBy: "\r\n").filter { !$0.isEmpty }
     #expect(lines.count == 2)
     #expect(lines[0].hasPrefix("b.txt\u{1}"))
+    #expect(lines[0].contains("\u{1}size=14\u{1}"))
+    #expect(lines[0].contains("\u{1}date="))
+    #expect(lines[0].hasSuffix("\u{1}charset=UTF-8\u{1}"))
     #expect(lines[1].hasPrefix("ghost/master/a.txt\u{1}"))
+    #expect(!lines[1].contains("charset="))
+    #expect(content.contains("\r\n"))
 }

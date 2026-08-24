@@ -108,6 +108,39 @@ func `loads SSP choice and anchor appearances`() throws {
 }
 
 @Test
+func `loads default balloon font decoration`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    type,balloon
+    name,Decorated Balloon
+    font.name,Helvetica
+    font.shadowcolor.r,10
+    font.shadowcolor.g,20
+    font.shadowcolor.b,30
+    font.shadowstyle,outline
+    font.bold,1
+    font.italic,true
+    font.underline,on
+    font.strike,1
+    font.outline,1
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+
+    let balloon = try BalloonLoader().load(from: directory)
+
+    #expect(balloon.fontName == "Helvetica")
+    #expect(balloon.fontShadowColor == BalloonColor(red: 10, green: 20, blue: 30))
+    #expect(balloon.fontShadowStyle == "outline")
+    #expect(balloon.fontBold)
+    #expect(balloon.fontItalic)
+    #expect(balloon.fontUnderline)
+    #expect(balloon.fontStrike)
+    #expect(balloon.fontOutline)
+}
+
+@Test
 func `uses scope specific marker and falls back to common marker`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

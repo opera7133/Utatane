@@ -571,6 +571,7 @@ private final class BalloonContentView: NSView {
     private let numberTextField = NSTextField(labelWithString: "")
     private let textFont: NSFont
     private let textColor: NSColor
+    private let defaultTextStyle: BalloonTextStyle
     private let displayScale: CGFloat
     private let textScale: CGFloat
     private var dragStartMouseLocation: NSPoint?
@@ -666,7 +667,21 @@ private final class BalloonContentView: NSView {
         scrollView = NSScrollView(frame: .zero)
         arrowView = arrowImage.map(NSImageView.init(image:))
         self.markerImage = markerImage
-        textFont = .systemFont(ofSize: CGFloat(balloon.fontHeight) * displayScale * textScale)
+        let fontSize = CGFloat(balloon.fontHeight) * displayScale * textScale
+        let namedFont = balloon.fontName.flatMap { NSFont(name: $0, size: fontSize) }
+            ?? NSFont.systemFont(ofSize: fontSize)
+        textFont = decoratedFont(namedFont, bold: balloon.fontBold, italic: balloon.fontItalic)
+        var defaultTextStyle = BalloonTextStyle()
+        defaultTextStyle.fontName = balloon.fontName
+        defaultTextStyle.fontHeight = Double(balloon.fontHeight)
+        defaultTextStyle.shadowColor = balloon.fontShadowColor
+        defaultTextStyle.shadowStyle = balloon.fontShadowStyle
+        defaultTextStyle.bold = balloon.fontBold
+        defaultTextStyle.italic = balloon.fontItalic
+        defaultTextStyle.underline = balloon.fontUnderline
+        defaultTextStyle.strike = balloon.fontStrike
+        defaultTextStyle.outline = balloon.fontOutline
+        self.defaultTextStyle = defaultTextStyle
         self.displayScale = displayScale
         self.textScale = textScale
         textColor = NSColor(
@@ -851,12 +866,14 @@ private extension BalloonContentView {
         inlineImages: [NSRange: NSImage] = [:],
         autoscroll: Bool = true
     ) {
+        var baseAttributes: [NSAttributedString.Key: Any] = [
+            .font: textFont,
+            .foregroundColor: textColor
+        ]
+        baseAttributes.merge(attributes(for: defaultTextStyle)) { _, new in new }
         let attributedText = NSMutableAttributedString(
             string: text,
-            attributes: [
-                .font: textFont,
-                .foregroundColor: textColor
-            ]
+            attributes: baseAttributes
         )
         for run in styles where NSMaxRange(run.range) <= attributedText.length {
             attributedText.addAttributes(attributes(for: run.style), range: run.range)
@@ -931,17 +948,13 @@ private extension BalloonContentView {
             ?? defaultUnscaledSize * displayScale
         let baseFont = style.fontName.flatMap { NSFont(name: $0, size: size) }
             ?? NSFont.systemFont(ofSize: size)
-        var traits: NSFontTraitMask = []
-        if style.bold {
-            traits.insert(.boldFontMask)
-        }
-        if style.italic {
-            traits.insert(.italicFontMask)
-        }
-        let font = NSFontManager.shared.convert(baseFont, toHaveTrait: traits)
+        let font = decoratedFont(baseFont, bold: style.bold, italic: style.italic)
         var result: [NSAttributedString.Key: Any] = [:]
         if style.fontName != nil || style.fontHeight != nil || style.bold || style.italic {
             result[.font] = font
+        }
+        if style.italic {
+            result[.obliqueness] = 0.2
         }
         if let color = style.color {
             result[.foregroundColor] = NSColor(balloonColor: color)
@@ -997,6 +1010,18 @@ private extension BalloonContentView {
         let coordinate = CGFloat(value) * displayScale
         return coordinate < 0 ? extent + coordinate : coordinate
     }
+}
+
+private func decoratedFont(_ base: NSFont, bold: Bool, italic: Bool) -> NSFont {
+    var traits = base.fontDescriptor.symbolicTraits
+    if bold {
+        traits.insert(.bold)
+    }
+    if italic {
+        traits.insert(.italic)
+    }
+    let descriptor = base.fontDescriptor.withSymbolicTraits(traits)
+    return NSFont(descriptor: descriptor, size: base.pointSize) ?? base
 }
 
 private final class InteractiveTextView: NSTextView, NSTextViewDelegate {

@@ -5,12 +5,42 @@ import Testing
 
 @Test func `parses both update manifest formats and rejects traversal`() throws {
     let delimiter = "\u{1}"
-    let data = Data("ghost/master/a.txt\(delimiter)d41d8cd98f00b204e9800998ecf8427e\(delimiter)\nfile,shell/master/a.png\(delimiter)d41d8cd98f00b204e9800998ecf8427e\(delimiter)size=0\(delimiter)\n".utf8)
+    let data = Data("charset,Shift_JIS\ncomment,ignored\nghost/master/a.txt\(delimiter)d41d8cd98f00b204e9800998ecf8427e\(delimiter)\nfile,shell/master/a.png\(delimiter)d41d8cd98f00b204e9800998ecf8427e\(delimiter)size=0\(delimiter)date=2026-08-24T00:00:00Z\(delimiter)charset=UTF-8\(delimiter)\n".utf8)
     let entries = try ContentNetworkUpdater.parseManifest(data)
     #expect(entries.map(\.path) == ["ghost/master/a.txt", "shell/master/a.png"])
+    #expect(entries[1].size == 0)
+    #expect(entries[1].date == "2026-08-24T00:00:00Z")
+    #expect(entries[1].charset == "UTF-8")
 
     #expect(throws: ContentNetworkUpdateError.self) {
         try ContentNetworkUpdater.parseManifest(Data("../outside\(delimiter)d41d8cd98f00b204e9800998ecf8427e\n".utf8))
+    }
+}
+
+@Test func `parses and safely applies delete txt after update`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(
+        at: root.appending(path: "ghost/master/old", directoryHint: .isDirectory),
+        withIntermediateDirectories: true
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data("obsolete".utf8).write(to: root.appending(path: "ghost/master/obsolete.txt"))
+    try Data("old".utf8).write(to: root.appending(path: "ghost/master/old/data.txt"))
+    let deleteList = Data("charset,UTF-8\nghost\\master\\obsolete.txt\nghost\\master\\old\\\n".utf8)
+    let updater = ContentNetworkUpdater { url in
+        switch url.lastPathComponent {
+        case "updates2.dau": Data()
+        case "delete.txt": deleteList
+        default: throw NetworkFetchError.unsuccessfulStatus(404)
+        }
+    }
+
+    _ = try await updater.update(rootDirectory: root, homeURL: #require(URL(string: "https://example.test/ghost/")))
+
+    #expect(!FileManager.default.fileExists(atPath: root.appending(path: "ghost/master/obsolete.txt").path))
+    #expect(!FileManager.default.fileExists(atPath: root.appending(path: "ghost/master/old").path))
+    #expect(throws: ContentNetworkUpdateError.self) {
+        try ContentNetworkUpdater.parseDeleteList(Data("..\\outside".utf8))
     }
 }
 

@@ -4,10 +4,16 @@ import Foundation
 public struct ContentUpdateEntry: Sendable, Equatable {
     public let path: String
     public let md5: String
+    public let size: Int?
+    public let date: String?
+    public let charset: String?
 
-    public init(path: String, md5: String) {
+    public init(path: String, md5: String, size: Int? = nil, date: String? = nil, charset: String? = nil) {
         self.path = path
         self.md5 = md5.lowercased()
+        self.size = size
+        self.date = date
+        self.charset = charset
     }
 }
 
@@ -97,6 +103,12 @@ public struct ContentNetworkUpdater: Sendable {
             guard Self.md5(data) == entry.md5 else {
                 throw ContentNetworkUpdateError.checksumMismatch(entry.path)
             }
+            if let expectedSize = entry.size, data.count != expectedSize {
+                throw ContentNetworkUpdateError.downloadFailed(
+                    path: entry.path,
+                    underlyingError: "size mismatch: expected \(expectedSize), got \(data.count)"
+                )
+            }
             let staged = try Self.confinedURL(path: entry.path, root: staging)
             try fileManager.createDirectory(at: staged.deletingLastPathComponent(), withIntermediateDirectories: true)
             try data.write(to: staged, options: .atomic)
@@ -128,6 +140,9 @@ public struct ContentNetworkUpdater: Sendable {
             }
             throw error
         }
+        if let deleteData = try? await fetch(manifestURL.deletingLastPathComponent().appending(path: "delete.txt")) {
+            try Self.applyDeleteList(deleteData, root: root)
+        }
         return ContentUpdateResult(changedFiles: changed.map(\.entry.path))
     }
 
@@ -157,6 +172,9 @@ public struct ContentNetworkUpdater: Sendable {
         return try text.components(separatedBy: .newlines).compactMap { raw in
             let line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !line.isEmpty else { return nil }
+            if line.lowercased().hasPrefix("charset,") || line.hasPrefix("//") {
+                return nil
+            }
             let fields = line.split(separator: "\u{1}", omittingEmptySubsequences: false).map(String.init)
             let path: String
             let hash: String
@@ -166,6 +184,8 @@ public struct ContentNetworkUpdater: Sendable {
             } else if fields.count >= 2 {
                 path = fields[0]
                 hash = fields[1]
+            } else if fields.count == 1, fields[0].contains(",") {
+                return nil
             } else {
                 throw ContentNetworkUpdateError.invalidManifestLine(line)
             }
@@ -173,7 +193,48 @@ public struct ContentNetworkUpdater: Sendable {
             guard hash.range(of: "^[0-9a-fA-F]{32}$", options: .regularExpression) != nil else {
                 throw ContentNetworkUpdateError.invalidManifestLine(line)
             }
-            return ContentUpdateEntry(path: path, md5: hash)
+            let options = fields.dropFirst(2).reduce(into: [String: String]()) { result, field in
+                guard let separator = field.firstIndex(of: "=") else { return }
+                result[String(field[..<separator]).lowercased()] = String(field[field.index(after: separator)...])
+            }
+            let size = options["size"].flatMap(Int.init)
+            if options["size"] != nil, size.map({ $0 < 0 }) ?? true {
+                throw ContentNetworkUpdateError.invalidManifestLine(line)
+            }
+            return ContentUpdateEntry(
+                path: path,
+                md5: hash,
+                size: size,
+                date: options["date"],
+                charset: options["charset"]
+            )
+        }
+    }
+
+    public static func parseDeleteList(_ data: Data) throws -> [String] {
+        guard let text = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .shiftJIS)
+        else { throw ContentNetworkUpdateError.invalidManifestLine("delete.txt encoding") }
+        return try text.components(separatedBy: .newlines).compactMap { raw in
+            var line = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, !line.hasPrefix("//"), !line.lowercased().hasPrefix("charset,") else {
+                return nil
+            }
+            line = line.replacingOccurrences(of: "\\", with: "/")
+            while line.hasSuffix("/") {
+                line.removeLast()
+            }
+            _ = try confinedURL(path: line, root: URL(filePath: "/delete-root", directoryHint: .isDirectory))
+            return line
+        }
+    }
+
+    private static func applyDeleteList(_ data: Data, root: URL) throws {
+        for path in try parseDeleteList(data) {
+            let target = try confinedURL(path: path, root: root)
+            if FileManager.default.fileExists(atPath: target.path) {
+                try FileManager.default.removeItem(at: target)
+            }
         }
     }
 

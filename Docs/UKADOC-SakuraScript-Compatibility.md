@@ -216,18 +216,6 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 
 | UKADOC領域 | 状況 | 現在の範囲・主な不足 |
 | --- | --- | --- |
-| Ghost `descript.txt` | 🟡 | 名前、SHIORI、scope、default surface、更新URLなど実利用キー中心。全キー表が必要 |
-| Shell `descript.txt` | 🟡 | 基本情報、scope、メニュー関係の一部。全キー未網羅 |
-| `surfaces.txt` | 🟡 | surface、alias、element、collision、主要animationを実装。SERIKOの全pattern・optionは要照合 |
-| `surfacetable.txt` | ✅ | charsetを考慮してversion・option・group・scope・surface名を読み込み、`__disabled`・`__parts`・空名もシェルの開発用メタデータとして保持 |
-| Balloon `descript.txt` | 🟡 | 画像、位置、文字領域、フォント、cursor/anchorの主要設定。ROP、visited、全キー未対応 |
-| `balloon(s/k)*s.txt` | ❌ | 旧バルーン定義形式は未実装 |
-| Plugin `descript.txt` / PLUGIN | ❌ | プラグイン機構なし |
-| Headline `descript.txt` | 🟡 | RSS型とHEADLINEセンサーを実装。全SSPキー・イベント未照合 |
-| `install.txt` | 🟡 | Ghost/Shell/Balloon NARと同梱バルーンを実装。全インストール種別・上書き規則は未網羅 |
-| `delete.txt` | ❌ | 明示的な実装なし |
-| `developer_options.txt` | ❌ | 明示的な実装なし |
-| SHIORI Event | 🟡 | 起動、終了、切替、時刻、マウス、選択肢、入力、更新など実利用イベント中心。[全イベントの詳細対応表](UKADOC-SHIORI-Event-Compatibility.md)を分離して管理 |
 | SHIORI Event（外部） | 🟡 | SSTPや一部コールバック。全イベント未網羅 |
 | SHIORI Resource | ❌ | 完全なresource照会表なし |
 | SHIORI/3.0 | 🟡 | GET/NOTIFY、Reference、Charset、Valueなど基本モデルあり。全ヘッダー・ステータス未照合 |
@@ -236,7 +224,6 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | HEADLINE/2.0 | 🟡 | native `config.txt` とWine DLL fallback。全応答差異は未照合 |
 | DLL規格 | 🟡 | SHIORIはnative実装と限定Wine経路。一般Windows DLLは対象外 |
 | FMO / MUTEX | ❌ | Windows固有FMOは対象外。macOS向け互換公開方式も未設計 |
-| 更新定義ファイル | 🟡 | `updates2.dau` / `updates.txt`、MD5、ロールバック対応。全オプション未照合 |
 | Web関連 | 🟡 | homeurl更新、RSS/Atom、SSTP over HTTP中心。全仕様未照合 |
 | Property System | 🟡 | 大文字小文字を無視する値解決、組み込みsystem/baseware値、動的な値登録、書込可否管理をコアに実装。SakuraScript・ゴースト一覧・UI状態との接続は未完 |
 
