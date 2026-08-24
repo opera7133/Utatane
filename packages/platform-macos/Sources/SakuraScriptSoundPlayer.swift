@@ -3,7 +3,9 @@ import Foundation
 import UtataneSakuraScript
 
 @MainActor
-final class SakuraScriptSoundPlayer {
+final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
+    var onStop: ((String, String) -> Void)?
+    var onError: ((String, Error) -> Void)?
     var resourceBaseDirectory: URL?
     private var audioPlayer: AVAudioPlayer?
     private var loadedFile: String?
@@ -16,19 +18,38 @@ final class SakuraScriptSoundPlayer {
             if loadedFile == file, let audioPlayer {
                 player = audioPlayer
             } else {
-                guard let url = resolvedURL(for: file) else { return }
-                player = try AVAudioPlayer(contentsOf: url)
+                guard let url = resolvedURL(for: file) else {
+                    onError?(file, CocoaError(.fileNoSuchFile))
+                    return
+                }
+                do {
+                    player = try AVAudioPlayer(contentsOf: url)
+                } catch {
+                    onError?(file, error)
+                    throw error
+                }
                 audioPlayer = player
                 loadedFile = file
             }
+            player.delegate = self
             player.numberOfLoops = loop ? -1 : 0
             apply(options: options, to: player)
             player.prepareToPlay()
             player.play()
             isLooping = loop
         case let .load(file, options):
-            guard let url = resolvedURL(for: file) else { return }
-            let player = try AVAudioPlayer(contentsOf: url)
+            guard let url = resolvedURL(for: file) else {
+                onError?(file, CocoaError(.fileNoSuchFile))
+                return
+            }
+            let player: AVAudioPlayer
+            do {
+                player = try AVAudioPlayer(contentsOf: url)
+            } catch {
+                onError?(file, error)
+                throw error
+            }
+            player.delegate = self
             apply(options: options, to: player)
             player.prepareToPlay()
             audioPlayer = player
@@ -46,9 +67,27 @@ final class SakuraScriptSoundPlayer {
         case .resume:
             audioPlayer?.play()
         case .stop:
+            let stoppedFile = loadedFile
             audioPlayer?.stop()
             audioPlayer = nil
             loadedFile = nil
+            isLooping = false
+            if let stoppedFile {
+                onStop?(stoppedFile, "close")
+            }
+        }
+    }
+
+    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
+        Task { @MainActor [weak self] in
+            guard let self, let loadedFile else { return }
+            if flag {
+                onStop?(loadedFile, "end")
+            } else {
+                onError?(loadedFile, CocoaError(.fileReadCorruptFile))
+            }
+            audioPlayer = nil
+            self.loadedFile = nil
             isLooping = false
         }
     }

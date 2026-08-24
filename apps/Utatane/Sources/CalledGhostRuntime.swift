@@ -24,6 +24,8 @@ final class CalledGhostRuntime {
     private let textInputWindowController = TextInputWindowController()
     private var weatherTask: Task<Void, Never>?
     private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
+    private var teachHistory: [String] = []
+    private var pendingHourTimeSignal = false
     private(set) var shell: InstalledShell
     private(set) var balloon: BalloonDefinition
 
@@ -38,6 +40,7 @@ final class CalledGhostRuntime {
     var onOtherEvent: ((String, String, [String], Bool) async -> Void)?
     var onOtherGhostTalk: ((String, String) -> Void)?
     var onOtherSurfaceChange: ((String, Int, Int) -> Void)?
+    var onSurfaceChanged: ((Int, Int?, Int) -> Void)?
 
     init(
         ghost: InstalledGhost,
@@ -103,7 +106,18 @@ final class CalledGhostRuntime {
     func start(caller: InstalledGhost) async throws -> String? {
         try show(shell: shell)
         surfaceController.setPresentationHidden(true)
-        let script = try await session.start(event: .shiori(id: "OnGhostCalled", references: [
+        _ = try? await session.start(event: .shiori(id: "OnInitialize", references: [:]))
+        if let definition = try? shellLoader.load(from: shell.directory) {
+            for event in startupInformationEvents(
+                ghost: ghost,
+                shell: shell,
+                balloon: balloon,
+                shellDefinition: definition
+            ) {
+                _ = try? await session.handle(event: .shiori(id: event.id, references: event.references))
+            }
+        }
+        let script = try await session.handle(event: .shiori(id: "OnGhostCalled", references: [
             0: caller.characters.first(where: { $0.scope == 0 })?.name ?? caller.name,
             1: "",
             2: caller.name,
@@ -165,6 +179,33 @@ final class CalledGhostRuntime {
         }
     }
 
+    func sendTimedEvent(id: String, references: [Int: String], waitsUntilTalkable: Bool) {
+        let canTalk = !player.isDialogueActive
+        guard !waitsUntilTalkable || canTalk else { return }
+        var references = references
+        references[3] = canTalk ? "1" : "0"
+        Task {
+            guard let response = try? await session.response(for: .shiori(id: id, references: references)) else {
+                return
+            }
+            guard canTalk else { return }
+            if let script = response.script {
+                player.play(script, balloon: balloon)
+            }
+            forwardCommunication(response)
+        }
+    }
+
+    func scheduleHourTimeSignal() {
+        pendingHourTimeSignal = true
+    }
+
+    func flushHourTimeSignal(references: [Int: String]) {
+        guard pendingHourTimeSignal, !player.isDialogueActive else { return }
+        pendingHourTimeSignal = false
+        sendTimedEvent(id: "OnHourTimeSignal", references: references, waitsUntilTalkable: true)
+    }
+
     func communicate(from sender: String, sentence: String) async -> PersonalityResponse? {
         let response = try? await session.response(for: .shiori(
             id: "OnCommunicate",
@@ -188,27 +229,34 @@ final class CalledGhostRuntime {
         }
     }
 
-    func stop() async {
+    func stop() async -> String {
         await webSocketManager.cancelAll()
         cancelHTTP(url: nil)
+        var finalScript = ""
+        _ = try? await session.handle(event: .shiori(id: "OnDestroy", references: [:]))
         if let script = try? await session.stop(reason: .close) {
+            finalScript = script.rawValue
             await player.playAndWait(script, balloon: balloon)
         }
         player.cancel()
         surfaceController.hideAll()
         balloonController.hideAll()
+        return finalScript
     }
 
     func select(shell newShell: InstalledShell) {
         do {
+            let previousShell = shell
             send(.shiori(id: "OnShellChanging", references: [
                 0: newShell.name,
-                1: newShell.directory.lastPathComponent
+                1: previousShell.name,
+                2: newShell.directory.path
             ]))
             try show(shell: newShell)
             send(.shiori(id: "OnShellChanged", references: [
                 0: newShell.name,
-                1: newShell.directory.lastPathComponent
+                1: ghost.name,
+                2: newShell.directory.path
             ]))
         } catch {
             AppLogStore.shared.error(
@@ -238,6 +286,17 @@ final class CalledGhostRuntime {
         )
     }
 
+    func configureDisplay(shellPercent: Int, balloonPercent: Int, textPercent: Int) {
+        surfaceController.setDisplayScale(Double(shellPercent) / 100)
+        balloonController.setDisplayScale(Double(balloonPercent) / 100, textScale: Double(textPercent) / 100)
+    }
+
+    func resetWindowPositions() {
+        send(.shiori(id: "OnResetWindowPos", references: [:]))
+        surfaceController.resetWindowPositions()
+        balloonController.resetWindowPositions()
+    }
+
     private func show(shell newShell: InstalledShell) throws {
         player.cancel()
         let definition = try shellLoader.load(from: newShell.directory)
@@ -254,12 +313,41 @@ final class CalledGhostRuntime {
         selectionStore.setShellDirectoryName(newShell.directory.lastPathComponent, for: ghost.id)
     }
 
+    private func currentSurfaceReferences() -> [Int: String] {
+        Dictionary(uniqueKeysWithValues: [0, 1].compactMap { scope in
+            surfaceController.surfaceID(for: scope).map { (scope, String($0)) }
+        })
+    }
+
     private func configureCallbacks() {
         surfaceController.onMouseEvent = { [weak self] event in
             guard let self, !player.isTimeCritical else { return }
             send(.mouse(event))
         }
+        surfaceController.onSurfaceChange = { [weak self] scope, previous, current in
+            guard let self else { return }
+            send(.shiori(id: "OnSurfaceChange", references: currentSurfaceReferences()))
+            onSurfaceChanged?(scope, previous, current)
+        }
         surfaceController.onNarDrop = { [weak self] _, urls in self?.onNarDrop?(urls) }
+        surfaceController.onFileDropping = { [weak self] scope, urls in
+            guard let first = urls.first else { return }
+            self?.send(.shiori(id: "OnFileDropping", references: [0: first.path, 1: String(scope)]))
+        }
+        surfaceController.onFileDrop = { [weak self] scope, urls in
+            self?.sendFileDropEvents(scope: scope, urls: urls)
+        }
+        surfaceController.onURLDropping = { [weak self] scope, url in
+            self?.send(.shiori(id: "OnURLDragDropping", references: [0: url.absoluteString, 1: String(scope)]))
+        }
+        surfaceController.onURLDrop = { [weak self] scope, url in
+            self?.send(.shiori(id: "OnURLDropping", references: [0: url.absoluteString, 1: String(scope)]))
+        }
+        surfaceController.onTextDrop = { [weak self] scope, value in
+            self?.send(.shiori(id: "OnTextDrop", references: [
+                0: value.replacingOccurrences(of: "\n", with: "\u{1}"), 1: String(scope)
+            ]))
+        }
         player.onError = { [weak self] error in
             guard let self else { return }
             AppLogStore.shared.error(
@@ -273,7 +361,14 @@ final class CalledGhostRuntime {
         player.onDialogueContent = { [weak self] in self?.surfaceController.setPresentationHidden(false) }
         player.onPlaybackFinished = { [weak self] in self?.surfaceController.setPresentationHidden(false) }
         player.onDialogueDismissed = { [weak self] in
-            self?.send(.shiori(id: "OnSurfaceRestore", references: [:]))
+            guard let self else { return }
+            send(.shiori(id: "OnSurfaceRestore", references: currentSurfaceReferences()))
+        }
+        player.onBalloonClose = { [weak self] script in
+            self?.send(.shiori(id: "OnBalloonClose", references: [0: script]))
+        }
+        player.onBalloonTimeout = { [weak self] script in
+            self?.send(.shiori(id: "OnBalloonTimeout", references: [0: script, 1: "0"]))
         }
         player.onChoice = { [weak self] id, arguments in
             if let url = URL(string: id), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) {
@@ -282,8 +377,42 @@ final class CalledGhostRuntime {
                 self?.send(.choice(id: id, arguments: arguments))
             }
         }
-        player.onChoiceTimeout = { [weak self] in
-            self?.send(.shiori(id: "OnChoiceTimeout", references: [:]))
+        player.onChoiceSelectEx = { [weak self] label, id, arguments in
+            self?.send(.shiori(id: "OnChoiceSelectEx", references: Dictionary(
+                uniqueKeysWithValues: ([label, id] + arguments).enumerated().map { ($0.offset, $0.element) }
+            )))
+        }
+        player.onAnchorSelectEx = { [weak self] label, id, arguments in
+            self?.send(.shiori(id: "OnAnchorSelectEx", references: Dictionary(
+                uniqueKeysWithValues: ([label, id] + arguments).enumerated().map { ($0.offset, $0.element) }
+            )))
+        }
+        player.onAnchorSelect = { [weak self] id in
+            self?.send(.shiori(id: "OnAnchorSelect", references: [0: id]))
+        }
+        player.onChoiceEnter = { [weak self] label, id, arguments in
+            self?.send(.shiori(id: "OnChoiceEnter", references: linkEventReferences(label, id, arguments)))
+        }
+        player.onChoiceHover = { [weak self] label, id, arguments in
+            self?.send(.shiori(id: "OnChoiceHover", references: linkEventReferences(label, id, arguments)))
+        }
+        player.onAnchorEnter = { [weak self] label, id, arguments in
+            self?.send(.shiori(id: "OnAnchorEnter", references: linkEventReferences(label, id, arguments)))
+        }
+        player.onAnchorHover = { [weak self] label, id, arguments in
+            self?.send(.shiori(id: "OnAnchorHover", references: linkEventReferences(label, id, arguments)))
+        }
+        player.onSoundStop = { [weak self] file, reason in
+            self?.send(.shiori(id: "OnSoundStop", references: [0: file, 1: reason]))
+        }
+        player.onSoundError = { [weak self] file, error in
+            let nsError = error as NSError
+            self?.send(.shiori(id: "OnSoundError", references: [
+                0: "play", 1: String(nsError.code), 2: file, 3: error.localizedDescription
+            ]))
+        }
+        player.onChoiceTimeout = { [weak self] script in
+            self?.send(.shiori(id: "OnChoiceTimeout", references: [0: script]))
         }
         player.onOpen = { target in
             guard let url = URL(string: target),
@@ -331,9 +460,21 @@ final class CalledGhostRuntime {
                 initialValue: initialValue,
                 actionTitle: String(localized: "OK")
             ) else {
-                return nil
+                return try? await session.handle(event: .shiori(
+                    id: "OnUserInputCancel",
+                    references: [0: id, 1: "close", 2: ""]
+                ))
             }
-            return try? await session.handle(event: .shiori(id: id, references: [0: value]))
+            if id.hasPrefix("On") {
+                return try? await session.handle(event: .shiori(
+                    id: id,
+                    references: [0: value, 1: ""]
+                ))
+            }
+            return try? await session.handle(event: .shiori(
+                id: "OnUserInput",
+                references: [0: id, 1: value, 2: ""]
+            ))
         }
         player.onCloseInputBox = { [weak self] id in
             self?.textInputWindowController.close(id: id)
@@ -374,20 +515,36 @@ final class CalledGhostRuntime {
                 initialValue: initialValue,
                 actionTitle: String(localized: "OK")
             ) else {
-                return nil
+                return try? await session.handle(event: .shiori(
+                    id: "OnCommunicateInputCancel",
+                    references: [0: "", 1: "cancel"]
+                ))
             }
-            return try? await session.handle(event: .shiori(id: "OnCommunicate", references: [0: value]))
+            return try? await session.handle(event: .shiori(
+                id: "OnCommunicate",
+                references: [0: "user", 1: value]
+            ))
         }
         player.onTeachBox = { [weak self] initialValue in
             guard let self else { return nil }
+            _ = try? await session.handle(event: .shiori(id: "OnTeachStart", references: [:]))
             guard let value = await textInputWindowController.showPrompt(
                 title: String(localized: "文字を入力"),
                 initialValue: initialValue,
                 actionTitle: String(localized: "OK")
             ) else {
-                return nil
+                return try? await session.handle(event: .shiori(
+                    id: "OnTeachInputCancel",
+                    references: [0: "", 1: "cancel"]
+                ))
             }
-            return try? await session.handle(event: .shiori(id: "OnTeach", references: [0: value]))
+            teachHistory.append(value)
+            return try? await session.handle(event: .shiori(
+                id: "OnTeach",
+                references: Dictionary(uniqueKeysWithValues: teachHistory.enumerated().map {
+                    ($0.offset, $0.element)
+                })
+            ))
         }
         player.onOtherGhostTalk = { [weak self] target, script in
             self?.onOtherGhostTalk?(target, script)
@@ -434,6 +591,25 @@ final class CalledGhostRuntime {
 
     func changeSurface(to surfaceID: Int, scope: Int = 0) {
         try? surfaceController.changeSurface(scope: scope, to: surfaceID)
+    }
+
+    private func sendFileDropEvents(scope: Int, urls: [URL]) {
+        guard let first = urls.first else { return }
+        let firstReferences = [0: first.path, 1: String(scope), 2: droppedFileMIMEType(first)]
+        for eventID in ["OnFileDropped", "OnFileDrop"] {
+            send(.shiori(id: eventID, references: firstReferences))
+        }
+        let joinedReferences = [
+            0: urls.map(\.path).joined(separator: "\u{1}"),
+            1: String(scope),
+            2: urls.map(droppedFileMIMEType).joined(separator: "\u{1}")
+        ]
+        for eventID in ["OnFileDropEx", "OnFileDrop2"] {
+            send(.shiori(id: eventID, references: joinedReferences))
+        }
+        for url in urls where url.hasDirectoryPath {
+            send(.shiori(id: "OnDirectoryDrop", references: [0: url.path, 1: String(scope)]))
+        }
     }
 
     func updateEnvironmentVariables(_ variables: [String: String]) {

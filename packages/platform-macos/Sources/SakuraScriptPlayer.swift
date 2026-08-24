@@ -25,12 +25,25 @@ public final class SakuraScriptPlayer {
     private var completedDialogueTimeoutMilliseconds: Int?
     private var notifiesChoiceTimeout = false
     private var resourceBaseDirectory: URL?
+    private var currentScriptRawValue = ""
+    private var activatedLinkKind: BalloonTextLink.Kind?
 
     public private(set) var isTimeCritical = false
 
     public var onError: (@MainActor (Error) -> Void)?
     public var onChoice: (@MainActor (String, [String]) -> Void)?
-    public var onChoiceTimeout: (@MainActor () -> Void)?
+    public var onChoiceSelectEx: (@MainActor (String, String, [String]) -> Void)?
+    public var onAnchorSelect: (@MainActor (String) -> Void)?
+    public var onAnchorSelectEx: (@MainActor (String, String, [String]) -> Void)?
+    public var onChoiceEnter: (@MainActor (String?, String?, [String]) -> Void)?
+    public var onChoiceHover: (@MainActor (String, String, [String]) -> Void)?
+    public var onAnchorEnter: (@MainActor (String?, String?, [String]) -> Void)?
+    public var onAnchorHover: (@MainActor (String, String, [String]) -> Void)?
+    public var onSoundStop: (@MainActor (String, String) -> Void)?
+    public var onSoundError: (@MainActor (String, Error) -> Void)?
+    public var onChoiceTimeout: (@MainActor (String) -> Void)?
+    public var onBalloonClose: (@MainActor (String) -> Void)?
+    public var onBalloonTimeout: (@MainActor (String) -> Void)?
     public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
     public var onInputBox: (@MainActor (String, Int?, String) async -> SakuraScript?)?
     public var onHTTP: (@MainActor (SakuraScriptHTTPRequest) async -> SakuraScript?)?
@@ -66,11 +79,26 @@ public final class SakuraScriptPlayer {
         self.surfaceWindowController = surfaceWindowController
         self.balloonWindowController = balloonWindowController
         self.postDialogueDismissalMilliseconds = postDialogueDismissalMilliseconds
+        soundPlayer.onStop = { [weak self] file, reason in self?.onSoundStop?(file, reason) }
+        soundPlayer.onError = { [weak self] file, error in self?.onSoundError?(file, error) }
         balloonWindowController.onClick = { [weak self] _ in
             self?.advance()
         }
+        balloonWindowController.onLinkActivate = { [weak self] link, label in
+            guard let self else { return }
+            activatedLinkKind = link.kind
+            switch link.kind {
+            case .choice:
+                onChoiceSelectEx?(label, link.id, link.arguments)
+            case .anchor:
+                onAnchorSelectEx?(label, link.id, link.arguments)
+                onAnchorSelect?(link.id)
+            }
+        }
         balloonWindowController.onLinkClick = { [weak self] id, arguments in
             guard let self else { return }
+            let linkKind = activatedLinkKind
+            activatedLinkKind = nil
             if id.lowercased().hasPrefix("script:") {
                 let script = String(id.dropFirst("script:".count))
                 let balloon = currentBalloon
@@ -80,7 +108,28 @@ public final class SakuraScriptPlayer {
                 }
             } else {
                 cancel()
-                onChoice?(id, arguments)
+                if linkKind != .anchor {
+                    onChoice?(id, arguments)
+                }
+            }
+        }
+        balloonWindowController.onLinkEnter = { [weak self] link, label in
+            guard let self else { return }
+            switch link?.kind {
+            case .choice:
+                onChoiceEnter?(label, link?.id, link?.arguments ?? [])
+            case .anchor:
+                onAnchorEnter?(label, link?.id, link?.arguments ?? [])
+            case nil:
+                onChoiceEnter?(nil, nil, [])
+                onAnchorEnter?(nil, nil, [])
+            }
+        }
+        balloonWindowController.onLinkHover = { [weak self] link, label in
+            guard let self else { return }
+            switch link.kind {
+            case .choice: onChoiceHover?(label, link.id, link.arguments)
+            case .anchor: onAnchorHover?(label, link.id, link.arguments)
             }
         }
     }
@@ -99,6 +148,7 @@ public final class SakuraScriptPlayer {
         isPlaybackComplete = false
         isTimeCritical = false
         currentBalloon = balloon
+        currentScriptRawValue = script.rawValue
         balloonWindowController.hideAll()
         balloonWindowController.setWaitingForClick(false)
         let tokens = parser.parse(script)
@@ -184,6 +234,7 @@ public final class SakuraScriptPlayer {
 
     public func advance() {
         if isPlaybackComplete {
+            onBalloonClose?(currentScriptRawValue)
             dismissCompletedDialogue()
             return
         }
@@ -1221,9 +1272,12 @@ public final class SakuraScriptPlayer {
                 return
             }
             let shouldNotifyChoiceTimeout = notifiesChoiceTimeout
+            if !shouldNotifyChoiceTimeout {
+                onBalloonTimeout?(currentScriptRawValue)
+            }
             dismissCompletedDialogue()
             if shouldNotifyChoiceTimeout {
-                onChoiceTimeout?()
+                onChoiceTimeout?(currentScriptRawValue)
             }
         }
     }

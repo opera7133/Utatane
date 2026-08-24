@@ -46,8 +46,18 @@ private extension GhostMouseEvent {
     var eventName: String {
         switch kind {
         case .move: "OnMouseMove"
+        case .enter: "OnMouseEnter"
+        case .leave: "OnMouseLeave"
+        case .enterAll: "OnMouseEnterAll"
+        case .leaveAll: "OnMouseLeaveAll"
+        case .down: "OnMouseDown"
+        case .up: "OnMouseUp"
         case .click: "OnMouseClick"
         case .doubleClick: "OnMouseDoubleClick"
+        case .multipleClick: "OnMouseMultipleClick"
+        case .dragStart: "OnMouseDragStart"
+        case .dragEnd: "OnMouseDragEnd"
+        case .hover: "OnMouseHover"
         case .wheel: "OnMouseWheel"
         }
     }

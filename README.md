@@ -124,7 +124,8 @@ Content/Local/
 - [開発・ビルド](Docs/Development.md)
 - [ゴースト互換状況](Docs/Compatibility.md)
 - [Native SHIORI / SAORI](Docs/Native-SHIORI.md)
-- [SakuraScript対応状況](Docs/UKADOC-Compatibility.md)
+- [SakuraScript対応状況](Docs/UKADOC-SakuraScript-Compatibility.md)
+- [SHIORI対応状況](Docs/UKADOC-SHIORI-Event-Compatibility.md)
 
 ## ライセンス
 

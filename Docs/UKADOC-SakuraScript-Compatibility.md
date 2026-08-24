@@ -227,7 +227,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `install.txt` | 🟡 | Ghost/Shell/Balloon NARと同梱バルーンを実装。全インストール種別・上書き規則は未網羅 |
 | `delete.txt` | ❌ | 明示的な実装なし |
 | `developer_options.txt` | ❌ | 明示的な実装なし |
-| SHIORI Event | 🟡 | 起動、終了、切替、時刻、マウス、選択肢、入力、更新など実利用イベント中心。完全イベント表が必要 |
+| SHIORI Event | 🟡 | 起動、終了、切替、時刻、マウス、選択肢、入力、更新など実利用イベント中心。[全イベントの詳細対応表](UKADOC-SHIORI-Event-Compatibility.md)を分離して管理 |
 | SHIORI Event（外部） | 🟡 | SSTPや一部コールバック。全イベント未網羅 |
 | SHIORI Resource | ❌ | 完全なresource照会表なし |
 | SHIORI/3.0 | 🟡 | GET/NOTIFY、Reference、Charset、Valueなど基本モデルあり。全ヘッダー・ステータス未照合 |

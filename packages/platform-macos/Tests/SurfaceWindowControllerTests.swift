@@ -1151,19 +1151,20 @@ func `times out choices after playback and dispatches the timeout event`() async
         surfaceWindowController: surfaceController,
         balloonWindowController: balloonController
     )
-    var timeoutCount = 0
-    player.onChoiceTimeout = { timeoutCount += 1 }
+    var timedOutScript: String?
+    player.onChoiceTimeout = { timedOutScript = $0 }
 
+    let source = #"\q[選択,OnSelect]\![set,choicetimeout,20]\e"#
     await player.playAndWait(
-        SakuraScript(rawValue: #"\q[選択,OnSelect]\![set,choicetimeout,20]\e"#),
+        SakuraScript(rawValue: source),
         balloon: makeBalloon(directory: directory),
         characterDelayMilliseconds: 0
     )
-    for _ in 0 ..< 100 where timeoutCount == 0 {
+    for _ in 0 ..< 100 where timedOutScript == nil {
         try await Task.sleep(for: .milliseconds(10))
     }
 
-    #expect(timeoutCount == 1)
+    #expect(timedOutScript == source)
     #expect(balloonController.visibleScopes.isEmpty)
 }
 

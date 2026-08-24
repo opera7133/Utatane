@@ -95,6 +95,9 @@ public final class BalloonWindowController {
 
     public var onClick: (@MainActor (Int) -> Void)?
     public var onLinkClick: (@MainActor (String, [String]) -> Void)?
+    public var onLinkActivate: (@MainActor (BalloonTextLink, String) -> Void)?
+    public var onLinkEnter: (@MainActor (BalloonTextLink?, String?) -> Void)?
+    public var onLinkHover: (@MainActor (BalloonTextLink, String) -> Void)?
 
     public init(positionStore: WindowPositionStore = WindowPositionStore()) {
         self.positionStore = positionStore
@@ -129,6 +132,10 @@ public final class BalloonWindowController {
         presentations.compactMap { scope, presentation in
             presentation.window.isVisible ? scope : nil
         }.sorted()
+    }
+
+    public var windowNumbers: [Int] {
+        presentations.keys.sorted().map { presentations[$0]!.window.windowNumber }
     }
 
     public func windowFrame(for scope: Int) -> NSRect? {
@@ -226,6 +233,11 @@ public final class BalloonWindowController {
         contentView.onLinkClick = { [weak self] id, arguments in
             self?.onLinkClick?(id, arguments)
         }
+        contentView.onLinkActivate = { [weak self] link, label in
+            self?.onLinkActivate?(link, label)
+        }
+        contentView.onLinkEnter = { [weak self] link, label in self?.onLinkEnter?(link, label) }
+        contentView.onLinkHover = { [weak self] link, label in self?.onLinkHover?(link, label) }
         contentView.isMovementLocked = movementLockedScopes.contains(scope)
         contentView.setMarkerText(markerTextByScope[scope] ?? "")
         contentView.setNumberText(numberTextByScope[scope] ?? "")
@@ -568,6 +580,9 @@ private final class BalloonContentView: NSView {
     private var verticalAlignment: BalloonVerticalAlignment = .top
     var onClick: (() -> Void)?
     var onLinkClick: ((String, [String]) -> Void)?
+    var onLinkActivate: ((BalloonTextLink, String) -> Void)?
+    var onLinkEnter: ((BalloonTextLink?, String?) -> Void)?
+    var onLinkHover: ((BalloonTextLink, String) -> Void)?
 
     var isWaitingForClick: Bool {
         get { arrowView?.isHidden == false }
@@ -700,6 +715,11 @@ private final class BalloonContentView: NSView {
         textView.onLinkClick = { [weak self] id, arguments in
             self?.onLinkClick?(id, arguments)
         }
+        textView.onLinkActivate = { [weak self] link, label in
+            self?.onLinkActivate?(link, label)
+        }
+        textView.onLinkEnter = { [weak self] link, label in self?.onLinkEnter?(link, label) }
+        textView.onLinkHover = { [weak self] link, label in self?.onLinkHover?(link, label) }
         scrollView.frame = textFrame
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
@@ -985,11 +1005,15 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
     var defaultTextColor = NSColor.textColor
     var onBackgroundClick: (() -> Void)?
     var onLinkClick: ((String, [String]) -> Void)?
+    var onLinkActivate: ((BalloonTextLink, String) -> Void)?
+    var onLinkEnter: ((BalloonTextLink?, String?) -> Void)?
+    var onLinkHover: ((BalloonTextLink, String) -> Void)?
     private var dragStartMouseLocation: NSPoint?
     private var dragStartWindowOrigin: NSPoint?
     private var didDrag = false
     private var hoveredLinkToken: String?
     private var mouseTrackingArea: NSTrackingArea?
+    private var hoverWorkItem: DispatchWorkItem?
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
@@ -1017,14 +1041,29 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
         let point = convert(event.locationInWindow, from: nil)
         let token = balloonTextLinkID(at: point, in: self)
         guard token != hoveredLinkToken else { return }
+        hoverWorkItem?.cancel()
         hoveredLinkToken = token
         refreshLinkAppearance()
+        guard let token, let link = linkTargets[token] else {
+            onLinkEnter?(nil, nil)
+            return
+        }
+        let label = linkLabel(for: token)
+        onLinkEnter?(link, label)
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self, hoveredLinkToken == token else { return }
+            onLinkHover?(link, label)
+        }
+        hoverWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: workItem)
     }
 
     override func mouseExited(with event: NSEvent) {
         guard hoveredLinkToken != nil else { return }
+        hoverWorkItem?.cancel()
         hoveredLinkToken = nil
         refreshLinkAppearance()
+        onLinkEnter?(nil, nil)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -1069,10 +1108,17 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
 
     private func activateLink(_ token: String) {
         if let target = linkTargets[token] {
+            let label = linkLabel(for: token)
+            onLinkActivate?(target, label)
             onLinkClick?(target.id, target.arguments)
         } else {
             onLinkClick?(token, [])
         }
+    }
+
+    private func linkLabel(for token: String) -> String {
+        guard let link = linkTargets[token] else { return "" }
+        return textStorage.map { ($0.string as NSString).substring(with: link.range) } ?? ""
     }
 
     func refreshLinkAppearance() {

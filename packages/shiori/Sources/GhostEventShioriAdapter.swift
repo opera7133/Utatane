@@ -75,8 +75,10 @@ public struct GhostEventShioriAdapter: Sendable {
             var references: [Int: String] = [
                 0: String(event.x),
                 1: String(event.y),
+                2: "0",
                 3: String(event.scope),
-                5: String(event.button)
+                5: String(event.button),
+                6: "mouse"
             ]
             if let region = event.region {
                 references[4] = region
@@ -84,10 +86,36 @@ public struct GhostEventShioriAdapter: Sendable {
             switch event.kind {
             case .move:
                 id = "OnMouseMove"
+            case .enter:
+                id = "OnMouseEnter"
+            case .leave:
+                id = "OnMouseLeave"
+            case .enterAll:
+                id = "OnMouseEnterAll"
+            case .leaveAll:
+                id = "OnMouseLeaveAll"
+            case .down:
+                id = event.button <= 1 ? "OnMouseDown" : "OnMouseDownEx"
+                references[5] = Self.mouseButtonReference(event.button)
+            case .up:
+                id = event.button <= 1 ? "OnMouseUp" : "OnMouseUpEx"
+                references[5] = Self.mouseButtonReference(event.button)
             case .click:
-                id = "OnMouseClick"
+                id = event.button <= 1 ? "OnMouseClick" : "OnMouseClickEx"
+                references[5] = Self.mouseButtonReference(event.button)
             case .doubleClick:
-                id = "OnMouseDoubleClick"
+                id = event.button <= 1 ? "OnMouseDoubleClick" : "OnMouseDoubleClickEx"
+                references[5] = Self.mouseButtonReference(event.button)
+            case let .multipleClick(count):
+                id = event.button <= 1 ? "OnMouseMultipleClick" : "OnMouseMultipleClickEx"
+                references[5] = Self.mouseButtonReference(event.button)
+                references[7] = String(count)
+            case .dragStart:
+                id = "OnMouseDragStart"
+            case .dragEnd:
+                id = "OnMouseDragEnd"
+            case .hover:
+                id = "OnMouseHover"
             case let .wheel(delta):
                 id = "OnMouseWheel"
                 references[2] = String(delta)
@@ -108,6 +136,15 @@ public struct GhostEventShioriAdapter: Sendable {
             })
             references[0] = id
             return ("OnChoiceSelect", references)
+        }
+    }
+
+    private static func mouseButtonReference(_ button: Int) -> String {
+        switch button {
+        case 2: "middle"
+        case 3: "xbutton1"
+        case 4: "xbutton2"
+        default: String(button)
         }
     }
 }

@@ -12,8 +12,18 @@ public enum GhostEvent: Sendable, Equatable {
 public struct GhostMouseEvent: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
         case move
+        case enter
+        case leave
+        case enterAll
+        case leaveAll
+        case down
+        case up
         case click
         case doubleClick
+        case multipleClick(count: Int)
+        case dragStart
+        case dragEnd
+        case hover
         case wheel(delta: Int)
     }
 

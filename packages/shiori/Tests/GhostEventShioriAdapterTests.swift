@@ -92,6 +92,84 @@ import UtataneCore
     #expect(request.reference(4) == "Bust")
 }
 
+@Test func `maps mouse boundary events with SSP input references`() {
+    let adapter = GhostEventShioriAdapter()
+    let cases: [(GhostMouseEvent.Kind, String)] = [
+        (.enterAll, "OnMouseEnterAll"),
+        (.leaveAll, "OnMouseLeaveAll"),
+        (.enter, "OnMouseEnter"),
+        (.leave, "OnMouseLeave")
+    ]
+
+    for (kind, eventID) in cases {
+        let request = adapter.request(for: .mouse(GhostMouseEvent(
+            kind: kind,
+            scope: 1,
+            region: "Head",
+            x: 12,
+            y: 34
+        )))
+        #expect(request.id == eventID)
+        #expect(request.reference(0) == "12")
+        #expect(request.reference(1) == "34")
+        #expect(request.reference(2) == "0")
+        #expect(request.reference(3) == "1")
+        #expect(request.reference(4) == "Head")
+        #expect(request.reference(5) == "0")
+        #expect(request.reference(6) == "mouse")
+    }
+}
+
+@Test func `maps mouse button drag and hover event families`() {
+    let adapter = GhostEventShioriAdapter()
+    let cases: [(GhostMouseEvent.Kind, Int, String)] = [
+        (.down, 0, "OnMouseDown"),
+        (.down, 2, "OnMouseDownEx"),
+        (.up, 0, "OnMouseUp"),
+        (.up, 2, "OnMouseUpEx"),
+        (.click, 2, "OnMouseClickEx"),
+        (.doubleClick, 2, "OnMouseDoubleClickEx"),
+        (.multipleClick(count: 3), 0, "OnMouseMultipleClick"),
+        (.multipleClick(count: 4), 3, "OnMouseMultipleClickEx"),
+        (.dragStart, 0, "OnMouseDragStart"),
+        (.dragEnd, 0, "OnMouseDragEnd"),
+        (.hover, 0, "OnMouseHover")
+    ]
+
+    for (kind, button, eventID) in cases {
+        let request = adapter.request(for: .mouse(.init(
+            kind: kind,
+            scope: 0,
+            region: "Bust",
+            x: 20,
+            y: 30,
+            button: button
+        )))
+        #expect(request.id == eventID)
+        #expect(request.reference(2) == "0")
+        #expect(request.reference(6) == "mouse")
+    }
+
+    let middleClick = adapter.request(for: .mouse(.init(
+        kind: .click,
+        scope: 0,
+        region: nil,
+        x: 0,
+        y: 0,
+        button: 2
+    )))
+    #expect(middleClick.reference(5) == "middle")
+
+    let multipleClick = adapter.request(for: .mouse(.init(
+        kind: .multipleClick(count: 4),
+        scope: 0,
+        region: nil,
+        x: 0,
+        y: 0
+    )))
+    #expect(multipleClick.reference(7) == "4")
+}
+
 @Test func `maps a baseware event directly to SHIORI`() {
     let request = GhostEventShioriAdapter().request(for: .shiori(
         id: "OnInstallCompleteEx",

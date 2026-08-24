@@ -40,7 +40,13 @@ public final class SurfaceWindowController {
 
     public var onMouseClick: (@MainActor (Int, String?) -> Void)?
     public var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
+    public var onSurfaceChange: (@MainActor (Int, Int?, Int) -> Void)?
     public var onNarDrop: (@MainActor (Int, [URL]) -> Void)?
+    public var onFileDropping: (@MainActor (Int, [URL]) -> Void)?
+    public var onFileDrop: (@MainActor (Int, [URL]) -> Void)?
+    public var onURLDropping: (@MainActor (Int, URL) -> Void)?
+    public var onURLDrop: (@MainActor (Int, URL) -> Void)?
+    public var onTextDrop: (@MainActor (Int, String) -> Void)?
     public var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
 
     public init(positionStore: WindowPositionStore = WindowPositionStore()) {
@@ -103,6 +109,10 @@ public final class SurfaceWindowController {
 
     public func surfaceID(for scope: Int) -> Int? {
         characters[scope]?.currentSurfaceID
+    }
+
+    public var windowNumbers: [Int] {
+        characters.keys.sorted().compactMap { characters[$0]?.windowNumber }
     }
 
     public func renderedImage(for scope: Int = 0) -> NSImage? {
@@ -352,8 +362,12 @@ public final class SurfaceWindowController {
 
     public func changeSurface(scope: Int = 0, to surfaceID: Int) throws {
         let resolvedSurfaceID = shell?.resolveSurface(String(surfaceID), scope: scope) ?? surfaceID
+        let previousSurfaceID = characters[scope]?.currentSurfaceID
         if let character = characters[scope] {
             try character.changeSurface(to: resolvedSurfaceID)
+            if previousSurfaceID != resolvedSurfaceID {
+                onSurfaceChange?(scope, previousSurfaceID, resolvedSurfaceID)
+            }
             return
         }
 
@@ -361,6 +375,7 @@ public final class SurfaceWindowController {
         let character = characterController(for: scope)
         try character.show(shell: shell, surfaceID: resolvedSurfaceID)
         placeInitialWindow(for: scope)
+        onSurfaceChange?(scope, previousSurfaceID, resolvedSurfaceID)
     }
 
     public func changeSurface(scope: Int = 0, named identifier: String) throws {
@@ -460,6 +475,15 @@ public final class SurfaceWindowController {
         character.onNarDrop = { [weak self] urls in
             self?.onNarDrop?(scope, urls)
         }
+        character.onFileDropping = { [weak self] urls in
+            self?.onFileDropping?(scope, urls)
+        }
+        character.onFileDrop = { [weak self] urls in
+            self?.onFileDrop?(scope, urls)
+        }
+        character.onURLDropping = { [weak self] url in self?.onURLDropping?(scope, url) }
+        character.onURLDrop = { [weak self] url in self?.onURLDrop?(scope, url) }
+        character.onTextDrop = { [weak self] value in self?.onTextDrop?(scope, value) }
         character.onWindowDragDelta = { [weak self] delta in
             self?.handleWindowDragDelta(scope: scope, delta: delta)
         }
@@ -561,6 +585,11 @@ private final class CharacterSurfaceController {
     var onMouseClick: (@MainActor (String?) -> Void)?
     var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
     var onNarDrop: (@MainActor ([URL]) -> Void)?
+    var onFileDropping: (@MainActor ([URL]) -> Void)?
+    var onFileDrop: (@MainActor ([URL]) -> Void)?
+    var onURLDropping: (@MainActor (URL) -> Void)?
+    var onURLDrop: (@MainActor (URL) -> Void)?
+    var onTextDrop: (@MainActor (String) -> Void)?
     var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
 
     init(
@@ -1013,6 +1042,15 @@ private final class CharacterSurfaceController {
         imageView.onNarDrop = { [weak self] urls in
             self?.onNarDrop?(urls)
         }
+        imageView.onFileDropping = { [weak self] urls in
+            self?.onFileDropping?(urls)
+        }
+        imageView.onFileDrop = { [weak self] urls in
+            self?.onFileDrop?(urls)
+        }
+        imageView.onURLDropping = { [weak self] url in self?.onURLDropping?(url) }
+        imageView.onURLDrop = { [weak self] url in self?.onURLDrop?(url) }
+        imageView.onTextDrop = { [weak self] value in self?.onTextDrop?(value) }
         imageView.onWindowDragDelta = { [weak self] delta in
             self?.onWindowDragDelta?(delta)
         }
@@ -1276,6 +1314,11 @@ private final class SurfaceImageView: NSImageView {
     var onMouseEvent: ((GhostMouseEvent.Kind, String?, Int, Int, Int) -> Void)?
     var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
     var onNarDrop: (([URL]) -> Void)?
+    var onFileDropping: (([URL]) -> Void)?
+    var onFileDrop: (([URL]) -> Void)?
+    var onURLDropping: ((URL) -> Void)?
+    var onURLDrop: ((URL) -> Void)?
+    var onTextDrop: ((String) -> Void)?
     var onWindowDragDelta: ((NSPoint) -> Void)?
     var locksVerticalMovement = true
     var locksHorizontalMovement = false
@@ -1285,11 +1328,12 @@ private final class SurfaceImageView: NSImageView {
     private var dragStartMouseLocation: NSPoint?
     private var dragStartWindowOrigin: NSPoint?
     private var didDrag = false
+    private var hoverWorkItem: DispatchWorkItem?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        registerForDraggedTypes([.fileURL])
+        registerForDraggedTypes([.fileURL, .URL, .string])
     }
 
     override func layout() {
@@ -1312,6 +1356,8 @@ private final class SurfaceImageView: NSImageView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        sendMouseEvent(.down, event: event)
+        cancelHoverEvent()
         guard event.buttonNumber == 0, let window else {
             super.mouseDown(with: event)
             return
@@ -1332,7 +1378,10 @@ private final class SurfaceImageView: NSImageView {
         let currentMouseLocation = NSEvent.mouseLocation
         let deltaX = currentMouseLocation.x - startMouseLocation.x
         let deltaY = currentMouseLocation.y - startMouseLocation.y
-        didDrag = didDrag || hypot(deltaX, deltaY) >= 2
+        if !didDrag, hypot(deltaX, deltaY) >= 2 {
+            didDrag = true
+            sendMouseEvent(.dragStart, event: event)
+        }
         let currentOrigin = window.frame.origin
         let newX = locksHorizontalMovement ? startWindowOrigin.x : startWindowOrigin.x + deltaX
         let newY = locksVerticalMovement ? startWindowOrigin.y : startWindowOrigin.y + deltaY
@@ -1356,11 +1405,20 @@ private final class SurfaceImageView: NSImageView {
     }
 
     override func mouseEntered(with event: NSEvent) {
-        updateCursor(for: event)
+        let hit = hitTest(event)
+        onMouseEvent?(.enterAll, hit.region, hit.x, hit.y, buttonNumber(event))
+        updateHoveredRegion(with: hit, event: event)
+        scheduleHoverEvent(for: hit, event: event)
         super.mouseEntered(with: event)
     }
 
     override func mouseExited(with event: NSEvent) {
+        cancelHoverEvent()
+        let hit = hitTest(event)
+        if let hoveredRegion {
+            onMouseEvent?(.leave, hoveredRegion, hit.x, hit.y, buttonNumber(event))
+        }
+        onMouseEvent?(.leaveAll, hoveredRegion, hit.x, hit.y, buttonNumber(event))
         hoveredRegion = nil
         lastStrokePoint = nil
         lastStrokeRegion = nil
@@ -1373,7 +1431,9 @@ private final class SurfaceImageView: NSImageView {
     }
 
     override func mouseMoved(with event: NSEvent) {
-        updateCursor(for: event)
+        let hit = hitTest(event)
+        updateHoveredRegion(with: hit, event: event)
+        scheduleHoverEvent(for: hit, event: event)
         sendStrokeEventIfNeeded(event)
         super.mouseMoved(with: event)
     }
@@ -1383,15 +1443,46 @@ private final class SurfaceImageView: NSImageView {
         dragStartMouseLocation = nil
         dragStartWindowOrigin = nil
         didDrag = false
-        guard !wasDragging else { return }
+        sendMouseEvent(.up, event: event)
+        if wasDragging {
+            sendMouseEvent(.dragEnd, event: event)
+            scheduleHoverEvent(for: hitTest(event), event: event)
+            return
+        }
         let hit = hitTest(event)
-        if event.clickCount >= 2 {
+        if event.clickCount >= 3 {
+            onMouseEvent?(.multipleClick(count: event.clickCount), hit.region, hit.x, hit.y, buttonNumber(event))
+        } else if event.clickCount == 2 {
             onMouseEvent?(.doubleClick, hit.region, hit.x, hit.y, buttonNumber(event))
         } else {
             onMouseClick?(hit.region)
             onMouseEvent?(.click, hit.region, hit.x, hit.y, buttonNumber(event))
         }
         super.mouseUp(with: event)
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        sendMouseEvent(.down, event: event)
+        cancelHoverEvent()
+        super.rightMouseDown(with: event)
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        sendMouseEvent(.up, event: event)
+        sendClickEvent(event)
+        super.rightMouseUp(with: event)
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        sendMouseEvent(.down, event: event)
+        cancelHoverEvent()
+        super.otherMouseDown(with: event)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        sendMouseEvent(.up, event: event)
+        sendClickEvent(event)
+        super.otherMouseUp(with: event)
     }
 
     override func scrollWheel(with event: NSEvent) {
@@ -1402,32 +1493,93 @@ private final class SurfaceImageView: NSImageView {
     }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        narURLs(from: sender).isEmpty ? [] : .copy
+        let urls = fileURLs(from: sender)
+        if !urls.isEmpty {
+            onFileDropping?(urls)
+        } else if let url = webURL(from: sender) {
+            onURLDropping?(url)
+        } else if droppedText(from: sender) == nil {
+            return []
+        }
+        return .copy
     }
 
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        !narURLs(from: sender).isEmpty
+        !fileURLs(from: sender).isEmpty || webURL(from: sender) != nil || droppedText(from: sender) != nil
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        let urls = narURLs(from: sender)
-        guard !urls.isEmpty else { return false }
-        onNarDrop?(urls)
+        let urls = fileURLs(from: sender)
+        if !urls.isEmpty {
+            onFileDrop?(urls)
+            let nars = SurfaceDropPayload.narURLs(from: urls)
+            if !nars.isEmpty {
+                onNarDrop?(nars)
+            }
+        } else if let url = webURL(from: sender) {
+            onURLDrop?(url)
+        } else if let text = droppedText(from: sender) {
+            onTextDrop?(text)
+        } else {
+            return false
+        }
         return true
     }
 
-    private func narURLs(from draggingInfo: any NSDraggingInfo) -> [URL] {
+    private func fileURLs(from draggingInfo: any NSDraggingInfo) -> [URL] {
         guard let items = draggingInfo.draggingPasteboard.readObjects(
             forClasses: [NSURL.self],
             options: [.urlReadingFileURLsOnly: true]
         ) as? [URL]
         else { return [] }
-        return SurfaceDropPayload.narURLs(from: items)
+        return items
+    }
+
+    private func webURL(from draggingInfo: any NSDraggingInfo) -> URL? {
+        guard let value = draggingInfo.draggingPasteboard.string(forType: .URL),
+              let url = URL(string: value), !url.isFileURL
+        else { return nil }
+        return url
+    }
+
+    private func droppedText(from draggingInfo: any NSDraggingInfo) -> String? {
+        draggingInfo.draggingPasteboard.string(forType: .string)
     }
 
     private func sendMouseEvent(_ kind: GhostMouseEvent.Kind, event: NSEvent) {
         let hit = hitTest(event)
         onMouseEvent?(kind, hit.region, hit.x, hit.y, buttonNumber(event))
+    }
+
+    private func sendClickEvent(_ event: NSEvent) {
+        let hit = hitTest(event)
+        let kind: GhostMouseEvent.Kind = if event.clickCount >= 3 {
+            .multipleClick(count: event.clickCount)
+        } else if event.clickCount == 2 {
+            .doubleClick
+        } else {
+            .click
+        }
+        onMouseEvent?(kind, hit.region, hit.x, hit.y, buttonNumber(event))
+        scheduleHoverEvent(for: hit, event: event)
+    }
+
+    private func scheduleHoverEvent(
+        for hit: (region: String?, x: Int, y: Int),
+        event: NSEvent
+    ) {
+        cancelHoverEvent()
+        let button = buttonNumber(event)
+        let workItem = DispatchWorkItem { [weak self] in
+            self?.onMouseEvent?(.hover, hit.region, hit.x, hit.y, button)
+        }
+        hoverWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: workItem)
+    }
+
+    private func cancelHoverEvent() {
+        hoverWorkItem?.cancel()
+        hoverWorkItem = nil
     }
 
     private func sendStrokeEventIfNeeded(_ event: NSEvent) {
@@ -1450,9 +1602,24 @@ private final class SurfaceImageView: NSImageView {
     }
 
     private func updateCursor(for event: NSEvent) {
-        let region = hitTest(event).region
-        hoveredRegion = region
-        SurfaceCursorStyle(region: region).cursor.set()
+        let hit = hitTest(event)
+        updateHoveredRegion(with: hit, event: event)
+    }
+
+    private func updateHoveredRegion(
+        with hit: (region: String?, x: Int, y: Int),
+        event: NSEvent
+    ) {
+        if hoveredRegion != hit.region {
+            if let hoveredRegion {
+                onMouseEvent?(.leave, hoveredRegion, hit.x, hit.y, buttonNumber(event))
+            }
+            if let region = hit.region {
+                onMouseEvent?(.enter, region, hit.x, hit.y, buttonNumber(event))
+            }
+            hoveredRegion = hit.region
+        }
+        SurfaceCursorStyle(region: hit.region).cursor.set()
     }
 
     private func hitTest(_ event: NSEvent) -> (region: String?, x: Int, y: Int) {
