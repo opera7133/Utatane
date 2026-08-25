@@ -6,8 +6,8 @@ Utatane が発行する SHIORI Event を UKADOC の一覧と比較するため�
 基準: [SHIORI Eventリスト](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html)
 
 UKADOC掲載イベント数: 290
-調査日: 2026-08-24
-調査結果: ✅ 5 / 🟡 148 / ❌ 137
+調査日: 2026-08-25
+調査結果: ✅ 6 / 🟡 198 / ❌ 83 / ➖ 3
 
 ## 判定
 

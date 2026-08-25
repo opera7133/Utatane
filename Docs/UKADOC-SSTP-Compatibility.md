@@ -2,6 +2,9 @@
 
 参照元はUKADOCの`SSTP/1.x`。UtataneではmacOSで利用可能なSocket SSTPとSSTP over HTTPを対象とし、Windowsの`WM_COPYDATA`に依存するDirect SSTPは対象外とする。
 
+調査日: 2026-08-25
+調査結果: ✅ 18 / 🟡 2 / ❌ 0 / ➖ 3
+
 ## 通信と共通仕様
 
 | 項目 | 状況 | Utataneの対応 |

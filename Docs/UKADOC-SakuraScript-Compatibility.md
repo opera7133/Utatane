@@ -19,6 +19,9 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 
 基準: [さくらスクリプトリスト](https://ssp.shillest.net/ukadoc/manual/list_sakura_script.html)
 
+調査日: 2026-08-25
+調査結果: ✅ 75 / 🟡 39 / ❌ 8 / ➖ 4
+
 ### 基本仕様
 
 | UKADOC項目 | 状況 | Utataneの挙動・不足 |
