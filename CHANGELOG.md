@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.0-alpha.12] - 2026-08-25
+
+### 追加
+
+- バッテリー残量・充電状態・電源種別を取得する`BatteryMonitor`を追加。`OnBatteryNotify`・`OnBatteryLow`・`OnBatteryCritical`・`OnBatteryChargingStart/Stop`をゴーストへ通知
+- ネットワーク接続状態とインターフェース一覧を監視する`NetworkStatusMonitor`を追加。`OnNetworkStatusChange`でゴーストへ通知
+- フルスクリーンアプリの検出機能を追加。別アプリがフルスクリーン展開中はゴーストとバルーンを非表示にし、`OnFullScreenAppMinimize/Restore`を送信
+- ゴーストどうしの重なりと画面外へのはみ出し状態を検出する`WindowLayoutSnapshot`を追加
+- SakuraScriptからファイル・フォルダー・カラーのシステムダイアログを開く`systemDialog`命令と`closeSystemDialog`を追加
+- surfaces.txtの`cursor`ブロックでコリジョン領域ごとにカーソル形状を設定できるようにした
+- surfaces.txtの`tooltips`ブロックでコリジョン領域ごとにツールチップを設定できるようにした
+- `OnGhostChanging`のReferenceに切り替えモード、ゴースト名、パスを含む詳細情報を渡せるようにした
+- HTTPリクエストがタイムアウトした際に`OnNetworkHeavy`をゴーストへ送信するようにした
+- Windows DLLホストのCライブラリリンクを廃止し、`SOURCE_DATE_EPOCH`またはGitコミット時刻をバイナリのtimestampに利用して再現性を確保するようにした
+
+### 変更
+
+- SakuraScriptアニメーションの`move`パターンでベースフレームを平行移動できるようにした
+- サーフェスのコンポジッティング演算に`blend-multiply`・`blend-screen`・`blend-overlay`・`blend-add`・`replace`、およびそれぞれの`-fast`変形を追加
+- サーフェスウィンドウとバルーンウィンドウの非表示状態を統一し、フルスクリーン時の表示制御を改善
+
 ## [0.1.0-alpha.11] - 2026-08-25
 
 ### 追加
@@ -157,7 +178,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[0.1.0-alpha.11]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.10...HEAD
+[0.1.0-alpha.12]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.11...HEAD
+[0.1.0-alpha.11]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.10...v0.1.0-alpha.11
 [0.1.0-alpha.10]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.9...v0.1.0-alpha.10
 [0.1.0-alpha.9]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
