@@ -5,6 +5,7 @@ import UtataneSakuraScript
 
 @MainActor
 public final class SakuraScriptPlayer {
+    private static var signaledSyncObjects: Set<String> = []
     private let parser = SakuraScriptParser()
     private let surfaceWindowController: SurfaceWindowController
     private let balloonWindowController: BalloonWindowController
@@ -27,6 +28,8 @@ public final class SakuraScriptPlayer {
     private var resourceBaseDirectory: URL?
     private var currentScriptRawValue = ""
     private var activatedLinkKind: BalloonTextLink.Kind?
+    private var preventsUserBreak = false
+    private var interactionMode: SakuraScriptInteractionMode?
 
     public private(set) var isTimeCritical = false
 
@@ -69,6 +72,10 @@ public final class SakuraScriptPlayer {
 
     public var isDialogueActive: Bool {
         playbackTask != nil || isPlaybackComplete
+    }
+
+    public var canTalk: Bool {
+        !isDialogueActive && interactionMode == nil
     }
 
     public init(
@@ -139,6 +146,7 @@ public final class SakuraScriptPlayer {
         balloon: BalloonDefinition,
         characterDelayMilliseconds: Int? = nil
     ) {
+        guard !(preventsUserBreak && playbackTask != nil) else { return }
         finishPlaybackWait()
         playbackTask?.cancel()
         dismissalTask?.cancel()
@@ -227,6 +235,7 @@ public final class SakuraScriptPlayer {
         isWaitingForClick = false
         isPlaybackComplete = false
         isTimeCritical = false
+        preventsUserBreak = false
         balloonWindowController.setWaitingForClick(false)
         balloonWindowController.hideAll()
         finishPlaybackWait()
@@ -685,6 +694,36 @@ public final class SakuraScriptPlayer {
                         updateContent(scope: targetScope)
                         textStyleByScope[targetScope, default: BalloonTextStyle()].alignment = nil
                     }
+                case let .onlineMode(enabled):
+                    balloonWindowController.setMarkerText(enabled ? "●" : "", scope: scope)
+                    if enabled, !activatedScopes.contains(scope) {
+                        try activate(scope: scope, style: balloonStyleByScope[scope] ?? 0)
+                        activatedScopes.insert(scope)
+                    }
+                case let .noUserBreakMode(enabled):
+                    preventsUserBreak = enabled
+                case let .interactionMode(mode, enabled):
+                    if enabled {
+                        interactionMode = mode
+                    } else if interactionMode == mode {
+                        interactionMode = nil
+                    }
+                case let .collisionMode(enabled, showsNames):
+                    surfaceWindowController.setCollisionMode(enabled, showsNames: showsNames)
+                case let .syncObjectSet(name):
+                    Self.signaledSyncObjects.insert(name)
+                case let .syncObjectReset(name):
+                    Self.signaledSyncObjects.remove(name)
+                case let .syncObjectWait(name, timeoutMilliseconds):
+                    let startedAt = ProcessInfo.processInfo.systemUptime
+                    while !Self.signaledSyncObjects.contains(name) {
+                        if let timeoutMilliseconds,
+                           Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000) >= timeoutMilliseconds
+                        {
+                            break
+                        }
+                        try await sleep(milliseconds: 10)
+                    }
                 case .automaticLineBreak:
                     let enabled = !(automaticLineWrappingByScope[scope] ?? true)
                     automaticLineWrappingByScope[scope] = enabled
@@ -889,6 +928,14 @@ public final class SakuraScriptPlayer {
                         isAsync: isAsync,
                         options: options
                     )
+                case let .setPosition(x, y, targetScope):
+                    await surfaceWindowController.setFixedPosition(
+                        x: x,
+                        y: y,
+                        scope: targetScope
+                    )
+                case .resetPosition:
+                    surfaceWindowController.resetFixedPositions()
                 case .separateCharacters:
                     await surfaceWindowController.separateCharacters(scope: scope)
                 case .approachCharacters:
@@ -1259,10 +1306,12 @@ public final class SakuraScriptPlayer {
         isTimeCritical = false
         isPlaybackComplete = true
         isWaitingForClick = false
+        preventsUserBreak = false
         balloonWindowController.setWaitingForClick(false)
         finishPlaybackWait()
         onPlaybackFinished?()
         dismissalTask?.cancel()
+        guard interactionMode != .passive else { return }
         guard let timeout = completedDialogueTimeoutMilliseconds else { return }
         dismissalTask = Task { [weak self] in
             guard let self else { return }

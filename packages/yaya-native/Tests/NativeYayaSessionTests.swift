@@ -455,3 +455,37 @@ import UtataneShiori
     ))
     #expect(silent == nil)
 }
+
+@Test func `installed ria responds to OnSysSuspend and OnSysResume`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: installedMasterURL.path) else {
+        return
+    }
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-suspend-resume-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+
+    let suspend = try await engine.handle(event: .shiori(id: "OnSysSuspend", references: [:]))
+    #expect(suspend != nil)
+    #expect(suspend?.rawValue.isEmpty == false)
+    #expect(suspend?.rawValue.hasSuffix("\\e") == true)
+
+    let resume = try await engine.handle(event: .shiori(id: "OnSysResume", references: [0: "normal"]))
+    #expect(resume != nil)
+    #expect(resume?.rawValue.isEmpty == false)
+    #expect(resume?.rawValue.hasSuffix("\\e") == true)
+}

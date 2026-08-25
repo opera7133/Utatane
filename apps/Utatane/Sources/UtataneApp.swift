@@ -494,29 +494,101 @@ private struct UtataneRootView: View {
     }
 
     private func sendFileDropEvents(scope: Int, urls: [URL]) {
-        guard let first = urls.first else { return }
-        let firstReferences = [0: first.path, 1: String(scope), 2: droppedFileMIMEType(first)]
-        for eventID in ["OnFileDropped", "OnFileDrop"] {
-            sendEvent(.shiori(id: eventID, references: firstReferences))
-        }
+        guard !urls.isEmpty, let session, let balloon else { return }
         let joinedReferences = [
             0: urls.map(\.path).joined(separator: "\u{1}"),
             1: String(scope),
             2: urls.map(droppedFileMIMEType).joined(separator: "\u{1}")
         ]
-        for eventID in ["OnFileDropEx", "OnFileDrop2"] {
-            sendEvent(.shiori(id: eventID, references: joinedReferences))
-        }
         for url in urls where url.hasDirectoryPath {
             sendEvent(.shiori(id: "OnDirectoryDrop", references: [0: url.path, 1: String(scope)]))
         }
+        Task {
+            do {
+                let response = try await session.response(for: .shiori(
+                    id: "OnFileDrop2",
+                    references: joinedReferences
+                ))
+                if let script = response?.script {
+                    scriptPlayer.play(script, balloon: balloon)
+                    if let response {
+                        forwardCommunication(from: currentGhost, response: response)
+                    }
+                    return
+                }
+                guard let url = urls.first,
+                      url.pathExtension.caseInsensitiveCompare("nar") != .orderedSame,
+                      let viewerEventID = droppedFileViewerEventID(url),
+                      NSWorkspace.shared.open(url)
+                else { return }
+                sendEvent(.shiori(id: viewerEventID, references: joinedReferences))
+            } catch {
+                AppLogStore.shared.error(
+                    "ファイルドロップ処理エラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: "Files: \(urls.map(\.path).joined(separator: "\n"))"
+                )
+            }
+        }
+    }
+
+    private func handleURLDrop(scope: Int, url: URL) {
+        if handleXUkagakaLink(url) {
+            return
+        }
+        guard let session, let balloon else { return }
+        let plannedAction = url.pathExtension.caseInsensitiveCompare("nar") == .orderedSame ? "nar" : "unknown"
+        let queryReferences = [
+            0: url.absoluteString,
+            1: String(scope),
+            2: droppedFileMIMEType(url),
+            3: plannedAction
+        ]
+        Task {
+            do {
+                if let response = try await session.response(for: .shiori(
+                    id: "OnURLQuery",
+                    references: queryReferences
+                )), let script = response.script {
+                    scriptPlayer.play(script, balloon: balloon)
+                    forwardCommunication(from: currentGhost, response: response)
+                    return
+                }
+                guard plannedAction == "nar" else { return }
+                sendEvent(.shiori(id: "OnURLDropping", references: [
+                    0: url.absoluteString, 1: String(scope)
+                ]))
+                let localURL = try await downloadDroppedNar(from: url)
+                sendEvent(.shiori(id: "OnURLDropped", references: [
+                    0: localURL.path, 1: url.absoluteString, 2: String(scope)
+                ]))
+                installNars(from: [localURL])
+            } catch {
+                sendEvent(.shiori(id: "OnURLDropFailure", references: [
+                    0: "", 1: urlDropFailureReason(error), 2: url.absoluteString, 3: String(scope)
+                ]))
+            }
+        }
+    }
+
+    private func handleXUkagakaLink(_ url: URL) -> Bool {
+        guard let values = xUkagakaLinkValues(url),
+              values["type"]?.caseInsensitiveCompare("event") == .orderedSame,
+              let target = values["ghost"], let info = values["info"]
+        else { return false }
+        if let currentGhost, ghost(currentGhost, matches: target) {
+            sendEvent(.shiori(id: "OnXUkagakaLinkOpen", references: [0: info]))
+        } else if let runtime = calledGhosts.values.first(where: { ghost($0.ghost, matches: target) }) {
+            runtime.send(.shiori(id: "OnXUkagakaLinkOpen", references: [0: info]))
+        }
+        return true
     }
 
     private func sendSecondChange() {
         guard !isTransitioningGhost else { return }
         let references = secondChangeReferences(for: surfaceWindowController)
         if let session {
-            let canTalk = !scriptPlayer.isDialogueActive
+            let canTalk = scriptPlayer.canTalk
             var primaryReferences = references
             // UKADOC / SSP standard: 1 for talkable, 0 while dialogue is being played.
             primaryReferences[3] = canTalk ? "1" : "0"
@@ -566,7 +638,7 @@ private struct UtataneRootView: View {
                 runtime.scheduleHourTimeSignal()
             }
         }
-        if pendingHourTimeSignal, !scriptPlayer.isDialogueActive {
+        if pendingHourTimeSignal, scriptPlayer.canTalk {
             pendingHourTimeSignal = false
             sendTimedEvent(id: "OnHourTimeSignal", waitsUntilTalkable: true, includesCalledGhosts: false)
         }
@@ -580,7 +652,7 @@ private struct UtataneRootView: View {
         waitsUntilTalkable: Bool,
         includesCalledGhosts: Bool = true
     ) {
-        let canTalk = !scriptPlayer.isDialogueActive
+        let canTalk = scriptPlayer.canTalk
         guard !waitsUntilTalkable || canTalk else { return }
         var references = secondChangeReferences(for: surfaceWindowController)
         references[3] = canTalk ? "1" : "0"
@@ -778,9 +850,7 @@ private struct UtataneRootView: View {
                 ]))
             }
             surfaceWindowController.onURLDrop = { scope, url in
-                sendEvent(.shiori(id: "OnURLDropping", references: [
-                    0: url.absoluteString, 1: String(scope)
-                ]))
+                handleURLDrop(scope: scope, url: url)
             }
             surfaceWindowController.onTextDrop = { scope, value in
                 sendEvent(.shiori(id: "OnTextDrop", references: [
@@ -1340,15 +1410,28 @@ private struct UtataneRootView: View {
             let archiveURL = resolvePath(narPath)
             let sourceURL = resolvePath(sourceDirectoryPath)
             do {
-                let result = try runner.compress(destinationArchiveURL: archiveURL, sourceDirectoryURL: sourceURL)
-                guard let eventID else { return nil }
+                let references = narCreationEventReferences(sourceURL: sourceURL, archiveURL: archiveURL)
+                _ = try? await activeSession.handle(event: .shiori(
+                    id: "OnNarCreating",
+                    references: references
+                ))
+                let result = try runner.compress(
+                    destinationArchiveURL: archiveURL,
+                    sourceDirectoryURL: sourceURL,
+                    appliesNarExclusions: true
+                )
+                let standardResponse = try? await activeSession.handle(event: .shiori(
+                    id: "OnNarCreated",
+                    references: references
+                ))
+                guard let eventID else { return standardResponse }
                 let id = eventID.hasPrefix("On") ? eventID : "OnCreateNarComplete"
                 return try await activeSession.handle(event: .shiori(id: id, references: [
                     0: eventID,
                     1: String(result.fileCount),
                     2: String(result.compressedBytes),
                     3: String(result.uncompressedBytes)
-                ]))
+                ])) ?? standardResponse
             } catch let error as ArchiveOperationError {
                 guard let eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateNarFailure"
@@ -1405,14 +1488,19 @@ private struct UtataneRootView: View {
         case let .createUpdateData(directoryPath, eventID):
             let targetURL = directoryPath.map(resolvePath) ?? currentGhost.rootDirectory
             do {
+                _ = try? await activeSession.handle(event: .shiori(id: "OnUpdatedataCreating", references: [:]))
                 let generator = UpdateDataGenerator()
                 let result = try generator.generate(in: targetURL)
-                guard let eventID else { return nil }
+                let standardResponse = try? await activeSession.handle(event: .shiori(
+                    id: "OnUpdatedataCreated",
+                    references: [:]
+                ))
+                guard let eventID else { return standardResponse }
                 let id = eventID.hasPrefix("On") ? eventID : "OnCreateUpdateDataComplete"
                 return try await activeSession.handle(event: .shiori(id: id, references: [
                     0: String(result.fileCount),
                     1: targetURL.path
-                ]))
+                ])) ?? standardResponse
             } catch {
                 guard let eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateUpdateDataFailure"
@@ -1678,7 +1766,7 @@ private struct UtataneRootView: View {
             }
             configureContextMenu()
         case .updateGhost:
-            Task { await updateCurrentGhost() }
+            Task { await updateCurrentGhost(reason: "script") }
         case .updateBalloon:
             Task { await updateCurrentBalloon() }
         case let .headline(target):
@@ -2322,7 +2410,7 @@ private struct UtataneRootView: View {
         installNars(from: [url])
     }
 
-    private func updateCurrentGhost(isAutomatic: Bool = false) async {
+    private func updateCurrentGhost(isAutomatic: Bool = false, reason: String? = nil) async {
         guard !isUpdatingContent,
               let ghost = currentGhost,
               let updateSession = session,
@@ -2332,6 +2420,7 @@ private struct UtataneRootView: View {
         defer { isUpdatingContent = false }
 
         let directoryName = ghost.rootDirectory.lastPathComponent
+        let updateReason = reason ?? (isAutomatic ? "auto" : "manual")
         networkSettings.recordContentUpdateAttempt(kind: .ghost, directoryName: directoryName)
         AppLogStore.shared.info("「\(ghost.name)」の更新確認を開始しました", category: "Update", ghostName: ghost.name)
         let statusToken = isAutomatic ? nil : statusWindowController.show("「\(ghost.name)」を更新中…")
@@ -2342,8 +2431,21 @@ private struct UtataneRootView: View {
         }
 
         do {
+            let usesCustomUpdate = await playInstallationEvent(
+                .shiori(id: "OnUpdateProcessExec", references: [0: updateReason]),
+                session: updateSession,
+                balloon: updateBalloon
+            )
+            if usesCustomUpdate {
+                return
+            }
             _ = await playInstallationEvent(
-                .shiori(id: "OnUpdateBegin", references: [:]),
+                .shiori(id: "OnUpdateBegin", references: [
+                    0: ghost.name,
+                    1: ghost.rootDirectory.path,
+                    3: "ghost",
+                    4: updateReason
+                ]),
                 session: updateSession,
                 balloon: updateBalloon
             )
@@ -2360,7 +2462,15 @@ private struct UtataneRootView: View {
             AppLogStore.shared.info("更新URL: \(homeURL.absoluteString)", category: "Update", ghostName: ghost.name)
             let result = try await ContentNetworkUpdater().update(
                 rootDirectory: ghost.rootDirectory,
-                homeURL: homeURL
+                homeURL: homeURL,
+                progress: { progress in
+                    await playUpdateProgress(
+                        progress,
+                        session: updateSession,
+                        balloon: updateBalloon,
+                        reason: updateReason
+                    )
+                }
             )
             networkSettings.recordContentUpdateSuccess(kind: .ghost, directoryName: directoryName)
             AppLogStore.shared.info(
@@ -2372,7 +2482,9 @@ private struct UtataneRootView: View {
             _ = await playInstallationEvent(
                 .shiori(id: "OnUpdateComplete", references: [
                     0: result.changedFiles.isEmpty ? "none" : "changed",
-                    1: String(result.changedFiles.count)
+                    1: result.changedFiles.joined(separator: ","),
+                    3: "ghost",
+                    4: updateReason
                 ]),
                 session: updateSession,
                 balloon: updateBalloon
@@ -2385,13 +2497,85 @@ private struct UtataneRootView: View {
                 ghostName: ghost.name
             )
             let handled = await playInstallationEvent(
-                .shiori(id: "OnUpdateFailure", references: [0: "download"]),
+                .shiori(id: "OnUpdateFailure", references: [
+                    0: updateFailureReason(error),
+                    1: updateFailurePath(error) ?? "",
+                    3: "ghost",
+                    4: updateReason
+                ]),
                 session: updateSession,
                 balloon: updateBalloon
             )
             if !handled, !isAutomatic {
                 showError(error.localizedDescription)
             }
+        }
+    }
+
+    private func playUpdateProgress(
+        _ progress: ContentUpdateProgress,
+        session: GhostSession,
+        balloon: BalloonDefinition,
+        reason: String
+    ) async {
+        let event: GhostEvent = switch progress {
+        case let .ready(files):
+            .shiori(id: "OnUpdateReady", references: [
+                0: String(max(0, files.count - 1)),
+                1: files.joined(separator: ","),
+                3: "ghost",
+                4: reason
+            ])
+        case let .downloadBegin(path, index, total):
+            .shiori(id: "OnUpdate.OnDownloadBegin", references: [
+                0: path,
+                1: String(index),
+                2: String(max(0, total - 1)),
+                3: "ghost",
+                4: reason
+            ])
+        case let .checksumBegin(path, expected, actual):
+            .shiori(id: "OnUpdate.OnMD5CompareBegin", references: [
+                0: path, 1: expected, 2: actual, 3: "ghost", 4: reason
+            ])
+        case let .checksumComplete(path, expected, actual):
+            .shiori(id: "OnUpdate.OnMD5CompareComplete", references: [
+                0: path, 1: expected, 2: actual, 3: "ghost", 4: reason
+            ])
+        case let .checksumFailure(path, expected, actual):
+            .shiori(id: "OnUpdate.OnMD5CompareFailure", references: [
+                0: path, 1: expected, 2: actual, 3: "ghost", 4: reason
+            ])
+        }
+        _ = await playInstallationEvent(event, session: session, balloon: balloon)
+    }
+
+    private func updateFailureReason(_ error: Error) -> String {
+        switch error {
+        case ContentNetworkUpdateError.checksumMismatch: "md5 miss"
+        case let ContentNetworkUpdateError.downloadFailed(_, underlyingError):
+            if underlyingError.localizedCaseInsensitiveContains("timed out")
+                || underlyingError.localizedCaseInsensitiveContains("timeout")
+            {
+                "timeout"
+            } else if let status = underlyingError
+                .split(whereSeparator: { !$0.isNumber })
+                .compactMap({ Int($0) })
+                .first(where: { 400 ... 599 ~= $0 })
+            {
+                String(status)
+            } else {
+                "fileio"
+            }
+        default: "fileio"
+        }
+    }
+
+    private func updateFailurePath(_ error: Error) -> String? {
+        switch error {
+        case let ContentNetworkUpdateError.checksumMismatch(path): path
+        case let ContentNetworkUpdateError.downloadFailed(path, _): path
+        default: nil
         }
     }
 
@@ -2806,6 +2990,7 @@ private struct UtataneRootView: View {
             headlinesDirectory: ContentRoot.headlinesDirectory
         )
         let selectedGhostDirectory = currentGhost?.rootDirectory
+        let activeGhostDirectories = activeGhostInstallTargets()
         let installSession = session
         let installBalloon = balloon
         Task {
@@ -2817,6 +3002,9 @@ private struct UtataneRootView: View {
             defer {
                 for url in securityScopedURLs {
                     url.stopAccessingSecurityScopedResource()
+                }
+                for url in urls where url.lastPathComponent.hasPrefix("utatane-url-drop-") {
+                    try? FileManager.default.removeItem(at: url)
                 }
             }
             AppLogStore.shared.info("NARインストール開始 (\(urls.count)件)", category: "Install", details: urls.map(\.path).joined(separator: "\n"))
@@ -2832,10 +3020,38 @@ private struct UtataneRootView: View {
                         try NarInstaller().install(
                             archiveURL: url,
                             roots: roots,
-                            selectedGhostDirectory: selectedGhostDirectory
+                            selectedGhostDirectory: selectedGhostDirectory,
+                            activeGhostDirectories: activeGhostDirectories
                         )
                     }.value
                     installedItems.append(contentsOf: result.items)
+                    let eventTarget = installationEventTarget(acceptedGhostName: result.acceptedGhostName)
+                    if let acceptedGhostName = result.acceptedGhostName,
+                       eventTarget.session !== installSession
+                    {
+                        _ = await playInstallationEvent(
+                            .shiori(id: "OnInstallReroute", references: [
+                                0: acceptedGhostName,
+                                1: result.primaryType.rawValue,
+                                2: result.items.first?.name ?? ""
+                            ]),
+                            session: installSession,
+                            balloon: installBalloon
+                        )
+                    }
+                    let references = installCompletionReferences(for: result.items)
+                    let handled = await playInstallationEvent(
+                        .shiori(id: "OnInstallCompleteEx", references: references),
+                        session: eventTarget.session,
+                        balloon: eventTarget.balloon
+                    )
+                    if !handled {
+                        _ = await playInstallationEvent(
+                            .shiori(id: "OnInstallComplete", references: legacyInstallCompletionReferences(for: result)),
+                            session: eventTarget.session,
+                            balloon: eventTarget.balloon
+                        )
+                    }
                 }
                 await model.load()
                 if selectedGhostID == nil {
@@ -2869,21 +3085,18 @@ private struct UtataneRootView: View {
                     ])
                 }
 
-                let separator = "\u{1}"
                 AppLogStore.shared.info(
                     "NARインストール完了 (\(installedItems.count)件)",
                     category: "Install",
                     details: installedItems.map { "\($0.type): \($0.name)" }.joined(separator: "\n")
                 )
-                _ = await playInstallationEvent(
-                    .shiori(id: "OnInstallCompleteEx", references: [
-                        0: installedItems.map(\.type.rawValue).joined(separator: separator),
-                        1: installedItems.map(\.name).joined(separator: separator),
-                        2: installedItems.map(\.url.lastPathComponent).joined(separator: separator)
-                    ]),
-                    session: installSession,
-                    balloon: installBalloon
-                )
+                if urls.count > 1 {
+                    _ = await playInstallationEvent(
+                        .shiori(id: "OnInstallCompleteAll", references: installCompletionReferences(for: installedItems)),
+                        session: installSession,
+                        balloon: installBalloon
+                    )
+                }
                 let completionToken = statusWindowController.show(
                     installedItems.count == 1
                         ? "「\(installedItems[0].name)」をインストールした"
@@ -2897,11 +3110,19 @@ private struct UtataneRootView: View {
                     category: "Install",
                     details: String(describing: error)
                 )
-                _ = await playInstallationEvent(
-                    .shiori(id: "OnInstallFailure", references: [0: installFailureReason(error)]),
-                    session: installSession,
-                    balloon: installBalloon
-                )
+                if case let NarInstallError.refused(accept, type, name) = error {
+                    _ = await playInstallationEvent(
+                        .shiori(id: "OnInstallRefuse", references: [0: accept, 1: type, 2: name]),
+                        session: installSession,
+                        balloon: installBalloon
+                    )
+                } else {
+                    _ = await playInstallationEvent(
+                        .shiori(id: "OnInstallFailure", references: [0: installFailureReason(error)]),
+                        session: installSession,
+                        balloon: installBalloon
+                    )
+                }
                 showError(error.localizedDescription)
             }
         }
@@ -2987,9 +3208,61 @@ private struct UtataneRootView: View {
         case .missingInstallFile, .ambiguousInstallFile, .unsupportedTextEncoding,
              .invalidDirectoryName, .missingSourceDirectory, .shellRequiresGhost:
             return "invalid type"
-        case .unsupportedType, .missingArchive, .archiveTooLarge, .destinationExists:
+        case .unsupportedType, .missingArchive, .archiveTooLarge, .destinationExists, .refused:
             return "unsupported"
         }
+    }
+
+    private func activeGhostInstallTargets() -> [String: URL] {
+        var targets: [String: URL] = [:]
+        func add(_ ghost: InstalledGhost) {
+            targets[ghost.name] = ghost.rootDirectory
+            for character in ghost.characters {
+                if let name = character.name, !name.isEmpty {
+                    targets[name] = ghost.rootDirectory
+                }
+            }
+        }
+        if let currentGhost {
+            add(currentGhost)
+        }
+        for runtime in calledGhosts.values {
+            add(runtime.ghost)
+        }
+        return targets
+    }
+
+    private func installationEventTarget(
+        acceptedGhostName: String?
+    ) -> (session: GhostSession?, balloon: BalloonDefinition?) {
+        guard let acceptedGhostName else { return (session, balloon) }
+        if let currentGhost, ghost(currentGhost, matches: acceptedGhostName) {
+            return (session, balloon)
+        }
+        if let runtime = calledGhosts.values.first(where: { ghost($0.ghost, matches: acceptedGhostName) }) {
+            return (runtime.session, runtime.balloon)
+        }
+        return (session, balloon)
+    }
+
+    private func installCompletionReferences(for items: [NarInstalledItem]) -> [Int: String] {
+        let separator = "\u{1}"
+        return [
+            0: items.map(\.type.rawValue).joined(separator: separator),
+            1: items.map(\.name).joined(separator: separator),
+            2: items.map(\.url.path).joined(separator: separator)
+        ]
+    }
+
+    private func legacyInstallCompletionReferences(for result: NarInstallResult) -> [Int: String] {
+        let identifier = result.items.count > 1 && result.items.contains(where: { $0.type == .balloon })
+            ? "\(result.primaryType.rawValue) with balloon"
+            : result.primaryType.rawValue
+        return [
+            0: identifier,
+            1: result.items.first?.name ?? "",
+            2: result.items.dropFirst().first?.name ?? ""
+        ]
     }
 
     private func requestApplicationTermination() {
@@ -3136,6 +3409,83 @@ func droppedFileMIMEType(_ url: URL) -> String {
         return "inode/directory"
     }
     return UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
+}
+
+func droppedFileViewerEventID(_ url: URL) -> String? {
+    guard let type = UTType(filenameExtension: url.pathExtension) else { return nil }
+    if type.conforms(to: .image) {
+        return "OnPictureViewerOpen"
+    }
+    if type.conforms(to: .audio) || type.conforms(to: .movie) {
+        return "OnMediaPlayerOpen"
+    }
+    let archiveExtensions = ["zip", "lzh", "lha", "rar", "7z", "tar", "gz", "bz2", "xz"]
+    if archiveExtensions.contains(url.pathExtension.lowercased()) {
+        return "OnArchiveViewerOpen"
+    }
+    return nil
+}
+
+enum URLDropDownloadError: Error {
+    case httpStatus(Int)
+    case invalidResponse
+}
+
+func downloadDroppedNar(from url: URL) async throws -> URL {
+    let (temporaryURL, response) = try await URLSession.shared.download(from: url)
+    guard let response = response as? HTTPURLResponse else { throw URLDropDownloadError.invalidResponse }
+    guard (200 ..< 300).contains(response.statusCode) else {
+        throw URLDropDownloadError.httpStatus(response.statusCode)
+    }
+    let destination = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-url-drop-\(UUID().uuidString).nar",
+        directoryHint: .notDirectory
+    )
+    try FileManager.default.moveItem(at: temporaryURL, to: destination)
+    return destination
+}
+
+func urlDropFailureReason(_ error: Error) -> String {
+    if case let URLDropDownloadError.httpStatus(status) = error {
+        return String(status)
+    }
+    if let error = error as? URLError, error.code == .timedOut {
+        return "timeout"
+    }
+    return "fileio"
+}
+
+func xUkagakaLinkValues(_ url: URL) -> [String: String]? {
+    guard url.scheme?.caseInsensitiveCompare("x-ukagaka-link") == .orderedSame,
+          let separator = url.absoluteString.firstIndex(of: ":")
+    else { return nil }
+    let payload = url.absoluteString[url.absoluteString.index(after: separator)...]
+    let pairs: [(String, String)] = payload.split(separator: "&").compactMap { field in
+        let pair = field.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+        guard pair.count == 2,
+              let key = String(pair[0]).removingPercentEncoding,
+              let value = String(pair[1]).removingPercentEncoding
+        else { return nil }
+        return (key.lowercased(), value)
+    }
+    return pairs.reduce(into: [String: String]()) { values, pair in
+        values[pair.0] = pair.1
+    }
+}
+
+func narCreationEventReferences(sourceURL: URL, archiveURL: URL) -> [Int: String] {
+    let metadata = try? NarInstaller().readInstallMetadata(
+        from: sourceURL.appending(path: "install.txt", directoryHint: .notDirectory)
+    )
+    let baseType = metadata?["type"]?.lowercased() ?? "ghost"
+    let identifier = metadata?["balloon.directory"] != nil && ["ghost", "shell"].contains(baseType)
+        ? "\(baseType) with balloon"
+        : baseType
+    return [
+        0: metadata?["name"] ?? sourceURL.lastPathComponent,
+        1: archiveURL.path,
+        2: identifier
+    ]
 }
 
 func linkEventReferences(_ label: String?, _ id: String?, _ arguments: [String]) -> [Int: String] {

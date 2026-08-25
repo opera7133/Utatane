@@ -424,6 +424,21 @@ func `parses raised events`() {
 }
 
 @Test
+func `parses online user break and sync object controls`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![enter,onlinemode]\![leave,onlinemode]\![enter,nouserbreakmode]\![leave,nouserbreakmode]\![set,syncobject,ready]\![wait,syncobject,ready,--timeout=250]\![reset,syncobject,ready]"#
+    ) == [
+        .onlineMode(true),
+        .onlineMode(false),
+        .noUserBreakMode(true),
+        .noUserBreakMode(false),
+        .syncObjectSet("ready"),
+        .syncObjectWait(name: "ready", timeoutMilliseconds: 250),
+        .syncObjectReset("ready")
+    ])
+}
+
+@Test
 func `parses content actions`() {
     #expect(SakuraScriptParser().parse(#"\+\_+\![change,ghost,Ria]\![call,ghost,Emily]\![change,shell,master]\![change,balloon,origin]\![updatebymyself]\![update,balloon]\![execute,headline,recall]"#) == [
         .contentAction(.randomGhost),
@@ -691,8 +706,14 @@ func `parses communicatebox and teachbox commands`() {
 @Test
 func `parses reload content actions and createnar commands`() {
     #expect(SakuraScriptParser().parse(
-        #"\![reload,ghost]\![reload,shell]\![reload,balloon]\![execute,createnar,/tmp/out.nar,/tmp/target,--event=OnExported]"#
+        #"\![reload,ghost]\![reload,shell]\![reload,balloon]\![reloadsurface]\![reload,surface]\![reload,shiori]\![reload,descript]\![reload,descript,shell balloon]\![execute,createnar,/tmp/out.nar,/tmp/target,--event=OnExported]"#
     ) == [
+        .contentAction(.reloadGhost),
+        .contentAction(.reloadShell),
+        .contentAction(.reloadBalloon),
+        .contentAction(.reloadShell),
+        .contentAction(.reloadShell),
+        .contentAction(.reloadGhost),
         .contentAction(.reloadGhost),
         .contentAction(.reloadShell),
         .contentAction(.reloadBalloon),
@@ -735,6 +756,29 @@ func `parses move commands`() {
     #expect(SakuraScriptParser().parse(#"\![move,100,200,1000]\![moveasync,--X=50,--Y=60,--time=500]"#) == [
         .moveSurface(x: 100, y: 200, time: 1000, isAsync: false, options: ["100", "200", "1000"]),
         .moveSurface(x: 50, y: 60, time: 500, isAsync: true, options: ["--X=50", "--Y=60", "--time=500"])
+    ])
+}
+
+@Test
+func `parses collision display mode commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![enter,collisionmode]\![enter,collisionmode,rect]\![leave,collisionmode]"#
+    ) == [
+        .collisionMode(enabled: true, showsNames: true),
+        .collisionMode(enabled: true, showsNames: false),
+        .collisionMode(enabled: false, showsNames: true)
+    ])
+}
+
+@Test
+func `parses passive and induction mode commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![enter,passivemode]\![leave,passivemode]\![enter,inductionmode]\![leave,inductionmode]"#
+    ) == [
+        .interactionMode(.passive, enabled: true),
+        .interactionMode(.passive, enabled: false),
+        .interactionMode(.induction, enabled: true),
+        .interactionMode(.induction, enabled: false)
     ])
 }
 
@@ -785,5 +829,15 @@ func `parses zorder and sticky window commands`() {
         .resetZOrder,
         .setStickyWindows([1, 0]),
         .resetStickyWindows
+    ])
+}
+
+@Test
+func `parses fixed position commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![set,position,120,-30,1]\![reset,position]"#
+    ) == [
+        .setPosition(x: 120, y: -30, scope: 1),
+        .resetPosition
     ])
 }

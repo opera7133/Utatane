@@ -1012,6 +1012,56 @@ func `applies balloon default font decoration`() async throws {
 
 @Test
 @MainActor
+func `lays out vertical balloon text with vertical glyphs`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 300, height: 200).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    let balloon = BalloonDefinition(
+        directory: directory,
+        name: "vertical",
+        originX: 280,
+        originY: 20,
+        wordWrapPointX: 0,
+        wordWrapPointY: 180,
+        fontHeight: 14,
+        fontColor: BalloonColor(red: 0, green: 0, blue: 0),
+        validRectLeft: 20,
+        validRectTop: 20,
+        validRectRight: 280,
+        validRectBottom: 180,
+        isVertical: true
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"縦書き\e"#),
+        balloon: balloon,
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(balloonController.textLayoutOrientation(scope: 0) == .vertical)
+    #expect(balloonController.textAttributes(at: 0, scope: 0)?[.verticalGlyphForm] as? Int == 1)
+}
+
+@Test
+@MainActor
 func `runs a script choice directly without dispatching a SHIORI choice`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
@@ -1345,6 +1395,34 @@ func `handles zorder and sticky window configuration`() {
     surfaceController.resetStickyWindows()
     surfaceController.setZOrder(["1", "0"])
     surfaceController.resetZOrder()
+}
+
+@Test
+@MainActor
+func `sets and resets a fixed surface position`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { controller.hideAll() }
+
+    await controller.setFixedPosition(x: 120, y: 200, scope: 0)
+
+    #expect(controller.windowFrame(for: 0)?.origin == NSPoint(x: 120, y: 200))
+    #expect(controller.isMovementLocked(scope: 0))
+
+    controller.resetFixedPositions()
+    #expect(!controller.isMovementLocked(scope: 0))
 }
 
 @Test

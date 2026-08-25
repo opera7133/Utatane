@@ -24,6 +24,12 @@ public struct UpdateDataGenerator: Sendable {
         }
 
         var entries: [(relativePath: String, md5: String, size: Int, date: String)] = []
+        let developerOptions = try DeveloperOptions.load(from: directoryURL)
+        let pathFilter = try ContentPathFilter.load(
+            from: directoryURL,
+            ignoreFilename: ".updateignore",
+            includeFilename: ".updateinclude"
+        )
 
         let enumerator = FileManager.default.enumerator(
             at: directoryURL,
@@ -36,9 +42,7 @@ public struct UpdateDataGenerator: Sendable {
             guard resourceValues?.isRegularFile == true else { continue }
 
             let filename = fileURL.lastPathComponent
-            if filename == ".DS_Store"
-                || filename.hasSuffix("_variable.cfg")
-                || filename == "updates2.dau"
+            if filename == "updates2.dau"
                 || filename == "updates.txt"
             {
                 continue
@@ -51,6 +55,12 @@ public struct UpdateDataGenerator: Sendable {
             var relativePath = String(filePath.dropFirst(rootPath.count))
             if relativePath.hasPrefix("/") {
                 relativePath.removeFirst()
+            }
+            if DeveloperOptions.isStandardExcluded(relativePath: relativePath)
+                || developerOptions.excludesFromUpdate(relativePath: relativePath)
+                || !pathFilter.includes(relativePath: relativePath)
+            {
+                continue
             }
 
             let data = try Data(contentsOf: fileURL)

@@ -71,12 +71,18 @@ public struct BalloonLoader: Sendable {
             throw BalloonError.invalidType(descriptURL)
         }
 
+        let isVertical = boolean("vertical", in: values)
+        let validRectLeft = integer("validrect.left", in: values, default: 14)
+        let validRectTop = integer("validrect.top", in: values, default: 14)
+        let validRectRight = values["validrect.right"].flatMap(Int.init)
+        let validRectBottom = values["validrect.bottom"].flatMap(Int.init)
+
         return BalloonDefinition(
             directory: directory,
             name: values["name"] ?? directory.lastPathComponent,
             originX: textOrigin(
                 originKey: "origin.x",
-                validRectKey: "validrect.left",
+                validRectKey: isVertical ? "validrect.right" : "validrect.left",
                 in: values,
                 default: 14
             ),
@@ -87,13 +93,22 @@ public struct BalloonLoader: Sendable {
                 default: 14
             ),
             wordWrapPointX: integer("wordwrappoint.x", in: values, default: -14),
-            wordWrapPointY: integer("wordwrappoint.y", in: values, default: 0),
+            wordWrapPointY: integer(
+                "wordwrappoint.y",
+                in: values,
+                default: isVertical ? (validRectBottom ?? 0) : 0
+            ),
             fontHeight: integer("font.height", in: values, default: 12),
             fontColor: BalloonColor(
                 red: integer("font.color.r", in: values, default: 0),
                 green: integer("font.color.g", in: values, default: 0),
                 blue: integer("font.color.b", in: values, default: 0)
             ),
+            validRectLeft: validRectLeft,
+            validRectTop: validRectTop,
+            validRectRight: validRectRight,
+            validRectBottom: validRectBottom,
+            isVertical: isVertical,
             fontName: values["font.name"],
             fontShadowColor: color(prefix: "font.shadowcolor", in: values),
             fontShadowStyle: values["font.shadowstyle"]?.lowercased(),

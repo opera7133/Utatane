@@ -7,6 +7,11 @@ public struct BalloonDefinition: Sendable, Equatable {
     public let originY: Int
     public let wordWrapPointX: Int
     public let wordWrapPointY: Int
+    public let validRectLeft: Int
+    public let validRectTop: Int
+    public let validRectRight: Int?
+    public let validRectBottom: Int?
+    public let isVertical: Bool
     public let fontHeight: Int
     public let fontColor: BalloonColor
     public let fontName: String?
@@ -35,6 +40,11 @@ public struct BalloonDefinition: Sendable, Equatable {
         wordWrapPointY: Int,
         fontHeight: Int,
         fontColor: BalloonColor,
+        validRectLeft: Int = 14,
+        validRectTop: Int = 14,
+        validRectRight: Int? = nil,
+        validRectBottom: Int? = nil,
+        isVertical: Bool = false,
         fontName: String? = nil,
         fontShadowColor: BalloonColor? = nil,
         fontShadowStyle: String? = nil,
@@ -58,6 +68,11 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.originY = originY
         self.wordWrapPointX = wordWrapPointX
         self.wordWrapPointY = wordWrapPointY
+        self.validRectLeft = validRectLeft
+        self.validRectTop = validRectTop
+        self.validRectRight = validRectRight
+        self.validRectBottom = validRectBottom
+        self.isVertical = isVertical
         self.fontHeight = fontHeight
         self.fontColor = fontColor
         self.fontName = fontName

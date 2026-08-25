@@ -25,6 +25,14 @@ public struct ContentUpdateResult: Sendable, Equatable {
     }
 }
 
+public enum ContentUpdateProgress: Sendable, Equatable {
+    case ready(files: [String])
+    case downloadBegin(path: String, index: Int, total: Int)
+    case checksumBegin(path: String, expected: String, actual: String)
+    case checksumComplete(path: String, expected: String, actual: String)
+    case checksumFailure(path: String, expected: String, actual: String)
+}
+
 public enum ContentNetworkUpdateError: LocalizedError, Equatable, Sendable {
     case invalidHomeURL
     case missingManifest
@@ -51,6 +59,7 @@ public enum ContentNetworkUpdateError: LocalizedError, Equatable, Sendable {
 
 public struct ContentNetworkUpdater: Sendable {
     public typealias Fetch = @Sendable (URL) async throws -> Data
+    public typealias Progress = @MainActor @Sendable (ContentUpdateProgress) async -> Void
     private let maximumFileCount: Int
     private let maximumTotalBytes: Int
     private let fetch: Fetch
@@ -65,7 +74,11 @@ public struct ContentNetworkUpdater: Sendable {
         self.fetch = fetch
     }
 
-    public func update(rootDirectory: URL, homeURL: URL) async throws -> ContentUpdateResult {
+    public func update(
+        rootDirectory: URL,
+        homeURL: URL,
+        progress: Progress? = nil
+    ) async throws -> ContentUpdateResult {
         guard let scheme = homeURL.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
             throw ContentNetworkUpdateError.invalidHomeURL
         }
@@ -84,13 +97,20 @@ public struct ContentNetworkUpdater: Sendable {
             try? fileManager.removeItem(at: backup)
         }
 
-        var changed: [(entry: ContentUpdateEntry, local: URL, staged: URL)] = []
-        var totalBytes = 0
-        for entry in entries {
+        let pending = try entries.compactMap { entry -> (ContentUpdateEntry, URL)? in
             let local = try Self.confinedURL(path: entry.path, root: root)
             if let data = try? Data(contentsOf: local), Self.md5(data) == entry.md5 {
-                continue
+                return nil
             }
+            return (entry, local)
+        }
+        await progress?(.ready(files: pending.map(\.0.path)))
+
+        var changed: [(entry: ContentUpdateEntry, local: URL, staged: URL)] = []
+        var totalBytes = 0
+        for (index, item) in pending.enumerated() {
+            let (entry, local) = item
+            await progress?(.downloadBegin(path: entry.path, index: index, total: pending.count))
             let remote = manifestURL.deletingLastPathComponent().appending(path: entry.path)
             let data: Data
             do {
@@ -100,9 +120,13 @@ public struct ContentNetworkUpdater: Sendable {
             }
             totalBytes += data.count
             guard totalBytes <= maximumTotalBytes else { throw ContentNetworkUpdateError.updateTooLarge }
-            guard Self.md5(data) == entry.md5 else {
+            let actualMD5 = Self.md5(data)
+            await progress?(.checksumBegin(path: entry.path, expected: entry.md5, actual: actualMD5))
+            guard actualMD5 == entry.md5 else {
+                await progress?(.checksumFailure(path: entry.path, expected: entry.md5, actual: actualMD5))
                 throw ContentNetworkUpdateError.checksumMismatch(entry.path)
             }
+            await progress?(.checksumComplete(path: entry.path, expected: entry.md5, actual: actualMD5))
             if let expectedSize = entry.size, data.count != expectedSize {
                 throw ContentNetworkUpdateError.downloadFailed(
                     path: entry.path,

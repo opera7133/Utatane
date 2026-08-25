@@ -24,14 +24,16 @@ public struct NarInstallationRoots: Sendable, Equatable {
 public struct NarInstallResult: Sendable, Equatable {
     public let primaryType: NarContentType
     public let items: [NarInstalledItem]
+    public let acceptedGhostName: String?
 
     public var installedURLs: [URL] {
         items.map(\.url)
     }
 
-    public init(primaryType: NarContentType, items: [NarInstalledItem]) {
+    public init(primaryType: NarContentType, items: [NarInstalledItem], acceptedGhostName: String? = nil) {
         self.primaryType = primaryType
         self.items = items
+        self.acceptedGhostName = acceptedGhostName
     }
 }
 
@@ -63,6 +65,7 @@ public enum NarInstallError: LocalizedError, Equatable {
     case missingSourceDirectory(String)
     case shellRequiresGhost
     case destinationExists(URL)
+    case refused(accept: String, type: String, name: String)
     case commandFailed(String)
 
     public var errorDescription: String? {
@@ -82,6 +85,7 @@ public enum NarInstallError: LocalizedError, Equatable {
         case let .missingSourceDirectory(name): "同梱コンテンツが見つからない: \(name)"
         case .shellRequiresGhost: "Shellのインストール先ゴーストが選択されていない"
         case let .destinationExists(url): "同名のコンテンツが既にある: \(url.path)"
+        case let .refused(accept, _, _): "このNARは起動中の「\(accept)」用に指定されている"
         case let .commandFailed(message): "NARの展開に失敗した: \(message)"
         }
     }
@@ -105,7 +109,8 @@ public struct NarInstaller: Sendable {
     public func install(
         archiveURL: URL,
         roots: NarInstallationRoots,
-        selectedGhostDirectory: URL? = nil
+        selectedGhostDirectory: URL? = nil,
+        activeGhostDirectories: [String: URL] = [:]
     ) throws -> NarInstallResult {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: archiveURL.path) else {
@@ -141,6 +146,19 @@ public struct NarInstaller: Sendable {
 
         var operations: [(source: URL, destination: URL, type: NarContentType, name: String)] = []
         let primaryName = metadata["name"] ?? directoryName
+        let acceptedGhostName = metadata["accept"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let acceptedGhostDirectory = acceptedGhostName.flatMap { acceptedName in
+            activeGhostDirectories.first {
+                $0.key.caseInsensitiveCompare(acceptedName) == .orderedSame
+            }?.value
+        }
+        if let acceptedGhostName, !acceptedGhostName.isEmpty, acceptedGhostDirectory == nil {
+            throw NarInstallError.refused(
+                accept: acceptedGhostName,
+                type: contentType.rawValue,
+                name: primaryName
+            )
+        }
         switch contentType {
         case .ghost:
             operations.append((sourceRoot, roots.ghostsDirectory.appending(
@@ -167,8 +185,10 @@ public struct NarInstaller: Sendable {
                 directoryHint: .isDirectory
             ), .balloon, primaryName))
         case .shell:
-            guard let selectedGhostDirectory else { throw NarInstallError.shellRequiresGhost }
-            operations.append((sourceRoot, selectedGhostDirectory
+            guard let targetGhostDirectory = acceptedGhostDirectory ?? selectedGhostDirectory else {
+                throw NarInstallError.shellRequiresGhost
+            }
+            operations.append((sourceRoot, targetGhostDirectory
                     .appending(path: "shell", directoryHint: .isDirectory)
                     .appending(path: directoryName, directoryHint: .isDirectory), .shell, primaryName))
         case .headline:
@@ -198,7 +218,8 @@ public struct NarInstaller: Sendable {
             primaryType: contentType,
             items: zip(operations, installedURLs).map { operation, url in
                 NarInstalledItem(type: operation.type, name: operation.name, url: url)
-            }
+            },
+            acceptedGhostName: acceptedGhostName
         )
     }
 
@@ -291,7 +312,7 @@ public struct NarInstaller: Sendable {
         return installURL
     }
 
-    private func readInstallMetadata(from url: URL) throws -> [String: String] {
+    public func readInstallMetadata(from url: URL) throws -> [String: String] {
         let data = try Data(contentsOf: url)
         guard let text = String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .shiftJIS)

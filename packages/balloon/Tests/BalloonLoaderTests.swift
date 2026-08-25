@@ -74,6 +74,34 @@ func `explicit text origin takes precedence over valid rect`() throws {
 }
 
 @Test
+func `loads vertical writing layout using right and bottom valid rect defaults`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    type,balloon
+    name,Vertical Balloon
+    vertical,1
+    origin.x,0
+    origin.y,0
+    validrect.left,18
+    validrect.top,22
+    validrect.right,280
+    validrect.bottom,180
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+
+    let balloon = try BalloonLoader().load(from: directory)
+
+    #expect(balloon.isVertical)
+    #expect(balloon.originX == 280)
+    #expect(balloon.originY == 22)
+    #expect(balloon.wordWrapPointY == 180)
+    #expect(balloon.validRectLeft == 18)
+    #expect(balloon.validRectBottom == 180)
+}
+
+@Test
 func `loads SSP choice and anchor appearances`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

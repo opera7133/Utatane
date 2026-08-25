@@ -403,6 +403,60 @@ public struct SakuraScriptParser: Sendable {
                         ))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "syncobject",
+                              arguments.count >= 3, !arguments[2].isEmpty
+                    {
+                        tokens.append(.syncObjectSet(arguments[2]))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "reset",
+                              arguments[1].lowercased() == "syncobject",
+                              arguments.count >= 3, !arguments[2].isEmpty
+                    {
+                        tokens.append(.syncObjectReset(arguments[2]))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "wait",
+                              arguments[1].lowercased() == "syncobject",
+                              !arguments[2].isEmpty
+                    {
+                        let timeout = arguments.dropFirst(3).compactMap { option -> Int? in
+                            let value = option.lowercased()
+                            if value.hasPrefix("--timeout=") {
+                                return Int(value.dropFirst("--timeout=".count))
+                            }
+                            return Int(value)
+                        }.first
+                        tokens.append(.syncObjectWait(
+                            name: arguments[2],
+                            timeoutMilliseconds: timeout.flatMap { $0 > 0 ? $0 : nil }
+                        ))
+                    } else if arguments.count >= 2,
+                              ["enter", "leave"].contains(arguments[0].lowercased()),
+                              arguments[1].lowercased() == "onlinemode"
+                    {
+                        tokens.append(.onlineMode(arguments[0].lowercased() == "enter"))
+                    } else if arguments.count >= 2,
+                              ["enter", "leave"].contains(arguments[0].lowercased()),
+                              arguments[1].lowercased() == "nouserbreakmode"
+                    {
+                        tokens.append(.noUserBreakMode(arguments[0].lowercased() == "enter"))
+                    } else if arguments.count >= 2,
+                              ["enter", "leave"].contains(arguments[0].lowercased()),
+                              ["passivemode", "inductionmode"].contains(arguments[1].lowercased())
+                    {
+                        tokens.append(.interactionMode(
+                            arguments[1].lowercased() == "passivemode" ? .passive : .induction,
+                            enabled: arguments[0].lowercased() == "enter"
+                        ))
+                    } else if arguments.count >= 2,
+                              ["enter", "leave"].contains(arguments[0].lowercased()),
+                              arguments[1].lowercased() == "collisionmode"
+                    {
+                        tokens.append(.collisionMode(
+                            enabled: arguments[0].lowercased() == "enter",
+                            showsNames: arguments.count < 3 || arguments[2].lowercased() != "rect"
+                        ))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
                               arguments[1].lowercased() == "choicetimeout"
                     {
                         if arguments.count < 3 || arguments[2].isEmpty {
@@ -537,6 +591,19 @@ public struct SakuraScriptParser: Sendable {
                               arguments[1].lowercased() == "zorder"
                     {
                         tokens.append(.setZOrder(Array(arguments.dropFirst(2))))
+                    } else if arguments.count >= 5,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "position",
+                              let x = Int(arguments[2]),
+                              let y = Int(arguments[3]),
+                              let scope = Int(arguments[4])
+                    {
+                        tokens.append(.setPosition(x: x, y: y, scope: scope))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "reset",
+                              arguments[1].lowercased() == "position"
+                    {
+                        tokens.append(.resetPosition)
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "reset",
                               arguments[1].lowercased() == "zorder"
@@ -824,11 +891,37 @@ public struct SakuraScriptParser: Sendable {
                             scope: Int(arguments[2]) ?? 0,
                             surfaceID: Int(arguments[3]) ?? 0
                         ))
+                    } else if arguments.count == 1,
+                              arguments[0].lowercased() == "reloadsurface"
+                    {
+                        tokens.append(.contentAction(.reloadShell))
                     } else if arguments.count >= 2, arguments[0].lowercased() == "reload" {
                         switch arguments[1].lowercased() {
                         case "ghost": tokens.append(.contentAction(.reloadGhost))
-                        case "shell": tokens.append(.contentAction(.reloadShell))
+                        case "surface", "shell": tokens.append(.contentAction(.reloadShell))
                         case "balloon": tokens.append(.contentAction(.reloadBalloon))
+                        case "shiori": tokens.append(.contentAction(.reloadGhost))
+                        case "descript":
+                            let targets = arguments.dropFirst(2)
+                                .flatMap { $0.lowercased().split(whereSeparator: { $0.isWhitespace }) }
+                                .map(String.init)
+                            let effectiveTargets = targets.isEmpty ? ["ghost", "shell", "balloon"] : targets
+                            var actions: [SakuraScriptContentAction] = []
+                            if effectiveTargets.contains("ghost") {
+                                actions.append(.reloadGhost)
+                            } else {
+                                if effectiveTargets.contains("shell") {
+                                    actions.append(.reloadShell)
+                                }
+                                if effectiveTargets.contains("balloon") {
+                                    actions.append(.reloadBalloon)
+                                }
+                            }
+                            if actions.isEmpty {
+                                tokens.append(.unknown("\\![\(argument)]"))
+                            } else {
+                                tokens.append(contentsOf: actions.map(SakuraScriptToken.contentAction))
+                            }
                         default: tokens.append(.unknown("\\![\(argument)]"))
                         }
                     } else if arguments.count >= 4,

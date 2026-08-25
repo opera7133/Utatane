@@ -176,59 +176,59 @@ UKADOC掲載イベント数: 290
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnInstallBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallBegin) | 🟡 | 通知経路のUKADOC照合 | 低 | 静的照合ではNARインストール開始前にReferenceなしで発行。実行経路は未確認 |
-| [`OnInstallComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallComplete) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnInstallCompleteEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallCompleteEx) | 🟡 | 通知経路のUKADOC照合 | 低 | 複数項目をバイト値1区切りで通知するがReference2がインストール先ではなく元ファイル名 |
-| [`OnInstallCompleteAll`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallCompleteAll) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnInstallBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallBegin) | 🟡 | 通知経路のUKADOC照合 | 低 | NARインストール開始前にReferenceなしで発行。実機でのゴースト応答は未確認 |
+| [`OnInstallComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallComplete) | 🟡 | 通知経路のUKADOC照合 | 低 | 各NARの`OnInstallCompleteEx`に応答がない場合、識別子・主項目名・同梱項目名をReference0〜2へ入れて発行。実機応答は未確認 |
+| [`OnInstallCompleteEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallCompleteEx) | 🟡 | 通知経路のUKADOC照合 | 低 | 各NARのインストール後、識別子・名前・インストール先絶対パスをバイト値1区切りでReference0〜2へ通知。実機応答は未確認 |
+| [`OnInstallCompleteAll`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallCompleteAll) | 🟡 | 通知経路のUKADOC照合 | 低 | 複数NARがすべて成功した場合、各完了通知の後に全項目をバイト値1区切りで通知。実機応答は未確認 |
 | [`OnInstallFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallFailure) | 🟡 | 通知経路のUKADOC照合 | 低 | 静的照合ではNARインストール失敗理由をReference0へ通知。実行経路は未確認 |
-| [`OnInstallRefuse`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallRefuse) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnInstallReroute`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallReroute) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnInstallRefuse`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallRefuse) | 🟡 | 通知経路のUKADOC照合 | 低 | `install.txt`のaccept対象が起動していない場合、対象名・識別子・項目名をReference0〜2へ通知して拒否。実機応答は未確認 |
+| [`OnInstallReroute`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInstallReroute) | 🟡 | 通知経路のUKADOC照合 | 低 | accept対象が呼び出しゴーストとして起動中なら元ゴーストへ通知し、以降の完了イベントを対象へ転送。実機応答は未確認 |
 
 ## ファイルドロップイベント
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
 | [`OnFileDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDropping) | 🟡 | 通知経路のUKADOC照合 | 低 | ファイルドラッグ進入時に先頭ファイルのパスとscopeをReference0〜1へ通知。複数ファイルの個別通知は未対応 |
-| [`OnFileDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDropped) | 🟡 | 通知経路のUKADOC照合 | 低 | ドロップ完了時に先頭ファイルのパス・scope・MIME typeをReference0〜2へ通知。新旧イベント間の応答フォールバックは未対応 |
-| [`OnFileDrop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDrop) | 🟡 | 通知経路のUKADOC照合 | 低 | ドロップした先頭ファイルのパス・scope・MIME typeをReference0〜2へ通知。新旧イベント間の応答フォールバックは未対応 |
-| [`OnFileDropEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDropEx) | 🟡 | 通知経路のUKADOC照合 | 低 | 全ファイルのパスとMIME typeをバイト値1区切りでReference0・2へ、scopeをReference1へ通知。応答フォールバックは未対応 |
-| [`OnFileDrop2`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDrop2) | 🟡 | 通知経路のUKADOC照合 | 低 | 全ファイルのパスとMIME typeをバイト値1区切りでReference0・2へ、scopeをReference1へ通知。応答フォールバックは未対応 |
-| [`OnMediaPlayerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMediaPlayerOpen) | ❌ | ドラッグ＆ドロップ／関連UI | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnPictureViewerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnPictureViewerOpen) | ❌ | ドラッグ＆ドロップ／関連UI | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnArchiveViewerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnArchiveViewerOpen) | ❌ | ドラッグ＆ドロップ／関連UI | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnFileDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDropped) | ➖ | 旧仕様 | 低 | 最新仕様の`OnFileDrop2`のみ発行し、重複発火を避けるため旧イベントは発行しない |
+| [`OnFileDrop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDrop) | ➖ | 旧仕様 | 低 | 最新仕様の`OnFileDrop2`のみ発行し、重複発火を避けるため旧イベントは発行しない |
+| [`OnFileDropEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDropEx) | ➖ | 旧仕様 | 低 | 最新仕様の`OnFileDrop2`のみ発行し、重複発火を避けるため旧イベントは発行しない |
+| [`OnFileDrop2`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDrop2) | 🟡 | 通知経路のUKADOC照合 | 低 | 全ファイルのパスとMIME typeをバイト値1区切りでReference0・2へ、scopeをReference1へ通知。実機応答は未確認 |
+| [`OnMediaPlayerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMediaPlayerOpen) | 🟡 | ドラッグ＆ドロップ／関連UI | 低 | `OnFileDrop2`未応答の音声・動画を既定アプリで開いた後、同じReferenceで通知。実機応答は未確認 |
+| [`OnPictureViewerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnPictureViewerOpen) | 🟡 | ドラッグ＆ドロップ／関連UI | 低 | `OnFileDrop2`未応答の画像を既定アプリで開いた後、同じReferenceで通知。実機応答は未確認 |
+| [`OnArchiveViewerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnArchiveViewerOpen) | 🟡 | ドラッグ＆ドロップ／関連UI | 低 | `OnFileDrop2`未応答の一般アーカイブを既定アプリで開いた後、同じReferenceで通知。NARはインストールを優先。実機応答は未確認 |
 | [`OnOtherObjectDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherObjectDropping) | ❌ | ドラッグ＆ドロップ／関連UI | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnOtherObjectDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherObjectDropped) | ❌ | ドラッグ＆ドロップ／関連UI | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnDirectoryDrop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDirectoryDrop) | 🟡 | 通知経路のUKADOC照合 | 低 | ドロップされた各ディレクトリについてパスとscopeをReference0〜1へ通知。応答フォールバックは未対応 |
 | [`OnWallpaperChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWallpaperChange) | ❌ | ドラッグ＆ドロップ／関連UI | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdatedataCreating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdatedataCreating) | ❌ | ドラッグ＆ドロップ／関連UI | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdatedataCreated`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdatedataCreated) | ❌ | ドラッグ＆ドロップ／関連UI | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnNarCreating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNarCreating) | ❌ | ドラッグ＆ドロップ／関連UI | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnNarCreated`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNarCreated) | ❌ | ドラッグ＆ドロップ／関連UI | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnUpdatedataCreating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdatedataCreating) | 🟡 | 更新データ作成経路 | 低 | `createupdatedata`による`updates2.dau`生成の直前にReferenceなしで通知。フォルダD&Dからの作成UIは未実装 |
+| [`OnUpdatedataCreated`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdatedataCreated) | 🟡 | 更新データ作成経路 | 低 | `updates2.dau`生成成功後にReferenceなしで通知。実機応答は未確認 |
+| [`OnNarCreating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNarCreating) | 🟡 | NAR作成経路 | 低 | `createnar`実行直前にinstall.txt由来の名前、出力絶対パス、識別子をReference0〜2へ通知。フォルダD&Dからの作成UIは未実装 |
+| [`OnNarCreated`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNarCreated) | 🟡 | NAR作成経路 | 低 | NAR作成成功後に同じReference0〜2を通知。実機応答は未確認 |
 
 ## URLドロップイベント
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
 | [`OnURLDragDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDragDropping) | 🟡 | 通知経路のUKADOC照合 | 低 | Web URLがサーフェスへ重なった時にURLとscopeを通知。受入可否の詳細判定は未実装 |
-| [`OnURLDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropping) | 🟡 | 通知経路のUKADOC照合 | 低 | Web URLがサーフェスへドロップされた時にURLとscopeを通知。後続のダウンロード機能は未実装 |
-| [`OnURLDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropped) | ❌ | URLドラッグ＆ドロップ | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnURLDropFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropFailure) | ❌ | URLドラッグ＆ドロップ | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnURLQuery`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLQuery) | ❌ | URLドラッグ＆ドロップ | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnXUkagakaLinkOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnXUkagakaLinkOpen) | ❌ | URLドラッグ＆ドロップ | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnURLDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropping) | 🟡 | 通知経路のUKADOC照合 | 低 | NAR URLのダウンロード開始直前にURLとscopeを通知。実ネットワークでの確認は未実施 |
+| [`OnURLDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropped) | 🟡 | URLドラッグ＆ドロップ | 低 | NARのダウンロード完了後・インストール直前にローカルパス・元URL・scopeを通知。実ネットワークでの確認は未実施 |
+| [`OnURLDropFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropFailure) | 🟡 | URLドラッグ＆ドロップ | 低 | NAR取得失敗時に空のローカルパス、timeout・HTTP status・fileio、元URL、scopeをReference0〜3へ通知。実ネットワークでの確認は未実施 |
+| [`OnURLQuery`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLQuery) | 🟡 | URLドラッグ＆ドロップ | 低 | URL・scope・推定MIME type・nar/unknownを通知し、スクリプト応答時は標準処理を中止。feed・homeurl判定は未対応 |
+| [`OnXUkagakaLinkOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnXUkagakaLinkOpen) | 🟡 | URLドラッグ＆ドロップ | 低 | メインゴーストへのドロップ時、ghost指定を起動中の本体名・キャラクター名と照合し、URLデコード済みinfoを対象へ通知。OSのURL関連付けと呼び出しゴースト上のドロップは未対応 |
 
 ## ネットワーク更新イベント
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnUpdateProcessExec`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateProcessExec) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateBegin) | 🟡 | 通知経路のUKADOC照合 | 低 | 更新開始時に発行するがReference0〜4を送っていない |
-| [`OnUpdateReady`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateReady) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateComplete) | 🟡 | 通知経路のUKADOC照合 | 低 | 成功時に発行するがReference1がファイル名一覧でなく件数。Reference3〜4も不足 |
-| [`OnUpdateFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateFailure) | 🟡 | 通知経路のUKADOC照合 | 低 | 失敗時にReference0を通知。失敗ファイル・対象種別・実行理由が不足 |
-| [`OnUpdate.OnDownloadBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnDownloadBegin) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdate.OnMD5CompareBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnMD5CompareBegin) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdate.OnMD5CompareComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnMD5CompareComplete) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdate.OnMD5CompareFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnMD5CompareFailure) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnUpdateProcessExec`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateProcessExec) | 🟡 | 通知経路のUKADOC照合 | 低 | ゴースト更新の指示時にmanual・auto・scriptを通知し、応答があれば標準更新を行わない。実動未確認 |
+| [`OnUpdateBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateBegin) | 🟡 | 通知経路のUKADOC照合 | 低 | ゴースト名・フルパス・ghost・実行理由をReference0・1・3・4へ通知。実動未確認 |
+| [`OnUpdateReady`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateReady) | 🟡 | 通知経路のUKADOC照合 | 低 | ローカルMD5との比較後、更新対象の最終番号とファイル名一覧をReference0〜1へ、種別・理由を3〜4へ通知。実動未確認 |
+| [`OnUpdateComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateComplete) | 🟡 | 通知経路のUKADOC照合 | 低 | none／changed、ファイル名一覧、ghost、実行理由をReference0・1・3・4へ通知。実動未確認 |
+| [`OnUpdateFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateFailure) | 🟡 | 通知経路のUKADOC照合 | 低 | md5 miss／timeout／HTTP状態／fileio、失敗ファイル、ghost、実行理由をReference0・1・3・4へ通知。全失敗理由の分類は未対応 |
+| [`OnUpdate.OnDownloadBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnDownloadBegin) | 🟡 | 通知経路のUKADOC照合 | 低 | 各更新ファイル取得前にパス・0始まり番号・最終番号・ghost・実行理由を通知。実動未確認 |
+| [`OnUpdate.OnMD5CompareBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnMD5CompareBegin) | 🟡 | 通知経路のUKADOC照合 | 低 | 取得後の照合前にパス・期待値・実測MD5・ghost・実行理由を通知。実動未確認 |
+| [`OnUpdate.OnMD5CompareComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnMD5CompareComplete) | 🟡 | 通知経路のUKADOC照合 | 低 | MD5一致時にパス・期待値・実測値・ghost・実行理由を通知。実動未確認 |
+| [`OnUpdate.OnMD5CompareFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnMD5CompareFailure) | 🟡 | 通知経路のUKADOC照合 | 低 | MD5不一致時にパス・期待値・実測値・ghost・実行理由を通知してから更新を中断。実動未確認 |
 | [`OnUpdateOtherBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherBegin) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnUpdateOtherReady`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherReady) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnUpdateOtherComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherComplete) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |

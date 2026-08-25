@@ -55,6 +55,13 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case font(name: String, arguments: [String])
     case quickSection(Bool?)
     case synchronizeScopes([Int]?)
+    case onlineMode(Bool)
+    case noUserBreakMode(Bool)
+    case interactionMode(SakuraScriptInteractionMode, enabled: Bool)
+    case collisionMode(enabled: Bool, showsNames: Bool)
+    case syncObjectWait(name: String, timeoutMilliseconds: Int?)
+    case syncObjectSet(String)
+    case syncObjectReset(String)
     case open(String)
     case sound(SakuraScriptSoundCommand)
     case contentAction(SakuraScriptContentAction)
@@ -64,6 +71,8 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case otherEvent(target: String, id: String, arguments: [String], reflectsResponse: Bool)
     case timerEvent(milliseconds: Int, repeats: Bool, reflectsResponse: Bool, id: String, arguments: [String])
     case moveSurface(x: Int?, y: Int?, time: Int, isAsync: Bool, options: [String])
+    case setPosition(x: Int, y: Int, scope: Int)
+    case resetPosition
     case separateCharacters
     case approachCharacters
     case setZOrder([String])
@@ -89,6 +98,11 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case clearAll
     case end
     case unknown(String)
+}
+
+public enum SakuraScriptInteractionMode: Sendable, Equatable {
+    case passive
+    case induction
 }
 
 public enum SakuraScriptInstallSource: Sendable, Equatable {

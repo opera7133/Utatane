@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 import UtataneBalloon
 import UtataneContent
 import UtataneCore
@@ -152,7 +153,7 @@ final class CalledGhostRuntime {
     }
 
     func sendSecondChange(references: [Int: String]) {
-        let canTalk = !player.isDialogueActive
+        let canTalk = player.canTalk
         var references = references
         // UKADOC / SSP standard: 1 for talkable, 0 while dialogue is being played.
         references[3] = canTalk ? "1" : "0"
@@ -180,7 +181,7 @@ final class CalledGhostRuntime {
     }
 
     func sendTimedEvent(id: String, references: [Int: String], waitsUntilTalkable: Bool) {
-        let canTalk = !player.isDialogueActive
+        let canTalk = player.canTalk
         guard !waitsUntilTalkable || canTalk else { return }
         var references = references
         references[3] = canTalk ? "1" : "0"
@@ -201,7 +202,7 @@ final class CalledGhostRuntime {
     }
 
     func flushHourTimeSignal(references: [Int: String]) {
-        guard pendingHourTimeSignal, !player.isDialogueActive else { return }
+        guard pendingHourTimeSignal, player.canTalk else { return }
         pendingHourTimeSignal = false
         sendTimedEvent(id: "OnHourTimeSignal", references: references, waitsUntilTalkable: true)
     }
@@ -341,7 +342,7 @@ final class CalledGhostRuntime {
             self?.send(.shiori(id: "OnURLDragDropping", references: [0: url.absoluteString, 1: String(scope)]))
         }
         surfaceController.onURLDrop = { [weak self] scope, url in
-            self?.send(.shiori(id: "OnURLDropping", references: [0: url.absoluteString, 1: String(scope)]))
+            self?.handleURLDrop(scope: scope, url: url)
         }
         surfaceController.onTextDrop = { [weak self] scope, value in
             self?.send(.shiori(id: "OnTextDrop", references: [
@@ -594,21 +595,77 @@ final class CalledGhostRuntime {
     }
 
     private func sendFileDropEvents(scope: Int, urls: [URL]) {
-        guard let first = urls.first else { return }
-        let firstReferences = [0: first.path, 1: String(scope), 2: droppedFileMIMEType(first)]
-        for eventID in ["OnFileDropped", "OnFileDrop"] {
-            send(.shiori(id: eventID, references: firstReferences))
-        }
+        guard !urls.isEmpty else { return }
         let joinedReferences = [
             0: urls.map(\.path).joined(separator: "\u{1}"),
             1: String(scope),
             2: urls.map(droppedFileMIMEType).joined(separator: "\u{1}")
         ]
-        for eventID in ["OnFileDropEx", "OnFileDrop2"] {
-            send(.shiori(id: eventID, references: joinedReferences))
-        }
         for url in urls where url.hasDirectoryPath {
             send(.shiori(id: "OnDirectoryDrop", references: [0: url.path, 1: String(scope)]))
+        }
+        Task {
+            do {
+                let response = try await session.response(for: .shiori(
+                    id: "OnFileDrop2",
+                    references: joinedReferences
+                ))
+                if let script = response?.script {
+                    player.play(script, balloon: balloon)
+                    if let response {
+                        forwardCommunication(response)
+                    }
+                    return
+                }
+                guard let url = urls.first,
+                      url.pathExtension.caseInsensitiveCompare("nar") != .orderedSame,
+                      let viewerEventID = droppedFileViewerEventID(url),
+                      NSWorkspace.shared.open(url)
+                else { return }
+                send(.shiori(id: viewerEventID, references: joinedReferences))
+            } catch {
+                AppLogStore.shared.error(
+                    "ファイルドロップ処理エラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: "Files: \(urls.map(\.path).joined(separator: "\n"))",
+                    ghostName: ghost.name
+                )
+            }
+        }
+    }
+
+    private func handleURLDrop(scope: Int, url: URL) {
+        let plannedAction = url.pathExtension.caseInsensitiveCompare("nar") == .orderedSame ? "nar" : "unknown"
+        let queryReferences = [
+            0: url.absoluteString,
+            1: String(scope),
+            2: droppedFileMIMEType(url),
+            3: plannedAction
+        ]
+        Task {
+            do {
+                if let response = try await session.response(for: .shiori(
+                    id: "OnURLQuery",
+                    references: queryReferences
+                )), let script = response.script {
+                    player.play(script, balloon: balloon)
+                    forwardCommunication(response)
+                    return
+                }
+                guard plannedAction == "nar" else { return }
+                send(.shiori(id: "OnURLDropping", references: [
+                    0: url.absoluteString, 1: String(scope)
+                ]))
+                let localURL = try await downloadDroppedNar(from: url)
+                send(.shiori(id: "OnURLDropped", references: [
+                    0: localURL.path, 1: url.absoluteString, 2: String(scope)
+                ]))
+                onNarDrop?([localURL])
+            } catch {
+                send(.shiori(id: "OnURLDropFailure", references: [
+                    0: "", 1: urlDropFailureReason(error), 2: url.absoluteString, 3: String(scope)
+                ]))
+            }
         }
     }
 
@@ -799,15 +856,21 @@ final class CalledGhostRuntime {
             let archiveURL = resolvePath(narPath)
             let sourceURL = resolvePath(sourceDirectoryPath)
             do {
+                let references = narCreationEventReferences(sourceURL: sourceURL, archiveURL: archiveURL)
+                _ = try? await session.handle(event: .shiori(id: "OnNarCreating", references: references))
                 let result = try runner.compress(destinationArchiveURL: archiveURL, sourceDirectoryURL: sourceURL)
-                guard let eventID else { return nil }
+                let standardResponse = try? await session.handle(event: .shiori(
+                    id: "OnNarCreated",
+                    references: references
+                ))
+                guard let eventID else { return standardResponse }
                 let id = eventID.hasPrefix("On") ? eventID : "OnCreateNarComplete"
                 return try await session.handle(event: .shiori(id: id, references: [
                     0: eventID,
                     1: String(result.fileCount),
                     2: String(result.compressedBytes),
                     3: String(result.uncompressedBytes)
-                ]))
+                ])) ?? standardResponse
             } catch let error as ArchiveOperationError {
                 guard let eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateNarFailure"
@@ -864,14 +927,19 @@ final class CalledGhostRuntime {
         case let .createUpdateData(directoryPath, eventID):
             let targetURL = directoryPath.map(resolvePath) ?? ghost.rootDirectory
             do {
+                _ = try? await session.handle(event: .shiori(id: "OnUpdatedataCreating", references: [:]))
                 let generator = UpdateDataGenerator()
                 let result = try generator.generate(in: targetURL)
-                guard let eventID else { return nil }
+                let standardResponse = try? await session.handle(event: .shiori(
+                    id: "OnUpdatedataCreated",
+                    references: [:]
+                ))
+                guard let eventID else { return standardResponse }
                 let id = eventID.hasPrefix("On") ? eventID : "OnCreateUpdateDataComplete"
                 return try await session.handle(event: .shiori(id: id, references: [
                     0: String(result.fileCount),
                     1: targetURL.path
-                ]))
+                ])) ?? standardResponse
             } catch {
                 guard let eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateUpdateDataFailure"

@@ -24,9 +24,9 @@ UKADOCに掲載されているゴースト関連の設定・配布用テキス�
 | Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、arrow座標、cursor／anchorのstyle・色 | 162項目中、visited、marker配置、入力欄、透過方式、ウインドウ位置等が未反映 |
 | Plugin `descript.txt` | ❌ | なし | PLUGIN機構自体が未実装。UKADOC掲載13項目は未使用 |
 | Headline `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、名前、DLL名、URL、open URL、homeurl、charset、alwaysdisplay。RSS用`type`・`feed`拡張も利用 | UKADOC掲載9項目のうちreadme系が未使用。Windows DLL実行は実行環境依存 |
-| `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、Ghost同梱balloon、Ghost／Shell／Balloon／Headlineの安全な新規インストール | accept、bootghost、refresh、refreshundeletemask、汎用複数オブジェクト、上書き更新が未対応 |
+| `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、Ghost同梱balloon、Ghost／Shell／Balloon／Headlineの安全な新規インストール | bootghost、refresh、refreshundeletemask、汎用複数オブジェクト、上書き更新が未対応 |
 | `delete.txt` | 🟡 | UTF-8／Shift_JIS、charset行、Windows区切りの相対ファイル・ディレクトリを更新後に安全確認して削除 | 更新本体と削除を合わせた完全なロールバックは未対応 |
-| `developer_options.txt` | ❌ | なし | noupdate、compress、ignore等を読まず、更新定義・NAR生成へ反映しない |
+| `developer_options.txt` | 🟡 | `noupdate`／`nonar`に加え、`.narignore`／`.updateignore`／`.narinclude`／`.updateinclude`の主要gitignore構文と`include:`を各生成処理へ反映 | 文字クラス・エスケープ等、gitignoreの全細則は未対応 |
 | `surfaces.txt`／`surfaces*.txt` | 🟡 | 複数ファイル結合、surface selector、append、alias、element、rect／polygon collision、主要animation | 後述のSERIKO構文・描画メソッド・surface属性が多数未対応 |
 | `surfaces2.txt` | 🟡 | `surfaces`で始まるため読み込む | SSP用上書きではなく、他のsurfacesファイルとファイル名順で単純結合する |
 | `alias.txt` | 🟡 | surfaces文書として追加読込し、sakura／kero／char scope aliasを利用 | alias以外の互換挙動は未照合 |
@@ -35,7 +35,7 @@ UKADOCに掲載されているゴースト関連の設定・配布用テキス�
 | `updates.txt` | 🟡 | `charset,`と`file,`行、path・MD5・拡張フィールド、未知行の無視に対応 | Version 3形式の生成は未対応 |
 | `readme.txt`／`readme.md` | 🟡 | 既定候補をmacOSの関連アプリで開く | descript.txtのreadme・readme.charset指定を参照しない。Markdownの独自表示はしない |
 
-現状は ✅ 1 / 🟡 12 / ❌ 2。
+現状は ✅ 1 / 🟡 13 / ❌ 1。
 
 ## Ghost descript.txt
 
@@ -47,7 +47,7 @@ UKADOC掲載は74項目。汎用パーサーはコメントと空行を除いた
 | 利用 | `sakura.seriko.defaultsurface`、`kero.seriko.defaultsurface`、`char*.seriko.defaultsurface` |
 | 利用 | `balloon.defaultsurface`、scope別`balloon.defaultsurface` |
 | 別経路で利用 | `homeurl`、`readme.txt`候補 |
-| 未反映 | charset宣言、作者・ID・title、readme指定、配置・alignment、SSTP設定、SHIORI version/cache/encoding、イベント抑制、カーソル、メニュー、アイコン、install.accept、推奨balloon関連 |
+| 未反映 | charset宣言、作者・ID・title、readme指定、配置・alignment、SSTP設定、SHIORI version/cache/encoding、イベント抑制、カーソル、メニュー、アイコン、推奨balloon関連 |
 
 文字コードはファイル内`charset`ではなく、UTF-8を試してからShift_JISへフォールバックする。
 
@@ -70,14 +70,14 @@ UKADOC掲載は162項目。現在の実利用項目は以下。
 
 | 状況 | 項目 |
 | --- | --- |
-| 利用 | `type`、`name`、`origin.x/y`、`validrect.left/top`、`wordwrappoint.x/y` |
+| 利用 | `type`、`name`、`origin.x/y`、`validrect.left/top/right/bottom`、`wordwrappoint.x/y`、`vertical` |
 | 利用 | `font.name`、`font.height`、`font.color.r/g/b`、`font.shadowcolor.r/g/b`、`font.shadowstyle` |
 | 利用 | `font.bold`、`font.italic`、`font.underline`、`font.strike`、`font.outline`、`arrow0.x/y`、`arrow1.x/y` |
 | 利用 | cursor、cursor.notselect、anchor、anchor.notselectの`style`、font／pen／brush RGB |
 | 画像として利用 | balloon画像、marker画像、arrow画像。ただしfilename指定ではなく既定ファイル名を探索 |
-| 未反映 | validrect右・下、vertical、disable.font、blendmethod、visited anchor、各marker座標・間隔・文字、number書式、communicatebox、透過方式、windowposition、filename差替え、recommended ghost |
+| 未反映 | disable.font、blendmethod、visited anchor、各marker座標・間隔・文字、number書式、communicatebox、透過方式、windowposition、filename差替え、recommended ghost |
 
-`origin`が0または未定義なら`validrect.left/top`へフォールバックする独自の互換処理がある。
+`origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックする。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置する。入力欄は従来どおり横書き。
 
 ## Headline descript.txt
 
@@ -95,13 +95,13 @@ UKADOC掲載の主要15項目・構文に対する状況。
 | name | ✅ | インストール結果の表示名に利用 |
 | type | 🟡 | ghost、shell、balloon、headlineに対応。他種別は拒否 |
 | directory | ✅ | 1階層の安全な名前に限定して利用 |
-| accept | ❌ | 対象ゴースト名の制限なし |
+| accept | 🟡 | 起動中の本体側名・キャラクター名を照合し、対象不在時は拒否、呼び出しゴーストなら完了通知を転送。実機確認は未実施 |
 | bootghost | ❌ | インストール後起動なし |
 | refresh | ❌ | 既存インストール先は上書きせず失敗 |
 | refreshundeletemask | ❌ | 未実装 |
 | `*.directory`／`*.source.directory` | 🟡 | Ghost同梱balloonのみ対応 |
 | `*.refresh`／`*.refreshundeletemask` | ❌ | 未実装 |
-| developer_optionsの相対パス規則 | ❌ | ファイル自体を未読込 |
+| developer_optionsの相対パス規則 | ✅ | `noupdate`／`nonar`のファイル・フォルダ・glob指定を各生成処理へ反映 |
 
 アーカイブについてはパストラバーサル、絶対パス、バックスラッシュ、シンボリックリンク、特殊ファイル、過大な件数・容量を拒否し、途中失敗時は作成済み項目を戻す。これはUKADOC互換とは別の安全策。
 
@@ -136,12 +136,12 @@ size／date／charset拡張フィールドとVersion 3の`charset,`・未知行�
 
 `delete.txt`はcharset行・コメントを除いたWindows区切りの相対パスを読み、更新後にファイルまたはディレクトリを削除する。絶対パス・空要素・`.`・`..`は拒否する。更新済みファイルの置換と削除処理をまとめた完全なロールバックは今後の課題。
 
-生成処理は引き続きdeveloper_options.txtを無視し、`.DS_Store`、`*_variable.cfg`、更新定義自身だけを固定で除外する。
+更新定義生成は`noupdate`とupdate ignore／include、NAR生成は`nonar`とnar ignore／includeを反映する。否定、`*`／`**`／`?`、ルート・フォルダ指定、`include:`に対応するが、文字クラスやエスケープ等のgitignore全細則は今後の課題。
 
 ## 優先度
 
 1. Ghost／Shell descript.txtの配置・balloon offset・alignmentを既存ウインドウ機能へ接続する。
-2. `install.txt`のaccept、refresh、複数同梱オブジェクトを実装する。
+2. `install.txt`のrefresh、複数同梱オブジェクトを実装する。
 3. Balloon descript.txtのフォント装飾・marker・visitedを既存描画へ接続する。
 4. surfaces.txtのanimation option、surface属性、未対応pattern methodを段階的に追加する。
 5. developer_options.txtを更新定義生成と将来のNAR生成で共通利用する。

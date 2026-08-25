@@ -118,3 +118,78 @@ OnUpdate.OnCryptingFailure
 {
 	'\0\s[6]更新の確認に失敗した。\w5配布側のファイルが変なのかも。\e'
 }
+
+OnSysSuspend
+{
+	ria_suspend_time = GETSECCOUNT()
+	_talks = RiaSysSuspendTalks
+	if ISFUNC('RiaLocalSysSuspendTalks') {
+		_talks ,= EVAL('RiaLocalSysSuspendTalks')
+	}
+	_talks[RAND(ARRAYSIZE(_talks))]
+}
+
+RiaSysSuspendTalks : array
+{
+	'\0\s[100]スリープ入るの。\w5じゃあ私も寝る。\w5おやすみ、お兄。\e'
+	'\0\s[0]画面消すんだ。\w5……作業中のファイル、保存したよね？\e'
+	'\0\s[103]システムサスペンドね。\w5私も休んでるから、用ができたら起こして。\e'
+	'\0\s[317]お兄も休むの？\w5ならちょうどいい。\w5また後で。\e'
+	'\0\s[4]急に寝かせるじゃん。\w5まあいいけど。\w5おやすみ。\e'
+}
+
+OnSysResume
+{
+	_elapsed = 0
+	if ISVAR('ria_suspend_time') && TOINT(ria_suspend_time) > 0 {
+		_elapsed = GETSECCOUNT() - TOINT(ria_suspend_time)
+		ria_suspend_time = 0
+	}
+	ria_idle_seconds = 0
+	ria_touch_sequence = 0
+	RiaSelectOutfit
+	RiaUpdateTalkInterval
+
+	_talks = IARRAY
+	_hour = GETTIME[4]
+
+	if _elapsed >= 7200 {
+		_talks ,= '\0\s[100]ふぁ……。\w5結構寝てたかも。\w5お兄、おかえり。\e'
+		_talks ,= '\0\s[103]……何時間スリープしてた？\w5私もぐっすり休めたけど。\e'
+		_talks ,= '\0\s[0]画面ついた。\w5お兄も少しは休憩できた？\e'
+	}
+	elseif _elapsed > 0 {
+		_talks ,= '\0\s[0]……ん、起きた。\w5もうスリープ解除？\e'
+		_talks ,= '\0\s[103]おかえり。\w5作業の続きするの？\e'
+		_talks ,= '\0\s[4]ちょっと離れてただけか。\w5画面明るくなって目が覚めた。\e'
+		_talks ,= '\0\s[105]スリープ復帰。\w5はいはい、付き合うよ。\e'
+	}
+
+	if _hour >= 0 && _hour < 5 {
+		_talks ,= '\0\s[100]……こんな時間に起こすの。\w5まだ眠いんだけど、お兄。\e'
+	}
+	elseif _hour >= 5 && _hour < 10 {
+		_talks ,= '\0\s[100]……ん、朝？\w5おはよ、お兄。\w5ちゃんと起きられたんだ。\e'
+	}
+
+	if ARRAYSIZE(_talks) == 0 {
+		_talks = RiaSysResumeTalks
+	}
+	else {
+		_talks ,= RiaSysResumeTalks
+	}
+
+	if ISFUNC('RiaLocalSysResumeTalks') {
+		_talks ,= EVAL('RiaLocalSysResumeTalks')
+	}
+	_talks[RAND(ARRAYSIZE(_talks))]
+}
+
+RiaSysResumeTalks : array
+{
+	'\0\s[0]……ん、起きた。\w5画面ついたね。\e'
+	'\0\s[103]スリープ復帰確認。\w5また何か作業するの？\e'
+	'\0\s[105]おかえり、お兄。\w5続きやるなら付き合うけど。\e'
+	'\0\s[100]ふぁ……。\w5もう復帰？\w5まだ眠い。\e'
+}
+

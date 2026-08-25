@@ -15,6 +15,19 @@ func `rejects traversal absolute and backslash archive entries`() throws {
 }
 
 @Test
+func `reads install metadata for creation event references`() throws {
+    let url = FileManager.default.temporaryDirectory.appending(path: "\(UUID().uuidString)-install.txt")
+    defer { try? FileManager.default.removeItem(at: url) }
+    try Data("name,Test Ghost\ntype,ghost\nballoon.directory,test-balloon\n".utf8).write(to: url)
+
+    let metadata = try NarInstaller().readInstallMetadata(from: url)
+
+    #expect(metadata["name"] == "Test Ghost")
+    #expect(metadata["type"] == "ghost")
+    #expect(metadata["balloon.directory"] == "test-balloon")
+}
+
+@Test
 func `installs a balloon NAR into the balloon root`() throws {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -59,6 +72,40 @@ func `installs a headline NAR into the headline root`() throws {
     let destination = fixture.roots.headlinesDirectory.appending(path: "test-news", directoryHint: .isDirectory)
     #expect(result.items == [NarInstalledItem(type: .headline, name: "Test News", url: destination)])
     #expect(FileManager.default.fileExists(atPath: destination.appending(path: "descript.txt").path))
+}
+
+@Test
+func `honors install accept and reports a missing target`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let package = fixture.source.appending(path: "package", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+    try Data("type,shell\nname,Target Shell\ndirectory,target-shell\naccept,Target Ghost\n".utf8).write(
+        to: package.appending(path: "install.txt")
+    )
+    let archive = try makeArchive(from: fixture.source, at: fixture.root)
+
+    #expect(throws: NarInstallError.refused(
+        accept: "Target Ghost",
+        type: "shell",
+        name: "Target Shell"
+    )) {
+        try NarInstaller().install(
+            archiveURL: archive,
+            roots: fixture.roots,
+            selectedGhostDirectory: fixture.root.appending(path: "wrong-ghost")
+        )
+    }
+
+    let target = fixture.root.appending(path: "target-ghost", directoryHint: .isDirectory)
+    let result = try NarInstaller().install(
+        archiveURL: archive,
+        roots: fixture.roots,
+        selectedGhostDirectory: fixture.root.appending(path: "wrong-ghost"),
+        activeGhostDirectories: ["Target Ghost": target]
+    )
+    #expect(result.acceptedGhostName == "Target Ghost")
+    #expect(result.items.first?.url == target.appending(path: "shell/target-shell", directoryHint: .isDirectory))
 }
 
 @Test

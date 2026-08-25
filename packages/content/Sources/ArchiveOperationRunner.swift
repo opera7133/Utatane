@@ -103,7 +103,8 @@ public struct ArchiveOperationRunner: Sendable {
     public func compress(
         destinationArchiveURL: URL,
         sourceDirectoryURL: URL,
-        password: String? = nil
+        password: String? = nil,
+        appliesNarExclusions: Bool = false
     ) throws -> ArchiveOperationResult {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: sourceDirectoryURL.path, isDirectory: &isDir), isDir.boolValue else {
@@ -125,6 +126,37 @@ public struct ArchiveOperationRunner: Sendable {
         }
         arguments.append(destinationArchiveURL.path)
         arguments.append(".")
+        let developerOptions = try DeveloperOptions.load(from: sourceDirectoryURL)
+        let narPathFilter = appliesNarExclusions ? try ContentPathFilter.load(
+            from: sourceDirectoryURL,
+            ignoreFilename: ".narignore",
+            includeFilename: ".narinclude"
+        ) : nil
+        if appliesNarExclusions {
+            let standardPatterns = [
+                "desktop.ini", "thumbs.db", "folder.htt", "mscreate.dir", ".DS_Store", "_CATALOG.VIX",
+                "profile/*", "*/profile/*", "var/*", "*/var/*", "__MACOSX/*", "*/__MACOSX/*",
+                "XtraStuf.mac/*", "*/XtraStuf.mac/*", "*_variable.cfg", "*/*_variable.cfg"
+            ]
+            var excludedPaths = standardPatterns + developerOptions.exclusionPatterns(option: "nonar")
+            if let enumerator = FileManager.default.enumerator(at: sourceDirectoryURL, includingPropertiesForKeys: nil) {
+                for case let fileURL as URL in enumerator {
+                    var relativePath = String(fileURL.standardizedFileURL.path.dropFirst(
+                        sourceDirectoryURL.standardizedFileURL.path.count
+                    ))
+                    if relativePath.hasPrefix("/") {
+                        relativePath.removeFirst()
+                    }
+                    if !relativePath.isEmpty,
+                       narPathFilter?.includes(relativePath: relativePath) == false
+                    {
+                        excludedPaths.append(relativePath)
+                    }
+                }
+            }
+            arguments.append("-x")
+            arguments.append(contentsOf: excludedPaths)
+        }
 
         _ = try run(executable: "/usr/bin/zip", arguments: arguments, currentDirectoryURL: sourceDirectoryURL)
 
@@ -136,6 +168,19 @@ public struct ArchiveOperationRunner: Sendable {
             for case let fileURL as URL in enumerator {
                 let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
                 if values?.isRegularFile == true {
+                    var relativePath = String(fileURL.standardizedFileURL.path.dropFirst(
+                        sourceDirectoryURL.standardizedFileURL.path.count
+                    ))
+                    if relativePath.hasPrefix("/") {
+                        relativePath.removeFirst()
+                    }
+                    let isExcludedFromNar = DeveloperOptions.isStandardExcluded(relativePath: relativePath)
+                        || developerOptions.excludesFromNar(relativePath: relativePath)
+                    if appliesNarExclusions,
+                       isExcludedFromNar || narPathFilter?.includes(relativePath: relativePath) == false
+                    {
+                        continue
+                    }
                     fileCount += 1
                     uncompressedBytes += values?.fileSize ?? 0
                 }

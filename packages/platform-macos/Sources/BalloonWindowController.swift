@@ -158,6 +158,10 @@ public final class BalloonWindowController {
         presentations[scope]?.contentView.textAttributes(at: location)
     }
 
+    func textLayoutOrientation(scope: Int) -> NSLayoutManager.TextLayoutOrientation? {
+        presentations[scope]?.contentView.textLayoutOrientation
+    }
+
     func verticalContentInset(scope: Int) -> CGFloat? {
         presentations[scope]?.contentView.verticalContentInset
     }
@@ -574,6 +578,7 @@ private final class BalloonContentView: NSView {
     private let defaultTextStyle: BalloonTextStyle
     private let displayScale: CGFloat
     private let textScale: CGFloat
+    private let isVerticalWriting: Bool
     private var dragStartMouseLocation: NSPoint?
     private var dragStartWindowOrigin: NSPoint?
     private var didDrag = false
@@ -609,6 +614,10 @@ private final class BalloonContentView: NSView {
         scrollView.contentInsets.top
     }
 
+    var textLayoutOrientation: NSLayoutManager.TextLayoutOrientation {
+        textView.layoutOrientation
+    }
+
     var markerText: String {
         markerTextField.stringValue
     }
@@ -630,11 +639,18 @@ private final class BalloonContentView: NSView {
     }
 
     func setAutomaticLineWrapping(_ enabled: Bool) {
-        textView.textContainer?.widthTracksTextView = enabled
         textView.textContainer?.lineBreakMode = enabled ? .byWordWrapping : .byClipping
-        textView.textContainer?.containerSize.width = enabled
-            ? textView.frame.width
-            : .greatestFiniteMagnitude
+        if isVerticalWriting {
+            textView.textContainer?.heightTracksTextView = enabled
+            textView.textContainer?.containerSize.height = enabled
+                ? textView.frame.height
+                : .greatestFiniteMagnitude
+        } else {
+            textView.textContainer?.widthTracksTextView = enabled
+            textView.textContainer?.containerSize.width = enabled
+                ? textView.frame.width
+                : .greatestFiniteMagnitude
+        }
         textView.needsLayout = true
     }
 
@@ -684,6 +700,7 @@ private final class BalloonContentView: NSView {
         self.defaultTextStyle = defaultTextStyle
         self.displayScale = displayScale
         self.textScale = textScale
+        isVerticalWriting = balloon.isVertical
         textColor = NSColor(
             calibratedRed: CGFloat(min(max(balloon.fontColor.red, 0), 255)) / 255,
             green: CGFloat(min(max(balloon.fontColor.green, 0), 255)) / 255,
@@ -704,17 +721,20 @@ private final class BalloonContentView: NSView {
         textView.textContainerInset = .zero
         textView.textContainer?.lineFragmentPadding = 0
         textView.textContainer?.lineBreakMode = .byWordWrapping
-        textView.isVerticallyResizable = true
-        textView.minSize = NSSize(width: 0, height: textFrame(for: balloon).height)
-        textView.autoresizingMask = [.width]
+        textView.setLayoutOrientation(balloon.isVertical ? .vertical : .horizontal)
+        textView.isVerticallyResizable = !balloon.isVertical
+        textView.isHorizontallyResizable = balloon.isVertical
+        textView.minSize = textFrame(for: balloon).size
+        textView.autoresizingMask = balloon.isVertical ? [.height] : [.width]
         textView.maxSize = NSSize(
             width: CGFloat.greatestFiniteMagnitude,
             height: CGFloat.greatestFiniteMagnitude
         )
-        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.widthTracksTextView = !balloon.isVertical
+        textView.textContainer?.heightTracksTextView = balloon.isVertical
         textView.textContainer?.containerSize = NSSize(
-            width: textFrame(for: balloon).width,
-            height: CGFloat.greatestFiniteMagnitude
+            width: balloon.isVertical ? CGFloat.greatestFiniteMagnitude : textFrame(for: balloon).width,
+            height: balloon.isVertical ? textFrame(for: balloon).height : CGFloat.greatestFiniteMagnitude
         )
         textView.delegate = textView
         textView.defaultTextColor = textColor
@@ -737,7 +757,8 @@ private final class BalloonContentView: NSView {
         textView.onLinkHover = { [weak self] link, label in self?.onLinkHover?(link, label) }
         scrollView.frame = textFrame
         scrollView.drawsBackground = false
-        scrollView.hasVerticalScroller = true
+        scrollView.hasVerticalScroller = !balloon.isVertical
+        scrollView.hasHorizontalScroller = balloon.isVertical
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
         scrollView.documentView = textView
@@ -844,8 +865,28 @@ func balloonTextFrame(
     displayedImageSize: NSSize,
     displayScale: CGFloat
 ) -> NSRect {
-    let originX = CGFloat(balloon.originX) * displayScale
+    let scaledOriginX = CGFloat(balloon.originX) * displayScale
+    let originX = balloon.originX < 0 ? displayedImageSize.width + scaledOriginX : scaledOriginX
     let originY = CGFloat(balloon.originY) * displayScale
+    if balloon.isVertical {
+        let leftEdge = CGFloat(balloon.validRectLeft) * displayScale
+        let wrapY = CGFloat(balloon.wordWrapPointY) * displayScale
+        let bottomEdge: CGFloat = if wrapY < 0 {
+            displayedImageSize.height + wrapY
+        } else if wrapY > 0 {
+            wrapY
+        } else if let validRectBottom = balloon.validRectBottom {
+            CGFloat(validRectBottom) * displayScale
+        } else {
+            displayedImageSize.height - CGFloat(balloon.validRectTop) * displayScale
+        }
+        return NSRect(
+            x: leftEdge,
+            y: originY,
+            width: max(1, originX - leftEdge),
+            height: max(1, bottomEdge - originY)
+        )
+    }
     let wrapX = CGFloat(balloon.wordWrapPointX) * displayScale
     let rightEdge = wrapX < 0 ? displayedImageSize.width + wrapX : wrapX
     let width = max(1, rightEdge - originX)
@@ -870,6 +911,9 @@ private extension BalloonContentView {
             .font: textFont,
             .foregroundColor: textColor
         ]
+        if isVerticalWriting {
+            baseAttributes[.verticalGlyphForm] = 1
+        }
         baseAttributes.merge(attributes(for: defaultTextStyle)) { _, new in new }
         let attributedText = NSMutableAttributedString(
             string: text,

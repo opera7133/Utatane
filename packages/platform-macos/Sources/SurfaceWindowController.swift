@@ -37,6 +37,7 @@ public final class SurfaceWindowController {
     private var keepsOnScreen = true
     private var stayOnTop = true
     private var stickyGroups: [Set<Int>] = []
+    private var collisionMode = (enabled: false, showsNames: true)
 
     public var onMouseClick: (@MainActor (Int, String?) -> Void)?
     public var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
@@ -57,6 +58,13 @@ public final class SurfaceWindowController {
         self.stayOnTop = stayOnTop
         for character in characters.values {
             character.setStayOnTop(stayOnTop)
+        }
+    }
+
+    public func setCollisionMode(_ enabled: Bool, showsNames: Bool = true) {
+        collisionMode = (enabled, showsNames)
+        for character in characters.values {
+            character.setCollisionMode(enabled, showsNames: showsNames)
         }
     }
 
@@ -283,6 +291,25 @@ public final class SurfaceWindowController {
         }
     }
 
+    public func setFixedPosition(x: Int, y: Int, scope: Int) async {
+        guard let character = characters[scope] else { return }
+        character.setMovementLocked(true)
+        await character.moveOrigin(
+            to: NSPoint(x: CGFloat(x), y: CGFloat(y)),
+            durationMilliseconds: 0
+        )
+    }
+
+    public func resetFixedPositions() {
+        for character in characters.values {
+            character.setMovementLocked(false)
+        }
+    }
+
+    func isMovementLocked(scope: Int) -> Bool {
+        characters[scope]?.isMovementLocked ?? false
+    }
+
     public func separateCharacters(scope: Int = 0) async {
         guard let currentFrame = characters[scope]?.windowFrame else { return }
         let otherScope = scope == 0 ? 1 : 0
@@ -491,6 +518,7 @@ public final class SurfaceWindowController {
             self?.contextMenuItems?() ?? []
         }
         character.setStayOnTop(stayOnTop)
+        character.setCollisionMode(collisionMode.enabled, showsNames: collisionMode.showsNames)
         characters[scope] = character
         return character
     }
@@ -576,10 +604,17 @@ private final class CharacterSurfaceController {
     private var keepsOnScreen: Bool
     private var stayOnTop = true
     private var desktopAlignment: SurfaceDesktopAlignment = .defaultValue
+    private(set) var isMovementLocked = false
+    private var collisionMode = (enabled: false, showsNames: true)
 
     func setStayOnTop(_ stayOnTop: Bool) {
         self.stayOnTop = stayOnTop
         window?.level = stayOnTop ? .floating : .normal
+    }
+
+    func setCollisionMode(_ enabled: Bool, showsNames: Bool) {
+        collisionMode = (enabled, showsNames)
+        imageView?.setCollisionMode(enabled, showsNames: showsNames)
     }
 
     var onMouseClick: (@MainActor (String?) -> Void)?
@@ -621,6 +656,15 @@ private final class CharacterSurfaceController {
 
     var renderedImage: NSImage? {
         imageView?.image
+    }
+
+    func setMovementLocked(_ locked: Bool) {
+        isMovementLocked = locked
+        imageView?.isMovementLocked = locked
+        (window as? FloatingContentWindow)?.setPlacementPolicy(.init(
+            edge: locked ? nil : effectiveDesktopEdge,
+            keepsOnScreen: keepsOnScreen
+        ))
     }
 
     func show(shell: ShellDefinition, surfaceID: Int) throws {
@@ -1019,7 +1063,9 @@ private final class CharacterSurfaceController {
         imageView.locksHorizontalMovement = [.left, .right].contains(desktopAlignment)
         imageView.locksVerticalMovement = [.top, .bottom].contains(desktopAlignment)
             || (desktopAlignment == .defaultValue && locksToDesktopBottom)
+        imageView.isMovementLocked = isMovementLocked
         imageView.collisions = definition?.collisions ?? []
+        imageView.setCollisionMode(collisionMode.enabled, showsNames: collisionMode.showsNames)
         imageView.onMouseClick = { [weak self] region in
             self?.onMouseClick?(region)
         }
@@ -1322,6 +1368,8 @@ private final class SurfaceImageView: NSImageView {
     var onWindowDragDelta: ((NSPoint) -> Void)?
     var locksVerticalMovement = true
     var locksHorizontalMovement = false
+    var isMovementLocked = false
+    private var collisionMode = (enabled: false, showsNames: true)
     private var hoveredRegion: String?
     private var lastStrokePoint: NSPoint?
     private var lastStrokeRegion: String?
@@ -1346,6 +1394,61 @@ private final class SurfaceImageView: NSImageView {
         ))
     }
 
+    func setCollisionMode(_ enabled: Bool, showsNames: Bool) {
+        collisionMode = (enabled, showsNames)
+        needsDisplay = true
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard collisionMode.enabled else { return }
+        NSColor.systemRed.withAlphaComponent(0.85).setStroke()
+        NSColor.systemRed.withAlphaComponent(0.14).setFill()
+        for collision in collisions {
+            let path = collisionPath(collision)
+            path.lineWidth = 1
+            path.fill()
+            path.stroke()
+            guard collisionMode.showsNames else { continue }
+            let origin = path.bounds.origin
+            collision.name.draw(
+                at: NSPoint(x: origin.x + 2, y: origin.y + 1),
+                withAttributes: [
+                    .font: NSFont.systemFont(ofSize: 10),
+                    .foregroundColor: NSColor.white,
+                    .backgroundColor: NSColor.systemRed.withAlphaComponent(0.8)
+                ]
+            )
+        }
+    }
+
+    private func collisionPath(_ collision: SurfaceCollision) -> NSBezierPath {
+        if collision.polygon.count >= 3 {
+            let path = NSBezierPath()
+            for (index, point) in collision.polygon.enumerated() {
+                let mapped = collisionPoint(x: point.x, y: point.y)
+                index == 0 ? path.move(to: mapped) : path.line(to: mapped)
+            }
+            path.close()
+            return path
+        }
+        let first = collisionPoint(x: collision.left, y: collision.top)
+        let second = collisionPoint(x: collision.right, y: collision.bottom)
+        return NSBezierPath(rect: NSRect(
+            x: min(first.x, second.x),
+            y: min(first.y, second.y),
+            width: abs(second.x - first.x),
+            height: abs(second.y - first.y)
+        ))
+    }
+
+    private func collisionPoint(x: Int, y: Int) -> NSPoint {
+        NSPoint(
+            x: CGFloat(x) * coordinateScaleX,
+            y: bounds.height - CGFloat(y) * coordinateScaleY
+        )
+    }
+
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
@@ -1368,6 +1471,7 @@ private final class SurfaceImageView: NSImageView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        guard !isMovementLocked else { return }
         guard let window,
               let startMouseLocation = dragStartMouseLocation,
               let startWindowOrigin = dragStartWindowOrigin

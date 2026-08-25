@@ -51,7 +51,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\![set,alpha,...]` | ✅ | scope別の0〜100指定、上限クランプ、負値で値を維持した再描画、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
 | `\4`, `\5` | ✅ | `\4`（他キャラから離れる方向への一定移動）と `\5`（他キャラとの隣接位置への接近移動）に対応 |
 | `\![move]`, `\![moveasync]` | ✅ | 指定座標・アニメーション時間（ミリ秒）によるウィンドウ移動に対応（同期・非同期移動） |
-| `\![set/reset,position...]` | ❌ | 未実装 |
+| `\![set/reset,position...]` | ✅ | `set,position,x,y,scope`で指定scopeをスクリーン座標へ移動してドラッグ固定し、`reset,position`で全scopeの固定を解除 |
 | `\![set/reset,zorder...]` | ✅ | `\![set,zorder,スコープ...]` によるサーフェス・バルーンウィンドウの重なり順序（Z-Order）指定と、`\![reset,zorder]` による解除に対応 |
 | `\![set/reset,sticky-window...]` | ✅ | `\![set,sticky-window,スコープ...]` による複数キャラクターウィンドウの連動ドラッグ移動と、`\![reset,sticky-window]` による解除に対応 |
 | `\![execute,resetwindowpos]` | ✅ | 保存済みの全scopeのサーフェス・バルーン位置を消去し、表示中ウィンドウを初期配置へ戻す |
@@ -75,7 +75,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\![set,balloonwait,...]` | ✅ | 倍率・百分率・`ms` 絶対値に対応し、スクリプト終了時に復帰 |
 | `\![set,serikotalk,true/false]` | ✅ | 文字表示中に現在surfaceのSERIKO `talk` intervalを駆動。明示アニメーションとは競合させず、スクリプトごとにtrueへリセット |
 | `\![*]` | ✅ | scope別の `marker*.png` をインライン表示 |
-| online / nouserbreak mode | ❌ | `enter` / `leave` とも未実装 |
+| online / nouserbreak mode | 🟡 | `enter` / `leave`を解析。onlineは現scopeのバルーンを強制表示して簡易オンライン印を表示し、nouserbreakは区間中の別スクリプトによる割込みを拒否。SSPの専用マーカー画像とOwned SSTP判定は未対応 |
 | balloon repaint / move lock | ✅ | `balloonrepaint`は描画を保留してunlock時に最新内容を反映。通常lockは終端解除、manualは維持。`balloonmove`は明示解除までドラッグを抑止 |
 | `\_!`, `\_?` | ✅ | 区間内のタグ・環境変数を解釈せずそのまま表示。閉じタグがない場合は末尾までを対象にしParserテストで確認 |
 | `\__v` | ❌ | 音声合成・バックログ制御は未実装 |
@@ -106,7 +106,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\t` | ✅ | 実行後からスクリプト終了・キャンセルまで、通常・呼び出しゴーストのサーフェスマウスイベントをSHIORIへ通知しない。Player状態と配送経路をテスト |
 | `\_q`, quicksection | ✅ | トグル形式と明示的なtrue/false・1/0に対応。文字ウェイトだけを省略し、明示ウェイトは実行 |
 | `\_s`, `\_s[ID...]` | ✅ | 無引数はscope 0・1、ID指定は列挙scopeへ、区間内の文字と改行を同時表示。scope別の文字装飾も保持しPlayerテストで確認 |
-| syncobject の wait / set / reset | ❌ | 未実装 |
+| syncobject の wait / set / reset | 🟡 | Utatane内の通常・呼び出しゴースト間で共有する名前付きシグナルとしてset・reset・waitとtimeoutを実装。WindowsのMutex・Semaphore種別判定と`--reset`は未対応 |
 
 ### 選択肢・アンカー
 
@@ -190,8 +190,8 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl、完了・失敗イベントに対応。ping progress、df/dataは未対応 |
 | createnar / createupdatedata | 🟡 | `createupdatedata` は引数なしで実行元ゴーストの `updates2.dau` を生成（明示パス拡張も対応）。`createnar` は明示パス拡張のみで、UKADOCの引数なし形式は未実装 |
 | emptyrecyclebin / create shortcut | ➖ | OS依存かつ危険。原則対象外候補 |
-| passive / induction / select / collision mode | ❌ | 未実装 |
-| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | `\![reload,ghost]`、`\![reload,shell]`、`\![reload,balloon]` を実装。surface/descript等の個別リロードは未対応 |
+| passive / induction / select / collision mode | 🟡 | passive／inductionはenter・leaveと`cantalk=false`を実装し、passive中は選択肢・バルーンの時間切れも停止。collisionは矩形・多角形の領域を名前つきまたは`rect`指定で枠のみ表示。メニュー・DnD・更新・最小化・終了等の全制限とselect modeは未実装 |
+| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | ghost・shell・balloonに加え、旧`reloadsurface`、surface、shiori、descriptの全体指定とghost／shell／balloon対象指定を実装。shioriとghost descriptは人格全体の再起動で代替。makoto・headline・plugin・aigraphは未対応 |
 | unload/load shiori・makoto、shioridebugmode | ❌ | 未実装 |
 | `\_u`, `\_m` | ✅ | 16進・10進のUCS-2／ASCIIコードを文字へ変換。範囲外とサロゲートは拒否しParserテストで確認 |
 | `\&[ID]` | ✅ | amp・apos・gt・lt・nbsp・quotに加え、yen・cent・pound・euro・copy・reg・trade・deg・plusmn・sup1-3・frac・times・divide・half_solidus・bull・hellip・矢印等の主要HTML/XML実体参照に対応 |

@@ -3,6 +3,18 @@ import Foundation
 import Testing
 @testable import UtataneNetwork
 
+private actor UpdateProgressRecorder {
+    private var values: [ContentUpdateProgress] = []
+
+    func append(_ value: ContentUpdateProgress) {
+        values.append(value)
+    }
+
+    func recorded() -> [ContentUpdateProgress] {
+        values
+    }
+}
+
 @Test func `parses both update manifest formats and rejects traversal`() throws {
     let delimiter = "\u{1}"
     let data = Data("charset,Shift_JIS\ncomment,ignored\nghost/master/a.txt\(delimiter)d41d8cd98f00b204e9800998ecf8427e\(delimiter)\nfile,shell/master/a.png\(delimiter)d41d8cd98f00b204e9800998ecf8427e\(delimiter)size=0\(delimiter)date=2026-08-24T00:00:00Z\(delimiter)charset=UTF-8\(delimiter)\n".utf8)
@@ -62,9 +74,20 @@ import Testing
         throw NetworkFetchError.unsuccessfulStatus(404)
     }
 
-    let result = try await updater.update(rootDirectory: root, homeURL: #require(URL(string: "https://example.test/ghost/")))
+    let recorder = UpdateProgressRecorder()
+    let result = try await updater.update(
+        rootDirectory: root,
+        homeURL: #require(URL(string: "https://example.test/ghost/")),
+        progress: { await recorder.append($0) }
+    )
     #expect(result.changedFiles == ["descript.txt"])
     #expect(try Data(contentsOf: root.appending(path: "descript.txt")) == content)
+    #expect(await recorder.recorded() == [
+        .ready(files: ["descript.txt"]),
+        .downloadBegin(path: "descript.txt", index: 0, total: 1),
+        .checksumBegin(path: "descript.txt", expected: hash, actual: hash),
+        .checksumComplete(path: "descript.txt", expected: hash, actual: hash)
+    ])
 }
 
 @Test func `reads homeurl from ghost and balloon descriptors`() throws {

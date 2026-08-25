@@ -86,11 +86,11 @@ OnMouseDoubleClick
 			}
 			_talks[RAND(ARRAYSIZE(_talks))]
 		}
-		elseif TOINT(ria_outfit_active) && RAND(3) == 0 {
-			'\0\s[202]スカートの裾、気になる？\w5私は別に。お兄が触らなければ。\e'
-		}
 		else {
 			_talks = RiaLegDoubleClickTalks
+			if TOINT(ria_outfit_active) {
+				_talks ,= '\0\s[202]スカートの裾、気になる？\w5私は別に。お兄が触らなければ。\e'
+			}
 			if ISFUNC('RiaLocalLegDoubleClickTalks') {
 				_talks ,= EVAL('RiaLocalLegDoubleClickTalks')
 			}
