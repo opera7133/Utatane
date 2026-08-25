@@ -1833,16 +1833,8 @@ private struct UtataneRootView: View {
             openSettings()
         case .openReadme:
             let ghost = calledRuntime?.ghost ?? currentGhost
-            if let root = ghost?.rootDirectory {
-                let candidates = [
-                    root.appending(path: "readme.txt"),
-                    root.appending(path: "ghost/master/readme.txt"),
-                    root.appending(path: "ghost/master/README.txt"),
-                    root.appending(path: "README.md")
-                ]
-                if let targetURL = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
-                    NSWorkspace.shared.open(targetURL)
-                }
+            if let document = ghost.flatMap(ghostReadme) {
+                NSWorkspace.shared.open(document.url)
             }
         case .openHelp:
             let ghost = calledRuntime?.ghost ?? currentGhost
@@ -2035,6 +2027,37 @@ private struct UtataneRootView: View {
         }
     }
 
+    private func ghostReadme(_ ghost: InstalledGhost) -> ReadmeDocument? {
+        ReadmeResolver().resolve(
+            contentDirectory: ghost.rootDirectory,
+            descriptorURL: ghost.rootDirectory.appending(path: "ghost/master/descript.txt")
+        )
+    }
+
+    private func readmeMenuItems() -> [SurfaceContextMenuItem] {
+        var items: [SurfaceContextMenuItem] = []
+        if let currentGhost, let document = ghostReadme(currentGhost) {
+            items.append(.action(title: currentGhost.name, handler: { NSWorkspace.shared.open(document.url) }))
+        }
+        if let selectedShell,
+           let document = ReadmeResolver().resolve(
+               contentDirectory: selectedShell.directory,
+               descriptorURL: selectedShell.directory.appending(path: "descript.txt")
+           )
+        {
+            items.append(.action(title: selectedShell.name, handler: { NSWorkspace.shared.open(document.url) }))
+        }
+        if let balloon,
+           let document = ReadmeResolver().resolve(
+               contentDirectory: balloon.directory,
+               descriptorURL: balloon.directory.appending(path: "descript.txt")
+           )
+        {
+            items.append(.action(title: balloon.name, handler: { NSWorkspace.shared.open(document.url) }))
+        }
+        return items
+    }
+
     private func configureContextMenu() {
         surfaceWindowController.contextMenuItems = {
             [
@@ -2069,6 +2092,7 @@ private struct UtataneRootView: View {
                         )
                     }
                 ),
+                .submenu(title: "README", items: readmeMenuItems()),
                 .separator,
                 .action(
                     title: String(localized: "ランダムトーク"),
@@ -3015,6 +3039,7 @@ private struct UtataneRootView: View {
                     balloon: installBalloon
                 )
                 var installedItems: [NarInstalledItem] = []
+                var bootGhostDirectories: [String] = []
                 for url in urls {
                     let result = try await Task.detached {
                         try NarInstaller().install(
@@ -3025,6 +3050,9 @@ private struct UtataneRootView: View {
                         )
                     }.value
                     installedItems.append(contentsOf: result.items)
+                    if let bootGhostDirectory = result.bootGhostDirectory {
+                        bootGhostDirectories.append(bootGhostDirectory)
+                    }
                     let eventTarget = installationEventTarget(acceptedGhostName: result.acceptedGhostName)
                     if let acceptedGhostName = result.acceptedGhostName,
                        eventTarget.session !== installSession
@@ -3054,7 +3082,14 @@ private struct UtataneRootView: View {
                     }
                 }
                 await model.load()
-                if selectedGhostID == nil {
+                if let bootGhostDirectory = bootGhostDirectories.last,
+                   let bootGhost = model.ghosts.first(where: {
+                       $0.rootDirectory.lastPathComponent.caseInsensitiveCompare(bootGhostDirectory) == .orderedSame
+                   })
+                {
+                    selectedGhostID = bootGhost.id
+                    currentGhost = bootGhost
+                } else if selectedGhostID == nil {
                     selectedGhostID = model.ghosts.first?.id
                 }
                 showsOnboarding = model.ghosts.isEmpty

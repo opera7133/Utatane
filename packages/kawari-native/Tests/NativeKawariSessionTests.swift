@@ -40,7 +40,7 @@ struct NativeKawariSessionTests {
         #expect(NativeKawariPersonalityEngine.supports(masterDirectoryURL: master))
     }
 
-    @Test func `loads a legacy kawari ini ghost and answers OnBoot`() throws {
+    @Test func `loads a legacy kawari ini ghost and answers OnBoot`() async throws {
         let master = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -51,6 +51,18 @@ struct NativeKawariSessionTests {
 
         #expect(NativeKawariPersonalityEngine.supports(masterDirectoryURL: master))
         let session = try NativeKawariSession(masterDirectoryURL: master)
+        for kind in [
+            GhostMouseEvent.Kind.down,
+            .up,
+            .click,
+            .down,
+            .up
+        ] {
+            let incidentalResponse = try session.request(GhostEventShioriAdapter().request(for: .mouse(
+                GhostMouseEvent(kind: kind, scope: 0, region: "cap", x: 200, y: 80)
+            )))
+            #expect(incidentalResponse.value == #"\e"#)
+        }
         let initialMenu = try session.request(GhostEventShioriAdapter().request(for: .mouse(GhostMouseEvent(
             kind: .doubleClick,
             scope: 0,
@@ -59,6 +71,27 @@ struct NativeKawariSessionTests {
             y: 80
         ))))
         #expect(initialMenu.value?.contains("メニュー") == true)
+        let engine = try NativeKawariPersonalityEngine(masterDirectoryURL: master)
+        for kind in [
+            GhostMouseEvent.Kind.down,
+            .up,
+            .click,
+            .down,
+            .up
+        ] {
+            let script = try await engine.handle(event: .mouse(
+                GhostMouseEvent(kind: kind, scope: 0, region: "cap", x: 200, y: 80)
+            ))
+            #expect(script == nil)
+        }
+        let engineMenu = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .doubleClick,
+            scope: 0,
+            region: "cap",
+            x: 200,
+            y: 80
+        )))
+        #expect(engineMenu?.rawValue.contains("メニュー") == true)
         let response = try session.request(GhostEventShioriAdapter().request(for: .boot))
         #expect((200 ..< 300).contains(response.statusCode))
         #expect(response.value?.isEmpty == false)

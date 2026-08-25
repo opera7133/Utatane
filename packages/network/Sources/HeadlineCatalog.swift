@@ -12,6 +12,8 @@ public struct InstalledHeadline: Identifiable, Sendable, Equatable {
     public let openURL: URL?
     public let charset: String
     public let alwaysDisplay: Bool
+    public let readmeURL: URL?
+    public let readmeCharset: String?
     public let kind: Kind
 
     public init(
@@ -21,6 +23,8 @@ public struct InstalledHeadline: Identifiable, Sendable, Equatable {
         openURL: URL? = nil,
         charset: String = "Shift_JIS",
         alwaysDisplay: Bool = false,
+        readmeURL: URL? = nil,
+        readmeCharset: String? = nil,
         kind: Kind
     ) {
         self.id = id
@@ -29,6 +33,8 @@ public struct InstalledHeadline: Identifiable, Sendable, Equatable {
         self.openURL = openURL
         self.charset = charset
         self.alwaysDisplay = alwaysDisplay
+        self.readmeURL = readmeURL
+        self.readmeCharset = readmeCharset
         self.kind = kind
     }
 }
@@ -54,6 +60,8 @@ public struct HeadlineCatalog: Sendable {
         let openURL = metadata["openurl"].flatMap(URL.init(string:))
         let charset = metadata["charset"] ?? "Shift_JIS"
         let alwaysDisplay = metadata["alwaysdisplay"] == "1"
+        let readmeURL = resolveReadme(in: directory, configuredName: metadata["readme"])
+        let readmeCharset = metadata["readme.charset"]
         if metadata["type"]?.lowercased() == "rss", let value = metadata["feed"], let feedURL = URL(string: value) {
             return InstalledHeadline(
                 id: directory,
@@ -62,6 +70,8 @@ public struct HeadlineCatalog: Sendable {
                 openURL: openURL,
                 charset: charset,
                 alwaysDisplay: alwaysDisplay,
+                readmeURL: readmeURL,
+                readmeCharset: readmeCharset,
                 kind: .rss(feedURL: feedURL)
             )
         }
@@ -73,8 +83,22 @@ public struct HeadlineCatalog: Sendable {
                 openURL: openURL,
                 charset: charset,
                 alwaysDisplay: alwaysDisplay,
+                readmeURL: readmeURL,
+                readmeCharset: readmeCharset,
                 kind: .legacyDLL(fileName: dllName)
             )
+        }
+        return nil
+    }
+
+    private static func resolveReadme(in directory: URL, configuredName: String?) -> URL? {
+        let candidates = configuredName.map { [$0] } ?? ["readme.txt", "README.txt", "readme.md", "README.md"]
+        let root = directory.resolvingSymlinksInPath().standardizedFileURL
+        for candidate in candidates where !candidate.hasPrefix("/") && !candidate.contains("\\") {
+            let url = root.appending(path: candidate).resolvingSymlinksInPath().standardizedFileURL
+            if url.path.hasPrefix(root.path + "/"), FileManager.default.fileExists(atPath: url.path) {
+                return url
+            }
         }
         return nil
     }

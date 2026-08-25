@@ -5,6 +5,7 @@ public enum NarContentType: String, Sendable, Equatable {
     case balloon
     case shell
     case headline
+    case package
 }
 
 public struct NarInstallationRoots: Sendable, Equatable {
@@ -25,15 +26,22 @@ public struct NarInstallResult: Sendable, Equatable {
     public let primaryType: NarContentType
     public let items: [NarInstalledItem]
     public let acceptedGhostName: String?
+    public let bootGhostDirectory: String?
 
     public var installedURLs: [URL] {
         items.map(\.url)
     }
 
-    public init(primaryType: NarContentType, items: [NarInstalledItem], acceptedGhostName: String? = nil) {
+    public init(
+        primaryType: NarContentType,
+        items: [NarInstalledItem],
+        acceptedGhostName: String? = nil,
+        bootGhostDirectory: String? = nil
+    ) {
         self.primaryType = primaryType
         self.items = items
         self.acceptedGhostName = acceptedGhostName
+        self.bootGhostDirectory = bootGhostDirectory
     }
 }
 
@@ -92,6 +100,15 @@ public enum NarInstallError: LocalizedError, Equatable {
 }
 
 public struct NarInstaller: Sendable {
+    private struct InstallOperation {
+        let source: URL
+        let destination: URL
+        let type: NarContentType
+        let name: String
+        let refreshes: Bool
+        let undeleteMask: Set<String>
+    }
+
     private let maximumArchiveBytes: Int
     private let maximumExtractedBytes: Int
     private let maximumEntryCount: Int
@@ -141,76 +158,69 @@ public struct NarInstaller: Sendable {
         guard let rawType = metadata["type"], let contentType = NarContentType(rawValue: rawType.lowercased()) else {
             throw NarInstallError.unsupportedType(metadata["type"] ?? "")
         }
-        let directoryName = try validatedDirectoryName(metadata["directory"] ?? "")
         let sourceRoot = installURL.deletingLastPathComponent()
-
-        var operations: [(source: URL, destination: URL, type: NarContentType, name: String)] = []
-        let primaryName = metadata["name"] ?? directoryName
-        let acceptedGhostName = metadata["accept"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let acceptedGhostDirectory = acceptedGhostName.flatMap { acceptedName in
-            activeGhostDirectories.first {
-                $0.key.caseInsensitiveCompare(acceptedName) == .orderedSame
-            }?.value
-        }
-        if let acceptedGhostName, !acceptedGhostName.isEmpty, acceptedGhostDirectory == nil {
-            throw NarInstallError.refused(
-                accept: acceptedGhostName,
-                type: contentType.rawValue,
-                name: primaryName
+        var operations: [InstallOperation] = []
+        var acceptedGhostName: String?
+        var bootGhostDirectory: String?
+        if contentType == .package {
+            if let bootGhost = metadata["bootghost"] {
+                bootGhostDirectory = try validatedDirectoryName(bootGhost)
+            }
+            let childInstallFiles = try installFiles(in: sourceRoot).filter { $0 != installURL }
+            guard !childInstallFiles.isEmpty else { throw NarInstallError.missingInstallFile }
+            for childInstallURL in childInstallFiles.sorted(by: { $0.path < $1.path }) {
+                let childMetadata = try readInstallMetadata(from: childInstallURL)
+                let child = try installationOperations(
+                    metadata: childMetadata,
+                    sourceRoot: childInstallURL.deletingLastPathComponent(),
+                    roots: roots,
+                    selectedGhostDirectory: selectedGhostDirectory,
+                    activeGhostDirectories: activeGhostDirectories
+                )
+                operations.append(contentsOf: child.operations)
+                acceptedGhostName = acceptedGhostName ?? child.acceptedGhostName
+            }
+        } else {
+            let primary = try installationOperations(
+                metadata: metadata,
+                sourceRoot: sourceRoot,
+                roots: roots,
+                selectedGhostDirectory: selectedGhostDirectory,
+                activeGhostDirectories: activeGhostDirectories
             )
-        }
-        switch contentType {
-        case .ghost:
-            operations.append((sourceRoot, roots.ghostsDirectory.appending(
-                path: directoryName,
-                directoryHint: .isDirectory
-            ), .ghost, primaryName))
-            if let sourceName = metadata["balloon.source.directory"],
-               let balloonName = metadata["balloon.directory"]
-            {
-                let safeSourceName = try validatedDirectoryName(sourceName)
-                let safeBalloonName = try validatedDirectoryName(balloonName)
-                let balloonSource = sourceRoot.appending(path: safeSourceName, directoryHint: .isDirectory)
-                guard fileManager.fileExists(atPath: balloonSource.path) else {
-                    throw NarInstallError.missingSourceDirectory(safeSourceName)
-                }
-                operations.append((balloonSource, roots.balloonsDirectory.appending(
-                    path: safeBalloonName,
-                    directoryHint: .isDirectory
-                ), .balloon, metadata["balloon.name"] ?? safeBalloonName))
-            }
-        case .balloon:
-            operations.append((sourceRoot, roots.balloonsDirectory.appending(
-                path: directoryName,
-                directoryHint: .isDirectory
-            ), .balloon, primaryName))
-        case .shell:
-            guard let targetGhostDirectory = acceptedGhostDirectory ?? selectedGhostDirectory else {
-                throw NarInstallError.shellRequiresGhost
-            }
-            operations.append((sourceRoot, targetGhostDirectory
-                    .appending(path: "shell", directoryHint: .isDirectory)
-                    .appending(path: directoryName, directoryHint: .isDirectory), .shell, primaryName))
-        case .headline:
-            operations.append((sourceRoot, roots.headlinesDirectory.appending(
-                path: directoryName,
-                directoryHint: .isDirectory
-            ), .headline, primaryName))
+            operations = primary.operations
+            acceptedGhostName = primary.acceptedGhostName
         }
 
-        for operation in operations where fileManager.fileExists(atPath: operation.destination.path) {
+        for operation in operations
+            where fileManager.fileExists(atPath: operation.destination.path) && !operation.refreshes
+        {
             throw NarInstallError.destinationExists(operation.destination)
         }
 
         var installedURLs: [URL] = []
+        var backups: [(destination: URL, backup: URL)] = []
         do {
             for operation in operations {
-                try installCopy(from: operation.source, to: operation.destination)
+                if let backup = try installCopy(
+                    from: operation.source,
+                    to: operation.destination,
+                    refreshes: operation.refreshes,
+                    undeleteMask: operation.undeleteMask
+                ) {
+                    backups.append((operation.destination, backup))
+                }
                 installedURLs.append(operation.destination)
             }
+            for record in backups {
+                try? fileManager.removeItem(at: record.backup)
+            }
         } catch {
-            for url in installedURLs {
+            for url in installedURLs.reversed() {
                 try? fileManager.removeItem(at: url)
+                if let record = backups.first(where: { $0.destination == url }) {
+                    try? fileManager.moveItem(at: record.backup, to: record.destination)
+                }
             }
             throw error
         }
@@ -219,7 +229,8 @@ public struct NarInstaller: Sendable {
             items: zip(operations, installedURLs).map { operation, url in
                 NarInstalledItem(type: operation.type, name: operation.name, url: url)
             },
-            acceptedGhostName: acceptedGhostName
+            acceptedGhostName: acceptedGhostName,
+            bootGhostDirectory: bootGhostDirectory
         )
     }
 
@@ -291,17 +302,7 @@ public struct NarInstaller: Sendable {
     }
 
     private func primaryInstallFile(in root: URL) throws -> URL {
-        guard let enumerator = FileManager.default.enumerator(
-            at: root,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else { throw NarInstallError.missingInstallFile }
-        let candidates = enumerator.compactMap { item -> URL? in
-            guard let url = item as? URL,
-                  url.lastPathComponent.caseInsensitiveCompare("install.txt") == .orderedSame
-            else { return nil }
-            return url
-        }
+        let candidates = try installFiles(in: root)
         guard !candidates.isEmpty else { throw NarInstallError.missingInstallFile }
         let depths = candidates.map { ($0, $0.pathComponents.count) }
         guard let minimumDepth = depths.map(\.1).min() else { throw NarInstallError.missingInstallFile }
@@ -310,6 +311,20 @@ public struct NarInstaller: Sendable {
             throw NarInstallError.ambiguousInstallFile
         }
         return installURL
+    }
+
+    private func installFiles(in root: URL) throws -> [URL] {
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { throw NarInstallError.missingInstallFile }
+        return enumerator.compactMap { item -> URL? in
+            guard let url = item as? URL,
+                  url.lastPathComponent.caseInsensitiveCompare("install.txt") == .orderedSame
+            else { return nil }
+            return url
+        }
     }
 
     public func readInstallMetadata(from url: URL) throws -> [String: String] {
@@ -342,7 +357,105 @@ public struct NarInstaller: Sendable {
         return trimmed
     }
 
-    private func installCopy(from source: URL, to destination: URL) throws {
+    private func refreshUndeleteMask(_ value: String?) -> Set<String> {
+        Set(value?.split(separator: ":").map(String.init).filter { !$0.isEmpty } ?? [])
+    }
+
+    private func installationOperations(
+        metadata: [String: String],
+        sourceRoot: URL,
+        roots: NarInstallationRoots,
+        selectedGhostDirectory: URL?,
+        activeGhostDirectories: [String: URL]
+    ) throws -> (operations: [InstallOperation], acceptedGhostName: String?) {
+        let fileManager = FileManager.default
+        guard let rawType = metadata["type"], let contentType = NarContentType(rawValue: rawType.lowercased()),
+              contentType != .package
+        else { throw NarInstallError.unsupportedType(metadata["type"] ?? "") }
+        let directoryName = try validatedDirectoryName(metadata["directory"] ?? "")
+        let primaryName = metadata["name"] ?? directoryName
+        let refreshes = metadata["refresh"] == "1"
+        let undeleteMask = refreshUndeleteMask(metadata["refreshundeletemask"])
+        let acceptedGhostName = metadata["accept"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let acceptedGhostDirectory = acceptedGhostName.flatMap { acceptedName in
+            activeGhostDirectories.first {
+                $0.key.caseInsensitiveCompare(acceptedName) == .orderedSame
+            }?.value
+        }
+        if let acceptedGhostName, !acceptedGhostName.isEmpty, acceptedGhostDirectory == nil {
+            throw NarInstallError.refused(accept: acceptedGhostName, type: contentType.rawValue, name: primaryName)
+        }
+
+        var operations: [InstallOperation] = []
+        func appendBundledOperations() throws {
+            for key in metadata.keys.sorted() where key.hasSuffix(".directory") && !key.hasSuffix(".source.directory") {
+                let identifier = String(key.dropLast(".directory".count))
+                let type: NarContentType
+                if identifier.hasPrefix("balloon"), identifier.dropFirst("balloon".count).allSatisfy(\.isNumber) {
+                    type = .balloon
+                } else if identifier.hasPrefix("headline"), identifier.dropFirst("headline".count).allSatisfy(\.isNumber) {
+                    type = .headline
+                } else {
+                    continue
+                }
+                guard let destinationName = metadata[key] else { continue }
+                let safeDestinationName = try validatedDirectoryName(destinationName)
+                let sourceName = metadata["\(identifier).source.directory"] ?? safeDestinationName
+                let safeSourceName = try validatedDirectoryName(sourceName)
+                let bundledSource = sourceRoot.appending(path: safeSourceName, directoryHint: .isDirectory)
+                guard fileManager.fileExists(atPath: bundledSource.path) else {
+                    throw NarInstallError.missingSourceDirectory(safeSourceName)
+                }
+                let destinationRoot = type == .balloon ? roots.balloonsDirectory : roots.headlinesDirectory
+                operations.append(InstallOperation(
+                    source: bundledSource,
+                    destination: destinationRoot.appending(path: safeDestinationName, directoryHint: .isDirectory),
+                    type: type,
+                    name: metadata["\(identifier).name"] ?? safeDestinationName,
+                    refreshes: metadata["\(identifier).refresh"] == "1",
+                    undeleteMask: refreshUndeleteMask(metadata["\(identifier).refreshundeletemask"])
+                ))
+            }
+        }
+
+        switch contentType {
+        case .ghost:
+            operations.append(InstallOperation(source: sourceRoot, destination: roots.ghostsDirectory.appending(
+                path: directoryName,
+                directoryHint: .isDirectory
+            ), type: .ghost, name: primaryName, refreshes: refreshes, undeleteMask: undeleteMask))
+            try appendBundledOperations()
+        case .balloon:
+            operations.append(InstallOperation(source: sourceRoot, destination: roots.balloonsDirectory.appending(
+                path: directoryName,
+                directoryHint: .isDirectory
+            ), type: .balloon, name: primaryName, refreshes: refreshes, undeleteMask: undeleteMask))
+        case .shell:
+            guard let targetGhostDirectory = acceptedGhostDirectory ?? selectedGhostDirectory else {
+                throw NarInstallError.shellRequiresGhost
+            }
+            operations.append(InstallOperation(source: sourceRoot, destination: targetGhostDirectory
+                    .appending(path: "shell", directoryHint: .isDirectory)
+                    .appending(path: directoryName, directoryHint: .isDirectory), type: .shell, name: primaryName,
+                refreshes: refreshes, undeleteMask: undeleteMask))
+            try appendBundledOperations()
+        case .headline:
+            operations.append(InstallOperation(source: sourceRoot, destination: roots.headlinesDirectory.appending(
+                path: directoryName,
+                directoryHint: .isDirectory
+            ), type: .headline, name: primaryName, refreshes: refreshes, undeleteMask: undeleteMask))
+        case .package:
+            break
+        }
+        return (operations, acceptedGhostName)
+    }
+
+    private func installCopy(
+        from source: URL,
+        to destination: URL,
+        refreshes: Bool,
+        undeleteMask: Set<String>
+    ) throws -> URL? {
         let fileManager = FileManager.default
         let parent = destination.deletingLastPathComponent()
         try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
@@ -352,7 +465,40 @@ public struct NarInstaller: Sendable {
         )
         defer { try? fileManager.removeItem(at: staging) }
         try fileManager.copyItem(at: source, to: staging)
-        try fileManager.moveItem(at: staging, to: destination)
+        if refreshes, fileManager.fileExists(atPath: destination.path), !undeleteMask.isEmpty,
+           let enumerator = fileManager.enumerator(at: destination, includingPropertiesForKeys: [.isRegularFileKey])
+        {
+            let resolvedDestinationPath = destination.resolvingSymlinksInPath().path
+            for case let oldURL as URL in enumerator where undeleteMask.contains(oldURL.lastPathComponent) {
+                let resolvedOldPath = oldURL.resolvingSymlinksInPath().path
+                var relativePath = String(resolvedOldPath.dropFirst(resolvedDestinationPath.count))
+                if relativePath.hasPrefix("/") {
+                    relativePath.removeFirst()
+                }
+                let preservedURL = staging.appending(path: relativePath)
+                guard !fileManager.fileExists(atPath: preservedURL.path) else { continue }
+                try fileManager.createDirectory(
+                    at: preservedURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try fileManager.copyItem(at: oldURL, to: preservedURL)
+            }
+        }
+        var backup: URL?
+        if refreshes, fileManager.fileExists(atPath: destination.path) {
+            let candidate = parent.appending(path: ".utatane-backup-\(UUID().uuidString)")
+            try fileManager.moveItem(at: destination, to: candidate)
+            backup = candidate
+        }
+        do {
+            try fileManager.moveItem(at: staging, to: destination)
+        } catch {
+            if let backup {
+                try? fileManager.moveItem(at: backup, to: destination)
+            }
+            throw error
+        }
+        return backup
     }
 
     @discardableResult

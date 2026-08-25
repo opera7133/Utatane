@@ -38,7 +38,9 @@ public actor NativeKawariPersonalityEngine: PersonalityEngine {
         guard (200 ..< 300).contains(response.statusCode) else {
             throw NativeKawariError.requestFailed
         }
-        let script = response.value.flatMap { $0.isEmpty ? nil : SakuraScript(rawValue: $0) }
+        let script = response.value.flatMap { value in
+            value.isEmpty || value == #"\e"# ? nil : SakuraScript(rawValue: value)
+        }
         return PersonalityResponse(script: script, references: response.referenceValues)
     }
 }

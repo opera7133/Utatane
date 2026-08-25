@@ -1,3 +1,4 @@
+import AppKit
 import Sparkle
 import SwiftUI
 import UtataneAI
@@ -524,6 +525,11 @@ struct UtataneSettingsView: View {
                                 Text(headline.name)
                                 Spacer()
                                 Text(kindLabel(headline)).foregroundStyle(.secondary)
+                                if let readmeURL = headline.readmeURL {
+                                    Button("README") {
+                                        NSWorkspace.shared.open(readmeURL)
+                                    }
+                                }
                             }
                         }
                     }

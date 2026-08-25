@@ -109,35 +109,107 @@ func `honors install accept and reports a missing target`() throws {
 }
 
 @Test
-func `installs a ghost and its bundled balloon together`() throws {
+func `installs a ghost and its numbered bundled objects together`() throws {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
     let package = fixture.source.appending(path: "package", directoryHint: .isDirectory)
     let ghostMaster = package.appending(path: "ghost/master", directoryHint: .isDirectory)
     let balloon = package.appending(path: "balloon", directoryHint: .isDirectory)
+    let secondBalloon = package.appending(path: "balloon-extra", directoryHint: .isDirectory)
+    let headline = package.appending(path: "headline", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: ghostMaster, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: balloon, withIntermediateDirectories: true)
-    try Data(
-        "type,ghost\ndirectory,test-ghost\nballoon.directory,test-balloon\nballoon.source.directory,balloon\n".utf8
-    ).write(to: package.appending(path: "install.txt", directoryHint: .notDirectory))
+    try FileManager.default.createDirectory(at: secondBalloon, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: headline, withIntermediateDirectories: true)
+    try Data((
+        "type,ghost\ndirectory,test-ghost\nballoon.directory,test-balloon\nballoon.source.directory,balloon\n" +
+            "balloon1.directory,test-balloon-extra\nballoon1.source.directory,balloon-extra\n" +
+            "headline.directory,test-headline\nheadline.source.directory,headline\n"
+    ).utf8).write(to: package.appending(path: "install.txt", directoryHint: .notDirectory))
     try Data("type,ghost\nname,Test Ghost\n".utf8).write(
         to: ghostMaster.appending(path: "descript.txt", directoryHint: .notDirectory)
     )
     try Data("type,balloon\nname,Test Balloon\n".utf8).write(
         to: balloon.appending(path: "descript.txt", directoryHint: .notDirectory)
     )
+    try Data("type,balloon\nname,Extra Balloon\n".utf8).write(
+        to: secondBalloon.appending(path: "descript.txt", directoryHint: .notDirectory)
+    )
+    try Data("name,Test Headline\n".utf8).write(
+        to: headline.appending(path: "descript.txt", directoryHint: .notDirectory)
+    )
     let archive = try makeArchive(from: fixture.source, at: fixture.root)
 
     let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
 
     #expect(result.primaryType == .ghost)
-    #expect(result.installedURLs.count == 2)
-    #expect(result.items.map(\.type) == [.ghost, .balloon])
-    #expect(result.items.map(\.name) == ["test-ghost", "test-balloon"])
+    #expect(result.installedURLs.count == 4)
+    #expect(result.items.map(\.type) == [.ghost, .balloon, .balloon, .headline])
+    #expect(result.items.map(\.name) == ["test-ghost", "test-balloon", "test-balloon-extra", "test-headline"])
     #expect(FileManager.default.fileExists(atPath: fixture.roots.ghostsDirectory
             .appending(path: "test-ghost/ghost/master/descript.txt").path))
     #expect(FileManager.default.fileExists(atPath: fixture.roots.balloonsDirectory
             .appending(path: "test-balloon/descript.txt").path))
+    #expect(FileManager.default.fileExists(atPath: fixture.roots.balloonsDirectory
+            .appending(path: "test-balloon-extra/descript.txt").path))
+    #expect(FileManager.default.fileExists(atPath: fixture.roots.headlinesDirectory
+            .appending(path: "test-headline/descript.txt").path))
+}
+
+@Test
+func `installs a package and exposes its boot ghost`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let package = fixture.source.appending(path: "package", directoryHint: .isDirectory)
+    let ghost = package.appending(path: "ghost-one", directoryHint: .isDirectory)
+    let balloon = package.appending(path: "balloon-one", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: ghost.appending(path: "ghost/master"), withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: balloon, withIntermediateDirectories: true)
+    try Data("type,package\nname,Test Package\nbootghost,test-ghost\n".utf8).write(
+        to: package.appending(path: "install.txt")
+    )
+    try Data("type,ghost\nname,Test Ghost\ndirectory,test-ghost\n".utf8).write(
+        to: ghost.appending(path: "install.txt")
+    )
+    try Data("name,Test Ghost\n".utf8).write(to: ghost.appending(path: "ghost/master/descript.txt"))
+    try Data("type,balloon\nname,Test Balloon\ndirectory,test-balloon\n".utf8).write(
+        to: balloon.appending(path: "install.txt")
+    )
+    try Data("name,Test Balloon\n".utf8).write(to: balloon.appending(path: "descript.txt"))
+    let archive = try makeArchive(from: fixture.source, at: fixture.root)
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(result.primaryType == .package)
+    #expect(result.bootGhostDirectory == "test-ghost")
+    #expect(result.items.map(\.type) == [.balloon, .ghost])
+    #expect(FileManager.default.fileExists(atPath: fixture.roots.ghostsDirectory
+            .appending(path: "test-ghost/ghost/master/descript.txt").path))
+    #expect(FileManager.default.fileExists(atPath: fixture.roots.balloonsDirectory
+            .appending(path: "test-balloon/descript.txt").path))
+}
+
+@Test
+func `refresh replaces installed content while preserving undelete mask files`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let destination = fixture.roots.balloonsDirectory.appending(path: "test-balloon")
+    try FileManager.default.createDirectory(at: destination.appending(path: "state"), withIntermediateDirectories: true)
+    try Data("old".utf8).write(to: destination.appending(path: "obsolete.txt"))
+    try Data("saved".utf8).write(to: destination.appending(path: "state/savedata.txt"))
+
+    let package = fixture.source.appending(path: "package", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: package, withIntermediateDirectories: true)
+    try Data("type,balloon\nname,Test\ndirectory,test-balloon\nrefresh,1\nrefreshundeletemask,savedata.txt\n".utf8)
+        .write(to: package.appending(path: "install.txt"))
+    try Data("new".utf8).write(to: package.appending(path: "descript.txt"))
+    let archive = try makeArchive(from: fixture.source, at: fixture.root)
+
+    _ = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(!FileManager.default.fileExists(atPath: destination.appending(path: "obsolete.txt").path))
+    #expect(try String(contentsOf: destination.appending(path: "state/savedata.txt"), encoding: .utf8) == "saved")
+    #expect(try String(contentsOf: destination.appending(path: "descript.txt"), encoding: .utf8) == "new")
 }
 
 @Test
