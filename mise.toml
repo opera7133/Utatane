@@ -25,9 +25,17 @@ run = "swiftformat apps packages"
 description = "Check Swift formatting"
 run = "swiftformat apps packages --lint"
 
+[tasks.localization-generate]
+description = "Generate the string catalog from per-language translations"
+run = "python3 Scripts/generate-localizations.py"
+
+[tasks.localization-check]
+description = "Check that the generated string catalog is up to date"
+run = "python3 Scripts/generate-localizations.py --check"
+
 [tasks.check]
 description = "Run all local checks"
-depends = ["lint", "test", "build"]
+depends = ["localization-check", "lint", "test", "build"]
 
 [tasks.build-hosts]
 description = "Build the Windows DLL helper binary with zig"

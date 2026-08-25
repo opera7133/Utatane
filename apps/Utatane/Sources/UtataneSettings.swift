@@ -32,6 +32,23 @@ final class UtataneSettingsStore: ObservableObject {
         }
     }
 
+    enum AppLanguage: String, CaseIterable, Identifiable {
+        case system
+        case ja
+        case en
+        case zhHans = "zh-Hans"
+        case zhHant = "zh-Hant"
+        case ko
+
+        var id: Self {
+            self
+        }
+
+        var languageCode: String? {
+            self == .system ? nil : rawValue
+        }
+    }
+
     enum Pane: Hashable {
         case general
         case ghost
@@ -48,6 +65,7 @@ final class UtataneSettingsStore: ObservableObject {
         static let contentUpdateIntervalDays = "network.ghostUpdateIntervalDays"
         static let startupBehavior = "general.startupBehavior"
         static let appearance = "general.appearance"
+        static let appLanguage = "general.appLanguage"
         static let defaultBalloonDirectoryName = "general.defaultBalloonDirectoryName"
         static let characterDelayMilliseconds = "talk.characterDelayMilliseconds"
         static let randomTalkIntervalMinutes = "talk.randomTalkIntervalMinutes"
@@ -89,6 +107,16 @@ final class UtataneSettingsStore: ObservableObject {
     @Published var appearance: Appearance {
         didSet { defaults.set(appearance.rawValue, forKey: Key.appearance) }
     }
+
+    @Published var appLanguage: AppLanguage {
+        didSet {
+            defaults.set(appLanguage.rawValue, forKey: Key.appLanguage)
+            Self.apply(appLanguage, to: defaults)
+            languageRequiresRestart = appLanguage != launchedAppLanguage
+        }
+    }
+
+    @Published private(set) var languageRequiresRestart = false
 
     @Published var defaultBalloonDirectoryName: String {
         didSet { defaults.set(defaultBalloonDirectoryName, forKey: Key.defaultBalloonDirectoryName) }
@@ -172,6 +200,7 @@ final class UtataneSettingsStore: ObservableObject {
     @Published private(set) var activeGhostName: String?
 
     private let defaults: UserDefaults
+    private let launchedAppLanguage: AppLanguage
     private var activeGhostDirectoryName: String?
     private var isLoadingGhostSettings = false
 
@@ -193,6 +222,11 @@ final class UtataneSettingsStore: ObservableObject {
         appearance = Appearance(
             rawValue: defaults.string(forKey: Key.appearance) ?? ""
         ) ?? .system
+        let loadedAppLanguage = AppLanguage(
+            rawValue: defaults.string(forKey: Key.appLanguage) ?? ""
+        ) ?? .system
+        appLanguage = loadedAppLanguage
+        launchedAppLanguage = loadedAppLanguage
         defaultBalloonDirectoryName = defaults.string(forKey: Key.defaultBalloonDirectoryName) ?? ""
         characterDelayMilliseconds = defaults.object(forKey: Key.characterDelayMilliseconds) == nil
             ? 50 : defaults.integer(forKey: Key.characterDelayMilliseconds)
@@ -214,6 +248,15 @@ final class UtataneSettingsStore: ObservableObject {
         aiModel = defaults.string(forKey: Key.aiModel) ?? "llama3.2"
         aiBaseURL = defaults.string(forKey: Key.aiBaseURL) ?? ""
         aiAPIKey = AIAPIKeyStore.load()
+        Self.apply(appLanguage, to: defaults)
+    }
+
+    private static func apply(_ language: AppLanguage, to defaults: UserDefaults) {
+        if let languageCode = language.languageCode {
+            defaults.set([languageCode], forKey: "AppleLanguages")
+        } else {
+            defaults.removeObject(forKey: "AppleLanguages")
+        }
     }
 
     private static func positiveValue(_ value: Int, fallback: Int) -> Int {
@@ -364,6 +407,24 @@ struct UtataneSettingsView: View {
                     }
                     Text("Shell、バルーン、キャラクター位置は、最後に使った状態がゴーストごとに復元される。")
                         .foregroundStyle(.secondary)
+                }
+                Section("言語") {
+                    Picker("表示言語", selection: $settings.appLanguage) {
+                        Text("システム設定に合わせる").tag(UtataneSettingsStore.AppLanguage.system)
+                        Text("日本語").tag(UtataneSettingsStore.AppLanguage.ja)
+                        Text("英語").tag(UtataneSettingsStore.AppLanguage.en)
+                        Text("中国語（簡体字）").tag(UtataneSettingsStore.AppLanguage.zhHans)
+                        Text("中国語（繁体字）").tag(UtataneSettingsStore.AppLanguage.zhHant)
+                        Text("韓国語").tag(UtataneSettingsStore.AppLanguage.ko)
+                    }
+                    if settings.languageRequiresRestart {
+                        Text("言語の変更はUtataneの再起動後に反映される。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Button("今すぐ再起動") {
+                            restartApplication()
+                        }
+                    }
                 }
                 Section("既定のバルーン") {
                     Picker("バルーン", selection: $settings.defaultBalloonDirectoryName) {
@@ -578,6 +639,20 @@ struct UtataneSettingsView: View {
         } catch {
             headlines = []
             loadError = error.localizedDescription
+        }
+    }
+
+    private func restartApplication() {
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(
+            at: Bundle.main.bundleURL,
+            configuration: configuration
+        ) { _, error in
+            guard error == nil else { return }
+            Task { @MainActor in
+                NSApplication.shared.terminate(nil)
+            }
         }
     }
 
