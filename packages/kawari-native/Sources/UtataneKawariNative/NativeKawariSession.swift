@@ -1,7 +1,15 @@
 import AppKit
 import CKawariNative
 import Foundation
+import UtataneNativeSaori
 import UtataneShiori
+
+private let kawariSaoriLock = NSLock()
+private let activeKawariSaori = KawariSaoriSlot()
+
+private final class KawariSaoriSlot: @unchecked Sendable {
+    var registry: NativeSaoriRegistry?
+}
 
 public enum NativeKawariError: LocalizedError, Equatable, Sendable {
     case loadFailed
@@ -24,9 +32,11 @@ public final class NativeKawariSession: @unchecked Sendable {
     private let handle: UInt32
     private let compatibilityDirectoryURL: URL?
     private let usesLegacyCompatibility: Bool
+    private let saoriRegistry: NativeSaoriRegistry
 
-    public init(masterDirectoryURL: URL) throws {
+    public init(masterDirectoryURL: URL, saoriRegistry: NativeSaoriRegistry? = nil) throws {
         Self.installNativeSaoriCallback()
+        self.saoriRegistry = saoriRegistry ?? NativeSaoriRegistry(baseDirectoryURL: masterDirectoryURL)
         let preparation = try Self.prepareDirectoryIfNeeded(masterDirectoryURL)
         let preparedDirectory = preparation.directory
         compatibilityDirectoryURL = preparation.isLegacy ? preparedDirectory : nil
@@ -187,6 +197,10 @@ public final class NativeKawariSession: @unchecked Sendable {
     }
 
     public func request(_ request: String) throws -> String {
+        kawariSaoriLock.lock()
+        defer { kawariSaoriLock.unlock() }
+        activeKawariSaori.registry = saoriRegistry
+        defer { activeKawariSaori.registry = nil }
         guard let data = request.data(using: .shiftJIS) else {
             throw NativeKawariError.undecodableResponse
         }
@@ -211,14 +225,18 @@ public final class NativeKawariSession: @unchecked Sendable {
 }
 
 private func utataneKawariSaoriRequest(
+    _ path: UnsafePointer<CChar>?,
     _ request: UnsafePointer<CChar>?,
     _ length: UnsafeMutablePointer<Int64>?
 ) -> UnsafeMutablePointer<CChar>? {
-    guard let request, let length, length.pointee >= 0 else { return nil }
+    guard let path, let request, let length, length.pointee >= 0 else { return nil }
     let data = Data(bytes: request, count: Int(length.pointee))
     guard let message = String(data: data, encoding: .shiftJIS) else { return nil }
 
-    let response = nativeTextCopySaoriResponse(for: message)
+    let modulePath = String(cString: path)
+    activeKawariSaori.registry?.load(modulePath)
+    let response = activeKawariSaori.registry?.response(path: modulePath, request: message)
+        ?? "SAORI/1.0 500 Internal Server Error\r\n\r\n"
     guard let responseData = response.data(using: .shiftJIS),
           let allocation = malloc(max(responseData.count, 1))
     else { return nil }
@@ -228,37 +246,7 @@ private func utataneKawariSaoriRequest(
 }
 
 func nativeTextCopySaoriResponse(for message: String) -> String {
-    if message.hasPrefix("GET Version SAORI/1.") {
-        return "SAORI/1.0 200 OK\r\nCharset: Shift_JIS\r\n\r\n"
-    } else if message.hasPrefix("EXECUTE SAORI/1."),
-              let text = header("Argument0", in: message)
-    {
-        writeToPasteboard(text)
-        let result = header("Argument1", in: message) == "1" ? "Result: \(text)\r\n" : ""
-        return "SAORI/1.0 200 OK\r\nCharset: Shift_JIS\r\n\(result)\r\n"
-    }
-    return "SAORI/1.0 400 Bad Request\r\nCharset: Shift_JIS\r\n\r\n"
-}
-
-private func writeToPasteboard(_ text: String) {
-    let operation = { @MainActor in
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
-    }
-    if Thread.isMainThread {
-        MainActor.assumeIsolated(operation)
-    } else {
-        DispatchQueue.main.sync {
-            MainActor.assumeIsolated(operation)
-        }
-    }
-}
-
-private func header(_ name: String, in message: String) -> String? {
-    let prefix = name.lowercased() + ":"
-    return message.split(whereSeparator: \ .isNewline).first { line in
-        line.lowercased().hasPrefix(prefix)
-    }.map { line in
-        line.dropFirst(prefix.count).trimmingCharacters(in: .whitespaces)
-    }
+    let registry = NativeSaoriRegistry(baseDirectoryURL: URL(filePath: "/"))
+    registry.load("textcopy2.dll")
+    return registry.response(path: "textcopy2.dll", request: message)
 }

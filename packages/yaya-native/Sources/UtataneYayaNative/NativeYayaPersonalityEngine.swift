@@ -1,5 +1,6 @@
 import Foundation
 import UtataneCore
+import UtataneNativeSaori
 import UtataneRuntime
 import UtataneSakuraScript
 import UtataneShiori
@@ -19,8 +20,8 @@ public actor NativeYayaPersonalityEngine: PersonalityEngine {
     private let session: NativeYayaSession
     private let adapter: GhostEventShioriAdapter
 
-    public init(masterDirectoryURL: URL) throws {
-        session = try NativeYayaSession(masterDirectoryURL: masterDirectoryURL)
+    public init(masterDirectoryURL: URL, saoriRegistry: NativeSaoriRegistry? = nil) throws {
+        session = try NativeYayaSession(masterDirectoryURL: masterDirectoryURL, saoriRegistry: saoriRegistry)
         adapter = GhostEventShioriAdapter()
     }
 

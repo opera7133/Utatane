@@ -2,6 +2,28 @@
 
 なるべくWineを使わずにゴーストを動かすための話です。KAWARIはアプリへ静的リンク、Aosoraは外部のmacOS用dynamic libraryを読み込みます。
 
+## 共通ネイティブSAORI
+
+`UtataneNativeSaori`はSHIORIから独立したSAORIレジストリです。ネイティブMISAKA、YAYA、SATORI、KAWARIは、それぞれの既存SAORI呼び出し構文を変えずに同じレジストリへ要求を渡します。
+
+- `mciaudior.dll`: `load`、`play`、`loop`、`stop`
+- `wmove.dll`: `MOVETO`、`MOVETO_INSIDE`、`GET_POSITION`、`GET_DESKTOP_SIZE`
+- `textcopy2.dll`: macOSのクリップボードへの書き込み
+
+`wmove.dll`のWindows HWNDは使用せず、さくら側をスコープ0、相方側をスコープ1としてUtataneのサーフェスウィンドウへ接続します。未実装なのは`MOVE`、`ZMOVE`、`WAIT`、`NOTIFY`、`CLEAR`、`STANDBY`などです。
+
+SSUはSATORIに同梱された既存実装を使います。`saori_cpuid.dll`と`kenonoke.dll`も、実ゴーストで検証済みの多値返却とShift_JIS辞書処理を保つため、現時点ではSATORI側に残しています。
+
+外部macOS SHIORIやWindows DLLホストへ任意のSAORIを注入する機構ではありません。ここでいう共通対応は、Utatane内蔵のネイティブSHIORI経路が対象です。
+
+## MISAKA
+
+MISAKAは`misaka.dll`をロードせず、Shift_JIS辞書をSwift実装で解釈します。配列、採用条件、`#_Common`、`nonoverlap`、`sequential`、整数演算、変数の自動保存、`$_talkinterval`による自発会話、プロパティハンドラ、主要システム変数を実装しています。
+
+`misaka.ini`の`debug`、`debugsaori`、`error`も扱います。ログはゴーストの配布物を変更しないよう、変数JSONと同じUtataneのApplication Support内へ出力します。`daysfromlastupdate`はUtataneの更新履歴をSHIORIへ直接渡していないため、現在はmasterディレクトリの更新日時による近似値です。Windows HWNDは存在しないため、`hwnd.*`は互換用のダミー値です。
+
+未対応なのは`misakac.exe`が生成する暗号化辞書`.__1`です。
+
 ## Materia first (さくら)
 
 「さくらとうにゅう」のオリジナル版firstには専用のネイティブ人格実装があります。`first.dll`をmacOSでロードしたり実行したりせず、利用者が配置したDLLから次のデータだけを読み取ります。

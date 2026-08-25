@@ -20,7 +20,11 @@
 | `saori_cpuid.dll` | 対応 | macOSの情報を返す互換実装 |
 | `kenonoke.dll` | 対応 | `keyword.txt`による分類 |
 | `textcopy2.dll` | 対応 | macOSのクリップボードへ書き込み |
+| `mciaudior.dll` | 対応 | AVFoundationによる`load`、`play`、`loop`、`stop` |
+| `wmove.dll` | 一部対応 | `MOVETO`、`MOVETO_INSIDE`、`GET_POSITION`、`GET_DESKTOP_SIZE` |
 | `exec.dll` / `process.dll` / `proxy.dll` | 未対応 | 権限と安全な挙動を決めてから |
 | その他のWindows DLL | 原則未対応 | Wineへ何でも投げる方針にはしない |
 
 実ゴーストを手元へ置く場所やテスト方法は[開発ガイド](Development.md)と[Native SHIORI / SAORI](Native-SHIORI.md)を参照してください。
+
+`mciaudior.dll`、`wmove.dll`、`textcopy2.dll`はSHIORI非依存の共通レジストリにあり、ネイティブMISAKA、YAYA、SATORI、KAWARIから利用できます。SSUはSATORI同梱実装、`saori_cpuid.dll`と`kenonoke.dll`は現在の実ゴースト互換性を保つためSATORI側の実装を維持しています。

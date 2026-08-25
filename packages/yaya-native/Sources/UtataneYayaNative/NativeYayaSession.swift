@@ -1,6 +1,13 @@
 import CYayaNative
 import Foundation
+import UtataneNativeSaori
 import UtataneShiori
+
+private let activeYayaSaori = YayaSaoriSlot()
+
+private final class YayaSaoriSlot: @unchecked Sendable {
+    var registry: NativeSaoriRegistry?
+}
 
 public enum NativeYayaError: LocalizedError, Equatable, Sendable {
     case loadFailed(URL)
@@ -25,8 +32,11 @@ public enum NativeYayaError: LocalizedError, Equatable, Sendable {
 public final class NativeYayaSession: @unchecked Sendable {
     private let lock = NSLock()
     private var instanceID: Int
+    private let saoriRegistry: NativeSaoriRegistry
 
-    public init(masterDirectoryURL: URL) throws {
+    public init(masterDirectoryURL: URL, saoriRegistry: NativeSaoriRegistry? = nil) throws {
+        self.saoriRegistry = saoriRegistry ?? NativeSaoriRegistry(baseDirectoryURL: masterDirectoryURL)
+        utatane_yaya_set_saori_request_callback(utataneYayaSaoriRequest)
         let path = masterDirectoryURL.standardizedFileURL.path
         instanceID = path.withCString { utatane_yaya_create_utf8($0) }
         guard instanceID > 0 else {
@@ -50,6 +60,8 @@ public final class NativeYayaSession: @unchecked Sendable {
 
     public func request(_ request: String) throws -> String {
         try lock.withLock {
+            activeYayaSaori.registry = saoriRegistry
+            defer { activeYayaSaori.registry = nil }
             var responseLength = 0
             let responseBuffer = request.withCString {
                 utatane_yaya_request(instanceID, $0, &responseLength)
@@ -69,4 +81,24 @@ public final class NativeYayaSession: @unchecked Sendable {
             throw NativeYayaError.undecodableResponse
         }
     }
+}
+
+private func utataneYayaSaoriRequest(
+    _ path: UnsafePointer<CChar>?,
+    _ request: UnsafePointer<CChar>?,
+    _ length: UnsafeMutablePointer<Int>?
+) -> UnsafeMutablePointer<CChar>? {
+    guard let path, let request, let length, length.pointee >= 0,
+          let registry = activeYayaSaori.registry else { return nil }
+    let data = Data(bytes: request, count: length.pointee)
+    let encoding: String.Encoding = String(data: data, encoding: .utf8) == nil ? .shiftJIS : .utf8
+    guard let message = String(data: data, encoding: encoding) else { return nil }
+    let modulePath = String(cString: path)
+    registry.load(modulePath)
+    let response = registry.response(path: modulePath, request: message)
+    guard let responseData = response.data(using: encoding), let allocation = malloc(max(responseData.count, 1))
+    else { return nil }
+    responseData.copyBytes(to: allocation.assumingMemoryBound(to: UInt8.self), count: responseData.count)
+    length.pointee = responseData.count
+    return allocation.assumingMemoryBound(to: CChar.self)
 }

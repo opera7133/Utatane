@@ -109,6 +109,10 @@ targets:
       - package: UtataneKit
         product: UtataneFirstNative
       - package: UtataneKit
+        product: UtataneMisakaNative
+      - package: UtataneKit
+        product: UtataneNativeSaori
+      - package: UtataneKit
         product: UtataneWindowsShiori
     scheme:
       gatherCoverageData: true

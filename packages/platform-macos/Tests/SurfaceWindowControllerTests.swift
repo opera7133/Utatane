@@ -161,7 +161,7 @@ func `base animation pattern temporarily replaces the whole surface`() async thr
     let animation = SurfaceAnimation(
         id: 0,
         name: "blink",
-        interval: "sometimes",
+        interval: nil,
         patterns: [SurfaceAnimationPattern(
             order: 0,
             method: "base",

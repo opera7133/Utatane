@@ -26,7 +26,7 @@ public:
     std::string Request(const std::string &request) override {
         if (saoriRequestCallback == nullptr) return "";
         int64_t length = static_cast<int64_t>(request.size());
-        char *response = saoriRequestCallback(request.data(), &length);
+        char *response = saoriRequestCallback(path.c_str(), request.data(), &length);
         if (response == nullptr || length < 0) return "";
         const std::string result(response, static_cast<std::size_t>(length));
         std::free(response);
@@ -46,7 +46,8 @@ public:
         std::transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char character) {
             return static_cast<char>(std::tolower(character));
         });
-        if (filename != "textcopy2.dll") return nullptr;
+        if (filename != "textcopy2.dll" && filename != "mciaudior.dll" && filename != "wmove.dll"
+            && filename != "saori_cpuid.dll" && filename != "kenonoke.dll") return nullptr;
         return new UtataneSaoriModule(*this, path);
     }
 

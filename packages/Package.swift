@@ -22,6 +22,8 @@ let package = Package(
         .library(name: "UtataneYayaNative", targets: ["UtataneYayaNative"]),
         .library(name: "UtataneSatoriNative", targets: ["UtataneSatoriNative"]),
         .library(name: "UtataneFirstNative", targets: ["UtataneFirstNative"]),
+        .library(name: "UtataneNativeSaori", targets: ["UtataneNativeSaori"]),
+        .library(name: "UtataneMisakaNative", targets: ["UtataneMisakaNative"]),
         .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"]),
         .executable(name: "utatane-mcp", targets: ["UtataneMCP"])
     ],
@@ -161,6 +163,7 @@ let package = Package(
             dependencies: [
                 "CKawariNative",
                 "UtataneCore",
+                "UtataneNativeSaori",
                 "UtataneRuntime",
                 "UtataneSakuraScript",
                 "UtataneShiori"
@@ -217,6 +220,7 @@ let package = Package(
             dependencies: [
                 "CYayaNative",
                 "UtataneCore",
+                "UtataneNativeSaori",
                 "UtataneRuntime",
                 "UtataneSakuraScript",
                 "UtataneShiori"
@@ -230,6 +234,7 @@ let package = Package(
                 "SatoriBridge.cpp",
                 "CharsetPOSIX.cpp",
                 "NativeKeywordSaori.cpp",
+                "NativeSwiftSaori.cpp",
                 "NativeSystemInfoSaori.cpp",
                 "Vendor/_/Sender.cpp",
                 "Vendor/_/Utilities.cpp",
@@ -270,6 +275,7 @@ let package = Package(
             dependencies: [
                 "CSatoriNative",
                 "UtataneCore",
+                "UtataneNativeSaori",
                 "UtataneRuntime",
                 "UtataneSakuraScript",
                 "UtataneShiori"
@@ -280,6 +286,22 @@ let package = Package(
             name: "UtataneFirstNative",
             dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript"],
             path: "first-native/Sources"
+        ),
+        .target(
+            name: "UtataneNativeSaori",
+            path: "native-saori/Sources",
+            linkerSettings: [.linkedFramework("AVFoundation")]
+        ),
+        .target(
+            name: "UtataneMisakaNative",
+            dependencies: [
+                "UtataneCore",
+                "UtataneNativeSaori",
+                "UtataneRuntime",
+                "UtataneSakuraScript",
+                "UtataneShiori"
+            ],
+            path: "misaka-native/Sources"
         ),
         .testTarget(
             name: "UtataneBalloonTests",
@@ -370,6 +392,16 @@ let package = Package(
             name: "UtataneFirstNativeTests",
             dependencies: ["UtataneFirstNative"],
             path: "first-native/Tests"
+        ),
+        .testTarget(
+            name: "UtataneNativeSaoriTests",
+            dependencies: ["UtataneNativeSaori"],
+            path: "native-saori/Tests"
+        ),
+        .testTarget(
+            name: "UtataneMisakaNativeTests",
+            dependencies: ["UtataneCore", "UtataneMisakaNative", "UtataneNativeSaori", "UtataneShiori"],
+            path: "misaka-native/Tests"
         )
     ],
     swiftLanguageModes: [.v6],

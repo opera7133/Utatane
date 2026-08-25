@@ -2,6 +2,9 @@
 
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
+#include <cctype>
+#include <string>
 #include <mutex>
 
 extern "C" long multi_loadu(char *path, long length);
@@ -10,6 +13,32 @@ extern "C" char *multi_request(long instance_id, char *request, long *length);
 
 namespace {
 std::mutex yaya_mutex;
+utatane_yaya_saori_request_callback saori_request_callback = nullptr;
+}
+
+void utatane_yaya_set_saori_request_callback(utatane_yaya_saori_request_callback callback) {
+    saori_request_callback = callback;
+}
+
+int utatane_yaya_native_saori_load(const char *path) {
+    if (saori_request_callback == nullptr || path == nullptr) return 0;
+    std::string filename(path);
+    std::replace(filename.begin(), filename.end(), '\\', '/');
+    const auto slash = filename.find_last_of('/');
+    if (slash != std::string::npos) filename.erase(0, slash + 1);
+    std::transform(filename.begin(), filename.end(), filename.begin(), [](unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    return filename == "mciaudior.dll" || filename == "wmove.dll" || filename == "textcopy2.dll";
+}
+
+int utatane_yaya_native_saori_unload(const char *path) {
+    return saori_request_callback != nullptr && path != nullptr ? 1 : 0;
+}
+
+char *utatane_yaya_native_saori_request(const char *path, char *request, long *length) {
+    if (saori_request_callback == nullptr || path == nullptr || request == nullptr || length == nullptr) return nullptr;
+    return saori_request_callback(path, request, length);
 }
 
 long utatane_yaya_create_utf8(const char *master_path) {

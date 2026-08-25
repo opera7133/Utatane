@@ -10,6 +10,16 @@ extern "C" char *satori_request(int id, char *data, long *length);
 
 namespace {
 std::mutex satori_mutex;
+utatane_satori_saori_request_callback saori_request_callback = nullptr;
+}
+
+void utatane_satori_set_saori_request_callback(utatane_satori_saori_request_callback callback) {
+    saori_request_callback = callback;
+}
+
+char *utatane_satori_native_saori_request(const char *path, const char *request, long *length) {
+    if (saori_request_callback == nullptr) return nullptr;
+    return saori_request_callback(path, request, length);
 }
 
 long utatane_satori_create(const char *master_path) {

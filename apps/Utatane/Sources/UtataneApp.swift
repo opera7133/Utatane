@@ -9,6 +9,8 @@ import UtataneCore
 import UtataneFirstNative
 import UtataneGhostKit
 import UtataneKawariNative
+import UtataneMisakaNative
+import UtataneNativeSaori
 import UtataneNetwork
 import UtatanePlatformMacOS
 import UtatanePOSIXShiori
@@ -1479,20 +1481,34 @@ private struct UtataneRootView: View {
                 masterDirectoryURL: ContentRoot.writableYayaMasterDirectory(
                     for: ghost,
                     source: masterDirectory
-                )
+                ),
+                saoriRegistry: nativeSaoriRegistry(for: masterDirectory)
             )
         }
         if NativeSatoriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
-            return try NativeSatoriPersonalityEngine(masterDirectoryURL: masterDirectory)
+            return try NativeSatoriPersonalityEngine(
+                masterDirectoryURL: masterDirectory,
+                saoriRegistry: nativeSaoriRegistry(for: masterDirectory)
+            )
         }
         if NativeKawariPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
-            return try NativeKawariPersonalityEngine(masterDirectoryURL: masterDirectory)
+            return try NativeKawariPersonalityEngine(
+                masterDirectoryURL: masterDirectory,
+                saoriRegistry: nativeSaoriRegistry(for: masterDirectory)
+            )
         }
         if POSIXShioriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try POSIXShioriPersonalityEngine(masterDirectoryURL: masterDirectory)
         }
         if NativeFirstPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try NativeFirstPersonalityEngine(masterDirectoryURL: masterDirectory)
+        }
+        if NativeMisakaPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
+            return try NativeMisakaPersonalityEngine(
+                masterDirectoryURL: masterDirectory,
+                variableStoreURL: ContentRoot.misakaVariableStoreURL(for: ghost),
+                saoriCaller: nativeSaoriRegistry(for: masterDirectory)
+            )
         }
         if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),
            let configuration = ContentRoot.materiaFirstConfiguration(for: ghost)
@@ -1507,6 +1523,13 @@ private struct UtataneRootView: View {
         }
         let catalog = try DialogueCatalogLoader().load(from: dialogueURL)
         return DialoguePersonalityEngine(catalog: catalog)
+    }
+
+    private func nativeSaoriRegistry(for masterDirectory: URL) -> NativeSaoriRegistry {
+        NativeSaoriRegistry(
+            baseDirectoryURL: masterDirectory,
+            windowController: NativeSaoriWindowAdapter(controller: surfaceWindowController)
+        )
     }
 
     private func cancelHTTP(url: String?) {
@@ -4331,6 +4354,12 @@ enum ContentRoot {
             .appending(path: "Utatane/State", directoryHint: .isDirectory)
             .appending(path: ghost.rootDirectory.lastPathComponent, directoryHint: .isDirectory)
             .appending(path: "variables.json", directoryHint: .notDirectory)
+    }
+
+    static func misakaVariableStoreURL(for ghost: InstalledGhost) -> URL {
+        variableStoreURL(for: ghost)
+            .deletingLastPathComponent()
+            .appending(path: "misaka-vars.json", directoryHint: .notDirectory)
     }
 
     static func writableYayaMasterDirectory(for ghost: InstalledGhost, source: URL) throws -> URL {
