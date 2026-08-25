@@ -10,6 +10,8 @@ public struct ShellDefinition: Sendable, Equatable {
     public let bindOptions: [Int: [String: ShellBindOptions]]
     public let surfaceTable: SurfaceTable?
     public let maximumSurfaceWidth: Int?
+    public let cursorDefinitions: [Int: [SurfaceCursorDefinition]]
+    public let tooltips: [Int: [String: String]]
 
     public init(
         directory: URL,
@@ -64,7 +66,9 @@ public struct ShellDefinition: Sendable, Equatable {
         bindGroups: [Int: [Int: ShellBindGroup]] = [:],
         bindOptions: [Int: [String: ShellBindOptions]] = [:],
         surfaceTable: SurfaceTable?,
-        maximumSurfaceWidth: Int?
+        maximumSurfaceWidth: Int?,
+        cursorDefinitions: [Int: [SurfaceCursorDefinition]] = [:],
+        tooltips: [Int: [String: String]] = [:]
     ) {
         self.directory = directory
         self.surfaces = surfaces
@@ -75,6 +79,8 @@ public struct ShellDefinition: Sendable, Equatable {
         self.bindOptions = bindOptions
         self.surfaceTable = surfaceTable
         self.maximumSurfaceWidth = maximumSurfaceWidth
+        self.cursorDefinitions = cursorDefinitions
+        self.tooltips = tooltips
     }
 
     public func resolveSurface(_ identifier: String, scope: Int) -> Int? {
@@ -93,6 +99,26 @@ public struct ShellDefinition: Sendable, Equatable {
             }
         }
         return result
+    }
+}
+
+public enum SurfaceCursorTrigger: String, Sendable, Equatable {
+    case mouseUp
+    case mouseDown
+    case mouseRightDown
+    case mouseWheel
+    case mouseHover
+}
+
+public struct SurfaceCursorDefinition: Sendable, Equatable {
+    public let trigger: SurfaceCursorTrigger
+    public let region: String
+    public let cursor: String
+
+    public init(trigger: SurfaceCursorTrigger, region: String, cursor: String) {
+        self.trigger = trigger
+        self.region = region
+        self.cursor = cursor
     }
 }
 

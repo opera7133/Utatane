@@ -230,3 +230,32 @@ func `preserves collision definition order when collision sorting is omitted`() 
 
     #expect(surface.collisions.map(\.id) == [7, 2])
 }
+
+@Test
+func `parses scoped cursor and tooltip braces`() {
+    let document = SurfacesParser().parseDocument("""
+    sakura.cursor
+    {
+    mouseup0,Head,system:hand
+    mousedown0,Head,system:grip
+    mouserightdown0,Bust,system:finger
+    mousewheel0,Face,system:cross
+    mousehover0,MenuButton,system:help
+    }
+    char2.tooltips
+    {
+    Head,頭です。
+    Bust,カンマ,も保持します。
+    }
+    """)
+
+    #expect(document.cursorDefinitions[0] == [
+        SurfaceCursorDefinition(trigger: .mouseUp, region: "Head", cursor: "system:hand"),
+        SurfaceCursorDefinition(trigger: .mouseDown, region: "Head", cursor: "system:grip"),
+        SurfaceCursorDefinition(trigger: .mouseRightDown, region: "Bust", cursor: "system:finger"),
+        SurfaceCursorDefinition(trigger: .mouseWheel, region: "Face", cursor: "system:cross"),
+        SurfaceCursorDefinition(trigger: .mouseHover, region: "MenuButton", cursor: "system:help")
+    ])
+    #expect(document.tooltips[2]?["Head"] == "頭です。")
+    #expect(document.tooltips[2]?["Bust"] == "カンマ,も保持します。")
+}

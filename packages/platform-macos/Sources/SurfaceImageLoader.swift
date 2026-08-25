@@ -76,6 +76,25 @@ struct SurfaceImageLoader {
         return result
     }
 
+    func translated(_ image: NSImage, x: Int, y: Int) -> NSImage {
+        let result = NSImage(size: image.size)
+        result.lockFocus()
+        NSGraphicsContext.current?.imageInterpolation = .none
+        image.draw(
+            in: NSRect(
+                x: CGFloat(x),
+                y: -CGFloat(y),
+                width: image.size.width,
+                height: image.size.height
+            ),
+            from: .zero,
+            operation: .sourceOver,
+            fraction: 1
+        )
+        result.unlockFocus()
+        return result
+    }
+
     private func compositeSourceAtop(
         base: NSImage,
         overlay: NSImage,

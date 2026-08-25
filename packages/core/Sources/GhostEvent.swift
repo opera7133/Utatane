@@ -54,4 +54,5 @@ public struct GhostMouseEvent: Sendable, Equatable {
 public enum GhostStopReason: Sendable, Equatable {
     case close
     case ghostChanging(name: String?)
+    case ghostChangingDetailed(name: String?, mode: String, ghostName: String, path: String)
 }

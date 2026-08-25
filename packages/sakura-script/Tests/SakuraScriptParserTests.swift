@@ -798,6 +798,21 @@ func `parses open ui dialog and utility commands`() {
 }
 
 @Test
+func `parses system dialog commands and options`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![open,dialog,open,--title=辞書,--dir=/tmp,--filter=辞書|*.dic,--id=OnPick]\![open,dialog,save,--name=test,--ext=txt,--id=save1]\![open,dialog,folder,--id=folder1]\![open,dialog,color,--color=255 0 128,--id=color1]\![close,dialog,__SYSTEM_ALL_DIALOG__]"#
+    ) == [
+        .systemDialog(.init(
+            kind: .open, id: "OnPick", title: "辞書", directory: "/tmp", filter: "辞書|*.dic"
+        )),
+        .systemDialog(.init(kind: .save, id: "save1", fileExtension: "txt", name: "test")),
+        .systemDialog(.init(kind: .folder, id: "folder1")),
+        .systemDialog(.init(kind: .color, id: "color1", color: "255 0 128")),
+        .closeSystemDialog(id: "__SYSTEM_ALL_DIALOG__")
+    ])
+}
+
+@Test
 func `parses createupdatedata without arguments for the current ghost`() {
     #expect(SakuraScriptParser().parse(#"\![execute,createupdatedata]"#) == [
         .archive(.createUpdateData(directoryPath: nil, eventID: nil))

@@ -92,6 +92,7 @@ public final class BalloonWindowController {
     private var displayScale: CGFloat = 1
     private var textScale: CGFloat = 1
     private var stayOnTop = true
+    private var presentationHidden = false
 
     public var onClick: (@MainActor (Int) -> Void)?
     public var onLinkClick: (@MainActor (String, [String]) -> Void)?
@@ -107,6 +108,13 @@ public final class BalloonWindowController {
         self.stayOnTop = stayOnTop
         for presentation in presentations.values {
             presentation.window.level = stayOnTop ? .floating : .normal
+        }
+    }
+
+    public func setPresentationHidden(_ hidden: Bool) {
+        presentationHidden = hidden
+        for presentation in presentations.values {
+            presentation.window.alphaValue = hidden ? 0 : 1
         }
     }
 
@@ -262,6 +270,7 @@ public final class BalloonWindowController {
             place(window, near: surfaceFrame, scope: scope)
         }
         window.makeKeyAndOrderFront(nil)
+        window.alphaValue = presentationHidden ? 0 : 1
         let presentation = BalloonPresentation(
             window: window,
             contentView: contentView,

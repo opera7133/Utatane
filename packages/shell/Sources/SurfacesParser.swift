@@ -6,18 +6,24 @@ public struct ParsedSurfacesDocument: Sendable, Equatable {
     public let maximumSurfaceWidth: Int?
     public let collisionSort: SurfaceSortOrder
     public let animationSort: SurfaceSortOrder
+    public let cursorDefinitions: [Int: [SurfaceCursorDefinition]]
+    public let tooltips: [Int: [String: String]]
 
     public init(
         surfaces: [Int: SurfaceDefinition], aliases: [Int: [String: [Int]]],
         maximumSurfaceWidth: Int? = nil,
         collisionSort: SurfaceSortOrder = .none,
-        animationSort: SurfaceSortOrder = .descending
+        animationSort: SurfaceSortOrder = .descending,
+        cursorDefinitions: [Int: [SurfaceCursorDefinition]] = [:],
+        tooltips: [Int: [String: String]] = [:]
     ) {
         self.surfaces = surfaces
         self.aliases = aliases
         self.maximumSurfaceWidth = maximumSurfaceWidth
         self.collisionSort = collisionSort
         self.animationSort = animationSort
+        self.cursorDefinitions = cursorDefinitions
+        self.tooltips = tooltips
     }
 }
 
@@ -41,6 +47,8 @@ public struct SurfacesParser: Sendable {
         var maximumSurfaceWidth: Int?
         var collisionSort: SurfaceSortOrder = .none
         var animationSort: SurfaceSortOrder = .descending
+        var cursorDefinitions: [Int: [SurfaceCursorDefinition]] = [:]
+        var tooltips: [Int: [String: String]] = [:]
 
         for rawLine in text.components(separatedBy: .newlines) {
             let line = rawLine.trimmingCharacters(in: .whitespaces)
@@ -79,6 +87,15 @@ public struct SurfacesParser: Sendable {
                 case "animation-sort": animationSort = SurfaceSortOrder(rawValue: fields[1].lowercased()) ?? .descending
                 default: continue
                 }
+            case let .cursor(scope):
+                guard let definition = parseCursor(line) else { continue }
+                cursorDefinitions[scope, default: []].append(definition)
+            case let .tooltips(scope):
+                guard let separator = line.firstIndex(of: ",") else { continue }
+                let region = line[..<separator].trimmingCharacters(in: .whitespaces)
+                let text = line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces)
+                guard !region.isEmpty, !text.isEmpty else { continue }
+                tooltips[scope, default: [:]][region] = text
             case nil:
                 continue
             }
@@ -89,7 +106,9 @@ public struct SurfacesParser: Sendable {
             aliases: aliases,
             maximumSurfaceWidth: maximumSurfaceWidth,
             collisionSort: collisionSort,
-            animationSort: animationSort
+            animationSort: animationSort,
+            cursorDefinitions: cursorDefinitions,
+            tooltips: tooltips
         )
     }
 
@@ -109,6 +128,12 @@ public struct SurfacesParser: Sendable {
                 return .aliases(scope: scope)
             }
         }
+        if let scope = scopedBlock(line, suffix: ".cursor") {
+            return .cursor(scope: scope)
+        }
+        if let scope = scopedBlock(line, suffix: ".tooltips") {
+            return .tooltips(scope: scope)
+        }
 
         let appendPrefix = "surface.append"
         let surfacePrefix = "surface"
@@ -126,6 +151,37 @@ public struct SurfacesParser: Sendable {
 
         let surfaceIDs = parseSurfaceSelector(String(selector))
         return surfaceIDs.isEmpty ? nil : .surfaces(ids: surfaceIDs, appendOnly: appendOnly)
+    }
+
+    private func scopedBlock(_ line: String, suffix: String) -> Int? {
+        if line == "sakura\(suffix)" {
+            return 0
+        }
+        if line == "kero\(suffix)" {
+            return 1
+        }
+        guard line.hasPrefix("char"), line.hasSuffix(suffix) else {
+            return nil
+        }
+        let end = line.index(line.endIndex, offsetBy: -suffix.count)
+        return Int(line[line.index(line.startIndex, offsetBy: 4) ..< end])
+    }
+
+    private func parseCursor(_ line: String) -> SurfaceCursorDefinition? {
+        let fields = line.split(separator: ",", omittingEmptySubsequences: false).map {
+            $0.trimmingCharacters(in: .whitespaces)
+        }
+        guard fields.count >= 3, !fields[1].isEmpty, !fields[2].isEmpty else { return nil }
+        let key = fields[0].lowercased().replacingOccurrences(of: #"\d+$"#, with: "", options: .regularExpression)
+        let trigger: SurfaceCursorTrigger? = switch key {
+        case "mouseup": .mouseUp
+        case "mousedown": .mouseDown
+        case "mouserightdown": .mouseRightDown
+        case "mousewheel": .mouseWheel
+        case "mousehover": .mouseHover
+        default: nil
+        }
+        return trigger.map { SurfaceCursorDefinition(trigger: $0, region: fields[1], cursor: fields[2]) }
     }
 
     private func parseSurfaceSelector(_ selector: String) -> [Int] {
@@ -407,6 +463,8 @@ private enum Block {
     case surfaces(ids: [Int], appendOnly: Bool)
     case aliases(scope: Int)
     case descript
+    case cursor(scope: Int)
+    case tooltips(scope: Int)
 }
 
 private struct SurfaceBuilder {

@@ -54,6 +54,10 @@ targets:
             LSHandlerRank: Alternate
             LSItemContentTypes:
               - dev.utatane.nar
+        CFBundleURLTypes:
+          - CFBundleURLName: Ukagaka Web Link
+            CFBundleURLSchemes:
+              - x-ukagaka-link
         UTImportedTypeDeclarations:
           - UTTypeIdentifier: dev.utatane.nar
             UTTypeDescription: NAR Archive

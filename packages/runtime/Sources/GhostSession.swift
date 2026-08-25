@@ -44,6 +44,10 @@ public actor GhostSession {
             .close
         case let .ghostChanging(name):
             .ghostChanging(name: name)
+        case let .ghostChangingDetailed(name, mode, ghostName, path):
+            .shiori(id: "OnGhostChanging", references: [
+                0: name ?? "", 1: mode, 2: ghostName, 3: path
+            ])
         }
         return try await personalityEngine.handle(event: event)
     }

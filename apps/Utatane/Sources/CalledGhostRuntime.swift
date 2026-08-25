@@ -23,6 +23,7 @@ final class CalledGhostRuntime {
     private let webSocketManager = WebSocketSessionManager()
     private let propertySystem: PropertySystem
     private let textInputWindowController = TextInputWindowController()
+    private let systemDialogController = SystemDialogController()
     private var weatherTask: Task<Void, Never>?
     private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
     private var teachHistory: [String] = []
@@ -228,6 +229,10 @@ final class CalledGhostRuntime {
         if reflectsResponse, !response.rawValue.isEmpty {
             player.play(response, balloon: balloon)
         }
+    }
+
+    func notify(_ event: GhostEvent) async {
+        _ = try? await session.handle(event: event)
     }
 
     func stop() async -> String {
@@ -452,6 +457,21 @@ final class CalledGhostRuntime {
         player.onSetProperty = { [weak self] property, value in
             guard let self else { return }
             try? await propertySystem.setValue(value, for: property)
+        }
+        player.onSystemDialog = { [weak self] command in
+            guard let self else { return nil }
+            let result = systemDialogController.show(command)
+            let eventID = command.id.hasPrefix("On")
+                ? command.id
+                : (result.value == nil ? "OnSystemDialogCancel" : "OnSystemDialog")
+            var references = [0: command.kind.rawValue, 1: command.id]
+            if let value = result.value {
+                references[2] = value
+            }
+            return try? await session.handle(event: .shiori(id: eventID, references: references))
+        }
+        player.onCloseSystemDialog = { [weak self] id in
+            self?.systemDialogController.close(id: id)
         }
         player.onInputBox = { [weak self] id, _, initialValue in
             guard let self else { return nil }
@@ -761,6 +781,14 @@ final class CalledGhostRuntime {
                 6: Self.httpResponseHeaders(httpResponse)
             ]))
         } catch {
+            if (error as NSError).domain == NSURLErrorDomain,
+               (error as NSError).code == NSURLErrorTimedOut
+            {
+                let timeout = min(max(command.timeoutSeconds ?? 60, 0.1), 300)
+                send(.shiori(id: "OnNetworkHeavy", references: [
+                    0: String(timeout), 1: String(timeout)
+                ]))
+            }
             guard let eventID = command.eventID else { return nil }
             let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : (command.isFeed ? "OnExecuteRSSFailure" : "OnExecuteHTTPFailure")
             return try? await session.handle(event: .shiori(id: failureID, references: [

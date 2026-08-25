@@ -48,7 +48,25 @@ func `maps both SERIKO overlay fast spellings to source atop`() {
     #expect(surfaceCompositingOperation(for: "overlay") == .sourceOver)
     #expect(surfaceCompositingOperation(for: "overlay-fast") == .sourceAtop)
     #expect(surfaceCompositingOperation(for: "overlayfast") == .sourceAtop)
-    #expect(surfaceCompositingOperation(for: "reduce") == nil)
+}
+
+@Test
+func `maps SERIKO blend and mask methods to native compositing`() {
+    #expect(surfaceCompositingOperation(for: "blend-multiply") == .multiply)
+    #expect(surfaceCompositingOperation(for: "blend-multiply-fast") == .multiply)
+    #expect(surfaceCompositingOperation(for: "overlaymultiply") == .multiply)
+    #expect(surfaceCompositingOperation(for: "blend-screen") == .screen)
+    #expect(surfaceCompositingOperation(for: "blend-overlay") == .overlay)
+    #expect(surfaceCompositingOperation(for: "blend-add-glow-fast") == .plusLighter)
+    #expect(surfaceCompositingOperation(for: "blend-soft-light") == .softLight)
+    #expect(surfaceCompositingOperation(for: "blend-color-dodge") == .colorDodge)
+    #expect(surfaceCompositingOperation(for: "blend-color-burn") == .colorBurn)
+    #expect(surfaceCompositingOperation(for: "blend-difference") == .difference)
+    #expect(surfaceCompositingOperation(for: "blend-exclusion-fast") == .exclusion)
+    #expect(surfaceCompositingOperation(for: "replace") == .copy)
+    #expect(surfaceCompositingOperation(for: "interpolate") == .destinationOver)
+    #expect(surfaceCompositingOperation(for: "reduce") == .destinationIn)
+    #expect(surfaceCompositingOperation(for: "asis") == nil)
 }
 
 @Test

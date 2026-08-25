@@ -163,7 +163,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
 | configuration / 各explorer / graph / calendar | 🟡 | `\![open,configurationdialog]` でUtataneの設定画面オープンに対応。各explorer等は未実装 |
 | help / messenger / readme / terms / file | 🟡 | `\![open,readme]`、`\![open,help]`、`\![open,file,パス]`、`\![open,folder,パス]` に対応。該当ドキュメントやファイルを外部アプリ／Finderで開く |
-| open/save/folder/color dialog、close dialog | ❌ | 未実装 |
+| open/save/folder/color dialog、close dialog | 🟡 | `open` / `save` / `folder` / `color` とID指定・全ダイアログのcloseに対応。title、dir、filter、ext、name、color、idを受け取り、結果を `OnSystemDialog` / `OnSystemDialogCancel` または指定イベントへ通知。filterは拡張子ワイルドカードのみ、実UIは未確認 |
 | surfacetest / aigraph / developer / shiorirequest / errorlog | ❌ | 開発UI未実装 |
 | dressup / picture / archive / backlog viewer | ❌ | 未実装 |
 

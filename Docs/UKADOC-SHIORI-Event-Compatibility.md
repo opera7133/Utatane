@@ -28,16 +28,16 @@ UKADOC掲載イベント数: 290
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnFirstBoot`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFirstBoot) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnBoot`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBoot) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にReference0へ起動シェル名を通知。OnFirstBoot等からの204フォールバック規則は未対応 |
+| [`OnFirstBoot`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFirstBoot) | 🟡 | 通知経路の実動確認 | 低 | ゴーストディレクトリごとの初回起動を永続記録し、Reference0=0で発行。204時はOnBootへフォールバック。vanish未実装のため回数は常に0 |
+| [`OnBoot`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBoot) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にReference0へ起動シェル名を通知。OnFirstBoot／OnGhostChangedの204時にもフォールバック。OnGhostCalled等の全フォールバック規則は未対応 |
 | [`OnClose`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnClose) | 🟡 | 通知経路のUKADOC照合 | 低 | 終了時に発行するが終了理由・操作scopeのReferenceを送っていない |
-| [`OnCloseAll`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCloseAll) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnGhostChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostChanged) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnGhostChanging`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostChanging) | 🟡 | 通知経路のUKADOC照合 | 低 | 切替前に発行するがReference0のみ。manual/automatic・名前・パスが不足 |
+| [`OnCloseAll`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCloseAll) | 🟡 | 通知経路のUKADOC照合 | 低 | アプリ終了要求時に全ゴーストへReference0=user、Reference1/2=0を通知してから終了。OSシャットダウン理由systemの判定と204時のOnCloseフォールバックは未対応 |
+| [`OnGhostChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostChanged) | 🟡 | 通知経路の実動確認 | 低 | 切替後に直前の本体側名・切替スクリプト・ゴースト名・パスと新シェル名をReference0〜3/7へ通知。204時はOnBootへフォールバック |
+| [`OnGhostChanging`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostChanging) | 🟡 | 通知経路の実動確認 | 低 | 手動切替前に切替先の本体側名・manual・ゴースト名・パスをReference0〜3へ通知。automatic理由は未実装 |
 | [`OnGhostCalled`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostCalled) | 🟡 | 通知経路のUKADOC照合 | 低 | 呼出先でReference0〜3・7を発行。204時のOnBootフォールバックは未対応 |
 | [`OnGhostCalling`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostCalling) | 🟡 | 通知経路のUKADOC照合 | 低 | 手動呼出時のReference0〜3を実装。automatic経路は未実装 |
 | [`OnGhostCallComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostCallComplete) | 🟡 | 通知経路のUKADOC照合 | 低 | 呼出完了後に発行。Reference0〜3・7のうちReference3はUKADOC外の拡張 |
-| [`OnOtherGhostBooted`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostBooted) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnOtherGhostBooted`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostBooted) | 🟡 | 通知経路のUKADOC照合 | 低 | 呼出ゴーストの起動完了時、呼出元以外の起動中ゴーストへReference0/1/2/7を通知。実動未確認 |
 | [`OnOtherGhostChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostChanged) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnOtherGhostClosed`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostClosed) | 🟡 | 通知経路のUKADOC照合 | 低 | 他ゴースト終了後に本体名・最終スクリプト・ゴースト名・シェル名をReference0/1/2/7へ通知。実動未確認 |
 | [`OnShellChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnShellChanged) | 🟡 | 通知経路のUKADOC照合 | 低 | 切替後に現シェル名・ゴースト名・シェルパスをReference0〜2へ通知。実動未確認 |
@@ -46,9 +46,9 @@ UKADOC掲載イベント数: 290
 | [`OnBalloonChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonChange) | 🟡 | 通知経路のUKADOC照合 | 低 | 切替後に名前とディレクトリ名を通知。UKADOCのパス表現との完全一致は未確認 |
 | [`OnWindowStateRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWindowStateRestore) | 🟡 | 通知経路のUKADOC照合 | 低 | macOSでアプリの非表示が解除された時にReference0=systemを通知。script・user理由の区別は未対応 |
 | [`OnWindowStateMinimize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWindowStateMinimize) | 🟡 | 通知経路のUKADOC照合 | 低 | macOSでアプリが非表示になった時にReference0=systemを通知。script・user理由の区別は未対応 |
-| [`OnFullScreenAppMinimize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFullScreenAppMinimize) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnFullScreenAppRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFullScreenAppRestore) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnVirtualDesktopChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVirtualDesktopChanged) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnFullScreenAppMinimize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFullScreenAppMinimize) | 🟡 | 実機アプリでの検出確認 | 中 | 前面アプリの通常レイヤに画面全体と一致するウインドウを検出すると、シェル・バルーンを透過してReference0=fullscreenを通知 |
+| [`OnFullScreenAppRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFullScreenAppRestore) | 🟡 | 実機アプリでの検出確認 | 中 | 前面アプリの全画面ウインドウがなくなると、シェル・バルーンを再表示してReference0=fullscreenを通知 |
+| [`OnVirtualDesktopChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVirtualDesktopChanged) | 🟡 | macOS Spacesの識別子取得 | 中 | macOSのactiveSpaceDidChangeでReference0=currentを通知。公開APIでSpace IDを取得できないためReference1は空 |
 | [`OnCacheSuspend`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCacheSuspend) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnCacheRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCacheRestore) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnInitialize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInitialize) | 🟡 | 通知経路のUKADOC照合 | 低 | SHIORIセッション開始直後、OnBootまたはOnGhostCalledより前にNOTIFY。リロード時のReference0=reloadは未対応 |
@@ -75,8 +75,8 @@ UKADOC掲載イベント数: 290
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnSystemDialog`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSystemDialog) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSystemDialogCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSystemDialogCancel) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnSystemDialog`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSystemDialog) | 🟡 | 実UI確認 | 中 | open/save/folder/colorダイアログの決定時に種別・ID・選択パスまたはRGB値をReference0〜2へ通知。Onで始まるIDは指定イベントとして通知 |
+| [`OnSystemDialogCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSystemDialogCancel) | 🟡 | 実UI確認 | 中 | open/save/folder/colorダイアログのキャンセル時に種別・IDをReference0〜1へ通知 |
 | [`OnConfigurationDialogHelp`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnConfigurationDialogHelp) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnGhostTermsAccept`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostTermsAccept) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnGhostTermsDecline`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostTermsDecline) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
@@ -214,7 +214,7 @@ UKADOC掲載イベント数: 290
 | [`OnURLDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropped) | 🟡 | URLドラッグ＆ドロップ | 低 | NARのダウンロード完了後・インストール直前にローカルパス・元URL・scopeを通知。実ネットワークでの確認は未実施 |
 | [`OnURLDropFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropFailure) | 🟡 | URLドラッグ＆ドロップ | 低 | NAR取得失敗時に空のローカルパス、timeout・HTTP status・fileio、元URL、scopeをReference0〜3へ通知。実ネットワークでの確認は未実施 |
 | [`OnURLQuery`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLQuery) | 🟡 | URLドラッグ＆ドロップ | 低 | URL・scope・推定MIME type・nar/unknownを通知し、スクリプト応答時は標準処理を中止。feed・homeurl判定は未対応 |
-| [`OnXUkagakaLinkOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnXUkagakaLinkOpen) | 🟡 | URLドラッグ＆ドロップ | 低 | メインゴーストへのドロップ時、ghost指定を起動中の本体名・キャラクター名と照合し、URLデコード済みinfoを対象へ通知。OSのURL関連付けと呼び出しゴースト上のドロップは未対応 |
+| [`OnXUkagakaLinkOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnXUkagakaLinkOpen) | ✅ | - | 低 | `x-ukagaka-link`をOSへ登録。eventはghost指定を本体名・キャラクター名と照合し、URLデコード済みinfoをメイン／呼び出しゴーストへ通知。installはNAR取得、homeurlは更新定義取得後のインストールへ接続 |
 
 ## ネットワーク更新イベント
 
@@ -229,14 +229,14 @@ UKADOC掲載イベント数: 290
 | [`OnUpdate.OnMD5CompareBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnMD5CompareBegin) | 🟡 | 通知経路のUKADOC照合 | 低 | 取得後の照合前にパス・期待値・実測MD5・ghost・実行理由を通知。実動未確認 |
 | [`OnUpdate.OnMD5CompareComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnMD5CompareComplete) | 🟡 | 通知経路のUKADOC照合 | 低 | MD5一致時にパス・期待値・実測値・ghost・実行理由を通知。実動未確認 |
 | [`OnUpdate.OnMD5CompareFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdate.OnMD5CompareFailure) | 🟡 | 通知経路のUKADOC照合 | 低 | MD5不一致時にパス・期待値・実測値・ghost・実行理由を通知してから更新を中断。実動未確認 |
-| [`OnUpdateOtherBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherBegin) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateOtherReady`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherReady) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateOtherComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherComplete) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateOtherFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherFailure) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateOther.OnDownloadBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnDownloadBegin) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateOther.OnMD5CompareBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnMD5CompareBegin) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateOther.OnMD5CompareComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnMD5CompareComplete) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateOther.OnMD5CompareFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnMD5CompareFailure) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnUpdateOtherBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherBegin) | 🟡 | 実更新確認 | 低 | バルーン更新開始時に名前・フルパス・balloon・manual/autoを全ゴーストへ通知 |
+| [`OnUpdateOtherReady`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherReady) | 🟡 | 実更新確認 | 低 | バルーンのローカルMD5比較後、最終番号と更新対象ファイル一覧を通知 |
+| [`OnUpdateOtherComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherComplete) | 🟡 | 実更新確認 | 低 | バルーン更新成功時にnone/changed・変更ファイル一覧・種別・理由を通知 |
+| [`OnUpdateOtherFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOtherFailure) | 🟡 | 実更新確認 | 低 | バルーン更新失敗時に分類した理由・失敗パス・種別・理由を通知 |
+| [`OnUpdateOther.OnDownloadBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnDownloadBegin) | 🟡 | 実更新確認 | 低 | バルーンの各更新ファイル取得前にパス・番号・最終番号・種別・理由を通知 |
+| [`OnUpdateOther.OnMD5CompareBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnMD5CompareBegin) | 🟡 | 実更新確認 | 低 | バルーン更新ファイルの照合前にパス・期待値・実測MD5・種別・理由を通知 |
+| [`OnUpdateOther.OnMD5CompareComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnMD5CompareComplete) | 🟡 | 実更新確認 | 低 | バルーン更新ファイルのMD5一致時に照合情報を通知 |
+| [`OnUpdateOther.OnMD5CompareFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnMD5CompareFailure) | 🟡 | 実更新確認 | 低 | バルーン更新ファイルのMD5不一致時に照合情報を通知してから更新を中断 |
 | [`OnUpdateCheckComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateCheckComplete) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnUpdateCheckFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateCheckFailure) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnUpdateResult`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateResult) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
@@ -332,17 +332,17 @@ UKADOC掲載イベント数: 290
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnOverlap`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOverlap) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnOtherOverlap`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherOverlap) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnOffscreen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOffscreen) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnOtherOffscreen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherOffscreen) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnOverlap`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOverlap) | 🟡 | 実UI確認 | 低 | 同一ゴースト内の表示中サーフェス同士の重なり状態が変化した時、現在と直前のscope組を通知 |
+| [`OnOtherOverlap`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherOverlap) | 🟡 | 実UI確認 | 低 | 呼び出しゴーストを含む全表示サーフェスの重なり状態が変化した時、現在と直前のSakura名/scope組を通知 |
+| [`OnOffscreen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOffscreen) | 🟡 | 実UI確認 | 低 | サーフェスが全画面の作業領域内に収まるかを1秒ごとに確認し、状態変化時に現在と直前のscope一覧を通知 |
+| [`OnOtherOffscreen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherOffscreen) | 🟡 | 実UI確認 | 低 | 呼び出しゴーストを含む見切れ状態の変化時、現在と直前のSakura名/scope一覧を通知 |
 
 ## ネットワーク状態イベント
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnNetworkHeavy`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNetworkHeavy) | ❌ | ネットワーク状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnNetworkStatusChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNetworkStatusChange) | ❌ | ネットワーク状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnNetworkHeavy`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNetworkHeavy) | 🟡 | 実通信確認 | 低 | SakuraScriptのHTTP/RSS要求が設定時間でタイムアウトした時、設定秒数と経過秒数を通知。HEADLINEや更新通信は未接続 |
+| [`OnNetworkStatusChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNetworkStatusChange) | 🟡 | 実ネットワーク切替確認 | 低 | Network.frameworkで起動時と接続状態変化時にonline/offline・IP一覧・wifi/ethernet/cellular等・従量制状態を通知。通信速度は0 |
 
 ## OS状態イベント
 
@@ -360,21 +360,21 @@ UKADOC掲載イベント数: 290
 | [`OnMemoryLoadLow`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMemoryLoadLow) | 🟡 | 通知経路のUKADOC照合 | 低 | Memory High通知後に使用率が60%未満へ戻った時、現在率をReference0へ通知。状態遷移テストで確認 |
 | [`OnDisplayChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChange) | 🟡 | 通知経路のUKADOC照合 | 低 | 画面構成変更時にプライマリ画面のbpp・幅・高さをReference0〜2へ通知。起動時NOTIFYは未対応 |
 | [`OnDisplayHandover`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayHandover) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnDisplayChangeEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChangeEx) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnDisplayPowerStatus`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayPowerStatus) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnBatteryNotify`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryNotify) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnBatteryLow`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryLow) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnBatteryCritical`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryCritical) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnBatteryChargingStart`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryChargingStart) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnBatteryChargingStop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryChargingStop) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnDeviceArrival`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDeviceArrival) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnDeviceRemove`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDeviceRemove) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnDisplayChangeEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChangeEx) | 🟡 | 実機の画面構成変更確認 | 低 | 画面構成変更時にupdateと全画面の矩形・色深度・プライマリ判定を通知。macOSにはタスクバーがないため末尾はunknown,0。起動時initは未対応 |
+| [`OnDisplayPowerStatus`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayPowerStatus) | 🟡 | 実機のスリープ確認 | 低 | macOSのスリープ直前に0、復帰時に1を通知。単独ディスプレイの電源断は検出しない |
+| [`OnBatteryNotify`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryNotify) | 🟡 | バッテリー搭載実機確認 | 低 | 起動時と30秒ごとの状態変化時に残量・残り分数・給電状態・状態フラグを通知。バッテリーなしもno_batteryとして通知 |
+| [`OnBatteryLow`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryLow) | 🟡 | バッテリー搭載実機確認 | 低 | 残量が33%以下へ遷移した時にOnBatteryNotifyと同じReferenceを通知 |
+| [`OnBatteryCritical`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryCritical) | 🟡 | バッテリー搭載実機確認 | 低 | 残量が5%以下へ遷移した時にOnBatteryNotifyと同じReferenceを通知 |
+| [`OnBatteryChargingStart`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryChargingStart) | 🟡 | バッテリー搭載実機確認 | 低 | 充電状態への遷移時にOnBatteryNotifyと同じReferenceを通知 |
+| [`OnBatteryChargingStop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryChargingStop) | 🟡 | バッテリー搭載実機確認 | 低 | 非充電状態への遷移時にOnBatteryNotifyと同じReferenceを通知 |
+| [`OnDeviceArrival`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDeviceArrival) | 🟡 | 外部ボリューム実機確認 | 低 | macOSでボリュームがマウントされた時、volume・名前・空の製造者・パスをバイト値1区切りで通知。一般USB機器は対象外 |
+| [`OnDeviceRemove`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDeviceRemove) | 🟡 | 外部ボリューム実機確認 | 低 | macOSでボリュームがアンマウントされた時、OnDeviceArrivalと同形式で通知。一般USB機器は対象外 |
 | [`OnTabletMode`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTabletMode) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnDarkTheme`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDarkTheme) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時とアプリ再アクティブ化時にmacOSのダークモード状態をReference0〜1へ通知。非アクティブ中の変更は復帰時通知 |
 | [`OnOSUpdateInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOSUpdateInfo) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnRecycleBinEmpty`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRecycleBinEmpty) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnRecycleBinEmptyFromOther`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRecycleBinEmptyFromOther) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnRecycleBinStatusUpdate`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRecycleBinStatusUpdate) | ❌ | macOS状態監視 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnRecycleBinStatusUpdate`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRecycleBinStatusUpdate) | 🟡 | 実ファイル操作確認 | 低 | 起動時と5秒ごとの変化時にmacOSゴミ箱内の通常ファイル数・合計サイズ・直前との差を通知。外部ボリュームのゴミ箱と隠しファイルは対象外 |
 
 ## 選択領域モードイベント
 

@@ -69,7 +69,9 @@ public struct ShellLoader: Sendable {
             bindGroups: shellMetadata.bindGroups,
             bindOptions: shellMetadata.bindOptions,
             surfaceTable: surfaceTable,
-            maximumSurfaceWidth: document.maximumSurfaceWidth
+            maximumSurfaceWidth: document.maximumSurfaceWidth,
+            cursorDefinitions: document.cursorDefinitions,
+            tooltips: document.tooltips
         )
     }
 

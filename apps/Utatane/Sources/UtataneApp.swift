@@ -142,6 +142,11 @@ struct UtataneApp: App {
     }
 }
 
+private enum GhostStartup {
+    case boot
+    case changed(from: InstalledGhost, script: String)
+}
+
 private struct UtataneRootView: View {
     let model: GhostListModel
     let shellLoader: ShellLoader
@@ -179,8 +184,13 @@ private struct UtataneRootView: View {
     @State private var sstpQuietUntil: Date?
     @State private var contentPickerController = ContentPickerWindowController()
     @State private var textInputWindowController = TextInputWindowController()
+    private let systemDialogController = SystemDialogController()
+    private let networkStatusMonitor = NetworkStatusMonitor()
+    private let recycleBinSampler = MacOSRecycleBinSampler()
     @State private var isTransitioningGhost = false
     @State private var isClosingCurrentGhost = false
+    @State private var isHiddenForFullScreenApp = false
+    private let fullScreenAppDetector = FullScreenAppDetector()
     @State private var weatherTask: Task<Void, Never>?
     @State private var webSocketManager = WebSocketSessionManager()
     @State private var lastGhostName: String = ""
@@ -190,6 +200,10 @@ private struct UtataneRootView: View {
     @State private var lastClockMinute: DateComponents?
     @State private var pendingHourTimeSignal = false
     @State private var systemLoadSampler = MacOSSystemLoadSampler()
+    private let batterySampler = MacOSBatterySampler()
+    @State private var batteryTransitionDetector = BatteryTransitionDetector()
+    @State private var previousWindowLayoutSnapshot: WindowLayoutSnapshot?
+    @State private var previousRecycleBinSnapshot: RecycleBinSnapshot?
     @State private var configuredShellScalePercent: Int?
     @State private var configuredBalloonScalePercent: Int?
     @State private var gamepadMonitor = GamepadEventMonitor()
@@ -232,6 +246,11 @@ private struct UtataneRootView: View {
             applicationDelegate.setOpenNarHandler { urls in
                 installNars(from: urls)
             }
+            applicationDelegate.setOpenURLHandler { urls in
+                for url in urls {
+                    _ = handleXUkagakaLink(url)
+                }
+            }
             await model.load()
             showsOnboarding = model.ghosts.isEmpty
             reloadHeadlines()
@@ -258,6 +277,10 @@ private struct UtataneRootView: View {
                 broadcastEvent(.shiori(id: id, references: references))
             }
             systemInputMonitor.start()
+            networkStatusMonitor.onChange = { snapshot in
+                broadcastEvent(.shiori(id: "OnNetworkStatusChange", references: snapshot.references))
+            }
+            networkStatusMonitor.start()
             do {
                 try sstpServer.start { request in
                     await handleSSTP(request)
@@ -290,6 +313,7 @@ private struct UtataneRootView: View {
                 guard !Task.isCancelled else { return }
                 sendSecondChange()
                 sendClockEvents(at: Date())
+                dispatchWindowLayoutEvents()
             }
         }
         .task {
@@ -297,6 +321,26 @@ private struct UtataneRootView: View {
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled, let sample = systemLoadSampler.sample() else { continue }
                 dispatchSystemLoadEvents(sample: sample)
+            }
+        }
+        .task {
+            dispatchBatteryEvents(snapshot: batterySampler.sample())
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { return }
+                dispatchBatteryEvents(snapshot: batterySampler.sample())
+            }
+        }
+        .task {
+            while !Task.isCancelled {
+                if let snapshot = recycleBinSampler.sample(), snapshot != previousRecycleBinSnapshot {
+                    broadcastEvent(.shiori(
+                        id: "OnRecycleBinStatusUpdate",
+                        references: snapshot.references(previous: previousRecycleBinSnapshot)
+                    ))
+                    previousRecycleBinSnapshot = snapshot
+                }
+                try? await Task.sleep(for: .seconds(5))
             }
         }
         .task(id: selectedGhostID) {
@@ -345,6 +389,7 @@ private struct UtataneRootView: View {
         .onDisappear {
             scriptPlayer.cancel()
             sstpServer.stop()
+            networkStatusMonitor.stop()
         }
         .background {
             DebugWindowReader { window in
@@ -368,7 +413,7 @@ private struct UtataneRootView: View {
         .onReceive(NotificationCenter.default.publisher(
             for: NSApplication.didChangeScreenParametersNotification
         )) { _ in
-            broadcastEvent(.shiori(id: "OnDisplayChange", references: displayChangeReferences()))
+            dispatchDisplayChangeEvents()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didHideNotification)) { _ in
             broadcastEvent(.shiori(id: "OnWindowStateMinimize", references: [0: "system"]))
@@ -384,12 +429,38 @@ private struct UtataneRootView: View {
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(
             for: NSWorkspace.willSleepNotification
         )) { _ in
+            broadcastEvent(.shiori(id: "OnDisplayPowerStatus", references: [0: "0"]))
             broadcastEvent(.shiori(id: "OnSysSuspend", references: [:]))
         }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(
             for: NSWorkspace.didWakeNotification
         )) { _ in
+            broadcastEvent(.shiori(id: "OnDisplayPowerStatus", references: [0: "1"]))
             broadcastEvent(.shiori(id: "OnSysResume", references: [0: "normal"]))
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(
+            for: NSWorkspace.didMountNotification
+        )) { notification in
+            dispatchDeviceEvent(id: "OnDeviceArrival", notification: notification)
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(
+            for: NSWorkspace.didUnmountNotification
+        )) { notification in
+            dispatchDeviceEvent(id: "OnDeviceRemove", notification: notification)
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(
+            for: NSWorkspace.activeSpaceDidChangeNotification
+        )) { _ in
+            broadcastEvent(.shiori(id: "OnVirtualDesktopChanged", references: [0: "current", 1: ""]))
+            Task {
+                try? await Task.sleep(for: .milliseconds(250))
+                refreshFullScreenAppState()
+            }
+        }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(
+            for: NSWorkspace.didActivateApplicationNotification
+        )) { _ in
+            refreshFullScreenAppState()
         }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(
             for: NSWorkspace.sessionDidResignActiveNotification
@@ -403,6 +474,18 @@ private struct UtataneRootView: View {
             broadcastEvent(.shiori(id: "OnSessionUnlock", references: [:]))
             broadcastEvent(.shiori(id: "OnSessionReconnect", references: [:]))
         }
+    }
+
+    private func refreshFullScreenAppState() {
+        let isFullScreen = fullScreenAppDetector.frontmostApplicationHasFullScreenWindow()
+        guard isFullScreen != isHiddenForFullScreenApp else { return }
+        isHiddenForFullScreenApp = isFullScreen
+        surfaceWindowController.setPresentationHidden(isFullScreen)
+        balloonWindowController.setPresentationHidden(isFullScreen)
+        broadcastEvent(.shiori(
+            id: isFullScreen ? "OnFullScreenAppMinimize" : "OnFullScreenAppRestore",
+            references: [0: "fullscreen"]
+        ))
     }
 
     private func registerCurrentGhostProperties() async {
@@ -483,6 +566,97 @@ private struct UtataneRootView: View {
         if transitions.memoryBecameLow {
             broadcastEvent(.shiori(id: "OnMemoryLoadLow", references: [0: String(sample.memory)]))
         }
+    }
+
+    private func dispatchBatteryEvents(snapshot: BatterySnapshot) {
+        for eventID in batteryTransitionDetector.consume(snapshot) {
+            broadcastEvent(.shiori(id: eventID, references: snapshot.references))
+        }
+    }
+
+    private func dispatchDisplayChangeEvents() {
+        broadcastEvent(.shiori(id: "OnDisplayChange", references: displayChangeReferences()))
+        var references = [0: "update"]
+        for (index, screen) in NSScreen.screens.enumerated() {
+            references[index + 1] = displayDescription(screen)
+        }
+        broadcastEvent(.shiori(id: "OnDisplayChangeEx", references: references))
+    }
+
+    private func dispatchDeviceEvent(id: String, notification: Notification) {
+        guard let url = notification.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL else { return }
+        let values = ["volume", url.lastPathComponent, "", url.path]
+        broadcastEvent(.shiori(id: id, references: [0: values.joined(separator: "\u{1}")]))
+    }
+
+    private func dispatchWindowLayoutEvents() {
+        let screenFrames = NSScreen.screens.map(\.visibleFrame)
+        var targets: [(
+            id: String,
+            name: String,
+            controller: SurfaceWindowController,
+            send: @MainActor @Sendable (GhostEvent) -> Void
+        )] = []
+        if let currentGhost {
+            let name = currentGhost.characters.first(where: { $0.scope == 0 })?.name ?? currentGhost.name
+            targets.append((currentGhost.id.path, name, surfaceWindowController, sendEvent))
+        }
+        for runtime in calledGhosts.values {
+            let name = runtime.ghost.characters.first(where: { $0.scope == 0 })?.name ?? runtime.ghost.name
+            targets.append((runtime.ghost.id.path, name, runtime.surfaceController, runtime.send))
+        }
+        let entries = targets.flatMap { target in
+            target.controller.visibleScopes.compactMap { scope -> WindowLayoutEntry? in
+                guard let frame = target.controller.windowFrame(for: scope) else { return nil }
+                return WindowLayoutEntry(
+                    ownerID: target.id,
+                    characterName: target.name,
+                    scope: scope,
+                    frame: frame,
+                    visibleScreenFrames: screenFrames
+                )
+            }
+        }
+        let current = WindowLayoutSnapshot(entries: entries)
+        guard let previous = previousWindowLayoutSnapshot else {
+            previousWindowLayoutSnapshot = current
+            return
+        }
+        for target in targets {
+            let overlap = current.overlapsByOwner[target.id] ?? ""
+            let previousOverlap = previous.overlapsByOwner[target.id] ?? ""
+            if overlap != previousOverlap {
+                target.send(.shiori(id: "OnOverlap", references: [0: overlap, 1: previousOverlap]))
+            }
+            let offscreen = current.offscreenByOwner[target.id] ?? ""
+            let previousOffscreen = previous.offscreenByOwner[target.id] ?? ""
+            if offscreen != previousOffscreen {
+                target.send(.shiori(id: "OnOffscreen", references: [0: offscreen, 1: previousOffscreen]))
+            }
+        }
+        if current.allOverlaps != previous.allOverlaps {
+            broadcastEvent(.shiori(
+                id: "OnOtherOverlap",
+                references: [0: current.allOverlaps, 1: previous.allOverlaps]
+            ))
+        }
+        if current.allOffscreen != previous.allOffscreen {
+            broadcastEvent(.shiori(
+                id: "OnOtherOffscreen",
+                references: [0: current.allOffscreen, 1: previous.allOffscreen]
+            ))
+        }
+        previousWindowLayoutSnapshot = current
+    }
+
+    private func displayDescription(_ screen: NSScreen) -> String {
+        let frame = screen.frame
+        let bitsPerSample = (screen.deviceDescription[.bitsPerSample] as? NSNumber)?.intValue ?? 8
+        let isPrimary = screen == NSScreen.screens.first ? 1 : 0
+        return [
+            Int(frame.minX), Int(frame.minY), Int(frame.maxX), Int(frame.maxY),
+            bitsPerSample * 4, isPrimary
+        ].map(String.init).joined(separator: ",") + ",unknown,0"
     }
 
     private func displayChangeReferences() -> [Int: String] {
@@ -574,16 +748,63 @@ private struct UtataneRootView: View {
     }
 
     private func handleXUkagakaLink(_ url: URL) -> Bool {
-        guard let values = xUkagakaLinkValues(url),
-              values["type"]?.caseInsensitiveCompare("event") == .orderedSame,
-              let target = values["ghost"], let info = values["info"]
-        else { return false }
-        if let currentGhost, ghost(currentGhost, matches: target) {
-            sendEvent(.shiori(id: "OnXUkagakaLinkOpen", references: [0: info]))
-        } else if let runtime = calledGhosts.values.first(where: { ghost($0.ghost, matches: target) }) {
-            runtime.send(.shiori(id: "OnXUkagakaLinkOpen", references: [0: info]))
+        guard let values = xUkagakaLinkValues(url), let type = values["type"]?.lowercased() else {
+            return false
+        }
+        switch type {
+        case "event":
+            guard let target = values["ghost"], let info = values["info"] else { return true }
+            if let currentGhost, ghost(currentGhost, matches: target) {
+                sendEvent(.shiori(id: "OnXUkagakaLinkOpen", references: [0: info]))
+            } else if let runtime = calledGhosts.values.first(where: { ghost($0.ghost, matches: target) }) {
+                runtime.send(.shiori(id: "OnXUkagakaLinkOpen", references: [0: info]))
+            }
+        case "install":
+            guard let source = values["url"].flatMap(URL.init(string:)), isWebURL(source) else { return true }
+            Task {
+                do {
+                    let localURL = try await downloadDroppedNar(from: source)
+                    installNars(from: [localURL])
+                } catch {
+                    showError(error.localizedDescription)
+                }
+            }
+        case "homeurl":
+            guard let homeURL = values["url"].flatMap(URL.init(string:)), isWebURL(homeURL) else { return true }
+            Task { await installFromHomeURL(homeURL) }
+        default:
+            return false
         }
         return true
+    }
+
+    private func installFromHomeURL(_ homeURL: URL) async {
+        let fileManager = FileManager.default
+        let root = fileManager.temporaryDirectory.appending(
+            path: "utatane-homeurl-\(UUID().uuidString)", directoryHint: .isDirectory
+        )
+        let archive = fileManager.temporaryDirectory.appending(
+            path: "utatane-url-drop-\(UUID().uuidString).nar", directoryHint: .notDirectory
+        )
+        do {
+            try fileManager.createDirectory(at: root, withIntermediateDirectories: true)
+            defer { try? fileManager.removeItem(at: root) }
+            _ = try await ContentNetworkUpdater().update(rootDirectory: root, homeURL: homeURL)
+            _ = try ArchiveOperationRunner().compress(
+                destinationArchiveURL: archive,
+                sourceDirectoryURL: root,
+                appliesNarExclusions: false
+            )
+            installNars(from: [archive])
+        } catch {
+            try? fileManager.removeItem(at: archive)
+            showError(error.localizedDescription)
+        }
+    }
+
+    private func isWebURL(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return scheme == "https" || scheme == "http"
     }
 
     private func sendSecondChange() {
@@ -719,9 +940,19 @@ private struct UtataneRootView: View {
         if let called = calledGhosts.removeValue(forKey: ghost.id) {
             _ = await called.stop()
         }
-        await closeCurrentGhost(reason: .ghostChanging(name: ghost.name))
+        let changeScript = await closeCurrentGhost(reason: .ghostChangingDetailed(
+            name: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+            mode: "manual",
+            ghostName: ghost.name,
+            path: ghost.rootDirectory.path
+        ))
         guard !Task.isCancelled else { return }
-        switch await activate(ghost) {
+        let startup: GhostStartup = if let previousGhost, !forceReload {
+            .changed(from: previousGhost, script: changeScript)
+        } else {
+            .boot
+        }
+        switch await activate(ghost, startup: startup) {
         case .success:
             AppLogStore.shared.info("「\(ghost.name)」の起動が完了しました", category: "Ghost", ghostName: ghost.name)
             return
@@ -743,7 +974,7 @@ private struct UtataneRootView: View {
                 let fallbackToken = statusWindowController.show(
                     "「\(ghost.name)」を起動できなかったため「\(fallback.name)」を起動中…"
                 )
-                let fallbackResult = await activate(fallback)
+                let fallbackResult = await activate(fallback, startup: startup)
                 statusWindowController.hide(token: fallbackToken)
                 if case .success = fallbackResult {
                     selectedGhostID = fallback.id
@@ -763,17 +994,20 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func closeCurrentGhost(reason: GhostStopReason) async {
-        guard let activeSession = session else { return }
+    private func closeCurrentGhost(reason: GhostStopReason) async -> String {
+        guard let activeSession = session else { return "" }
         session = nil
         configureContextMenu()
 
         do {
             _ = try? await activeSession.handle(event: .shiori(id: "OnDestroy", references: [:]))
-            guard let closeScript = try await activeSession.stop(reason: reason), let balloon else { return }
-            await scriptPlayer.playAndWait(closeScript, balloon: balloon)
-            guard !Task.isCancelled else { return }
+            guard let closeScript = try await activeSession.stop(reason: reason) else { return "" }
+            if let balloon {
+                await scriptPlayer.playAndWait(closeScript, balloon: balloon)
+            }
+            guard !Task.isCancelled else { return closeScript.rawValue }
             try? await Task.sleep(for: .seconds(1))
+            return closeScript.rawValue
         } catch {
             AppLogStore.shared.warning(
                 "ゴースト終了時のイベント処理エラー: \(error.localizedDescription)",
@@ -784,10 +1018,14 @@ private struct UtataneRootView: View {
             if !isTransitioningGhost {
                 showError(error.localizedDescription)
             }
+            return ""
         }
     }
 
-    private func activate(_ ghost: InstalledGhost) async -> Result<Void, any Error> {
+    private func activate(
+        _ ghost: InstalledGhost,
+        startup: GhostStartup = .boot
+    ) async -> Result<Void, any Error> {
         AppLogStore.shared.info("「\(ghost.name)」の起動を開始しました", category: "Ghost", ghostName: ghost.name)
         scriptPlayer.cancel()
         surfaceWindowController.hideAll()
@@ -805,7 +1043,7 @@ private struct UtataneRootView: View {
         balloonWindowController.setPositionContentID(ghost.id)
         selectionStore.ghostDirectoryName = ghost.rootDirectory.lastPathComponent
 
-        defer { surfaceWindowController.setPresentationHidden(false) }
+        defer { surfaceWindowController.setPresentationHidden(isHiddenForFullScreenApp) }
         do {
             guard let shellChoice = selectionStore.resolveShell(for: ghost) else {
                 throw AppError.missingResource("shell")
@@ -1017,6 +1255,23 @@ private struct UtataneRootView: View {
             scriptPlayer.onSetProperty = { property, value in
                 try? await propertySystem.setValue(value, for: property)
             }
+            scriptPlayer.onSystemDialog = { command in
+                guard let activeSession = session else { return nil }
+                let result = systemDialogController.show(command)
+                let eventID = command.id.hasPrefix("On")
+                    ? command.id
+                    : (result.value == nil ? "OnSystemDialogCancel" : "OnSystemDialog")
+                var references = [0: command.kind.rawValue, 1: command.id]
+                if let value = result.value {
+                    references[2] = value
+                }
+                return try? await activeSession.handle(event: .shiori(
+                    id: eventID, references: references
+                ))
+            }
+            scriptPlayer.onCloseSystemDialog = { id in
+                systemDialogController.close(id: id)
+            }
             scriptPlayer.onInputBox = { id, _, initialValue in
                 guard let activeSession = session else { return nil }
                 guard let value = await textInputWindowController.showPrompt(
@@ -1148,10 +1403,36 @@ private struct UtataneRootView: View {
             ) {
                 _ = try? await ghostSession.handle(event: .shiori(id: event.id, references: event.references))
             }
-            if let script = try await ghostSession.handle(event: .shiori(
-                id: "OnBoot",
-                references: [0: shellChoice.name]
-            )) {
+            let bootEvent = GhostEvent.shiori(id: "OnBoot", references: [0: shellChoice.name])
+            let startupScript: SakuraScript?
+            switch startup {
+            case .boot where !hasBooted(ghost):
+                let firstBootScript = try await ghostSession.handle(event: .shiori(
+                    id: "OnFirstBoot", references: [0: "0"]
+                ))
+                startupScript = if let firstBootScript {
+                    firstBootScript
+                } else {
+                    try await ghostSession.handle(event: bootEvent)
+                }
+            case .boot:
+                startupScript = try await ghostSession.handle(event: bootEvent)
+            case let .changed(previous, changeScript):
+                let changedScript = try await ghostSession.handle(event: .shiori(id: "OnGhostChanged", references: [
+                    0: previous.characters.first(where: { $0.scope == 0 })?.name ?? previous.name,
+                    1: changeScript,
+                    2: previous.name,
+                    3: previous.rootDirectory.path,
+                    7: shellChoice.name
+                ]))
+                startupScript = if let changedScript {
+                    changedScript
+                } else {
+                    try await ghostSession.handle(event: bootEvent)
+                }
+            }
+            markBooted(ghost)
+            if let script = startupScript {
                 scriptPlayer.play(script, balloon: loadedBalloon)
             }
             return .success(())
@@ -1160,6 +1441,18 @@ private struct UtataneRootView: View {
             balloon = nil
             return .failure(error)
         }
+    }
+
+    private func hasBooted(_ ghost: InstalledGhost) -> Bool {
+        UserDefaults.standard.bool(forKey: bootMarkerKey(for: ghost))
+    }
+
+    private func markBooted(_ ghost: InstalledGhost) {
+        UserDefaults.standard.set(true, forKey: bootMarkerKey(for: ghost))
+    }
+
+    private func bootMarkerKey(for ghost: InstalledGhost) -> String {
+        "utatane.ghost.hasBooted." + Data(ghost.rootDirectory.standardizedFileURL.path.utf8).base64EncodedString()
     }
 
     private func personalityEngine(for ghost: InstalledGhost) throws -> any PersonalityEngine {
@@ -1316,6 +1609,14 @@ private struct UtataneRootView: View {
                 6: Self.httpResponseHeaders(httpResponse)
             ]))
         } catch {
+            if (error as NSError).domain == NSURLErrorDomain,
+               (error as NSError).code == NSURLErrorTimedOut
+            {
+                let timeout = min(max(command.timeoutSeconds ?? 60, 0.1), 300)
+                sendEvent(.shiori(id: "OnNetworkHeavy", references: [
+                    0: String(timeout), 1: String(timeout)
+                ]))
+            }
             guard let eventID = command.eventID else { return nil }
             let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : (command.isFeed ? "OnExecuteRSSFailure" : "OnExecuteHTTPFailure")
             return try? await activeSession.handle(event: .shiori(id: failureID, references: [
@@ -2309,6 +2610,15 @@ private struct UtataneRootView: View {
                     3: ghost.rootDirectory.path,
                     7: runtime.shell.name
                 ]))
+                let otherGhostReferences = [
+                    0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                    1: startupScript,
+                    2: ghost.name,
+                    7: runtime.shell.name
+                ]
+                for otherRuntime in calledGhosts.values where otherRuntime.ghost.id != ghost.id {
+                    otherRuntime.send(.shiori(id: "OnOtherGhostBooted", references: otherGhostReferences))
+                }
             } catch {
                 calledGhosts[ghost.id] = nil
                 configureContextMenu()
@@ -2611,6 +2921,7 @@ private struct UtataneRootView: View {
         defer { isUpdatingContent = false }
 
         let directoryName = updateBalloon.directory.lastPathComponent
+        let updateReason = isAutomatic ? "auto" : "manual"
         networkSettings.recordContentUpdateAttempt(kind: .balloon, directoryName: directoryName)
         AppLogStore.shared.info("バルーン「\(updateBalloon.name)」の更新確認を開始しました", category: "Update")
         let statusToken = isAutomatic
@@ -2623,13 +2934,22 @@ private struct UtataneRootView: View {
         }
 
         do {
+            broadcastEvent(.shiori(id: "OnUpdateOtherBegin", references: [
+                0: updateBalloon.name,
+                1: updateBalloon.directory.path,
+                3: "balloon",
+                4: updateReason
+            ]))
             guard let homeURL = ContentNetworkUpdater.homeURL(in: updateBalloon.directory) else {
                 throw ContentNetworkUpdateError.invalidHomeURL
             }
             AppLogStore.shared.info("バルーン更新URL: \(homeURL.absoluteString)", category: "Update")
             let result = try await ContentNetworkUpdater().update(
                 rootDirectory: updateBalloon.directory,
-                homeURL: homeURL
+                homeURL: homeURL,
+                progress: { progress in
+                    broadcastOtherUpdateProgress(progress, reason: updateReason)
+                }
             )
             try reloadInstalledBalloons(preserving: updateBalloon.directory)
             networkSettings.recordContentUpdateSuccess(kind: .balloon, directoryName: directoryName)
@@ -2638,6 +2958,12 @@ private struct UtataneRootView: View {
                 category: "Update",
                 details: result.changedFiles.isEmpty ? nil : result.changedFiles.joined(separator: "\n")
             )
+            broadcastEvent(.shiori(id: "OnUpdateOtherComplete", references: [
+                0: result.changedFiles.isEmpty ? "none" : "changed",
+                1: result.changedFiles.joined(separator: ","),
+                3: "balloon",
+                4: updateReason
+            ]))
             if !isAutomatic {
                 if let statusToken {
                     statusWindowController.hide(token: statusToken)
@@ -2656,10 +2982,49 @@ private struct UtataneRootView: View {
                 category: "Update",
                 details: String(describing: error)
             )
+            broadcastEvent(.shiori(id: "OnUpdateOtherFailure", references: [
+                0: updateFailureReason(error),
+                1: updateFailurePath(error) ?? "",
+                3: "balloon",
+                4: updateReason
+            ]))
             if !isAutomatic {
                 showError(error.localizedDescription)
             }
         }
+    }
+
+    private func broadcastOtherUpdateProgress(_ progress: ContentUpdateProgress, reason: String) {
+        let event: GhostEvent = switch progress {
+        case let .ready(files):
+            .shiori(id: "OnUpdateOtherReady", references: [
+                0: String(max(0, files.count - 1)),
+                1: files.joined(separator: ","),
+                3: "balloon",
+                4: reason
+            ])
+        case let .downloadBegin(path, index, total):
+            .shiori(id: "OnUpdateOther.OnDownloadBegin", references: [
+                0: path,
+                1: String(index),
+                2: String(max(0, total - 1)),
+                3: "balloon",
+                4: reason
+            ])
+        case let .checksumBegin(path, expected, actual):
+            .shiori(id: "OnUpdateOther.OnMD5CompareBegin", references: [
+                0: path, 1: expected, 2: actual, 3: "balloon", 4: reason
+            ])
+        case let .checksumComplete(path, expected, actual):
+            .shiori(id: "OnUpdateOther.OnMD5CompareComplete", references: [
+                0: path, 1: expected, 2: actual, 3: "balloon", 4: reason
+            ])
+        case let .checksumFailure(path, expected, actual):
+            .shiori(id: "OnUpdateOther.OnMD5CompareFailure", references: [
+                0: path, 1: expected, 2: actual, 3: "balloon", 4: reason
+            ])
+        }
+        broadcastEvent(event)
     }
 
     private func reloadInstalledBalloons(preserving selectedDirectory: URL) throws {
@@ -3524,6 +3889,15 @@ private struct UtataneRootView: View {
 
     private func requestApplicationTermination() {
         Task {
+            let closeAll = GhostEvent.shiori(
+                id: "OnCloseAll", references: [0: "user", 1: "0", 2: "0"]
+            )
+            if let session {
+                _ = try? await session.handle(event: closeAll)
+            }
+            for runtime in calledGhosts.values {
+                await runtime.notify(closeAll)
+            }
             for runtime in calledGhosts.values {
                 _ = await runtime.stop()
             }
@@ -3757,6 +4131,8 @@ private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate 
     var onTerminationRequest: (() -> Void)?
     private var onOpenNar: (([URL]) -> Void)?
     private var pendingNarURLs: [URL] = []
+    private var onOpenURL: (([URL]) -> Void)?
+    private var pendingURLs: [URL] = []
 
     private var isAwaitingTermination = false
     private var isTerminationApproved = false
@@ -3803,6 +4179,24 @@ private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate 
             pendingNarURLs.append(contentsOf: urls)
         }
         sender.reply(toOpenOrPrint: .success)
+    }
+
+    func setOpenURLHandler(_ handler: @escaping ([URL]) -> Void) {
+        onOpenURL = handler
+        guard !pendingURLs.isEmpty else { return }
+        let urls = pendingURLs
+        pendingURLs.removeAll()
+        handler(urls)
+    }
+
+    func application(_: NSApplication, open urls: [URL]) {
+        let links = urls.filter { $0.scheme?.caseInsensitiveCompare("x-ukagaka-link") == .orderedSame }
+        guard !links.isEmpty else { return }
+        if let onOpenURL {
+            onOpenURL(links)
+        } else {
+            pendingURLs.append(contentsOf: links)
+        }
     }
 }
 

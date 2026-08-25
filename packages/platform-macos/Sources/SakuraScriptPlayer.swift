@@ -50,6 +50,8 @@ public final class SakuraScriptPlayer {
     public var onBalloonTimeout: (@MainActor (String) -> Void)?
     public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
     public var onInputBox: (@MainActor (String, Int?, String) async -> SakuraScript?)?
+    public var onSystemDialog: (@MainActor (SakuraScriptSystemDialogCommand) async -> SakuraScript?)?
+    public var onCloseSystemDialog: (@MainActor (String) -> Void)?
     public var onHTTP: (@MainActor (SakuraScriptHTTPRequest) async -> SakuraScript?)?
     public var onCancelHTTP: (@MainActor (String?) -> Void)?
     public var onNetworkDiagnostic: (@MainActor (SakuraScriptNetworkDiagnostic) async -> SakuraScript?)?
@@ -1008,6 +1010,8 @@ public final class SakuraScriptPlayer {
                     onCancelHTTP?(url)
                 case let .closeInputBox(id):
                     onCloseInputBox?(id)
+                case let .closeSystemDialog(id):
+                    onCloseSystemDialog?(id)
                 case let .communicateBox(initialValue):
                     if let response = await onCommunicateBox?(initialValue) {
                         pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
@@ -1029,6 +1033,10 @@ public final class SakuraScriptPlayer {
                     balloonWindowController.resetWindowPositions()
                 case let .inputBox(id, timeoutMilliseconds, initialValue):
                     if let response = await onInputBox?(id, timeoutMilliseconds, initialValue) {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                    }
+                case let .systemDialog(command):
+                    if let response = await onSystemDialog?(command) {
                         pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
                     }
                 case let .http(request):

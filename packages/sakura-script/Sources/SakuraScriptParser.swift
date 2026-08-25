@@ -978,6 +978,27 @@ public struct SakuraScriptParser: Sendable {
                               ["configurationdialog", "settingdialog", "preference"].contains(arguments[1].lowercased())
                     {
                         tokens.append(.contentAction(.openConfigurationDialog))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "dialog",
+                              let kind = SakuraScriptSystemDialogCommand.Kind(rawValue: arguments[2].lowercased())
+                    {
+                        let options = Array(arguments.dropFirst(3))
+                        tokens.append(.systemDialog(.init(
+                            kind: kind,
+                            id: Self.optionValue("id", in: options) ?? "",
+                            title: Self.optionValue("title", in: options),
+                            directory: Self.optionValue("dir", in: options),
+                            filter: Self.optionValue("filter", in: options),
+                            fileExtension: Self.optionValue("ext", in: options),
+                            name: Self.optionValue("name", in: options),
+                            color: Self.optionValue("color", in: options)
+                        )))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "close",
+                              arguments[1].lowercased() == "dialog"
+                    {
+                        tokens.append(.closeSystemDialog(id: arguments[2]))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "open",
                               arguments[1].lowercased() == "readme"

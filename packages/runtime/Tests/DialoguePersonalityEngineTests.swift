@@ -65,6 +65,20 @@ func `session accepts events only while running`() async throws {
 }
 
 @Test
+func `session sends detailed ghost changing references`() async throws {
+    let engine = RecordingPersonalityEngine()
+    let session = GhostSession(personalityEngine: engine)
+    _ = try await session.start()
+    _ = try await session.stop(reason: .ghostChangingDetailed(
+        name: "Emily", mode: "manual", ghostName: "Emily/Phase4.5", path: "/ghost/emily"
+    ))
+
+    #expect(await engine.lastEvent == .shiori(id: "OnGhostChanging", references: [
+        0: "Emily", 1: "manual", 2: "Emily/Phase4.5", 3: "/ghost/emily"
+    ]))
+}
+
+@Test
 func `decodes an older dialogue catalog without ghost changing scripts`() throws {
     let data = Data(#"{"boot":["boot"],"close":["close"]}"#.utf8)
     let catalog = try JSONDecoder().decode(DialogueCatalog.self, from: data)

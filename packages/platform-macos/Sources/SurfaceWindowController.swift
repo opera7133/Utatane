@@ -1107,6 +1107,9 @@ private final class CharacterSurfaceController {
             || (desktopAlignment == .defaultValue && locksToDesktopBottom)
         imageView.isMovementLocked = isMovementLocked
         imageView.collisions = effectiveCollisions(for: definition, shell: shell)
+        imageView.cursorDefinitions = shell.cursorDefinitions[scope] ?? []
+        imageView.tooltipDefinitions = shell.tooltips[scope] ?? [:]
+        imageView.shellDirectory = shell.directory
         imageView.setCollisionMode(collisionMode.enabled, showsNames: collisionMode.showsNames)
         imageView.onMouseClick = { [weak self] region in
             self?.onMouseClick?(region)
@@ -1343,20 +1346,26 @@ private final class CharacterSurfaceController {
             shell: shell,
             excludingInitialAnimations: stoppedAnimationIDs
         ).image) ?? baseImage
+        var frameBase = animationBase
 
         for pattern in animation.patterns {
             guard !Task.isCancelled else { return }
             let offset = animationOffsets[animation.id] ?? SurfacePoint(x: 0, y: 0)
 
-            if pattern.surfaceID < 0 {
+            if pattern.method.lowercased() == "move" {
+                frameBase = imageLoader.translated(animationBase, x: pattern.x + offset.x, y: pattern.y + offset.y)
+                setAnimationImage(frameBase)
+            } else if pattern.surfaceID < 0 {
+                frameBase = animationBase
                 setAnimationImage(animationBase)
             } else if pattern.method.lowercased() == "base" {
                 do {
-                    try setAnimationImage(render(
+                    frameBase = try render(
                         surfaceID: pattern.surfaceID,
                         shell: shell,
                         excludingInitialAnimations: stoppedAnimationIDs
-                    ).image)
+                    ).image
+                    setAnimationImage(frameBase)
                 } catch {
                     continue
                 }
@@ -1368,7 +1377,7 @@ private final class CharacterSurfaceController {
                         visited: []
                     )
                     setAnimationImage(imageLoader.composite(
-                        base: animationBase,
+                        base: frameBase,
                         overlay: overlay,
                         x: pattern.x + offset.x,
                         y: pattern.y + offset.y,
@@ -1424,12 +1433,53 @@ private final class CharacterSurfaceController {
 }
 
 func surfaceCompositingOperation(for method: String) -> NSCompositingOperation? {
-    switch method.lowercased() {
-    case "overlay":
-        .sourceOver
-    case "overlay-fast", "overlayfast":
+    let method = method.lowercased()
+    if method == "overlay-fast" || method == "overlayfast" {
         // SERIKO overlay-fast clips the new layer to the base layer's alpha.
-        .sourceAtop
+        return .sourceAtop
+    }
+    let baseMethod = method.hasSuffix("-fast") ? String(method.dropLast("-fast".count)) : method
+    return switch baseMethod {
+    case "overlay", "auto", "bind", "add":
+        .sourceOver
+    case "blend-multiply", "overlaymultiply":
+        .multiply
+    case "blend-screen", "overlayscreen":
+        .screen
+    case "blend-overlay":
+        .overlay
+    case "blend-add", "blend-add-glow":
+        .plusLighter
+    case "blend-soft-light":
+        .softLight
+    case "blend-hard-light", "blend-vivid-light", "blend-linear-light", "blend-pin-light", "blend-hard-mix":
+        .hardLight
+    case "blend-color-dodge", "blend-color-dodge-glow":
+        .colorDodge
+    case "blend-color":
+        .color
+    case "blend-luminosity":
+        .luminosity
+    case "blend-hue":
+        .hue
+    case "blend-saturation":
+        .saturation
+    case "blend-darken", "blend-darker-color", "blend-linear-burn", "blend-subtract":
+        .darken
+    case "blend-lighten", "blend-lighter-color", "blend-divide":
+        .lighten
+    case "blend-color-burn":
+        .colorBurn
+    case "blend-difference":
+        .difference
+    case "blend-exclusion":
+        .exclusion
+    case "replace":
+        .copy
+    case "interpolate":
+        .destinationOver
+    case "reduce":
+        .destinationIn
     default:
         nil
     }
@@ -1437,6 +1487,9 @@ func surfaceCompositingOperation(for method: String) -> NSCompositingOperation? 
 
 private final class SurfaceImageView: NSImageView {
     var collisions: [SurfaceCollision] = []
+    var cursorDefinitions: [SurfaceCursorDefinition] = []
+    var tooltipDefinitions: [String: String] = [:]
+    var shellDirectory: URL?
     var coordinateScaleX: CGFloat = 1
     var coordinateScaleY: CGFloat = 1
     var flipsHorizontally = false
@@ -1546,6 +1599,7 @@ private final class SurfaceImageView: NSImageView {
     override func mouseDown(with event: NSEvent) {
         sendMouseEvent(.down, event: event)
         cancelHoverEvent()
+        setCursor(.mouseDown, for: hitTest(event).region)
         guard event.buttonNumber == 0, let window else {
             super.mouseDown(with: event)
             return
@@ -1633,6 +1687,7 @@ private final class SurfaceImageView: NSImageView {
         dragStartWindowOrigin = nil
         didDrag = false
         sendMouseEvent(.up, event: event)
+        setCursor(.mouseUp, for: hitTest(event).region)
         if wasDragging {
             sendMouseEvent(.dragEnd, event: event)
             scheduleHoverEvent(for: hitTest(event), event: event)
@@ -1653,11 +1708,13 @@ private final class SurfaceImageView: NSImageView {
     override func rightMouseDown(with event: NSEvent) {
         sendMouseEvent(.down, event: event)
         cancelHoverEvent()
+        setCursor(.mouseRightDown, for: hitTest(event).region)
         super.rightMouseDown(with: event)
     }
 
     override func rightMouseUp(with event: NSEvent) {
         sendMouseEvent(.up, event: event)
+        setCursor(.mouseUp, for: hitTest(event).region)
         sendClickEvent(event)
         super.rightMouseUp(with: event)
     }
@@ -1677,6 +1734,7 @@ private final class SurfaceImageView: NSImageView {
     override func scrollWheel(with event: NSEvent) {
         let delta = Int(event.scrollingDeltaY.rounded())
         guard delta != 0 else { return }
+        setCursor(.mouseWheel, for: hitTest(event).region)
         sendMouseEvent(.wheel(delta: delta), event: event)
         super.scrollWheel(with: event)
     }
@@ -1761,6 +1819,7 @@ private final class SurfaceImageView: NSImageView {
         let button = buttonNumber(event)
         let workItem = DispatchWorkItem { [weak self] in
             self?.onMouseEvent?(.hover, hit.region, hit.x, hit.y, button)
+            self?.setCursor(.mouseHover, for: hit.region)
         }
         hoverWorkItem = workItem
         DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: workItem)
@@ -1808,7 +1867,51 @@ private final class SurfaceImageView: NSImageView {
             }
             hoveredRegion = hit.region
         }
-        SurfaceCursorStyle(region: hit.region).cursor.set()
+        toolTip = tooltip(for: hit.region)
+        setCursor(.mouseUp, for: hit.region)
+    }
+
+    private func tooltip(for region: String?) -> String? {
+        guard let region else { return nil }
+        return tooltipDefinitions.first {
+            $0.key.caseInsensitiveCompare(region) == .orderedSame
+        }?.value
+    }
+
+    private func setCursor(_ trigger: SurfaceCursorTrigger, for region: String?) {
+        guard let region,
+              let name = cursorDefinitions.last(where: {
+                  $0.trigger == trigger && $0.region.caseInsensitiveCompare(region) == .orderedSame
+              })?.cursor,
+              let cursor = configuredCursor(named: name)
+        else {
+            SurfaceCursorStyle(region: region).cursor.set()
+            return
+        }
+        cursor.set()
+    }
+
+    private func configuredCursor(named name: String) -> NSCursor? {
+        switch name.lowercased() {
+        case "system:arrow": return .arrow
+        case "system:cross": return .crosshair
+        case "system:no": return .operationNotAllowed
+        case "system:hand": return .openHand
+        case "system:grip": return .closedHand
+        case "system:finger": return .pointingHand
+        case "system:text": return .iBeam
+        case "system:move": return .openHand
+        case "system:help": return .contextualMenu
+        case "system:wait": return .arrow
+        default:
+            guard let shellDirectory else { return nil }
+            let fileURL = shellDirectory.appending(path: name, directoryHint: .notDirectory).standardizedFileURL
+            let root = shellDirectory.standardizedFileURL.path(percentEncoded: false) + "/"
+            guard fileURL.path(percentEncoded: false).hasPrefix(root), let image = NSImage(contentsOf: fileURL) else {
+                return nil
+            }
+            return NSCursor(image: image, hotSpot: .zero)
+        }
     }
 
     private func hitTest(_ event: NSEvent) -> (region: String?, x: Int, y: Int) {

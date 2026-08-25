@@ -119,10 +119,11 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用 |
 | animation基本 | 🟡 | name、interval文字列、pattern、wait、座標 |
 | interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能。複数animationの完全な並行実行は未対応 |
-| pattern method | 🟡 | base、overlay、overlay-fast、stopを実装。move、startや多数のblend・制御methodは未実装 |
+| pattern method | 🟡 | base、overlay、overlay-fast、replace、interpolate、reduce、bind、add、auto、move、stopに加え、multiply／screen／overlay／add／soft-light／hard-light／color-dodge／color-burn／color／luminosity／hue／saturation／darken／lighten／difference／exclusion系と旧名・fast名を実装。AppKitに同一演算がないvivid-light等の一部は近似。asis、scaling、import、insert、start／parallel系は未実装 |
 | animation option／collision | 🟡 | exclusive、background、shared-indexを保持。animation固有のrect／ellipse／circle／polygon collisionをbind中・アニメーション実行中のマウス判定に利用。optionの描画順・インデックス継続・限定exclusiveの完全な挙動は未実装 |
 | surface属性 | 🟡 | surface name、共通／sakura／kero balloon offset、center／kinoko.center／basepos point、icon.rect、maxwidthを保持。balloon offsetは倍率を含め実配置へ反映。collision-sortは当たり判定優先順、animation-sortは初期合成順へ反映。maxwidthの表示制約とpoint・offsetの全用途は未対応 |
-| cursor定義 | ❌ | collision別mouse cursor定義を保持しない |
+| cursor定義 | 🟡 | sakura／kero／char scopeのmouseup、mousedown、mouserightdown、mousewheel、mousehoverをcollision名ごとに反映。system cursor 10種と、AppKitで画像として読めるカーソルファイルに対応。system:wait／move／helpはmacOSの近似表示 |
+| tooltip定義 | ✅ | sakura／kero／char scopeのcollision別テキストをmacOS標準ツールチップとして表示 |
 
 `surfaces*.txt`は全てファイル名順に連結する。`surfaces2.txt`の「SSPだけへ上書き」という優先規則は専用実装していない。
 

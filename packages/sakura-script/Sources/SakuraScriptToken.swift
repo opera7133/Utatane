@@ -88,6 +88,8 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case archive(SakuraScriptArchiveCommand)
     case cancelHTTP(url: String?)
     case inputBox(id: String, timeoutMilliseconds: Int?, initialValue: String)
+    case systemDialog(SakuraScriptSystemDialogCommand)
+    case closeSystemDialog(id: String)
     case communicateBox(initialValue: String)
     case teachBox(initialValue: String)
     case http(SakuraScriptHTTPRequest)
@@ -98,6 +100,39 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case clearAll
     case end
     case unknown(String)
+}
+
+public struct SakuraScriptSystemDialogCommand: Sendable, Equatable {
+    public enum Kind: String, Sendable, Equatable {
+        case open
+        case save
+        case folder
+        case color
+    }
+
+    public let kind: Kind
+    public let id: String
+    public let title: String?
+    public let directory: String?
+    public let filter: String?
+    public let fileExtension: String?
+    public let name: String?
+    public let color: String?
+
+    public init(
+        kind: Kind, id: String, title: String? = nil, directory: String? = nil,
+        filter: String? = nil, fileExtension: String? = nil, name: String? = nil,
+        color: String? = nil
+    ) {
+        self.kind = kind
+        self.id = id
+        self.title = title
+        self.directory = directory
+        self.filter = filter
+        self.fileExtension = fileExtension
+        self.name = name
+        self.color = color
+    }
 }
 
 public enum SakuraScriptInteractionMode: Sendable, Equatable {
