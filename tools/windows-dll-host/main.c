@@ -1,22 +1,22 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-#include <stdint.h>
-#include <stdio.h>
-#include <string.h>
-
 typedef BOOL(__cdecl *module_load_fn)(HGLOBAL, long);
 typedef HGLOBAL(__cdecl *module_request_fn)(HGLOBAL, long *);
 typedef BOOL(__cdecl *module_unload_fn)(void);
 
 static HGLOBAL global_copy(const void *bytes, long length) {
     HGLOBAL memory = GlobalAlloc(GMEM_FIXED | GMEM_ZEROINIT, (SIZE_T)length + 1);
-    if (memory != NULL) memcpy((void *)memory, bytes, (size_t)length);
+    if (memory != NULL) {
+        BYTE *destination = (BYTE *)memory;
+        const BYTE *source = (const BYTE *)bytes;
+        for (long index = 0; index < length; ++index) destination[index] = source[index];
+    }
     return memory;
 }
 
 static BOOL read_exact(HANDLE input, void *buffer, DWORD length) {
-    BYTE *cursor = buffer;
+    BYTE *cursor = (BYTE *)buffer;
     while (length > 0) {
         DWORD count = 0;
         if (!ReadFile(input, cursor, length, &count, NULL) || count == 0) return FALSE;
@@ -27,7 +27,7 @@ static BOOL read_exact(HANDLE input, void *buffer, DWORD length) {
 }
 
 static BOOL write_exact(HANDLE output, const void *buffer, DWORD length) {
-    const BYTE *cursor = buffer;
+    const BYTE *cursor = (const BYTE *)buffer;
     while (length > 0) {
         DWORD count = 0;
         if (!WriteFile(output, cursor, length, &count, NULL) || count == 0) return FALSE;
@@ -37,22 +37,49 @@ static BOOL write_exact(HANDLE output, const void *buffer, DWORD length) {
     return TRUE;
 }
 
-static BOOL parent_directory(char *path) {
-    char *separator = strrchr(path, '\\');
-    if (separator == NULL) separator = strrchr(path, '/');
-    if (separator == NULL) return FALSE;
-    separator[1] = '\0';
+static char *read_argument(char *cursor, char *output, DWORD capacity) {
+    while (*cursor == ' ' || *cursor == '\t') ++cursor;
+    BOOL quoted = *cursor == '"';
+    if (quoted) ++cursor;
+
+    DWORD length = 0;
+    while (*cursor != '\0' && (quoted ? *cursor != '"' : (*cursor != ' ' && *cursor != '\t'))) {
+        if (length + 1 < capacity) output[length++] = *cursor;
+        ++cursor;
+    }
+    output[length] = '\0';
+    if (quoted && *cursor == '"') ++cursor;
+    return cursor;
+}
+
+static BOOL parent_directory(char *path, long *length) {
+    long separator = -1;
+    for (long index = 0; path[index] != '\0'; ++index) {
+        if (path[index] == '\\' || path[index] == '/') separator = index;
+    }
+    if (separator < 0) return FALSE;
+    path[separator + 1] = '\0';
+    *length = separator + 1;
     return TRUE;
 }
 
-int main(int argc, char **argv) {
-    if (argc != 2) return 2;
-
+static DWORD run_host(void) {
+    char ignored[MAX_PATH];
     char module_path[MAX_PATH];
     char module_directory[MAX_PATH];
-    lstrcpynA(module_path, argv[1], MAX_PATH);
-    lstrcpynA(module_directory, module_path, MAX_PATH);
-    if (!parent_directory(module_directory)) return 2;
+    char *cursor = read_argument(GetCommandLineA(), ignored, MAX_PATH);
+    read_argument(cursor, module_path, MAX_PATH);
+    if (module_path[0] == '\0') return 2;
+
+    long module_path_length = 0;
+    while (module_path[module_path_length] != '\0' && module_path_length < MAX_PATH - 1) {
+        module_directory[module_path_length] = module_path[module_path_length];
+        ++module_path_length;
+    }
+    module_directory[module_path_length] = '\0';
+
+    long directory_length = 0;
+    if (!parent_directory(module_directory, &directory_length)) return 2;
 
     HMODULE module = LoadLibraryA(module_path);
     if (module == NULL) return 3;
@@ -65,10 +92,9 @@ int main(int argc, char **argv) {
         return 4;
     }
 
-    const char *load_path = module_directory;
-    long load_length = (long)strlen(load_path);
-    HGLOBAL load_memory = global_copy(load_path, load_length);
-    if (load_memory == NULL || !(load != NULL ? load(load_memory, load_length) : loadu(load_memory, load_length))) {
+    HGLOBAL load_memory = global_copy(module_directory, directory_length);
+    if (load_memory == NULL ||
+        !(load != NULL ? load(load_memory, directory_length) : loadu(load_memory, directory_length))) {
         FreeLibrary(module);
         return 5;
     }
@@ -78,7 +104,7 @@ int main(int argc, char **argv) {
     DWORD ready = 0;
     if (!write_exact(output, &ready, sizeof(ready))) return 6;
 
-    int result = 0;
+    DWORD result = 0;
     for (;;) {
         DWORD frame_length = 0;
         if (!read_exact(input, &frame_length, sizeof(frame_length))) break;
@@ -86,7 +112,7 @@ int main(int argc, char **argv) {
             result = 7;
             break;
         }
-        BYTE *frame = HeapAlloc(GetProcessHeap(), 0, frame_length);
+        BYTE *frame = (BYTE *)HeapAlloc(GetProcessHeap(), 0, frame_length);
         if (frame == NULL || !read_exact(input, frame, frame_length)) {
             if (frame != NULL) HeapFree(GetProcessHeap(), 0, frame);
             result = 7;
@@ -117,4 +143,8 @@ int main(int argc, char **argv) {
     unload();
     FreeLibrary(module);
     return result;
+}
+
+void mainCRTStartup(void) {
+    ExitProcess(run_host());
 }

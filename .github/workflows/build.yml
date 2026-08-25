@@ -56,11 +56,8 @@ jobs:
 
       - name: Build Windows DLL host
         run: |
-          zig cc \
-            -target x86-windows-gnu \
-            -Os \
-            tools/windows-dll-host/main.c \
-            -o build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe
+          Scripts/build-windows-dll-host.sh \
+            build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe
 
       - name: Build universal MCP server
         run: |
@@ -73,9 +70,15 @@ jobs:
 
       - name: Verify Windows DLL host
         run: |
-          test -f build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe
-          file build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe \
+          host=build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe
+          comparison_host="$RUNNER_TEMP/utatane-dll-host.exe"
+          test -f "$host"
+          file "$host" \
             | grep -q "PE32 executable"
+          test "$(stat -f%z "$host")" -lt 16384
+          ! strings "$host" | grep -q "api-ms-win-crt"
+          Scripts/build-windows-dll-host.sh "$comparison_host"
+          cmp "$host" "$comparison_host"
 
       - name: Embed MCP server
         run: |
