@@ -127,6 +127,10 @@ public final class SurfaceWindowController {
         characters[scope]?.renderedImage
     }
 
+    public func balloonOffset(for scope: Int) -> NSPoint {
+        characters[scope]?.balloonOffset ?? .zero
+    }
+
     public func show(shell: ShellDefinition, surfaceID: Int) throws {
         try show(shell: shell, scope: 0, surfaceID: surfaceID)
     }
@@ -189,6 +193,15 @@ public final class SurfaceWindowController {
     @discardableResult
     public func playTalkAnimation(scope: Int = 0) -> Bool {
         characters[scope]?.playTalkAnimation() ?? false
+    }
+
+    @discardableResult
+    public func playIntervalAnimation(_ interval: String, scope: Int = 0) -> Bool {
+        characters[scope]?.playIntervalAnimation(interval) ?? false
+    }
+
+    public func playIntervalAnimationAndWait(_ interval: String, scope: Int = 0) async {
+        await characters[scope]?.playIntervalAnimationAndWait(interval)
     }
 
     public func playAnimationAndWait(identifier: String, scope: Int = 0) async {
@@ -595,6 +608,7 @@ private final class CharacterSurfaceController {
     private var isRepaintLocked = false
     private var pendingAnimationImage: NSImage?
     private var schedulerTask: Task<Void, Never>?
+    private var talkCharacterCount = 0
     private var isAnimating = false
     private var displayScale: CGFloat
     private(set) var surfaceAlpha: CGFloat = 1
@@ -718,16 +732,44 @@ private final class CharacterSurfaceController {
 
     @discardableResult
     func playTalkAnimation() -> Bool {
+        talkCharacterCount += 1
         guard animationTask == nil, !isAnimating else { return false }
         let enabled = shell.map { $0.effectiveBindGroups(scope: scope, enabled: enabledBindGroups) } ?? []
         let animations = currentSurfaceDefinition?.animations.filter { animation in
             let components = Set((animation.interval ?? "").lowercased().split(separator: "+").map(String.init))
             guard components.contains("talk") else { return false }
+            guard talkCharacterCount.isMultiple(of: max(animation.intervalParameter ?? 1, 1)) else { return false }
             guard components.contains("bind") else { return true }
             return enabled.contains(animation.id) || enabled.contains(animation.id - 1)
         } ?? []
         guard let animation = animations.randomElement() else { return false }
         return startAnimation(id: animation.id, minimumFrameDurationMilliseconds: 0) != nil
+    }
+
+    @discardableResult
+    func playIntervalAnimation(_ trigger: String) -> Bool {
+        if trigger == "starttalk" {
+            talkCharacterCount = 0
+        }
+        guard animationTask == nil, !isAnimating,
+              let animation = animations(forInterval: trigger).randomElement()
+        else { return false }
+        return startAnimation(id: animation.id, minimumFrameDurationMilliseconds: 0) != nil
+    }
+
+    func playIntervalAnimationAndWait(_ trigger: String) async {
+        guard let animation = animations(forInterval: trigger).randomElement() else { return }
+        await playAnimationAndWait(id: animation.id)
+    }
+
+    private func animations(forInterval trigger: String) -> [SurfaceAnimation] {
+        let enabled = shell.map { $0.effectiveBindGroups(scope: scope, enabled: enabledBindGroups) } ?? []
+        return currentSurfaceDefinition?.animations.filter { animation in
+            let components = Set((animation.interval ?? "").lowercased().split(separator: "+").map(String.init))
+            guard components.contains(trigger) else { return false }
+            guard components.contains("bind") else { return true }
+            return enabled.contains(animation.id) || enabled.contains(animation.id - 1)
+        } ?? []
     }
 
     func playAnimationAndWait(identifier: String) async {
@@ -1064,7 +1106,7 @@ private final class CharacterSurfaceController {
         imageView.locksVerticalMovement = [.top, .bottom].contains(desktopAlignment)
             || (desktopAlignment == .defaultValue && locksToDesktopBottom)
         imageView.isMovementLocked = isMovementLocked
-        imageView.collisions = definition?.collisions ?? []
+        imageView.collisions = effectiveCollisions(for: definition, shell: shell)
         imageView.setCollisionMode(collisionMode.enabled, showsNames: collisionMode.showsNames)
         imageView.onMouseClick = { [weak self] region in
             self?.onMouseClick?(region)
@@ -1138,7 +1180,7 @@ private final class CharacterSurfaceController {
         guard let definition else { return base }
         let enabled = shell.effectiveBindGroups(scope: scope, enabled: enabledBindGroups)
         var result = base
-        for animation in definition.animations.sorted(by: { $0.id < $1.id }) {
+        for animation in definition.animations {
             guard !excludedAnimationIDs.contains(animation.id) else { continue }
             let interval = animation.interval?.lowercased() ?? ""
             let isBound = interval.contains("bind")
@@ -1210,12 +1252,21 @@ private final class CharacterSurfaceController {
         return shell?.surfaces[baseSurfaceID]
     }
 
+    var balloonOffset: NSPoint {
+        guard let definition = currentSurfaceDefinition else { return .zero }
+        let offset = definition.scopeBalloonOffsets[scope] ?? definition.balloonOffset ?? SurfacePoint(x: 0, y: 0)
+        return NSPoint(
+            x: Double(offset.x) * displayScale * abs(runtimeScaleX),
+            y: Double(offset.y) * displayScale * abs(runtimeScaleY)
+        )
+    }
+
     private func scheduleAutomaticAnimations() {
         let enabled = shell.map { $0.effectiveBindGroups(scope: scope, enabled: enabledBindGroups) } ?? []
         let animations = currentSurfaceDefinition?.animations.filter { animation in
             let interval = animation.interval?.lowercased() ?? ""
             let components = Set(interval.split(separator: "+").map(String.init))
-            guard components.contains("sometimes") || components.contains("rarely") else {
+            guard !components.isDisjoint(with: ["sometimes", "rarely", "random", "periodic", "always"]) else {
                 return false
             }
             guard components.contains("bind") else { return true }
@@ -1226,18 +1277,40 @@ private final class CharacterSurfaceController {
         guard !animations.isEmpty else { return }
 
         schedulerTask = Task { [weak self] in
+            var elapsedSeconds: [Int: Int] = [:]
             while !Task.isCancelled {
-                guard let animation = animations.randomElement() else { return }
-                let isRare = animation.interval?.lowercased().split(separator: "+").contains("rarely") == true
                 do {
-                    try await Task.sleep(
-                        for: .seconds(Int.random(in: isRare ? 7 ... 14 : 4 ... 8))
-                    )
+                    try await Task.sleep(for: .seconds(1))
                 } catch {
                     return
                 }
                 guard let self else { return }
-                await run(animation)
+                let ready = animations.filter { animation in
+                    let components = Set((animation.interval ?? "").lowercased().split(separator: "+").map(String.init))
+                    elapsedSeconds[animation.id, default: 0] += 1
+                    if components.contains("always") {
+                        return true
+                    }
+                    if components.contains("sometimes") {
+                        return Int.random(in: 0 ..< 2) == 0
+                    }
+                    if components.contains("rarely") {
+                        return Int.random(in: 0 ..< 4) == 0
+                    }
+                    if components.contains("random") {
+                        return Int.random(in: 0 ..< max(animation.intervalParameter ?? 1, 1)) == 0
+                    }
+                    if components.contains("periodic"),
+                       elapsedSeconds[animation.id, default: 0] >= max(animation.intervalParameter ?? 1, 1)
+                    {
+                        elapsedSeconds[animation.id] = 0
+                        return true
+                    }
+                    return false
+                }
+                if let animation = ready.randomElement() {
+                    await run(animation)
+                }
             }
         }
     }
@@ -1253,8 +1326,10 @@ private final class CharacterSurfaceController {
               imageView != nil
         else { return }
         isAnimating = true
+        imageView?.collisions = effectiveCollisions(for: currentSurfaceDefinition, shell: shell) + animation.collisions
         defer {
             setAnimationImage(baseImage)
+            imageView?.collisions = effectiveCollisions(for: currentSurfaceDefinition, shell: shell)
             isAnimating = false
         }
 
@@ -1327,6 +1402,16 @@ private final class CharacterSurfaceController {
                 remainingMilliseconds -= interval
             }
         }
+    }
+
+    private func effectiveCollisions(for definition: SurfaceDefinition?, shell: ShellDefinition) -> [SurfaceCollision] {
+        guard let definition else { return [] }
+        let enabled = shell.effectiveBindGroups(scope: scope, enabled: enabledBindGroups)
+        let bound = definition.animations.filter {
+            ($0.interval ?? "").lowercased().split(separator: "+").contains("bind")
+                && (enabled.contains($0.id) || enabled.contains($0.id - 1))
+        }.flatMap(\.collisions)
+        return bound + definition.collisions
     }
 
     private func setAnimationImage(_ image: NSImage) {

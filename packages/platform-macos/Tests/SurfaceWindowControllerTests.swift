@@ -175,6 +175,7 @@ func `base animation pattern temporarily replaces the whole surface`() async thr
         id: 1,
         name: "mouth",
         interval: "talk",
+        intervalParameter: 2,
         patterns: [SurfaceAnimationPattern(
             order: 0,
             method: "base",
@@ -233,6 +234,8 @@ func `base animation pattern temporarily replaces the whole surface`() async thr
     await controller.waitForAnimation(id: 0)
     #expect(controller.renderedImage(for: 0) === initialImage)
 
+    #expect(!controller.playIntervalAnimation("starttalk", scope: 0))
+    #expect(!controller.playTalkAnimation(scope: 0))
     #expect(controller.playTalkAnimation(scope: 0))
     #expect(!controller.playTalkAnimation(scope: 0))
     await controller.waitForAnimation(id: 1, scope: 0)

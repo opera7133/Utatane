@@ -219,7 +219,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | SHIORI Event（外部） | 🟡 | SSTPや一部コールバック。全イベント未網羅 |
 | SHIORI Resource | ❌ | 完全なresource照会表なし |
 | SHIORI/3.0 | 🟡 | GET/NOTIFY、Reference、Charset、Valueなど基本モデルあり。全ヘッダー・ステータス未照合 |
-| SSTP/1.x | 🟡 | localhostのSEND/NOTIFYとHTTPラップ。全メソッド、ヘッダー、セキュリティレベル未対応 |
+| SSTP/1.x | ✅ | localhost Socket／HTTPのportable coreを実装。SEND、NOTIFY、COMMUNICATE、EXECUTE、GIVE、ゴースト指定、IfGhost、nobreak、情報取得・Cookie・Property・Archive系commandに対応。詳細は[UKADOC-SSTP-Compatibility.md](UKADOC-SSTP-Compatibility.md) |
 | SAORI/1.0 | 🟡 | SSU等の限定ネイティブ互換。任意SAORI、Windows DLL汎用実行は対象外 |
 | HEADLINE/2.0 | 🟡 | native `config.txt` とWine DLL fallback。全応答差異は未照合 |
 | DLL規格 | 🟡 | SHIORIはnative実装と限定Wine経路。一般Windows DLLは対象外 |

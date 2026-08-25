@@ -55,6 +55,24 @@ func `parses stop animation pattern without wait field`() throws {
 }
 
 @Test
+func `parses parameterized animation intervals`() throws {
+    let surface = try #require(SurfacesParser().parse("""
+    surface0
+    {
+    animation0.interval,random,5
+    animation0.pattern0,overlay,1,0,0,0
+    animation1.interval,bind+periodic,12
+    animation1.pattern0,overlay,2,0,0,0
+    }
+    """)[0])
+
+    #expect(surface.animations.first { $0.id == 0 }?.interval == "random")
+    #expect(surface.animations.first { $0.id == 0 }?.intervalParameter == 5)
+    #expect(surface.animations.first { $0.id == 1 }?.interval == "bind+periodic")
+    #expect(surface.animations.first { $0.id == 1 }?.intervalParameter == 12)
+}
+
+@Test
 func `parses ranges exclusions append definitions and aliases`() {
     let source = """
     surface0-3,!2
@@ -114,4 +132,101 @@ func `parses extended rectangle and polygon collisions`() throws {
     #expect(hair.polygon.count == 4)
     #expect(hair.contains(x: 10, y: 10))
     #expect(!hair.contains(x: 21, y: 10))
+}
+
+@Test
+func `parses curved and animation specific collisions and options`() throws {
+    let surface = try #require(SurfacesParser().parse("""
+    surface0
+    {
+    collisionex0,face,ellipse,0,0,20,10
+    collisionex1,button,circle,30,30,5
+    animation2.interval,sometimes
+    animation2.option,exclusive+background+shared-index
+    animation2.collision0,1,2,11,12,hand
+    animation2.collisionex1,effect,ellipse,20,20,40,30
+    animation2.pattern0,overlay,100,50,0,0
+    }
+    """)[0])
+    let face = try #require(surface.collisions.first { $0.name == "face" })
+    let button = try #require(surface.collisions.first { $0.name == "button" })
+    let animation = try #require(surface.animations.first)
+
+    #expect(face.contains(x: 10, y: 5))
+    #expect(!face.contains(x: 0, y: 0))
+    #expect(button.contains(x: 33, y: 33))
+    #expect(!button.contains(x: 36, y: 30))
+    #expect(animation.options == ["exclusive", "background", "shared-index"])
+    #expect(animation.collisions.map(\.name) == ["hand", "effect"])
+}
+
+@Test
+func `parses surface names offsets points and icon rectangle`() throws {
+    let surface = try #require(SurfacesParser().parse("""
+    surface0
+    {
+    name,normal
+    balloon.offsetx,10
+    balloon.offsety,-20
+    sakura.balloon.offsetx,30
+    sakura.balloon.offsety,40
+    point.centerx,50
+    point.centery,60
+    point.kinoko.centerx,70
+    point.kinoko.centery,80
+    point.basepos.x,90
+    point.basepos.y,100
+    icon.rect,1,2,31,42
+    }
+    """)[0])
+
+    #expect(surface.name == "normal")
+    #expect(surface.balloonOffset == SurfacePoint(x: 10, y: -20))
+    #expect(surface.scopeBalloonOffsets[0] == SurfacePoint(x: 30, y: 40))
+    #expect(surface.points["center"] == SurfacePoint(x: 50, y: 60))
+    #expect(surface.points["kinoko.center"] == SurfacePoint(x: 70, y: 80))
+    #expect(surface.points["basepos"] == SurfacePoint(x: 90, y: 100))
+    #expect(surface.iconRect == SurfaceRect(left: 1, top: 2, right: 31, bottom: 42))
+}
+
+@Test
+func `parses descript width and applies collision and animation sorting`() throws {
+    let document = SurfacesParser().parseDocument("""
+    descript
+    {
+    version,1
+    maxwidth,640
+    collision-sort,descend
+    animation-sort,ascend
+    }
+    surface0
+    {
+    collision1,0,0,10,10,lower
+    collision3,0,0,10,10,higher
+    animation3.interval,runonce
+    animation1.interval,runonce
+    }
+    """)
+    let surface = try #require(document.surfaces[0])
+
+    #expect(document.maximumSurfaceWidth == 640)
+    #expect(document.collisionSort == .descending)
+    #expect(document.animationSort == .ascending)
+    #expect(surface.collisions.map(\.id) == [3, 1])
+    #expect(surface.animations.map(\.id) == [1, 3])
+    #expect(surface.collisionSort == .descending)
+    #expect(surface.animationSort == .ascending)
+}
+
+@Test
+func `preserves collision definition order when collision sorting is omitted`() throws {
+    let surface = try #require(SurfacesParser().parse("""
+    surface0
+    {
+    collision7,0,0,10,10,first
+    collision2,0,0,10,10,second
+    }
+    """)[0])
+
+    #expect(surface.collisions.map(\.id) == [7, 2])
 }

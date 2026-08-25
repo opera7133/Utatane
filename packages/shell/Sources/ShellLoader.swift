@@ -68,7 +68,8 @@ public struct ShellLoader: Sendable {
             defaultBindGroups: shellMetadata.defaultBindGroups,
             bindGroups: shellMetadata.bindGroups,
             bindOptions: shellMetadata.bindOptions,
-            surfaceTable: surfaceTable
+            surfaceTable: surfaceTable,
+            maximumSurfaceWidth: document.maximumSurfaceWidth
         )
     }
 

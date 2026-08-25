@@ -116,12 +116,12 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | surface選択 | 🟡 | 単一ID、範囲、列挙、除外、`surface.append` |
 | alias | 🟡 | sakura、kero、char scopeの名前→surface ID候補 |
 | element | 🟡 | PNG／PNA、base・overlay系。画像形式・全描画オプションは未網羅 |
-| collision | 🟡 | 矩形、collisionex rect／polygon |
+| collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用 |
 | animation基本 | 🟡 | name、interval文字列、pattern、wait、座標 |
-| interval | 🟡 | runonce、sometimes、rarely、talk、bindを実行。random、periodic、always、never、yen-e、starttalk、endtalk等は未実装 |
+| interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能。複数animationの完全な並行実行は未対応 |
 | pattern method | 🟡 | base、overlay、overlay-fast、stopを実装。move、startや多数のblend・制御methodは未実装 |
-| animation option／collision | ❌ | exclusive、background、shared-index、animation固有collision等を保持しない |
-| surface属性 | ❌ | maxwidth、sort、balloon offset、各point、icon.rect、surface name等を保持しない |
+| animation option／collision | 🟡 | exclusive、background、shared-indexを保持。animation固有のrect／ellipse／circle／polygon collisionをbind中・アニメーション実行中のマウス判定に利用。optionの描画順・インデックス継続・限定exclusiveの完全な挙動は未実装 |
+| surface属性 | 🟡 | surface name、共通／sakura／kero balloon offset、center／kinoko.center／basepos point、icon.rect、maxwidthを保持。balloon offsetは倍率を含め実配置へ反映。collision-sortは当たり判定優先順、animation-sortは初期合成順へ反映。maxwidthの表示制約とpoint・offsetの全用途は未対応 |
 | cursor定義 | ❌ | collision別mouse cursor定義を保持しない |
 
 `surfaces*.txt`は全てファイル名順に連結する。`surfaces2.txt`の「SSPだけへ上書き」という優先規則は専用実装していない。

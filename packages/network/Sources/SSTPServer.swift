@@ -26,19 +26,40 @@ public struct SSTPResponse: Sendable, Equatable {
     public let statusCode: Int
     public let reason: String
     public let script: String?
+    public let headers: [(name: String, value: String)]
+    public let additionalData: String?
 
-    public init(statusCode: Int = 200, reason: String = "OK", script: String? = nil) {
+    public init(
+        statusCode: Int = 200,
+        reason: String = "OK",
+        script: String? = nil,
+        headers: [(name: String, value: String)] = [],
+        additionalData: String? = nil
+    ) {
         self.statusCode = statusCode
         self.reason = reason
         self.script = script
+        self.headers = headers
+        self.additionalData = additionalData
     }
 
     public var data: Data {
         var lines = ["SSTP/1.4 \(statusCode) \(reason)", "Charset: UTF-8"]
         if let script {
-            lines.append("Script: \(script)")
+            lines.append("Script: \(script.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: ""))")
         }
-        return Data((lines.joined(separator: "\r\n") + "\r\n\r\n").utf8)
+        lines.append(contentsOf: headers.map { "\($0.name): \($0.value)" })
+        var source = lines.joined(separator: "\r\n") + "\r\n\r\n"
+        if let additionalData {
+            source += additionalData + "\r\n\r\n"
+        }
+        return Data(source.utf8)
+    }
+
+    public static func == (lhs: SSTPResponse, rhs: SSTPResponse) -> Bool {
+        lhs.statusCode == rhs.statusCode && lhs.reason == rhs.reason && lhs.script == rhs.script
+            && lhs.additionalData == rhs.additionalData
+            && lhs.headers.elementsEqual(rhs.headers, by: { $0.name == $1.name && $0.value == $1.value })
     }
 }
 
@@ -89,7 +110,11 @@ public final class SSTPServer: @unchecked Sendable {
         let lines = source.replacingOccurrences(of: "\r\n", with: "\n").components(separatedBy: "\n")
         guard let requestLine = lines.first else { throw SSTPError.invalidRequest }
         let requestParts = requestLine.split(separator: " ", maxSplits: 1).map(String.init)
-        guard requestParts.count == 2, requestParts[1].hasPrefix("SSTP/") else { throw SSTPError.invalidRequest }
+        guard requestParts.count == 2,
+              requestParts[1].hasPrefix("SSTP/"),
+              let version = Double(requestParts[1].dropFirst("SSTP/".count)),
+              version >= 1, version < 3
+        else { throw SSTPError.invalidRequest }
         var headers: [(name: String, value: String)] = []
         for line in lines.dropFirst() {
             if line.isEmpty {
@@ -100,6 +125,9 @@ public final class SSTPServer: @unchecked Sendable {
                 String(line[..<separator]).trimmingCharacters(in: .whitespaces),
                 String(line[line.index(after: separator)...]).trimmingCharacters(in: .whitespaces)
             ))
+        }
+        guard headers.contains(where: { $0.name.caseInsensitiveCompare("Charset") == .orderedSame }) else {
+            throw SSTPError.invalidRequest
         }
         return SSTPRequest(method: requestParts[0].uppercased(), version: requestParts[1], headers: headers)
     }
@@ -144,7 +172,11 @@ public final class SSTPServer: @unchecked Sendable {
                 requestData.append(data)
             }
             if requestData.count > maximumRequestBytes {
-                send(SSTPResponse(statusCode: 413, reason: "Payload Too Large"), on: connection)
+                send(
+                    SSTPResponse(statusCode: 413, reason: "Payload Too Large"),
+                    asHTTP: requestData.starts(with: Data("POST ".utf8)),
+                    on: connection
+                )
                 return
             }
             let terminated = isCompleteRequest(requestData)
@@ -158,8 +190,8 @@ public final class SSTPServer: @unchecked Sendable {
                 do {
                     let payload = isHTTP ? try Self.parseHTTPRequest(requestData) : requestData
                     let request = try Self.parse(payload)
-                    guard ["SEND", "NOTIFY"].contains(request.method) else {
-                        self.send(SSTPResponse(statusCode: 400, reason: "Bad Request"), asHTTP: isHTTP, on: connection)
+                    guard ["SEND", "NOTIFY", "COMMUNICATE", "EXECUTE", "GIVE"].contains(request.method) else {
+                        self.send(SSTPResponse(statusCode: 501, reason: "Not Implemented"), asHTTP: isHTTP, on: connection)
                         return
                     }
                     response = await handler(request)

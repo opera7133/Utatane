@@ -175,6 +175,8 @@ private struct UtataneRootView: View {
     @State private var debugWindow: NSWindow?
     @State private var showsOnboarding = false
     @State private var calledGhosts: [URL: CalledGhostRuntime] = [:]
+    @State private var sstpCookies: [String: [String: String]] = [:]
+    @State private var sstpQuietUntil: Date?
     @State private var contentPickerController = ContentPickerWindowController()
     @State private var textInputWindowController = TextInputWindowController()
     @State private var isTransitioningGhost = false
@@ -2889,15 +2891,42 @@ private struct UtataneRootView: View {
         let headerSummary = request.headers.map { "\($0.name): \($0.value)" }.joined(separator: "\n")
         AppLogStore.shared.debug("SSTP \(request.method) \(request.version)", category: "SSTP", details: headerSummary)
         if let command = request.value(for: "Command") {
+            if request.method == "EXECUTE" {
+                return await handleSSTPExecute(request, command: command)
+            }
             return handleMCPBridgeCommand(
                 command,
                 ghostID: request.value(for: "Ghost-ID"),
                 script: request.value(for: "Script")
             )
         }
-        guard let activeSession = session, let activeBalloon = balloon else {
-            AppLogStore.shared.warning("SSTP: セッションなしのため 503 応答", category: "SSTP")
-            return SSTPResponse(statusCode: 503, reason: "Service Unavailable")
+        guard request.value(for: "Sender") != nil || request.value(for: "User-Agent") != nil else {
+            return SSTPResponse(statusCode: 400, reason: "Bad Request")
+        }
+        guard let target = sstpTarget(for: request) else {
+            let explicitlyTargeted = request.value(for: "Ghost") != nil
+                || request.value(for: "ReceiverGhostName") != nil
+            return SSTPResponse(
+                statusCode: explicitlyTargeted ? 404 : 503,
+                reason: explicitlyTargeted ? "Not Found" : "Service Unavailable"
+            )
+        }
+        if request.method == "COMMUNICATE" {
+            return await handleSSTPCommunicate(request, target: target)
+        }
+        if request.method == "GIVE" {
+            return await handleSSTPGive(request, target: target)
+        }
+        guard ["SEND", "NOTIFY"].contains(request.method) else {
+            return SSTPResponse(statusCode: 501, reason: "Not Implemented")
+        }
+        let activeSession = target.session
+        let activeBalloon = target.balloon
+        guard sstpQuietUntil.map({ $0 <= Date() }) ?? true else {
+            return SSTPResponse(statusCode: 409, reason: "Conflict")
+        }
+        if sstpQuietUntil != nil {
+            sstpQuietUntil = nil
         }
         var script: SakuraScript?
         if let eventID = request.value(for: "Event") {
@@ -2908,7 +2937,7 @@ private struct UtataneRootView: View {
             }
             script = try? await activeSession.handle(event: .shiori(id: eventID, references: references))
         }
-        if script == nil, let fallback = request.value(for: "Script") {
+        if script == nil, let fallback = selectedSSTPScript(in: request, for: target.ghost) {
             script = SakuraScript(rawValue: fallback)
         }
         guard let script else {
@@ -2916,8 +2945,201 @@ private struct UtataneRootView: View {
             return SSTPResponse(statusCode: 204, reason: "No Content")
         }
         AppLogStore.shared.info("SSTPスクリプト再生", category: "SSTP", details: script.rawValue)
-        scriptPlayer.play(script, balloon: activeBalloon)
+        let options = Set((request.value(for: "Option") ?? "").lowercased().split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        })
+        if options.contains("nobreak") {
+            target.player.enqueue(script, balloon: activeBalloon)
+        } else {
+            target.player.play(script, balloon: activeBalloon)
+        }
         return SSTPResponse(script: script.rawValue)
+    }
+
+    private typealias SSTPTarget = (
+        ghost: InstalledGhost,
+        session: GhostSession,
+        player: SakuraScriptPlayer,
+        balloon: BalloonDefinition,
+        shell: InstalledShell
+    )
+
+    private func sstpTarget(for request: SSTPRequest) -> SSTPTarget? {
+        let requestedName = request.value(for: "ReceiverGhostName") ?? request.value(for: "Ghost")
+        let targets: [SSTPTarget] = {
+            var result: [SSTPTarget] = []
+            if let currentGhost, let session, let balloon, let selectedShell {
+                result.append((currentGhost, session, scriptPlayer, balloon, selectedShell))
+            }
+            result.append(contentsOf: calledGhosts.values.map {
+                ($0.ghost, $0.session, $0.player, $0.balloon, $0.shell)
+            })
+            return result
+        }()
+        guard let requestedName else { return targets.first }
+        return targets.first { target in
+            let sakuraName = target.ghost.characters.first(where: { $0.scope == 0 })?.name
+            return target.ghost.name.caseInsensitiveCompare(requestedName) == .orderedSame
+                || sakuraName?.caseInsensitiveCompare(requestedName) == .orderedSame
+        }
+    }
+
+    private func selectedSSTPScript(in request: SSTPRequest, for ghost: InstalledGhost) -> String? {
+        let sakuraName = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+        let keroName = ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+        var defaultScript: String?
+        var pendingNames: [String]?
+        for header in request.headers {
+            if header.name.caseInsensitiveCompare("IfGhost") == .orderedSame {
+                pendingNames = header.value.split(separator: ",", omittingEmptySubsequences: false)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+            } else if header.name.caseInsensitiveCompare("Script") == .orderedSame {
+                guard let names = pendingNames else {
+                    defaultScript = header.value
+                    continue
+                }
+                pendingNames = nil
+                let matches = names.first?.caseInsensitiveCompare(sakuraName) == .orderedSame
+                    && (names.count < 2 || names[1].caseInsensitiveCompare(keroName) == .orderedSame)
+                if matches {
+                    return header.value
+                }
+            }
+        }
+        return defaultScript
+    }
+
+    private func handleSSTPCommunicate(_ request: SSTPRequest, target: SSTPTarget) async -> SSTPResponse {
+        guard let sender = request.value(for: "Sender"), let sentence = request.value(for: "Sentence") else {
+            return SSTPResponse(statusCode: 400, reason: "Bad Request")
+        }
+        var references = [0: sender, 1: sentence]
+        for index in 0 ..< 254 where request.value(for: "Reference\(index)") != nil {
+            references[index + 2] = request.value(for: "Reference\(index)")
+        }
+        let script = try? await target.session.handle(event: .shiori(id: "OnCommunicate", references: references))
+        if let script {
+            target.player.play(script, balloon: target.balloon)
+            return SSTPResponse(script: script.rawValue)
+        }
+        return SSTPResponse(statusCode: 204, reason: "No Content")
+    }
+
+    private func handleSSTPGive(_ request: SSTPRequest, target: SSTPTarget) async -> SSTPResponse {
+        let event: GhostEvent
+        if let document = request.value(for: "Document") {
+            event = .shiori(id: "OnCommunicate", references: [0: "user", 1: document])
+        } else if let song = request.value(for: "Song") {
+            event = .shiori(id: "OnMusicPlay", references: [0: song])
+        } else {
+            return SSTPResponse(statusCode: 400, reason: "Bad Request")
+        }
+        if let script = try? await target.session.handle(event: event) {
+            target.player.play(script, balloon: target.balloon)
+            return SSTPResponse(script: script.rawValue)
+        }
+        return SSTPResponse(statusCode: 204, reason: "No Content")
+    }
+
+    private func handleSSTPExecute(_ request: SSTPRequest, command: String) async -> SSTPResponse {
+        guard let sender = request.value(for: "Sender") ?? request.value(for: "User-Agent") else {
+            return SSTPResponse(statusCode: 400, reason: "Bad Request")
+        }
+        let parsed = parseSSTPCommand(command, request: request)
+        let target = sstpTarget(for: request)
+        let data: String?
+        switch parsed.name.lowercased() {
+        case "getname":
+            guard let target else { return SSTPResponse(statusCode: 503, reason: "Service Unavailable") }
+            data = [
+                target.ghost.characters.first(where: { $0.scope == 0 })?.name ?? target.ghost.name,
+                target.ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+            ].joined(separator: ",")
+        case "getnames", "getghostnamelist":
+            data = model.ghosts.map(\.name).joined(separator: "\r\n")
+        case "getghostname": data = target?.ghost.name
+        case "getshellname": data = target?.shell.name
+        case "getballoonname": data = target?.balloon.name
+        case "getversion": data = "Utatane/\(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0")"
+        case "getshortversion": data = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
+        case "getshellnamelist": data = target?.ghost.shells.map(\.name).joined(separator: "\r\n")
+        case "getballoonnamelist": data = installedBalloons.map(\.name).joined(separator: "\r\n")
+        case "getheadlinenamelist": data = installedHeadlines.map(\.name).joined(separator: "\r\n")
+        case "getpluginnamelist": data = ""
+        case "quiet":
+            sstpQuietUntil = Date().addingTimeInterval(16)
+            return SSTPResponse(statusCode: 204, reason: "No Content")
+        case "restore":
+            sstpQuietUntil = nil
+            return SSTPResponse(statusCode: 204, reason: "No Content")
+        case "setcookie":
+            guard parsed.parameters.count >= 2 else { return SSTPResponse(statusCode: 400, reason: "Bad Request") }
+            sstpCookies[sender, default: [:]][parsed.parameters[0]] = parsed.parameters[1]
+            return SSTPResponse(statusCode: 204, reason: "No Content")
+        case "getcookie":
+            guard let name = parsed.parameters.first else { return SSTPResponse(statusCode: 400, reason: "Bad Request") }
+            data = sstpCookies[sender]?[name] ?? ""
+        case "getproperty":
+            guard let name = parsed.parameters.first else { return SSTPResponse(statusCode: 400, reason: "Bad Request") }
+            data = try? await propertySystem.value(for: name)
+        case "setproperty":
+            guard parsed.parameters.count >= 2 else { return SSTPResponse(statusCode: 400, reason: "Bad Request") }
+            do {
+                try await propertySystem.setValue(parsed.parameters[1], for: parsed.parameters[0])
+                return SSTPResponse(statusCode: 204, reason: "No Content")
+            } catch {
+                return SSTPResponse(statusCode: 420, reason: "Refuse")
+            }
+        case "compressarchive":
+            guard parsed.parameters.count >= 2 else { return SSTPResponse(statusCode: 400, reason: "Bad Request") }
+            let options = Array(parsed.parameters.dropFirst(2))
+            _ = await handleArchive(.compress(
+                archivePath: parsed.parameters[0],
+                sourceDirectoryPath: parsed.parameters[1],
+                eventID: sstpOption("--event", in: options),
+                password: sstpOption("--password", in: options)
+            ))
+            return SSTPResponse(statusCode: 204, reason: "No Content")
+        case "extractarchive":
+            guard parsed.parameters.count >= 2 else { return SSTPResponse(statusCode: 400, reason: "Bad Request") }
+            let options = Array(parsed.parameters.dropFirst(2))
+            _ = await handleArchive(.extract(
+                archivePath: parsed.parameters[0],
+                destinationPath: parsed.parameters[1],
+                eventID: sstpOption("--event", in: options),
+                password: sstpOption("--password", in: options)
+            ))
+            return SSTPResponse(statusCode: 204, reason: "No Content")
+        case "dumpsurface":
+            let path = parsed.parameters.first(where: { !$0.hasPrefix("--") })
+            _ = await handleArchive(.dumpSurface(
+                path: path,
+                eventID: sstpOption("--event", in: parsed.parameters)
+            ))
+            return SSTPResponse(statusCode: 204, reason: "No Content")
+        default:
+            return SSTPResponse(statusCode: 501, reason: "Not Implemented")
+        }
+        guard let data else { return SSTPResponse(statusCode: 404, reason: "Not Found") }
+        return SSTPResponse(additionalData: data)
+    }
+
+    private func parseSSTPCommand(_ command: String, request: SSTPRequest) -> (name: String, parameters: [String]) {
+        if let open = command.firstIndex(of: "["), command.hasSuffix("]") {
+            let name = String(command[..<open])
+            let parameters = command[command.index(after: open) ..< command.index(before: command.endIndex)]
+                .split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+            return (name, parameters)
+        }
+        let parameters = (0 ..< 256).compactMap { request.value(for: "Reference\($0)") }
+        return (command, parameters)
+    }
+
+    private func sstpOption(_ name: String, in parameters: [String]) -> String? {
+        let prefix = "\(name)="
+        return parameters.first(where: { $0.lowercased().hasPrefix(prefix) }).map {
+            String($0.dropFirst(prefix.count))
+        }
     }
 
     private func handleMCPBridgeCommand(

@@ -12,6 +12,7 @@ public final class SakuraScriptPlayer {
     private var characterDelayMilliseconds = 50
     private var postDialogueDismissalMilliseconds: Int
     private var playbackTask: Task<Void, Never>?
+    private var queuedPlaybackTail: Task<Void, Never>?
     private var dismissalTask: Task<Void, Never>?
     private var fastForwardRequested = false
     private var advanceRequested = false
@@ -194,6 +195,21 @@ public final class SakuraScriptPlayer {
         }
     }
 
+    public func enqueue(
+        _ script: SakuraScript,
+        balloon: BalloonDefinition,
+        characterDelayMilliseconds: Int? = nil
+    ) {
+        let previous = queuedPlaybackTail ?? playbackTask
+        let task = Task { @MainActor [weak self] in
+            await previous?.value
+            guard !Task.isCancelled, let self else { return }
+            play(script, balloon: balloon, characterDelayMilliseconds: characterDelayMilliseconds)
+            await playbackTask?.value
+        }
+        queuedPlaybackTail = task
+    }
+
     public func configure(defaultBalloonSurfaceIDs: [Int: Int]) {
         self.defaultBalloonSurfaceIDs = defaultBalloonSurfaceIDs
     }
@@ -226,6 +242,8 @@ public final class SakuraScriptPlayer {
     }
 
     public func cancel() {
+        queuedPlaybackTail?.cancel()
+        queuedPlaybackTail = nil
         playbackTask?.cancel()
         dismissalTask?.cancel()
         playbackTask = nil
@@ -269,6 +287,7 @@ public final class SakuraScriptPlayer {
         var inlineImagesByScope: [Int: [NSRange: NSImage]] = [:]
         var balloonStyleByScope = defaultBalloonSurfaceIDs
         var activatedScopes = Set<Int>()
+        var talkingScopes = Set<Int>()
         var isQuickSection = false
         var synchronizedScopes: Set<Int>?
         var repaintLockedScopes: Set<Int> = []
@@ -390,9 +409,12 @@ public final class SakuraScriptPlayer {
         }
 
         func activate(scope: Int, style: Int) throws {
-            guard let surfaceFrame = surfaceWindowController.windowFrame(for: scope)
+            guard var surfaceFrame = surfaceWindowController.windowFrame(for: scope)
                 ?? surfaceWindowController.windowFrame
             else { return }
+            let surfaceBalloonOffset = surfaceWindowController.balloonOffset(for: scope)
+            surfaceFrame.origin.x += surfaceBalloonOffset.x
+            surfaceFrame.origin.y -= surfaceBalloonOffset.y
             let speaker: BalloonSpeaker = switch scope {
             case 0: .sakura
             case 1: .kero
@@ -455,6 +477,9 @@ public final class SakuraScriptPlayer {
                         guard !Task.isCancelled else { return }
                         let targetScopes = synchronizedScopes?.sorted() ?? [scope]
                         for targetScope in targetScopes {
+                            if !character.isWhitespace, talkingScopes.insert(targetScope).inserted {
+                                surfaceWindowController.playIntervalAnimation("starttalk", scope: targetScope)
+                            }
                             let start = textByScope[targetScope, default: ""].utf16.count
                             textByScope[targetScope, default: ""].append(character)
                             appendStyleRun(
@@ -481,6 +506,9 @@ public final class SakuraScriptPlayer {
                     }
                     fastForwardRequested = false
                 case let .scope(newScope):
+                    if newScope != scope, talkingScopes.remove(scope) != nil {
+                        await surfaceWindowController.playIntervalAnimationAndWait("endtalk", scope: scope)
+                    }
                     scope = newScope
                 case let .surface(surfaceID):
                     try surfaceWindowController.changeSurface(scope: scope, to: surfaceID)
@@ -1040,10 +1068,19 @@ public final class SakuraScriptPlayer {
                     styleRunsByScope.removeAll()
                     inlineImagesByScope.removeAll()
                 case .end:
+                    for talkingScope in talkingScopes.sorted() {
+                        await surfaceWindowController.playIntervalAnimationAndWait("endtalk", scope: talkingScope)
+                    }
+                    for visibleScope in surfaceWindowController.visibleScopes {
+                        await surfaceWindowController.playIntervalAnimationAndWait("yen-e", scope: visibleScope)
+                    }
                     return
                 case .unknown:
                     continue
                 }
+            }
+            for talkingScope in talkingScopes.sorted() {
+                await surfaceWindowController.playIntervalAnimationAndWait("endtalk", scope: talkingScope)
             }
         } catch is CancellationError {
             return

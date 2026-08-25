@@ -9,6 +9,7 @@ public struct ShellDefinition: Sendable, Equatable {
     public let bindGroups: [Int: [Int: ShellBindGroup]]
     public let bindOptions: [Int: [String: ShellBindOptions]]
     public let surfaceTable: SurfaceTable?
+    public let maximumSurfaceWidth: Int?
 
     public init(
         directory: URL,
@@ -41,6 +42,30 @@ public struct ShellDefinition: Sendable, Equatable {
         bindOptions: [Int: [String: ShellBindOptions]] = [:],
         surfaceTable: SurfaceTable?
     ) {
+        self.init(
+            directory: directory,
+            surfaces: surfaces,
+            surfaceAliases: surfaceAliases,
+            usesSelfAlpha: usesSelfAlpha,
+            defaultBindGroups: defaultBindGroups,
+            bindGroups: bindGroups,
+            bindOptions: bindOptions,
+            surfaceTable: surfaceTable,
+            maximumSurfaceWidth: nil
+        )
+    }
+
+    public init(
+        directory: URL,
+        surfaces: [Int: SurfaceDefinition],
+        surfaceAliases: [Int: [String: [Int]]] = [:],
+        usesSelfAlpha: Bool = false,
+        defaultBindGroups: [Int: Set<Int>] = [:],
+        bindGroups: [Int: [Int: ShellBindGroup]] = [:],
+        bindOptions: [Int: [String: ShellBindOptions]] = [:],
+        surfaceTable: SurfaceTable?,
+        maximumSurfaceWidth: Int?
+    ) {
         self.directory = directory
         self.surfaces = surfaces
         self.surfaceAliases = surfaceAliases
@@ -49,6 +74,7 @@ public struct ShellDefinition: Sendable, Equatable {
         self.bindGroups = bindGroups
         self.bindOptions = bindOptions
         self.surfaceTable = surfaceTable
+        self.maximumSurfaceWidth = maximumSurfaceWidth
     }
 
     public func resolveSurface(_ identifier: String, scope: Int) -> Int? {
@@ -68,6 +94,12 @@ public struct ShellDefinition: Sendable, Equatable {
         }
         return result
     }
+}
+
+public enum SurfaceSortOrder: String, Sendable, Equatable {
+    case none
+    case ascending = "ascend"
+    case descending = "descend"
 }
 
 public struct ShellBindGroup: Sendable, Equatable {
@@ -98,20 +130,81 @@ public struct ShellBindOptions: Sendable, Equatable {
 
 public struct SurfaceDefinition: Sendable, Equatable {
     public let id: Int
+    public let name: String?
+    public let balloonOffset: SurfacePoint?
+    public let scopeBalloonOffsets: [Int: SurfacePoint]
+    public let points: [String: SurfacePoint]
+    public let iconRect: SurfaceRect?
     public let elements: [SurfaceElement]
     public let collisions: [SurfaceCollision]
     public let animations: [SurfaceAnimation]
+    public let collisionSort: SurfaceSortOrder
+    public let animationSort: SurfaceSortOrder
 
     public init(
         id: Int,
+        name: String? = nil,
+        balloonOffset: SurfacePoint? = nil,
+        scopeBalloonOffsets: [Int: SurfacePoint] = [:],
+        points: [String: SurfacePoint] = [:],
+        iconRect: SurfaceRect? = nil,
         elements: [SurfaceElement] = [],
         collisions: [SurfaceCollision],
         animations: [SurfaceAnimation]
     ) {
+        self.init(
+            id: id,
+            name: name,
+            balloonOffset: balloonOffset,
+            scopeBalloonOffsets: scopeBalloonOffsets,
+            points: points,
+            iconRect: iconRect,
+            elements: elements,
+            collisions: collisions,
+            animations: animations,
+            collisionSort: .none,
+            animationSort: .descending
+        )
+    }
+
+    public init(
+        id: Int,
+        name: String? = nil,
+        balloonOffset: SurfacePoint? = nil,
+        scopeBalloonOffsets: [Int: SurfacePoint] = [:],
+        points: [String: SurfacePoint] = [:],
+        iconRect: SurfaceRect? = nil,
+        elements: [SurfaceElement] = [],
+        collisions: [SurfaceCollision],
+        animations: [SurfaceAnimation],
+        collisionSort: SurfaceSortOrder,
+        animationSort: SurfaceSortOrder
+    ) {
         self.id = id
+        self.name = name
+        self.balloonOffset = balloonOffset
+        self.scopeBalloonOffsets = scopeBalloonOffsets
+        self.points = points
+        self.iconRect = iconRect
         self.elements = elements
         self.collisions = collisions
         self.animations = animations
+        self.collisionSort = collisionSort
+        self.animationSort = animationSort
+    }
+}
+
+public struct SurfaceRect: Sendable, Equatable {
+    public let left: Int
+    public let top: Int
+    public let right: Int
+    public let bottom: Int
+
+    public init(left: Int, top: Int, right: Int, bottom: Int) {
+        self.left = left
+        self.top = top
+        self.right = right
+        self.bottom = bottom
     }
 }
 
@@ -132,6 +225,13 @@ public struct SurfaceElement: Sendable, Equatable {
 }
 
 public struct SurfaceCollision: Sendable, Equatable {
+    public enum Shape: Sendable, Equatable {
+        case rectangle
+        case ellipse
+        case circle(center: SurfacePoint, radius: Int)
+        case polygon
+    }
+
     public let id: Int
     public let left: Int
     public let top: Int
@@ -139,6 +239,7 @@ public struct SurfaceCollision: Sendable, Equatable {
     public let bottom: Int
     public let name: String
     public let polygon: [SurfacePoint]
+    public let shape: Shape
 
     public init(
         id: Int,
@@ -147,7 +248,8 @@ public struct SurfaceCollision: Sendable, Equatable {
         right: Int,
         bottom: Int,
         name: String,
-        polygon: [SurfacePoint] = []
+        polygon: [SurfacePoint] = [],
+        shape: Shape? = nil
     ) {
         self.id = id
         self.left = left
@@ -156,10 +258,12 @@ public struct SurfaceCollision: Sendable, Equatable {
         self.bottom = bottom
         self.name = name
         self.polygon = polygon
+        self.shape = shape ?? (polygon.isEmpty ? .rectangle : .polygon)
     }
 
     public func contains(x: Int, y: Int) -> Bool {
-        if polygon.count >= 3 {
+        switch shape {
+        case .polygon where polygon.count >= 3:
             var inside = false
             var previous = polygon.count - 1
             for current in polygon.indices {
@@ -173,9 +277,21 @@ public struct SurfaceCollision: Sendable, Equatable {
                 previous = current
             }
             return inside
+        case .ellipse:
+            let centerX = Double(left + right) / 2
+            let centerY = Double(top + bottom) / 2
+            let radiusX = Double(abs(right - left)) / 2
+            let radiusY = Double(abs(bottom - top)) / 2
+            guard radiusX > 0, radiusY > 0 else { return false }
+            return pow((Double(x) - centerX) / radiusX, 2) + pow((Double(y) - centerY) / radiusY, 2) <= 1
+        case let .circle(center, radius):
+            let dx = x - center.x
+            let dy = y - center.y
+            return dx * dx + dy * dy <= radius * radius
+        default:
+            return (min(left, right) ... max(left, right)).contains(x)
+                && (min(top, bottom) ... max(top, bottom)).contains(y)
         }
-        return (min(left, right) ... max(left, right)).contains(x)
-            && (min(top, bottom) ... max(top, bottom)).contains(y)
     }
 }
 
@@ -193,12 +309,45 @@ public struct SurfaceAnimation: Sendable, Equatable {
     public let id: Int
     public let name: String?
     public let interval: String?
+    public let intervalParameter: Int?
+    public let options: Set<String>
+    public let collisions: [SurfaceCollision]
     public let patterns: [SurfaceAnimationPattern]
 
-    public init(id: Int, name: String? = nil, interval: String?, patterns: [SurfaceAnimationPattern]) {
+    public init(
+        id: Int,
+        name: String? = nil,
+        interval: String?,
+        options: Set<String> = [],
+        collisions: [SurfaceCollision] = [],
+        patterns: [SurfaceAnimationPattern]
+    ) {
+        self.init(
+            id: id,
+            name: name,
+            interval: interval,
+            intervalParameter: nil,
+            options: options,
+            collisions: collisions,
+            patterns: patterns
+        )
+    }
+
+    public init(
+        id: Int,
+        name: String? = nil,
+        interval: String?,
+        intervalParameter: Int?,
+        options: Set<String> = [],
+        collisions: [SurfaceCollision] = [],
+        patterns: [SurfaceAnimationPattern]
+    ) {
         self.id = id
         self.name = name
         self.interval = interval
+        self.intervalParameter = intervalParameter
+        self.options = options
+        self.collisions = collisions
         self.patterns = patterns
     }
 }
