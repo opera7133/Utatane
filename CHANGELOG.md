@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.1.0-alpha.11] - 2026-08-25
+
+### 追加
+
+- SSTP互換状況の文書を追加。Socket SSTP・SSTP over HTTP・各メソッドとEXECUTE commandの対応範囲を整理
+- SSTPレスポンスに任意ヘッダーと追加データを付与できるようにし、UKADOC仕様どおり空行に続けてデータを返せるようにした
+- SakuraScriptにオンラインモード、ユーザー割り込み禁止モード、誘導・受動インタラクションモード、コリジョン表示モード、同期オブジェクトの命令を追加
+- SakuraScriptでキャラクターを絶対座標へ移動する`setPosition`と`resetPosition`を追加
+- SakuraScriptの再生をキューイングする`enqueue`メソッドを追加し、`Option: nobreak`で実行中の再生完了後へ続けられるようにした
+- surfaces.txtのdescriptブロックで`maxwidth`・`collision-sort`・`animation-sort`を読み取るようにした
+- surfaces.txtのサーフェス定義で`name`・`balloonoffset`・`point`・`icon`などのフィールドを読み取るようにした
+- NARのinstall.txtで`type,package`を扱い、パッケージ内の複数コンテンツをまとめてインストールできるようにした
+- NARのinstall.txtで`accept`フィールドを読み取り、指定外のゴーストへのインストールを拒否するようにした
+- NARを圧縮する際に`.narignore`・`.narinclude`と`developer_options.txt`の`nonar`オプションを反映してファイルを除外するようにした
+- `descript.txt`を参照してゴースト・シェル・バルーンのREADMEファイルを解決する`ReadmeResolver`を追加
+- 同梱ゴースト「りあ」にスリープ・復帰イベントへの応答と、脚のダブルクリック時の着せ替え会話の条件を修正
+
+### 変更
+
+- SakuraScriptのバルーン位置計算にサーフェスの`balloonoffset`を反映するようにした
+- SSTPのバージョン検証を強化し、`Charset`ヘッダーの有無も確認するようにした
+- 未知のSSTPメソッドに501を返すようにした
+
 ## [0.1.0-alpha.10] - 2026-08-24
 
 ### 追加
@@ -134,7 +157,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[0.1.0-alpha.10]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.9...HEAD
+[0.1.0-alpha.11]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.10...HEAD
+[0.1.0-alpha.10]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.9...v0.1.0-alpha.10
 [0.1.0-alpha.9]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
 [0.1.0-alpha.8]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.7...v0.1.0-alpha.8
 [0.1.0-alpha.7]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.6...v0.1.0-alpha.7
