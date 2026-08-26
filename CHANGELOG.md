@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.0-alpha.13] - 2026-08-26
+
+### 追加
+
+- 美坂（Misaka）をSHIORIとして使うゴーストのネイティブ実行に対応
+- 灯（Akari）をSHIORIとして使うゴーストのネイティブ実行に対応。イベント辞書・単語・条件・ジャンプ・変数・`.azr`スクリプト・配列・辞書・ JSON・Base64・正規表現・ファイル操作・`.amb`アーカイブの読み込みに対応
+- 共通ネイティブSAORIレジストリ`UtataneNativeSaori`を分離パッケージとして分離。`saori_cpuid`・`kenonoke`・`textcopy2`に加え、`mciaudior`・`wmove`のネイティブSAORI互換を追加
+- 各SHIORIから共通レジストリへアクセスするNativeSaoriWindowAdapterを追加
+- OpenAI Realtime API・互換APIへ接続してゴーストとリアルタイム音声会話を行う実験的機能を追加（Realtime API対応ブラウザウィンドウ、SDPネゴシエーション、トランスクリプト取得、ゴーストへの表情連動）
+- ゴーストの`realtime.json`でRealtime会話時の表情サーフェスを指定できるマニフェスト第1版を追加
+- アプリ内ヘルプ（HTML）をmacOSのヘルプメニューから開けるようにし、ゴーストの`\![open,help]`から専用ヘルプがない場合はUtataneヘルプへフォールバックするようにした
+- 右クリックメニューの順序をネットワーク・機能・設定・コンテンツ切り替え・情報・終了のSSP準拠の順序へ整理
+- `x-ukagaka-link`スキームをInfo.plistに登録
+- 日本語・英語・簡体中文・繁体中文・韓国語の局在化リソースをJSON形式で管理し、生成スクリプトでXcodeカタログへ反映するワークフローを整備
+- 設定画面でアプリの表示言語を切り替えられるようにした
+
+### 変更
+
+- KAWARIが共通SAORIレジストリを受け入れるようにした
+- 同梱ゴースト「りあ」のチーク空配列の連結前に要素数を確認し、空要素が混じり込む問題を修正
+
 ## [0.1.0-alpha.12] - 2026-08-25
 
 ### 追加
@@ -178,7 +199,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[0.1.0-alpha.12]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.11...HEAD
+[0.1.0-alpha.13]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.12...HEAD
+[0.1.0-alpha.12]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.11...v0.1.0-alpha.12
 [0.1.0-alpha.11]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.10...v0.1.0-alpha.11
 [0.1.0-alpha.10]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.9...v0.1.0-alpha.10
 [0.1.0-alpha.9]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.8...v0.1.0-alpha.9
