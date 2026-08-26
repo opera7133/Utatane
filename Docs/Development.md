@@ -52,27 +52,42 @@ mise run package
 ## コード構成
 
 ```text
-apps/Utatane/             SwiftUIアプリと機能の結線
-packages/core/            共有データ型とイベント
-packages/content/         NARとSSPコンテンツの取り込み
-packages/ghost-kit/       ゴーストとdescript.txtの読み込み
-packages/runtime/         セッションと人格エンジン
-packages/sakura-script/   SakuraScript解析
-packages/shell/           Shell、surfaces.txt、SERIKO解析
-packages/balloon/         Balloon解析
-packages/platform-macos/  AppKitによる表示と入力
-packages/network/         更新、RSS、HEADLINE、SSTP
-packages/shiori/          SHIORIメッセージとイベント変換
-packages/yaya-native/     YAYAネイティブブリッジ
-packages/satori-native/   SATORIネイティブブリッジ
-packages/kawari-native/   KAWARIネイティブブリッジ
-packages/first-native/    利用者所有のFIRST DLLを読み取る専用ネイティブ人格
-packages/posix-shiori/    Aosora外部モジュールローダー
-packages/windows-shiori/  Wine互換ホストとの通信
-packages/mcp-server/      stdio MCPサーバー
+apps/Utatane/              SwiftUIアプリ、状態管理、各Packageの結線
+packages/core/             共有データ型、ゴーストイベント、プロパティ
+packages/runtime/          セッション、人格エンジン、再生キュー
+packages/ghost-kit/        ゴースト設定とdescript.txtの読み込み
+packages/content/          NAR、ZIP、SSPコンテンツの取り込み
+packages/sakura-script/    SakuraScriptの解析と再生モデル
+packages/shell/            Shell、surfaces.txt、SERIKOの解析
+packages/balloon/          Balloon設定の解析
+packages/platform-macos/   AppKitによるサーフェス、バルーン、入力UI
+packages/network/          更新、RSS、HEADLINE、SSTP、WebSocket
+packages/ai/               プロバイダー非依存のAI人格エンジン
+packages/shiori/           SHIORIメッセージとイベント変換
+packages/native-saori/     ネイティブSHIORI共通のSAORIレジストリ
+packages/yaya-native/      YAYA本体とSwiftブリッジ
+packages/satori-native/    SATORI本体とSwiftブリッジ
+packages/kawari-native/    KAWARI本体とSwiftブリッジ
+packages/misaka-native/    MISAKA辞書のSwift実装
+packages/akari-native/     灯のイベント資源、AZR、AMBのSwift実装
+packages/first-native/     利用者所有のfirst.dllを読む専用人格
+packages/posix-shiori/     AosoraなどmacOS外部SHIORIのローダー
+packages/windows-shiori/   Wine互換ホストとWindows DLLの通信
+packages/mcp-server/       Utatane操作用のstdio MCPサーバー
 ```
 
-依存方向は`packages/Package.swift`で管理します。パーサーや本体処理は各Packageへ、SwiftUI/AppKit固有の結線だけを`apps/Utatane`と`platform-macos`へ置きます。
+依存方向と公開Productは`packages/Package.swift`で管理します。パーサーや本体処理は各Packageへ置き、SwiftUIアプリ固有の結線は`apps/Utatane`、再利用するAppKit表示は`platform-macos`へ分けます。YAYA、SATORI、KAWARIの上流コードとC/C++ブリッジも、それぞれの`*-native` Package内で管理します。
+
+周辺のビルド・調査用コードは次の場所にあります。
+
+```text
+Scripts/                   生成、検証、互換ホスト、リリース用スクリプト
+tools/native-shiori/       外部macOS SHIORIのローカルビルド補助
+tools/windows-dll-host/    汎用Windows DLLホストのソース
+tools/materia-shiori-host/ FIRST解析用ホストのソース
+Localizations/             文字列カタログの生成元JSON
+Internal-Docs/             調査記録、TODO、実装上の補足
+```
 
 ## 同梱コンテンツとローカル検証データ
 

@@ -31,7 +31,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 
 ### 人格とかネットワークとか
 
-- YAYA / SATORI / KAWARI / MISAKAを使うゴーストのネイティブ実行 (Aosoraについては"実験的な機能"を参照)
+- YAYA / 里々 / 華和梨 / 美坂 / 灯をSHIORIとして使うゴーストのネイティブ実行 (蒼空については"実験的な機能"を参照)
 - SSU、`saori_cpuid`、`kenonoke`、`textcopy2`、`mciaudior`、`wmove`のネイティブSAORI互換
 - ゴーストとバルーンの手動ネットワーク更新と、設定した日数ごとの自動更新
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
@@ -51,8 +51,8 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 <details>
 <summary>実験的な機能</summary>
 
-- 利用者がビルドしたAosoraのmacOS用モジュールを外部から読み込めます
-- 対応版と一致しないFIRSTは、専用ホストとWineを設定した場合だけ互換経路を利用できます
+- 利用者がビルドした蒼空のmacOS用モジュールを外部から読み込めます
+- 対応版と一致しないさくらは、専用ホストとWineを設定した場合だけ互換経路を利用できます
 - 独自Windows HEADLINE DLLはWineへフォールバックできます
 
 詳しくは[Native SHIORI / SAORI](Docs/Native-SHIORI.md)を参照してください。

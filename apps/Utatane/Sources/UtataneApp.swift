@@ -3,6 +3,7 @@ import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import UtataneAI
+import UtataneAkariNative
 import UtataneBalloon
 import UtataneContent
 import UtataneCore
@@ -1523,6 +1524,13 @@ private struct UtataneRootView: View {
             return try NativeMisakaPersonalityEngine(
                 masterDirectoryURL: masterDirectory,
                 variableStoreURL: ContentRoot.misakaVariableStoreURL(for: ghost),
+                saoriCaller: nativeSaoriRegistry(for: masterDirectory)
+            )
+        }
+        if NativeAkariPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
+            return try NativeAkariPersonalityEngine(
+                masterDirectoryURL: masterDirectory,
+                variableStoreURL: ContentRoot.akariVariableStoreURL(for: ghost),
                 saoriCaller: nativeSaoriRegistry(for: masterDirectory)
             )
         }
@@ -4414,6 +4422,12 @@ enum ContentRoot {
         variableStoreURL(for: ghost)
             .deletingLastPathComponent()
             .appending(path: "misaka-vars.json", directoryHint: .notDirectory)
+    }
+
+    static func akariVariableStoreURL(for ghost: InstalledGhost) -> URL {
+        variableStoreURL(for: ghost)
+            .deletingLastPathComponent()
+            .appending(path: "akari-vars.json", directoryHint: .notDirectory)
     }
 
     static func writableYayaMasterDirectory(for ghost: InstalledGhost, source: URL) throws -> URL {

@@ -202,7 +202,7 @@ import UtataneShiori
     $OnClose
     \\-
     """)
-    let state = master.deletingLastPathComponent().appending(path: "state.json")
+    let state = master.deletingLastPathComponent().appending(path: "\(master.lastPathComponent)-state.json")
     do {
         let session = try NativeMisakaSession(masterDirectoryURL: master, variableStoreURL: state)
         #expect(try session.request(request(id: "OnBoot")).value == "回")

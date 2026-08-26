@@ -24,6 +24,7 @@ let package = Package(
         .library(name: "UtataneFirstNative", targets: ["UtataneFirstNative"]),
         .library(name: "UtataneNativeSaori", targets: ["UtataneNativeSaori"]),
         .library(name: "UtataneMisakaNative", targets: ["UtataneMisakaNative"]),
+        .library(name: "UtataneAkariNative", targets: ["UtataneAkariNative"]),
         .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"]),
         .executable(name: "utatane-mcp", targets: ["UtataneMCP"])
     ],
@@ -301,6 +302,11 @@ let package = Package(
             ],
             path: "misaka-native/Sources"
         ),
+        .target(
+            name: "UtataneAkariNative",
+            dependencies: ["UtataneCore", "UtataneNativeSaori", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
+            path: "akari-native/Sources"
+        ),
         .testTarget(
             name: "UtataneBalloonTests",
             dependencies: ["UtataneBalloon"],
@@ -400,6 +406,11 @@ let package = Package(
             name: "UtataneMisakaNativeTests",
             dependencies: ["UtataneCore", "UtataneMisakaNative", "UtataneNativeSaori", "UtataneShiori"],
             path: "misaka-native/Tests"
+        ),
+        .testTarget(
+            name: "UtataneAkariNativeTests",
+            dependencies: ["UtataneAkariNative", "UtataneCore", "UtataneNativeSaori"],
+            path: "akari-native/Tests"
         )
     ],
     swiftLanguageModes: [.v6],
