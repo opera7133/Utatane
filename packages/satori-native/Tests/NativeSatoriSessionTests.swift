@@ -88,6 +88,32 @@ struct NativeSatoriSessionTests {
         #expect(strokeResponses.allSatisfy { !$0.contains("＄") && !$0.contains("メモリ好感度") })
     }
 
+    @Test func `native SATORI keeps memory-na Memory dialogue intact`() throws {
+        let source = repositoryRoot.appending(path: "Content/Local/Ghosts/memory-na/ghost/master", directoryHint: .isDirectory)
+        guard hasLocalContent(source) else { return }
+        let temporaryRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        let master = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: source, to: master)
+
+        let session = try NativeSatoriSession(masterDirectoryURL: master)
+        let event = GhostEvent.mouse(.init(
+            kind: .doubleClick,
+            scope: 0,
+            region: "Memory",
+            x: 100,
+            y: 100,
+            button: 0
+        ))
+        let response = try session.request(GhostEventShioriAdapter().request(for: event))
+        let value = try #require(response.value)
+        #expect(value.contains("�") == false)
+        #expect(value.contains("素手でメモリを触るのはやめてよね"))
+        #expect(value.contains("薄い本的な意味で"))
+        #expect(value.contains("壊れちゃいましゅぅ"))
+    }
+
     @Test func `detects SATORI ghost configuration`() {
         let master = repositoryRoot.appending(path: "Content/Local/Ghosts/twin/ghost/master", directoryHint: .isDirectory)
         guard hasLocalContent(master) else { return }

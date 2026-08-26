@@ -14,6 +14,8 @@ public final class SakuraScriptPlayer {
     private var playbackTask: Task<Void, Never>?
     private var queuedPlaybackTail: Task<Void, Never>?
     private var dismissalTask: Task<Void, Never>?
+    private var surfaceRestoreTask: Task<Void, Never>?
+    private let surfaceRestoreDelayMilliseconds: Int
     private var fastForwardRequested = false
     private var advanceRequested = false
     private var isWaitingForClick = false
@@ -71,7 +73,7 @@ public final class SakuraScriptPlayer {
     public var onOtherEvent: (@MainActor (String, String, [String], Bool) async -> Void)?
     public var onPluginEvent: (@MainActor (String, String, [String], Bool) async -> SakuraScript?)?
     public var onDialogueContent: (@MainActor () -> Void)?
-    public var onDialogueDismissed: (@MainActor () -> Void)?
+    public var onSurfaceRestore: (@MainActor () -> Void)?
     public var onPlaybackFinished: (@MainActor () -> Void)?
 
     public var isDialogueActive: Bool {
@@ -85,11 +87,13 @@ public final class SakuraScriptPlayer {
     public init(
         surfaceWindowController: SurfaceWindowController,
         balloonWindowController: BalloonWindowController,
-        postDialogueDismissalMilliseconds: Int = 10000
+        postDialogueDismissalMilliseconds: Int = 10000,
+        surfaceRestoreDelayMilliseconds: Int = 15000
     ) {
         self.surfaceWindowController = surfaceWindowController
         self.balloonWindowController = balloonWindowController
         self.postDialogueDismissalMilliseconds = postDialogueDismissalMilliseconds
+        self.surfaceRestoreDelayMilliseconds = max(0, surfaceRestoreDelayMilliseconds)
         soundPlayer.onStop = { [weak self] file, reason in self?.onSoundStop?(file, reason) }
         soundPlayer.onError = { [weak self] file, error in self?.onSoundError?(file, error) }
         balloonWindowController.onClick = { [weak self] _ in
@@ -154,6 +158,7 @@ public final class SakuraScriptPlayer {
         finishPlaybackWait()
         playbackTask?.cancel()
         dismissalTask?.cancel()
+        surfaceRestoreTask?.cancel()
         fastForwardRequested = false
         advanceRequested = false
         isWaitingForClick = false
@@ -249,8 +254,10 @@ public final class SakuraScriptPlayer {
         queuedPlaybackTail = nil
         playbackTask?.cancel()
         dismissalTask?.cancel()
+        surfaceRestoreTask?.cancel()
         playbackTask = nil
         dismissalTask = nil
+        surfaceRestoreTask = nil
         fastForwardRequested = false
         advanceRequested = false
         isWaitingForClick = false
@@ -819,7 +826,7 @@ public final class SakuraScriptPlayer {
                         )
                     )
                     try activateIfNeeded(scope: scope)
-                    updateContent(scope: scope)
+                    updateContent(scope: scope, autoscroll: false)
                 case let .choiceStart(id, arguments):
                     choicesByScope[scope] = ActiveAnchor(
                         id: id,
@@ -840,7 +847,7 @@ public final class SakuraScriptPlayer {
                         )
                     )
                     textByScope[scope, default: ""].append("\n")
-                    updateContent(scope: scope)
+                    updateContent(scope: scope, autoscroll: false)
                 case .choiceTimeout:
                     continue
                 case let .anchorStart(id, arguments):
@@ -1445,7 +1452,18 @@ public final class SakuraScriptPlayer {
         balloonWindowController.hideAll()
         isPlaybackComplete = false
         if hadVisibleDialogue {
-            onDialogueDismissed?()
+            surfaceRestoreTask?.cancel()
+            surfaceRestoreTask = Task { [weak self] in
+                guard let self else { return }
+                do {
+                    try await sleep(milliseconds: surfaceRestoreDelayMilliseconds)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                onSurfaceRestore?()
+                surfaceRestoreTask = nil
+            }
         }
     }
 

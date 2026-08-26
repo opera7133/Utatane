@@ -5,6 +5,9 @@ public enum NarContentType: String, Sendable, Equatable {
     case balloon
     case shell
     case headline
+    case plugin
+    case calendarSkin = "calendar skin"
+    case calendarPlugin = "calendar plugin"
     case package
 }
 
@@ -12,12 +15,32 @@ public struct NarInstallationRoots: Sendable, Equatable {
     public let ghostsDirectory: URL
     public let balloonsDirectory: URL
     public let headlinesDirectory: URL
+    public let pluginsDirectory: URL
+    public let calendarSkinsDirectory: URL
+    public let calendarPluginsDirectory: URL
 
-    public init(ghostsDirectory: URL, balloonsDirectory: URL, headlinesDirectory: URL? = nil) {
+    public init(
+        ghostsDirectory: URL,
+        balloonsDirectory: URL,
+        headlinesDirectory: URL? = nil,
+        pluginsDirectory: URL? = nil,
+        calendarSkinsDirectory: URL? = nil,
+        calendarPluginsDirectory: URL? = nil
+    ) {
         self.ghostsDirectory = ghostsDirectory
         self.balloonsDirectory = balloonsDirectory
-        self.headlinesDirectory = headlinesDirectory ?? ghostsDirectory.deletingLastPathComponent().appending(
+        let contentDirectory = ghostsDirectory.deletingLastPathComponent()
+        self.headlinesDirectory = headlinesDirectory ?? contentDirectory.appending(
             path: "Headline", directoryHint: .isDirectory
+        )
+        self.pluginsDirectory = pluginsDirectory ?? contentDirectory.appending(
+            path: "Plugins", directoryHint: .isDirectory
+        )
+        self.calendarSkinsDirectory = calendarSkinsDirectory ?? contentDirectory.appending(
+            path: "Calendar/Skins", directoryHint: .isDirectory
+        )
+        self.calendarPluginsDirectory = calendarPluginsDirectory ?? contentDirectory.appending(
+            path: "Calendar/Plugins", directoryHint: .isDirectory
         )
     }
 }
@@ -155,7 +178,7 @@ public struct NarInstaller: Sendable {
 
         let installURL = try primaryInstallFile(in: extractionRoot)
         let metadata = try readInstallMetadata(from: installURL)
-        guard let rawType = metadata["type"], let contentType = NarContentType(rawValue: rawType.lowercased()) else {
+        guard let rawType = metadata["type"], let contentType = contentType(rawType) else {
             throw NarInstallError.unsupportedType(metadata["type"] ?? "")
         }
         let sourceRoot = installURL.deletingLastPathComponent()
@@ -369,7 +392,7 @@ public struct NarInstaller: Sendable {
         activeGhostDirectories: [String: URL]
     ) throws -> (operations: [InstallOperation], acceptedGhostName: String?) {
         let fileManager = FileManager.default
-        guard let rawType = metadata["type"], let contentType = NarContentType(rawValue: rawType.lowercased()),
+        guard let rawType = metadata["type"], let contentType = contentType(rawType),
               contentType != .package
         else { throw NarInstallError.unsupportedType(metadata["type"] ?? "") }
         let directoryName = try validatedDirectoryName(metadata["directory"] ?? "")
@@ -391,13 +414,10 @@ public struct NarInstaller: Sendable {
             for key in metadata.keys.sorted() where key.hasSuffix(".directory") && !key.hasSuffix(".source.directory") {
                 let identifier = String(key.dropLast(".directory".count))
                 let type: NarContentType
-                if identifier.hasPrefix("balloon"), identifier.dropFirst("balloon".count).allSatisfy(\.isNumber) {
-                    type = .balloon
-                } else if identifier.hasPrefix("headline"), identifier.dropFirst("headline".count).allSatisfy(\.isNumber) {
-                    type = .headline
-                } else {
+                guard let bundledType = bundledContentType(identifier) else {
                     continue
                 }
+                type = bundledType
                 guard let destinationName = metadata[key] else { continue }
                 let safeDestinationName = try validatedDirectoryName(destinationName)
                 let sourceName = metadata["\(identifier).source.directory"] ?? safeDestinationName
@@ -406,7 +426,7 @@ public struct NarInstaller: Sendable {
                 guard fileManager.fileExists(atPath: bundledSource.path) else {
                     throw NarInstallError.missingSourceDirectory(safeSourceName)
                 }
-                let destinationRoot = type == .balloon ? roots.balloonsDirectory : roots.headlinesDirectory
+                let destinationRoot = destinationRoot(for: type, roots: roots)
                 operations.append(InstallOperation(
                     source: bundledSource,
                     destination: destinationRoot.appending(path: safeDestinationName, directoryHint: .isDirectory),
@@ -444,10 +464,55 @@ public struct NarInstaller: Sendable {
                 path: directoryName,
                 directoryHint: .isDirectory
             ), type: .headline, name: primaryName, refreshes: refreshes, undeleteMask: undeleteMask))
+        case .plugin, .calendarSkin, .calendarPlugin:
+            operations.append(InstallOperation(
+                source: sourceRoot,
+                destination: destinationRoot(for: contentType, roots: roots).appending(
+                    path: directoryName,
+                    directoryHint: .isDirectory
+                ),
+                type: contentType,
+                name: primaryName,
+                refreshes: refreshes,
+                undeleteMask: undeleteMask
+            ))
         case .package:
             break
         }
         return (operations, acceptedGhostName)
+    }
+
+    private func contentType(_ rawValue: String) -> NarContentType? {
+        let normalized = rawValue.lowercased().replacingOccurrences(of: ".", with: " ")
+        if normalized == "calendar" {
+            return .calendarSkin
+        }
+        return NarContentType(rawValue: normalized)
+    }
+
+    private func bundledContentType(_ identifier: String) -> NarContentType? {
+        for (prefix, type) in [
+            ("calendar.plugin", NarContentType.calendarPlugin),
+            ("calendar.skin", NarContentType.calendarSkin),
+            ("balloon", NarContentType.balloon),
+            ("headline", NarContentType.headline),
+            ("plugin", NarContentType.plugin)
+        ] where identifier.hasPrefix(prefix) && identifier.dropFirst(prefix.count).allSatisfy(\.isNumber) {
+            return type
+        }
+        return nil
+    }
+
+    private func destinationRoot(for type: NarContentType, roots: NarInstallationRoots) -> URL {
+        switch type {
+        case .balloon: roots.balloonsDirectory
+        case .headline: roots.headlinesDirectory
+        case .plugin: roots.pluginsDirectory
+        case .calendarSkin: roots.calendarSkinsDirectory
+        case .calendarPlugin: roots.calendarPluginsDirectory
+        case .ghost: roots.ghostsDirectory
+        case .shell, .package: roots.ghostsDirectory
+        }
     }
 
     private func installCopy(

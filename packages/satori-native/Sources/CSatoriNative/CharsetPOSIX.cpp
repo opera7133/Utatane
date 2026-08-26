@@ -42,5 +42,12 @@ std::string UTF8toSJIS(const std::string &value) {
         normalized.replace(position, unicodeMinus.size(), "-");
         ++position;
     }
+    const std::string waveDash = "\xE3\x80\x9C";
+    const std::string fullwidthTilde = "\xEF\xBD\x9E";
+    position = 0;
+    while ((position = normalized.find(waveDash, position)) != std::string::npos) {
+        normalized.replace(position, waveDash.size(), fullwidthTilde);
+        position += fullwidthTilde.size();
+    }
     return convert(normalized, "CP932", "UTF-8");
 }

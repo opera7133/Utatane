@@ -33,6 +33,7 @@ public protocol NativeSaoriWindowControlling: Sendable {
 }
 
 public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable {
+    private let lock = NSLock()
     private let baseDirectoryURL: URL
     private let windowController: (any NativeSaoriWindowControlling)?
     private let externalModuleFactory: (@Sendable (URL) -> (any ExternalSaoriModule)?)?
@@ -50,6 +51,10 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
     }
 
     public func load(_ path: String) {
+        lock.withLock { loadUnlocked(path) }
+    }
+
+    private func loadUnlocked(_ path: String) {
         let key = moduleKey(path)
         guard modules[key] == nil, externalModules[key] == nil else { return }
         switch key {
@@ -68,13 +73,17 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
     }
 
     public func unload(_ path: String) {
-        modules.removeValue(forKey: moduleKey(path))?.unload()
-        externalModules.removeValue(forKey: moduleKey(path))
+        lock.withLock {
+            modules.removeValue(forKey: moduleKey(path))?.unload()
+            externalModules.removeValue(forKey: moduleKey(path))
+        }
     }
 
     public func call(_ path: String, arguments: [String]) -> String {
-        let key = moduleKey(path)
-        return modules[key]?.call(arguments) ?? externalModules[key]?.call(arguments: arguments) ?? ""
+        lock.withLock {
+            let key = moduleKey(path)
+            return modules[key]?.call(arguments) ?? externalModules[key]?.call(arguments: arguments) ?? ""
+        }
     }
 
     public func response(path: String, request: String) -> String {

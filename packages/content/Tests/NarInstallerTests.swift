@@ -75,6 +75,31 @@ func `installs a headline NAR into the headline root`() throws {
 }
 
 @Test
+func `installs plugin and calendar NAR types into dedicated roots`() throws {
+    for (rawType, expectedType, folder) in [
+        ("plugin", NarContentType.plugin, "Plugins"),
+        ("calendar skin", NarContentType.calendarSkin, "Calendar/Skins"),
+        ("calendar plugin", NarContentType.calendarPlugin, "Calendar/Plugins"),
+        ("calendar", NarContentType.calendarSkin, "Calendar/Skins")
+    ] {
+        let fixture = try makeFixture()
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        try Data("type,\(rawType)\nname,Test\ndirectory,item\n".utf8).write(
+            to: fixture.source.appending(path: "install.txt")
+        )
+        try Data("payload".utf8).write(to: fixture.source.appending(path: "data.txt"))
+        let archive = try makeArchive(from: fixture.source, at: fixture.root)
+
+        let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+        let destination = fixture.roots.ghostsDirectory.deletingLastPathComponent()
+            .appending(path: "\(folder)/item", directoryHint: .isDirectory)
+        #expect(result.primaryType == expectedType)
+        #expect(result.items == [NarInstalledItem(type: expectedType, name: "Test", url: destination)])
+        #expect(FileManager.default.fileExists(atPath: destination.appending(path: "data.txt").path))
+    }
+}
+
+@Test
 func `honors install accept and reports a missing target`() throws {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -117,14 +142,23 @@ func `installs a ghost and its numbered bundled objects together`() throws {
     let balloon = package.appending(path: "balloon", directoryHint: .isDirectory)
     let secondBalloon = package.appending(path: "balloon-extra", directoryHint: .isDirectory)
     let headline = package.appending(path: "headline", directoryHint: .isDirectory)
+    let plugin = package.appending(path: "plugin", directoryHint: .isDirectory)
+    let calendarSkin = package.appending(path: "calendar-skin", directoryHint: .isDirectory)
+    let calendarPlugin = package.appending(path: "calendar-plugin", directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: ghostMaster, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: balloon, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: secondBalloon, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: headline, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: plugin, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: calendarSkin, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: calendarPlugin, withIntermediateDirectories: true)
     try Data((
         "type,ghost\ndirectory,test-ghost\nballoon.directory,test-balloon\nballoon.source.directory,balloon\n" +
             "balloon1.directory,test-balloon-extra\nballoon1.source.directory,balloon-extra\n" +
-            "headline.directory,test-headline\nheadline.source.directory,headline\n"
+            "headline.directory,test-headline\nheadline.source.directory,headline\n" +
+            "plugin.directory,test-plugin\nplugin.source.directory,plugin\n" +
+            "calendar.skin.directory,test-calendar-skin\ncalendar.skin.source.directory,calendar-skin\n" +
+            "calendar.plugin.directory,test-calendar-plugin\ncalendar.plugin.source.directory,calendar-plugin\n"
     ).utf8).write(to: package.appending(path: "install.txt", directoryHint: .notDirectory))
     try Data("type,ghost\nname,Test Ghost\n".utf8).write(
         to: ghostMaster.appending(path: "descript.txt", directoryHint: .notDirectory)
@@ -143,9 +177,10 @@ func `installs a ghost and its numbered bundled objects together`() throws {
     let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
 
     #expect(result.primaryType == .ghost)
-    #expect(result.installedURLs.count == 4)
-    #expect(result.items.map(\.type) == [.ghost, .balloon, .balloon, .headline])
-    #expect(result.items.map(\.name) == ["test-ghost", "test-balloon", "test-balloon-extra", "test-headline"])
+    #expect(result.installedURLs.count == 7)
+    #expect(result.items.map(\.type) == [
+        .ghost, .balloon, .balloon, .calendarPlugin, .calendarSkin, .headline, .plugin
+    ])
     #expect(FileManager.default.fileExists(atPath: fixture.roots.ghostsDirectory
             .appending(path: "test-ghost/ghost/master/descript.txt").path))
     #expect(FileManager.default.fileExists(atPath: fixture.roots.balloonsDirectory
@@ -154,6 +189,12 @@ func `installs a ghost and its numbered bundled objects together`() throws {
             .appending(path: "test-balloon-extra/descript.txt").path))
     #expect(FileManager.default.fileExists(atPath: fixture.roots.headlinesDirectory
             .appending(path: "test-headline/descript.txt").path))
+    #expect(FileManager.default.fileExists(atPath: fixture.roots.pluginsDirectory
+            .appending(path: "test-plugin").path))
+    #expect(FileManager.default.fileExists(atPath: fixture.roots.calendarSkinsDirectory
+            .appending(path: "test-calendar-skin").path))
+    #expect(FileManager.default.fileExists(atPath: fixture.roots.calendarPluginsDirectory
+            .appending(path: "test-calendar-plugin").path))
 }
 
 @Test

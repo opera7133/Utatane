@@ -56,6 +56,7 @@ public struct PluginCatalog: Sendable {
         guard let data = try? Data(contentsOf: descriptor), let metadata = metadata(from: data),
               let name = metadata["name"], !name.isEmpty,
               let id = metadata["id"], isValidID(id),
+              metadata["type"]?.lowercased() == nil || metadata["type"]?.lowercased() == "plugin",
               let filename = metadata["filename"],
               let moduleURL = safeFile(named: filename, in: root, mustExist: true)
         else { return nil }

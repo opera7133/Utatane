@@ -149,5 +149,9 @@
   "情報" : "Information",
   "機能" : "Functions",
   "韓国語" : "Korean",
-  "Utataneヘルプ" : "Utatane Help"
+  "Utataneヘルプ" : "Utatane Help",
+  "ネットワーク更新" : "Network Update",
+  "プラグイン" : "Plugins",
+  "プラグイン「%@」を更新中…" : "Updating plugin “%@”…",
+  "実行" : "Run"
 }

@@ -36,6 +36,15 @@ enum AkariValue: Codable, Equatable, Sendable {
         }
     }
 
+    var doubleValue: Double? {
+        switch self {
+        case let .integer(value): Double(value)
+        case let .double(value): value
+        case let .string(value): Double(value)
+        default: nil
+        }
+    }
+
     var typeName: String {
         switch self {
         case .null: "nil"

@@ -14,6 +14,39 @@ import UtataneShell
     #expect(SurfaceCursorStyle(region: "MenuButton") == .pointingHand)
 }
 
+@MainActor
+@Test func `renders all Emily Phase4 default characters`() throws {
+    let repositoryRoot = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let root = repositoryRoot.appending(path: "Content/Local/Ghosts/emily4/shell/master", directoryHint: .isDirectory)
+    guard FileManager.default.fileExists(atPath: root.path) else { return }
+    let shell = try ShellLoader().load(from: root)
+    let controller = SurfaceWindowController()
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 0, 1: 10, 2: 200])
+    #expect(controller.visibleScopes == [0, 1, 2])
+    #expect(controller.renderedImage(for: 2) != nil)
+    controller.hideAll()
+}
+
+@MainActor
+@Test func `renders Juda System default characters`() throws {
+    let repositoryRoot = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let root = repositoryRoot.appending(path: "Content/Local/Ghosts/Juda-System/shell/master", directoryHint: .isDirectory)
+    guard FileManager.default.fileExists(atPath: root.path) else { return }
+    let shell = try ShellLoader().load(from: root)
+    let controller = SurfaceWindowController()
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 0, 1: 10])
+    #expect(controller.visibleScopes == [0, 1])
+    controller.hideAll()
+}
+
 @Test func `head strokes emit at a finer movement interval`() {
     #expect(SurfaceStrokeEventPolicy.minimumDistance(for: "Head") == 2)
     #expect(SurfaceStrokeEventPolicy.minimumDistance(for: "head") == 2)
@@ -1207,8 +1240,11 @@ func `dismisses balloons without discarding dialogue surfaces`() async throws {
     let player = SakuraScriptPlayer(
         surfaceWindowController: surfaceController,
         balloonWindowController: balloonController,
-        postDialogueDismissalMilliseconds: 20
+        postDialogueDismissalMilliseconds: 20,
+        surfaceRestoreDelayMilliseconds: 40
     )
+    var didRequestSurfaceRestore = false
+    player.onSurfaceRestore = { didRequestSurfaceRestore = true }
     let balloon = BalloonDefinition(
         directory: directory,
         name: "test",
@@ -1235,6 +1271,11 @@ func `dismisses balloons without discarding dialogue surfaces`() async throws {
     #expect(balloonController.visibleScopes.isEmpty)
     #expect(surfaceController.surfaceID(for: 0) == 1)
     #expect(surfaceController.surfaceID(for: 1) == 11)
+    #expect(!didRequestSurfaceRestore)
+    for _ in 0 ..< 100 where !didRequestSurfaceRestore {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(didRequestSurfaceRestore)
 }
 
 @Test

@@ -1256,7 +1256,7 @@ private struct UtataneRootView: View {
             scriptPlayer.onPlaybackFinished = {
                 surfaceWindowController.setPresentationHidden(false)
             }
-            scriptPlayer.onDialogueDismissed = {
+            scriptPlayer.onSurfaceRestore = {
                 sendEvent(.shiori(
                     id: "OnSurfaceRestore",
                     references: currentSurfaceReferences(for: surfaceWindowController)
@@ -2675,25 +2675,42 @@ private struct UtataneRootView: View {
         .submenu(
             title: String(localized: "プラグイン"),
             items: installedPlugins.map { plugin in
-                .action(
-                    title: plugin.name,
-                    isEnabled: isNativePlugin(plugin),
-                    handler: {
-                        Task {
-                            let script = await invokePlugin(
-                                target: plugin.id,
-                                event: "OnMenuExec",
-                                arguments: pluginMenuReferences(),
-                                reflectsResponse: true
-                            )
-                            if let script, let balloon {
-                                scriptPlayer.play(script, balloon: balloon)
-                            }
-                        }
-                    }
-                )
+                .submenu(title: plugin.name, items: pluginMenuItems(for: plugin))
             }
         )
+    }
+
+    private func pluginMenuItems(for plugin: InstalledPlugin) -> [SurfaceContextMenuItem] {
+        var items: [SurfaceContextMenuItem] = [
+            .action(
+                title: String(localized: "実行"),
+                isEnabled: isNativePlugin(plugin),
+                handler: {
+                    Task {
+                        let script = await invokePlugin(
+                            target: plugin.id,
+                            event: "OnMenuExec",
+                            arguments: pluginMenuReferences(),
+                            reflectsResponse: true
+                        )
+                        if let script, let balloon {
+                            scriptPlayer.play(script, balloon: balloon)
+                        }
+                    }
+                }
+            )
+        ]
+        if let readmeURL = plugin.readmeURL {
+            items.append(.action(title: "README", handler: { NSWorkspace.shared.open(readmeURL) }))
+        }
+        if plugin.homeURL != nil {
+            items.append(.action(
+                title: String(localized: "ネットワーク更新"),
+                isEnabled: !isUpdatingContent,
+                handler: { Task { await update(plugin: plugin) } }
+            ))
+        }
+        return items
     }
 
     private func pluginMenuReferences() -> [String] {
@@ -3222,6 +3239,42 @@ private struct UtataneRootView: View {
                 showError(error.localizedDescription)
             }
         }
+    }
+
+    private func update(plugin: InstalledPlugin) async {
+        guard !isUpdatingContent, let homeURL = plugin.homeURL else { return }
+        isUpdatingContent = true
+        let status = statusWindowController.show(String(
+            format: String(localized: "プラグイン「%@」を更新中…"),
+            plugin.name
+        ))
+        defer {
+            isUpdatingContent = false
+            statusWindowController.hide(token: status)
+        }
+        await pluginRuntime.unloadAll()
+        do {
+            let result = try await ContentNetworkUpdater().update(
+                rootDirectory: plugin.directory,
+                homeURL: homeURL
+            )
+            AppLogStore.shared.info(
+                result.changedFiles.isEmpty
+                    ? "プラグイン「\(plugin.name)」は最新です"
+                    : "プラグイン「\(plugin.name)」を更新しました (\(result.changedFiles.count)ファイル)",
+                category: "Plugin",
+                details: result.changedFiles.isEmpty ? nil : result.changedFiles.joined(separator: "\n")
+            )
+        } catch {
+            AppLogStore.shared.error(
+                "プラグイン「\(plugin.name)」の更新に失敗しました: \(error.localizedDescription)",
+                category: "Plugin",
+                details: String(describing: error)
+            )
+            showError(error.localizedDescription)
+        }
+        await reloadPlugins()
+        configureContextMenu()
     }
 
     private func playUpdateProgress(
@@ -3997,7 +4050,10 @@ private struct UtataneRootView: View {
         let roots = NarInstallationRoots(
             ghostsDirectory: ContentRoot.ghostsDirectory,
             balloonsDirectory: ContentRoot.balloonsDirectory,
-            headlinesDirectory: ContentRoot.headlinesDirectory
+            headlinesDirectory: ContentRoot.headlinesDirectory,
+            pluginsDirectory: ContentRoot.pluginsDirectory,
+            calendarSkinsDirectory: ContentRoot.calendarSkinsDirectory,
+            calendarPluginsDirectory: ContentRoot.calendarPluginsDirectory
         )
         let selectedGhostDirectory = currentGhost?.rootDirectory
         let activeGhostDirectories = activeGhostInstallTargets()
@@ -4087,6 +4143,7 @@ private struct UtataneRootView: View {
                 }
                 installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonReadDirectories)
                 reloadHeadlines()
+                await reloadPlugins()
                 configureContextMenu()
 
                 if let lastGhost = installedItems.last(where: { $0.type == .ghost }) {
@@ -4372,8 +4429,8 @@ func startupInformationEvents(
         ("installedplugin", indexed(installedPlugins.map { [$0.name, $0.id].joined(separator: "\u{1}") })),
         ("configuredbiffname", [:]),
         ("pluginpathlist", indexed(ContentRoot.pluginReadDirectories.map(\.path))),
-        ("calendarskinpathlist", [:]),
-        ("calendarpluginpathlist", [:]),
+        ("calendarskinpathlist", [0: ContentRoot.calendarSkinsDirectory.path]),
+        ("calendarpluginpathlist", [0: ContentRoot.calendarPluginsDirectory.path]),
         ("rateofusegraph", [0: [ghost.name, mainName, partnerName, "0", "0", "0", "boot"]
                 .joined(separator: "\u{1}")]),
         ("enable_log", [0: "1"]),
@@ -4706,7 +4763,9 @@ enum ContentRoot {
             ghostsDirectory,
             balloonsDirectory,
             headlinesDirectory,
-            pluginsDirectory
+            pluginsDirectory,
+            calendarSkinsDirectory,
+            calendarPluginsDirectory
         ] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
@@ -5044,6 +5103,14 @@ enum ContentRoot {
             return URL(filePath: override, directoryHint: .isDirectory)
         }
         return contentDirectory.appending(path: "Plugins", directoryHint: .isDirectory)
+    }
+
+    static var calendarSkinsDirectory: URL {
+        contentDirectory.appending(path: "Calendar/Skins", directoryHint: .isDirectory)
+    }
+
+    static var calendarPluginsDirectory: URL {
+        contentDirectory.appending(path: "Calendar/Plugins", directoryHint: .isDirectory)
     }
 
     static var pluginReadDirectories: [URL] {

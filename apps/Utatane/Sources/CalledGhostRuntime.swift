@@ -366,7 +366,7 @@ final class CalledGhostRuntime {
         }
         player.onDialogueContent = { [weak self] in self?.surfaceController.setPresentationHidden(false) }
         player.onPlaybackFinished = { [weak self] in self?.surfaceController.setPresentationHidden(false) }
-        player.onDialogueDismissed = { [weak self] in
+        player.onSurfaceRestore = { [weak self] in
             guard let self else { return }
             send(.shiori(id: "OnSurfaceRestore", references: currentSurfaceReferences()))
         }

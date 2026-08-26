@@ -25,6 +25,13 @@ private struct AkariProgram: Sendable {
 }
 
 public actor NativeAkariPersonalityEngine: PersonalityEngine {
+    private struct ThreadChanges: Sendable {
+        var variables: [String: AkariValue]
+        var staticVariables: [String: AkariValue]
+        var loadedSaori: [String: String]
+        var unloadedSaori: Set<String>
+    }
+
     private var program: AkariProgram
     private var staticVariables: [String: AkariValue] = [:]
     private var activeStaticBindings: [String: String] = [:]
@@ -35,6 +42,9 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
     private let httpFetcher: any AkariHTTPFetching
     private var loadedSaori: [String: String] = [:]
     private var loadedPluginLifecycle = false
+    private var pendingThreadFunctions: [String] = []
+    private var backgroundTasks: [UUID: Task<Void, Never>] = [:]
+    private let persistsVariables: Bool
     private let adapter = GhostEventShioriAdapter()
 
     public init(
@@ -50,6 +60,7 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
         )
         self.saoriCaller = saoriCaller ?? NativeSaoriRegistry(baseDirectoryURL: masterDirectoryURL)
         self.httpFetcher = httpFetcher
+        persistsVariables = true
         program = try Self.loadProgram(from: masterDirectoryURL)
         if let data = try? Data(contentsOf: self.variableStoreURL) {
             let saved = (try? JSONDecoder().decode([String: AkariValue].self, from: data))
@@ -58,6 +69,26 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
                 program.variables.merge(saved) { _, saved in saved }
             }
         }
+    }
+
+    private init(
+        program: AkariProgram,
+        staticVariables: [String: AkariValue],
+        variableStoreURL: URL,
+        fileSystem: AkariVirtualFileSystem,
+        saoriCaller: (any NativeSaoriCalling)?,
+        httpFetcher: any AkariHTTPFetching,
+        loadedSaori: [String: String]
+    ) {
+        self.program = program
+        self.staticVariables = staticVariables
+        self.variableStoreURL = variableStoreURL
+        self.fileSystem = fileSystem
+        self.saoriCaller = saoriCaller
+        self.httpFetcher = httpFetcher
+        self.loadedSaori = loadedSaori
+        loadedPluginLifecycle = true
+        persistsVariables = false
     }
 
     public static func supports(masterDirectoryURL: URL) -> Bool {
@@ -95,6 +126,7 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
     }
 
     public func pluginResponse(for request: ShioriRequest) throws -> ShioriResponse {
+        defer { launchPendingThreads(request: request) }
         if !loadedPluginLifecycle {
             loadedPluginLifecycle = true
             if executeAZR(function: "load", arguments: [], request: request, depth: 0) == nil {
@@ -164,6 +196,71 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
             response.headers = ShioriHeaders(headers)
         }
         return response
+    }
+
+    public func waitForBackgroundTasks() async {
+        while let task = backgroundTasks.values.first {
+            await task.value
+        }
+    }
+
+    private func launchPendingThreads(request: ShioriRequest) {
+        let functions = pendingThreadFunctions
+        pendingThreadFunctions.removeAll()
+        for function in functions {
+            let baselineVariables = program.variables
+            let baselineStaticVariables = staticVariables
+            let baselineLoadedSaori = loadedSaori
+            let worker = NativeAkariPersonalityEngine(
+                program: program,
+                staticVariables: staticVariables,
+                variableStoreURL: variableStoreURL,
+                fileSystem: fileSystem,
+                saoriCaller: saoriCaller,
+                httpFetcher: httpFetcher,
+                loadedSaori: loadedSaori
+            )
+            let identifier = UUID()
+            backgroundTasks[identifier] = Task.detached { [weak self] in
+                let changes = await worker.runThread(
+                    function: function,
+                    request: request,
+                    baselineVariables: baselineVariables,
+                    baselineStaticVariables: baselineStaticVariables,
+                    baselineLoadedSaori: baselineLoadedSaori
+                )
+                await self?.applyThreadChanges(changes, identifier: identifier)
+            }
+        }
+    }
+
+    private func runThread(
+        function: String,
+        request: ShioriRequest,
+        baselineVariables: [String: AkariValue],
+        baselineStaticVariables: [String: AkariValue],
+        baselineLoadedSaori: [String: String]
+    ) -> ThreadChanges {
+        _ = executeAZR(function: function, arguments: [], request: request, depth: 1)
+        return ThreadChanges(
+            variables: program.variables.filter { baselineVariables[$0.key] != $0.value },
+            staticVariables: staticVariables.filter { baselineStaticVariables[$0.key] != $0.value },
+            loadedSaori: loadedSaori.filter { baselineLoadedSaori[$0.key] != $0.value },
+            unloadedSaori: Set(baselineLoadedSaori.keys).subtracting(loadedSaori.keys)
+        )
+    }
+
+    private func applyThreadChanges(_ changes: ThreadChanges, identifier: UUID) {
+        program.variables.merge(changes.variables) { _, newer in newer }
+        staticVariables.merge(changes.staticVariables) { _, newer in newer }
+        loadedSaori.merge(changes.loadedSaori) { _, newer in newer }
+        for identifier in changes.unloadedSaori {
+            loadedSaori.removeValue(forKey: identifier)
+        }
+        if !changes.variables.isEmpty {
+            try? save()
+        }
+        backgroundTasks.removeValue(forKey: identifier)
     }
 
     private static func loadProgram(from master: URL) throws -> AkariProgram {
@@ -336,12 +433,27 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
     private func render(_ source: String, request: ShioriRequest) -> String? {
         guard var text = interpolate(source, request: request) else { return nil }
         text = replaceSurfaces(in: text)
-        var script = ""
-        for (index, part) in text.components(separatedBy: "：").enumerated() {
-            script += index.isMultiple(of: 2) ? "\\0" : "\\1"
-            script += part
+        var script = "\\0"
+        var scope = 0
+        var index = text.startIndex
+        while index < text.endIndex {
+            if text[index] == "：", isSpeakerSeparator(in: text, at: index) {
+                scope = scope == 0 ? 1 : 0
+                script += scope == 0 ? "\\0" : "\\1"
+            } else {
+                script.append(text[index])
+            }
+            index = text.index(after: index)
         }
         return script + "\\e"
+    }
+
+    private func isSpeakerSeparator(in source: String, at index: String.Index) -> Bool {
+        if index == source.startIndex || source[source.index(before: index)].isNewline {
+            return true
+        }
+        let remainder = source[source.index(after: index)...]
+        return remainder.hasPrefix("\\s[")
     }
 
     private func interpolate(_ source: String, request: ShioriRequest) -> String? {
@@ -389,7 +501,9 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
         case "SET":
             guard arguments.count >= 2 else { return nil }
             program.variables[arguments[0].stringValue] = arguments[1]
-            try? save()
+            if persistsVariables {
+                try? save()
+            }
             return .string("")
         case "STRLEN": return arguments.first.map { .integer($0.stringValue.count) }
         case "STRREPLACE":
@@ -541,9 +655,16 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
             return .integer(fileSystem.writeData(path: arguments[1].stringValue, data: data) ? 1 : 0)
         case "_CREATE_THREAD":
             guard let function = arguments.first?.stringValue else { return .integer(0) }
-            _ = executeAZR(function: function, arguments: [], request: request, depth: 1)
+            guard program.functions[function] != nil else { return .integer(0) }
+            pendingThreadFunctions.append(function)
             return .integer(1)
-        case "_SLEEP": return .null
+        case "_SLEEP":
+            guard !persistsVariables,
+                  let seconds = arguments.first?.doubleValue,
+                  seconds >= 0, seconds <= 60
+            else { return .null }
+            Thread.sleep(forTimeInterval: seconds)
+            return .null
         default:
             if let result = AkariPureFunctions.evaluate(name, arguments: arguments) {
                 return result

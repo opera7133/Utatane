@@ -30,6 +30,21 @@ import Testing
     #expect(try PluginCatalog().load(from: [root]).isEmpty)
 }
 
+@Test func `accepts omitted or plugin type and rejects another content type`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    for (name, type) in [("omitted", nil), ("plugin", "plugin"), ("ghost", "ghost")] {
+        let directory = root.appending(path: name, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data().write(to: directory.appending(path: "module.dylib"))
+        let typeLine = type.map { "type,\($0)\n" } ?? ""
+        try Data("name,\(name)\nid,\(name)\n\(typeLine)filename,module.dylib\n".utf8)
+            .write(to: directory.appending(path: "descript.txt"))
+    }
+
+    #expect(try PluginCatalog().load(from: [root]).map(\.id).sorted() == ["omitted", "plugin"])
+}
+
 @Test func `serializes and parses PLUGIN 2 messages`() throws {
     let request = PluginRequest(method: "GET", id: "OnMenuExec", sender: "Ria", references: [0: "1"])
     #expect(request.serialized().hasPrefix("GET PLUGIN/2.0\r\n"))

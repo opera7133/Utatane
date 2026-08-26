@@ -119,7 +119,7 @@ UKADOC掲載イベント数: 290
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
 | [`OnSurfaceChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceChange) | 🟡 | 通知経路のUKADOC照合 | 低 | SakuraScript等でsurfaceが変わった時に本体側・相方側の現在IDをReference0〜1へ通知。NOTIFYメソッドの区別は未対応 |
-| [`OnSurfaceRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceRestore) | 🟡 | 通知経路のUKADOC照合 | 低 | 会話消去時に現在surfaceをReference0〜1へ通知。UKADOCのバルーン消去後15秒という発生時刻とは異なる |
+| [`OnSurfaceRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceRestore) | ✅ | 通知経路のUKADOC照合 | 低 | バルーン消去15秒後に、その時点の現在surfaceをReference0〜1へ通知。待機中に次の会話が始まった場合は通知を取り消す |
 | [`OnOtherSurfaceChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherSurfaceChange) | 🟡 | 通知経路のUKADOC照合 | 低 | 他の実行中ゴーストへ本体名・Sakura名・scope・新旧surface・矩形をReference0〜5で通知。othersurfacechange無効化設定は未対応 |
 
 ## マウスイベント
@@ -445,8 +445,8 @@ UKADOC掲載イベント数: 290
 | [`balloonpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#balloonpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にUtataneが参照するバルーン格納フォルダの絶対パスをNOTIFY。DebugではBundledとLocalの双方を含む |
 | [`headlinepathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#headlinepathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にヘッドライン格納フォルダの絶対パスをReference0へNOTIFY |
 | [`pluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#pluginpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にUtataneが参照するプラグイン格納フォルダの絶対パスをNOTIFY。DebugではLocalとApplication Supportの双方を含む |
-| [`calendarskinpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#calendarskinpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に空のNOTIFYを送り、カレンダースキン格納パスがない状態を通知。カレンダー機能自体は未実装 |
-| [`calendarpluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#calendarpluginpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に空のNOTIFYを送り、カレンダープラグイン格納パスがない状態を通知。カレンダー機能自体は未実装 |
+| [`calendarskinpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#calendarskinpathlist) | ✅ | 通知経路のUKADOC照合 | 低 | 起動時にカレンダースキン格納パスをNOTIFY |
+| [`calendarpluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#calendarpluginpathlist) | ✅ | 通知経路のUKADOC照合 | 低 | 起動時にカレンダープラグイン格納パスをNOTIFY |
 | [`rateofusegraph`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#rateofusegraph) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動中ゴーストをboot状態の1レコードとしてNOTIFY。起動回数・時間・割合は0固定で履歴集計は未実装 |
 | [`enable_log`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#enable_log) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にUtataneのアプリ内ログが有効であることをReference0=1でNOTIFY。SSP開発パレット相当の切替UIは未実装 |
 | [`enable_debug`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#enable_debug) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にDebugビルドなら1、Releaseなら0をReference0へNOTIFY。実行中の切替UIは未実装 |

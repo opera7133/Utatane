@@ -43,9 +43,52 @@ import UtataneShiori
         ])
     )
     let initialMenuResponse = try await engine.pluginResponse(for: menuRequest)
+    await engine.waitForBackgroundTasks()
     let menuResponse = try await engine.pluginResponse(for: menuRequest)
+    await engine.waitForBackgroundTasks()
     #expect(initialMenuResponse.headers["Script"]?.isEmpty != false)
     #expect(menuResponse.headers["Script"]?.contains("booting") == true)
+}
+
+@Test func `create thread runs on an isolated worker and merges changed globals`() async throws {
+    let master = try fixture(
+        "＊unused\n・unused",
+        azr: """
+        int backgroundValue = 0;
+
+        array _customrequest(dict request) {
+            return {"PLUGIN/2.0 200 OK", ""};
+        }
+
+        string OnMenuExec(dict ref) {
+            _create_thread("BackgroundWork");
+            return "started";
+        }
+
+        BackgroundWork() {
+            _sleep(0.02);
+            backgroundValue = 42;
+        }
+
+        string OnRead(dict ref) {
+            return "value=" + backgroundValue;
+        }
+        """
+    )
+    let engine = try NativeAkariPersonalityEngine(masterDirectoryURL: master)
+    let request: (String) -> ShioriRequest = { id in
+        ShioriRequest(
+            method: "GET",
+            version: "PLUGIN/2.0",
+            headers: ShioriHeaders([ShioriHeader(name: "ID", value: id)])
+        )
+    }
+
+    let started = try await engine.pluginResponse(for: request("OnMenuExec"))
+    #expect(started.headers["Script"] == "started")
+    await engine.waitForBackgroundTasks()
+    let completed = try await engine.pluginResponse(for: request("OnRead"))
+    #expect(completed.headers["Script"] == "value=42")
 }
 
 @Test func `loads plain akari event resources`() async throws {
@@ -59,6 +102,16 @@ import UtataneShiori
     let engine = try NativeAkariPersonalityEngine(masterDirectoryURL: master)
     let script = try await engine.handle(event: .boot)
     #expect(script?.rawValue == #"\0\s[0]こんにちは。\1\s[10]相方。\e"#)
+}
+
+@Test func `speaker separators only switch scope at the start of a line`() async throws {
+    let master = try fixture("""
+    ＊OnBoot
+    ・（０）時刻：正午\n：（１０）相方。
+    """)
+    let engine = try NativeAkariPersonalityEngine(masterDirectoryURL: master)
+    let script = try await engine.handle(event: .boot)
+    #expect(script?.rawValue == "\\0\\s[0]時刻：正午\n\\1\\s[10]相方。\\e")
 }
 
 @Test func `substitutes references`() async throws {

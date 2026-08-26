@@ -99,7 +99,10 @@ public struct ShellLoader: Sendable {
 
     public func loadElement(filename: String, from shellDirectory: URL) throws -> SurfaceAsset {
         let root = shellDirectory.standardizedFileURL.resolvingSymlinksInPath()
-        let normalizedFilename = filename.replacingOccurrences(of: "\\", with: "/")
+        var normalizedFilename = filename.replacingOccurrences(of: "\\", with: "/")
+        while normalizedFilename.lowercased().hasSuffix(".png.png") {
+            normalizedFilename.removeLast(4)
+        }
         let imageURL = shellDirectory
             .appending(path: normalizedFilename, directoryHint: .notDirectory)
             .standardizedFileURL
