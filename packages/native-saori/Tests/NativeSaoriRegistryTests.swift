@@ -12,6 +12,28 @@ import Testing
     #expect(windows.moves == [.init(scope: 1, x: 20, speed: 5)])
 }
 
+@Test func `system info reports macOS and processor count`() {
+    let registry = NativeSaoriRegistry(baseDirectoryURL: URL(filePath: "/ghost/master"))
+    registry.load("saori/saori_cpuid.dll")
+    #expect(registry.call("saori_cpuid.dll", arguments: ["os.name"]) == "macOS")
+    #expect(Int(registry.call("saori_cpuid.dll", arguments: ["cpu.num"])) ?? 0 > 0)
+}
+
+@Test func `keyword module loads Shift JIS classifications beside its module`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let moduleDirectory = root.appending(path: "saori", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: moduleDirectory, withIntermediateDirectories: true)
+    let source = "飲み物＝日本酒、酒\r\n場所＝酒場\r\n"
+    let data = try #require(source.data(using: .shiftJIS))
+    try data.write(to: moduleDirectory.appending(path: "keyword.txt"))
+
+    let registry = NativeSaoriRegistry(baseDirectoryURL: root)
+    registry.load("saori/kenonoke.dll")
+    #expect(registry.call("kenonoke.dll", arguments: ["GETKEYWORD", "酒場で日本酒を飲む"])
+        == "場所\u{1}飲み物")
+}
+
 private final class RecordingWindowController: NativeSaoriWindowControlling, @unchecked Sendable {
     struct Move: Equatable { var scope: Int; var x: Int; var speed: Int }
     var moves: [Move] = []

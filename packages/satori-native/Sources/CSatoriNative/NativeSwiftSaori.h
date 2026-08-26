@@ -9,6 +9,6 @@ public:
     virtual string request(const string&);
     virtual string get_version(const string&);
     virtual int request(const std::vector<string>&, bool, string&, std::vector<string>&);
-private:
+protected:
     string path;
 };

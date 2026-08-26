@@ -82,7 +82,10 @@ OnMouseDoubleClick
 		if TOINT(ria_spoiling_until) > GETSECCOUNT() {
 			_talks = RiaSpoilingLegDoubleClickTalks
 			if ISFUNC('RiaLocalSpoilingLegTalks') {
-				_talks ,= EVAL('RiaLocalSpoilingLegTalks')
+				_local_leg = EVAL('RiaLocalSpoilingLegTalks')
+				if ARRAYSIZE(_local_leg) > 0 {
+					_talks ,= _local_leg
+				}
 			}
 			_talks[RAND(ARRAYSIZE(_talks))]
 		}
@@ -92,7 +95,10 @@ OnMouseDoubleClick
 				_talks ,= '\0\s[202]スカートの裾、気になる？\w5私は別に。お兄が触らなければ。\e'
 			}
 			if ISFUNC('RiaLocalLegDoubleClickTalks') {
-				_talks ,= EVAL('RiaLocalLegDoubleClickTalks')
+				_local_leg = EVAL('RiaLocalLegDoubleClickTalks')
+				if ARRAYSIZE(_local_leg) > 0 {
+					_talks ,= _local_leg
+				}
 			}
 			_talks[RAND(ARRAYSIZE(_talks))]
 		}

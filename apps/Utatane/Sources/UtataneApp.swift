@@ -114,6 +114,12 @@ struct UtataneApp: App {
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)
             }
+            CommandGroup(replacing: .help) {
+                Button("Utataneヘルプ") {
+                    UtataneHelp.open()
+                }
+                .keyboardShortcut("?", modifiers: .command)
+            }
         }
     }
 
@@ -141,6 +147,16 @@ struct UtataneApp: App {
         }
         NSApplication.shared.orderFrontStandardAboutPanel(options: options)
         NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+}
+
+private enum UtataneHelp {
+    static func open() {
+        guard let url = Bundle.main.url(forResource: "UtataneHelp", withExtension: "html") else {
+            NSSound.beep()
+            return
+        }
+        NSWorkspace.shared.open(url)
     }
 }
 
@@ -2164,6 +2180,7 @@ private struct UtataneRootView: View {
             }
         case .openHelp:
             let ghost = calledRuntime?.ghost ?? currentGhost
+            var openedGhostHelp = false
             if let root = ghost?.rootDirectory {
                 let candidates = [
                     root.appending(path: "help.html"),
@@ -2173,7 +2190,11 @@ private struct UtataneRootView: View {
                 ]
                 if let targetURL = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
                     NSWorkspace.shared.open(targetURL)
+                    openedGhostHelp = true
                 }
+            }
+            if !openedGhostHelp {
+                UtataneHelp.open()
             }
         case let .openFile(filePath):
             let baseDir = (calledRuntime?.ghost ?? currentGhost)?.rootDirectory.appending(path: "ghost/master")
@@ -2387,6 +2408,11 @@ private struct UtataneRootView: View {
     private func configureContextMenu() {
         surfaceWindowController.contextMenuItems = {
             [
+                networkUpdateMenu(),
+                headlineMenu(),
+                functionMenu(),
+                settingsMenu(),
+                .separator,
                 .submenu(
                     title: String(localized: "ゴースト切り替え"),
                     items: model.ghosts.map { ghost in
@@ -2418,8 +2444,63 @@ private struct UtataneRootView: View {
                         )
                     }
                 ),
-                .submenu(title: "README", items: readmeMenuItems()),
+                informationMenu(),
                 .separator,
+                .action(title: String(localized: "Utataneを終了"), handler: { NSApplication.shared.terminate(nil) })
+            ]
+        }
+        for runtime in calledGhosts.values {
+            runtime.contextMenuItems = { calledGhostContextMenu(for: runtime) }
+        }
+    }
+
+    private func networkUpdateMenu() -> SurfaceContextMenuItem {
+        .submenu(
+            title: String(localized: "ネットワーク更新"),
+            items: [
+                .action(
+                    title: String(localized: "ゴーストを更新"),
+                    isEnabled: currentGhost != nil && session != nil && !isUpdatingContent,
+                    handler: { Task { await updateCurrentGhost() } }
+                ),
+                .action(
+                    title: String(localized: "バルーンを更新"),
+                    isEnabled: balloon != nil && !isUpdatingContent,
+                    handler: { Task { await updateCurrentBalloon() } }
+                )
+            ]
+        )
+    }
+
+    private func headlineMenu() -> SurfaceContextMenuItem {
+        .submenu(
+            title: String(localized: "RSS / ヘッドライン"),
+            items: installedHeadlines.map { headline in
+                switch headline.kind {
+                case let .rss(feedURL):
+                    .action(title: headline.name, handler: {
+                        Task { await fetchRSS(url: feedURL) }
+                    })
+                case .legacyDLL:
+                    .action(
+                        title: headline.name,
+                        isEnabled: headline.siteURL != nil
+                            && (ConfigHeadlineSensor.canLoad(headline)
+                                || ContentRoot.windowsHeadlineConfiguration() != nil),
+                        handler: { Task { await fetchLegacyHeadline(headline) } }
+                    )
+                }
+            } + [
+                .separator,
+                .action(title: String(localized: "URLを指定して取得…"), handler: showRSSInput)
+            ]
+        )
+    }
+
+    private func functionMenu() -> SurfaceContextMenuItem {
+        .submenu(
+            title: String(localized: "機能"),
+            items: [
                 .action(
                     title: String(localized: "ランダムトーク"),
                     isEnabled: session != nil,
@@ -2438,51 +2519,19 @@ private struct UtataneRootView: View {
                         .action(title: String(localized: "SSPフォルダから取り込む…"), handler: selectAndImportSSPDirectory),
                         .action(title: String(localized: "Finderで表示"), handler: showContentFolder)
                     ]
-                ),
-                .submenu(
-                    title: String(localized: "ネットワーク更新"),
-                    items: [
-                        .action(
-                            title: String(localized: "ゴーストを更新"),
-                            isEnabled: currentGhost != nil && session != nil && !isUpdatingContent,
-                            handler: { Task { await updateCurrentGhost() } }
-                        ),
-                        .action(
-                            title: String(localized: "バルーンを更新"),
-                            isEnabled: balloon != nil && !isUpdatingContent,
-                            handler: { Task { await updateCurrentBalloon() } }
-                        )
-                    ]
-                ),
-                .submenu(
-                    title: String(localized: "RSS / ヘッドライン"),
-                    items: installedHeadlines.map { headline in
-                        switch headline.kind {
-                        case let .rss(feedURL):
-                            .action(title: headline.name, handler: {
-                                Task { await fetchRSS(url: feedURL) }
-                            })
-                        case .legacyDLL:
-                            .action(
-                                title: headline.name,
-                                isEnabled: headline.siteURL != nil
-                                    && (ConfigHeadlineSensor.canLoad(headline)
-                                        || ContentRoot.windowsHeadlineConfiguration() != nil),
-                                handler: { Task { await fetchLegacyHeadline(headline) } }
-                            )
-                        }
-                    } + [
-                        .separator,
-                        .action(title: String(localized: "URLを指定して取得…"), handler: showRSSInput)
-                    ]
-                ),
-                .action(
-                    title: String(localized: "設定"),
-                    handler: {
-                        networkSettings.selectedPane = .general
-                        openSettings()
-                    }
-                ),
+                )
+            ]
+        )
+    }
+
+    private func settingsMenu() -> SurfaceContextMenuItem {
+        .submenu(
+            title: String(localized: "設定"),
+            items: [
+                .action(title: String(localized: "設定"), handler: {
+                    networkSettings.selectedPane = .general
+                    openSettings()
+                }),
                 .action(
                     title: String(localized: "デバッグ画面を表示"),
                     isSelected: networkSettings.showsDebugWindow,
@@ -2495,14 +2544,19 @@ private struct UtataneRootView: View {
                     title: String(localized: "現在のゴーストを再読み込み"),
                     isEnabled: currentGhost != nil && !isTransitioningGhost,
                     handler: { reloadCurrentGhost() }
-                ),
-                .separator,
-                .action(title: String(localized: "Utataneを終了"), handler: { NSApplication.shared.terminate(nil) })
+                )
             ]
-        }
-        for runtime in calledGhosts.values {
-            runtime.contextMenuItems = { calledGhostContextMenu(for: runtime) }
-        }
+        )
+    }
+
+    private func informationMenu() -> SurfaceContextMenuItem {
+        .submenu(
+            title: String(localized: "情報"),
+            items: [
+                .submenu(title: "README", items: readmeMenuItems()),
+                .action(title: String(localized: "Utataneヘルプ"), handler: { UtataneHelp.open() })
+            ]
+        )
     }
 
     private func callGhostMenu() -> SurfaceContextMenuItem {

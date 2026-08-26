@@ -233,9 +233,7 @@ let package = Package(
             sources: [
                 "SatoriBridge.cpp",
                 "CharsetPOSIX.cpp",
-                "NativeKeywordSaori.cpp",
                 "NativeSwiftSaori.cpp",
-                "NativeSystemInfoSaori.cpp",
                 "Vendor/_/Sender.cpp",
                 "Vendor/_/Utilities.cpp",
                 "Vendor/_/calc.cpp",

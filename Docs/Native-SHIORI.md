@@ -9,10 +9,12 @@
 - `mciaudior.dll`: `load`、`play`、`loop`、`stop`
 - `wmove.dll`: `MOVETO`、`MOVETO_INSIDE`、`GET_POSITION`、`GET_DESKTOP_SIZE`
 - `textcopy2.dll`: macOSのクリップボードへの書き込み
+- `saori_cpuid.dll`: macOS、CPU、メモリ情報の取得
+- `kenonoke.dll`: モジュールと同じディレクトリの`keyword.txt`による分類
 
 `wmove.dll`のWindows HWNDは使用せず、さくら側をスコープ0、相方側をスコープ1としてUtataneのサーフェスウィンドウへ接続します。未実装なのは`MOVE`、`ZMOVE`、`WAIT`、`NOTIFY`、`CLEAR`、`STANDBY`などです。
 
-SSUはSATORIに同梱された既存実装を使います。`saori_cpuid.dll`と`kenonoke.dll`も、実ゴーストで検証済みの多値返却とShift_JIS辞書処理を保つため、現時点ではSATORI側に残しています。
+SSUはSATORIに同梱された既存実装を使います。`saori_cpuid.dll`と`kenonoke.dll`はSATORI固有実装から共通レジストリへ移し、SATORIの既存呼び出し構文からも同じ実装を利用します。
 
 外部macOS SHIORIやWindows DLLホストへ任意のSAORIを注入する機構ではありません。ここでいう共通対応は、Utatane内蔵のネイティブSHIORI経路が対象です。
 

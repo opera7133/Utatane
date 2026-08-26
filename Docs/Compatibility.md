@@ -27,4 +27,4 @@
 
 実ゴーストを手元へ置く場所やテスト方法は[開発ガイド](Development.md)と[Native SHIORI / SAORI](Native-SHIORI.md)を参照してください。
 
-`mciaudior.dll`、`wmove.dll`、`textcopy2.dll`はSHIORI非依存の共通レジストリにあり、ネイティブMISAKA、YAYA、SATORI、KAWARIから利用できます。SSUはSATORI同梱実装、`saori_cpuid.dll`と`kenonoke.dll`は現在の実ゴースト互換性を保つためSATORI側の実装を維持しています。
+表にあるネイティブSAORIは、SSUを除いてSHIORI非依存の共通レジストリにあり、ネイティブMISAKA、YAYA、SATORI、KAWARIから利用できます。SSUはSATORI同梱実装を維持しています。

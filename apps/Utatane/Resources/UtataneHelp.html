@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Utatane ヘルプ</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { max-width: 760px; margin: 40px auto; padding: 0 24px 48px; line-height: 1.65; }
+    h1 { font-size: 2rem; margin-bottom: .25rem; }
+    h2 { border-bottom: 1px solid color-mix(in srgb, currentColor 18%, transparent); padding-bottom: .25rem; margin-top: 2rem; }
+    code { background: color-mix(in srgb, currentColor 10%, transparent); border-radius: 4px; padding: .1em .3em; }
+    .lead { color: color-mix(in srgb, currentColor 70%, transparent); }
+  </style>
+</head>
+<body>
+  <h1>Utatane ヘルプ</h1>
+  <p class="lead">Utataneは、伺かのゴーストをmacOSで表示するためのベースウェアです。</p>
+
+  <h2>基本操作</h2>
+  <ul>
+    <li>キャラクターをダブルクリックすると、その部位に応じた反応やメニューが表示されます。</li>
+    <li>キャラクターを右クリックすると、ゴースト、シェル、バルーンの切り替えや設定を開けます。</li>
+    <li>キャラクターとバルーンはドラッグして移動できます。</li>
+    <li>会話中のクリックで早送りし、会話後のクリックでバルーンを閉じます。</li>
+  </ul>
+
+  <h2>コンテンツを追加する</h2>
+  <p>NARファイルをキャラクターへドロップするか、右クリックメニューの「コンテンツ管理」からインストールできます。展開済みのSSPフォルダも同じメニューから取り込めます。</p>
+
+  <h2>設定とトラブル確認</h2>
+  <ul>
+    <li>右クリックメニューの「設定」で、表示倍率、会話速度、ネットワーク更新などを変更できます。</li>
+    <li>表示や会話に問題がある場合は「デバッグ画面を表示」を有効にすると、SHIORI応答や診断を確認できます。</li>
+    <li>ウインドウが画面外へ移動した場合は「ウインドウ位置を初期化」を選びます。</li>
+  </ul>
+
+  <h2>保存場所</h2>
+  <p>追加したコンテンツは <code>~/Library/Application Support/Utatane</code> に保存されます。右クリックメニューの「Finderで表示」から開けます。</p>
+
+  <h2>互換性について</h2>
+  <p>すべてのWindows向けDLLやSakuraScript命令には対応していません。ゴースト固有のREADMEがある場合は、右クリックメニューの「README」から確認できます。</p>
+</body>
+</html>
