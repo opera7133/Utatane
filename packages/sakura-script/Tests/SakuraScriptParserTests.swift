@@ -742,11 +742,13 @@ func `parses character separation and approach commands`() {
 
 @Test
 func `parses old format choice commands with and without marker`() {
-    #expect(SakuraScriptParser().parse(#"\q[0][はい]\q*[1][いいえ]"#) == [
+    #expect(SakuraScriptParser().parse(#"\q[0][はい]\q*[1][いいえ]\q2[talkinterval][普通]"#) == [
         .choice(label: "はい", id: "0", arguments: []),
         .lineBreak(scale: nil),
         .marker,
         .choice(label: "いいえ", id: "1", arguments: []),
+        .lineBreak(scale: nil),
+        .choice(label: "普通", id: "talkinterval", arguments: []),
         .lineBreak(scale: nil)
     ])
 }

@@ -437,6 +437,12 @@ public final class SurfaceWindowController {
         }
     }
 
+    public func restoreSurfaces() {
+        for character in characters.values {
+            character.restore()
+        }
+    }
+
     public func resetWindowPositions() {
         for scope in characters.keys.sorted() {
             positionStore.remove(for: .surface, scope: scope)
@@ -599,7 +605,9 @@ private final class CharacterSurfaceController {
     private weak var imageView: SurfaceImageView?
     private var shell: ShellDefinition?
     private var baseSurfaceID: Int?
+    private var surfaceBaseImage: NSImage?
     private var baseImage: NSImage?
+    private var persistentAnimationLayers: [Int: PersistentAnimationLayer] = [:]
     private var enabledBindGroups: Set<Int> = []
     private var animationTask: Task<Void, Never>?
     private var currentAnimationID: Int?
@@ -699,7 +707,9 @@ private final class CharacterSurfaceController {
         imageView = rendered.view
         self.shell = shell
         baseSurfaceID = surfaceID
+        surfaceBaseImage = rendered.image
         baseImage = rendered.image
+        persistentAnimationLayers.removeAll()
         scheduleAutomaticAnimations()
     }
 
@@ -719,6 +729,9 @@ private final class CharacterSurfaceController {
     }
 
     func playAnimation(id: Int, minimumFrameDurationMilliseconds: Int = 0) {
+        if applyInstantPersistentAnimation(id: id) {
+            return
+        }
         _ = startAnimation(
             id: id,
             minimumFrameDurationMilliseconds: minimumFrameDurationMilliseconds
@@ -895,14 +908,62 @@ private final class CharacterSurfaceController {
         window.orderFront(nil)
         imageView = rendered.view
         baseSurfaceID = surfaceID
+        surfaceBaseImage = rendered.image
         baseImage = rendered.image
+        persistentAnimationLayers.removeAll()
         scheduleAutomaticAnimations()
+    }
+
+    private func applyInstantPersistentAnimation(id: Int) -> Bool {
+        guard let shell,
+              let surfaceBaseImage,
+              let animation = currentSurfaceDefinition?.animations.first(where: { $0.id == id }),
+              animation.patterns.count == 1,
+              let pattern = animation.patterns.first,
+              pattern.waitMilliseconds == 0,
+              pattern.surfaceID >= 0,
+              let operation = surfaceCompositingOperation(for: pattern.method),
+              let overlay = try? renderLayer(surfaceID: pattern.surfaceID, shell: shell, visited: [])
+        else { return false }
+        let offset = animationOffsets[id] ?? SurfacePoint(x: 0, y: 0)
+        persistentAnimationLayers[id] = PersistentAnimationLayer(
+            image: overlay,
+            x: pattern.x + offset.x,
+            y: pattern.y + offset.y,
+            operation: operation
+        )
+        let order = currentSurfaceDefinition?.animations.map(\.id) ?? []
+        let result = order.reversed().reduce(surfaceBaseImage) { image, animationID in
+            guard let layer = persistentAnimationLayers[animationID] else { return image }
+            return imageLoader.composite(
+                base: image,
+                overlay: layer.image,
+                x: layer.x,
+                y: layer.y,
+                operation: layer.operation
+            )
+        }
+        baseImage = result
+        setAnimationImage(result)
+        return true
+    }
+
+    private struct PersistentAnimationLayer {
+        let image: NSImage
+        let x: Int
+        let y: Int
+        let operation: NSCompositingOperation
     }
 
     func hide() {
         animationTask?.cancel()
         schedulerTask?.cancel()
         window?.orderOut(nil)
+    }
+
+    func restore() {
+        window?.orderFront(nil)
+        setPresentationHidden(false)
     }
 
     func setPresentationHidden(_ hidden: Bool) {
@@ -1183,7 +1244,9 @@ private final class CharacterSurfaceController {
         guard let definition else { return base }
         let enabled = shell.effectiveBindGroups(scope: scope, enabled: enabledBindGroups)
         var result = base
-        for animation in definition.animations {
+        // `definition.animations` is ordered from front to back according to
+        // animation-sort. Compositing must paint the backmost layer first.
+        for animation in definition.animations.reversed() {
             guard !excludedAnimationIDs.contains(animation.id) else { continue }
             let interval = animation.interval?.lowercased() ?? ""
             let isBound = interval.contains("bind")
@@ -1341,11 +1404,15 @@ private final class CharacterSurfaceController {
                 ? pattern.surfaceID
                 : nil
         })
-        let animationBase = (try? render(
-            surfaceID: baseSurfaceID,
-            shell: shell,
-            excludingInitialAnimations: stoppedAnimationIDs
-        ).image) ?? baseImage
+        let animationBase = if stoppedAnimationIDs.isEmpty {
+            baseImage
+        } else {
+            (try? render(
+                surfaceID: baseSurfaceID,
+                shell: shell,
+                excludingInitialAnimations: stoppedAnimationIDs
+            ).image) ?? baseImage
+        }
         var frameBase = animationBase
 
         for pattern in animation.patterns {

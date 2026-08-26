@@ -380,23 +380,36 @@ public struct SurfacesParser: Sendable {
             return
         }
 
-        guard key.hasPrefix("animation") else { return }
-        let animationKey = key.dropFirst("animation".count).split(separator: ".", maxSplits: 1)
-        guard animationKey.count == 2, let animationID = Int(animationKey[0]) else { return }
+        let animationID: Int
+        let directive: String
+        let legacySyntax: Bool
+        if key.hasPrefix("animation") {
+            let animationKey = key.dropFirst("animation".count).split(separator: ".", maxSplits: 1)
+            guard animationKey.count == 2, let parsedID = Int(animationKey[0]) else { return }
+            animationID = parsedID
+            directive = String(animationKey[1])
+            legacySyntax = false
+        } else {
+            let idPrefix = key.prefix(while: { $0.isNumber })
+            guard !idPrefix.isEmpty, let parsedID = Int(idPrefix) else { return }
+            animationID = parsedID
+            directive = String(key.dropFirst(idPrefix.count))
+            legacySyntax = true
+        }
 
         if builder.animations[animationID] == nil {
             builder.animationOrder.append(animationID)
         }
         var animation = builder.animations[animationID] ?? AnimationBuilder(id: animationID)
-        if animationKey[1] == "name" {
+        if directive == "name" {
             animation.name = values.first
-        } else if animationKey[1] == "interval" {
+        } else if directive == "interval" {
             animation.interval = values.first
             animation.intervalParameter = values.dropFirst().first.flatMap(Int.init)
-        } else if animationKey[1] == "option" {
+        } else if directive == "option" {
             animation.options.formUnion(values.first?.lowercased().split(separator: "+").map(String.init) ?? [])
-        } else if animationKey[1].hasPrefix("collisionex"),
-                  let collisionID = Int(animationKey[1].dropFirst("collisionex".count)),
+        } else if directive.hasPrefix("collisionex"),
+                  let collisionID = Int(directive.dropFirst("collisionex".count)),
                   values.count >= 4
         {
             let name = values[0]
@@ -429,8 +442,8 @@ public struct SurfacesParser: Sendable {
                     name: name, polygon: points
                 )
             }
-        } else if animationKey[1].hasPrefix("collision"),
-                  let collisionID = Int(animationKey[1].dropFirst("collision".count)),
+        } else if directive.hasPrefix("collision"),
+                  let collisionID = Int(directive.dropFirst("collision".count)),
                   values.count >= 5,
                   let left = Int(values[0]), let top = Int(values[1]),
                   let right = Int(values[2]), let bottom = Int(values[3])
@@ -438,21 +451,24 @@ public struct SurfacesParser: Sendable {
             animation.collisions[collisionID] = SurfaceCollision(
                 id: collisionID, left: left, top: top, right: right, bottom: bottom, name: values[4]
             )
-        } else if animationKey[1].hasPrefix("pattern"),
-                  let order = Int(animationKey[1].dropFirst("pattern".count)),
+        } else if directive.hasPrefix("pattern"),
+                  let order = Int(directive.dropFirst("pattern".count)),
                   values.count >= 2,
-                  let surfaceID = Int(values[1])
+                  let surfaceID = Int(values[legacySyntax ? 0 : 1])
         {
             // SERIKO's stop pattern has no wait field:
             // animation101.pattern0,stop,100
-            let wait = values.count > 2 ? Int(values[2]) ?? 0 : 0
+            let waitIndex = legacySyntax ? 1 : 2
+            let methodIndex = legacySyntax ? 2 : 0
+            let coordinateStart = legacySyntax ? 3 : 3
+            let wait = values.count > waitIndex ? Int(values[waitIndex]) ?? 0 : 0
             animation.patterns[order] = SurfaceAnimationPattern(
                 order: order,
-                method: values[0],
+                method: values.count > methodIndex ? values[methodIndex] : "overlay",
                 surfaceID: surfaceID,
                 waitMilliseconds: wait,
-                x: values.count > 3 ? Int(values[3]) ?? 0 : 0,
-                y: values.count > 4 ? Int(values[4]) ?? 0 : 0
+                x: values.count > coordinateStart ? Int(values[coordinateStart]) ?? 0 : 0,
+                y: values.count > coordinateStart + 1 ? Int(values[coordinateStart + 1]) ?? 0 : 0
             )
         }
         builder.animations[animationID] = animation

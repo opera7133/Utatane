@@ -44,7 +44,130 @@ import UtataneShell
     let controller = SurfaceWindowController()
     try controller.show(shell: shell, defaultSurfaceIDs: [0: 0, 1: 10])
     #expect(controller.visibleScopes == [0, 1])
+    #expect(try #require(controller.renderedImage(for: 0)).hasVisiblePixels)
+    #expect(controller.renderedImage(for: 1) != nil)
+    try controller.changeSurface(scope: 0, to: 1)
+    for animationID in [6, 29, 7, 4, 5, 40] {
+        controller.playAnimation(id: animationID, scope: 0)
+        #expect(
+            try #require(controller.renderedImage(for: 0)).hasVisiblePixels,
+            "animation \(animationID) must contribute visible pixels"
+        )
+    }
+    #expect(try #require(controller.renderedImage(for: 0)).hasVisiblePixels)
     controller.hideAll()
+}
+
+private extension NSImage {
+    var hasVisiblePixels: Bool {
+        guard let tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffRepresentation)
+        else { return false }
+        for y in 0 ..< bitmap.pixelsHigh {
+            for x in 0 ..< bitmap.pixelsWide where bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0 > 0.01 {
+                return true
+            }
+        }
+        return false
+    }
+
+    func colorAtCenter() -> NSColor? {
+        guard let tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffRepresentation)
+        else { return nil }
+        return bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.usingColorSpace(.deviceRGB)
+    }
+}
+
+@MainActor
+@Test func `persistent animation layers follow SERIKO animation ID order`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 4, height: 4, color: .clear).write(to: directory.appending(path: "surface0.png"))
+    try makePNG(
+        width: 4, height: 4,
+        color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    ).write(to: directory.appending(path: "surface1.png"))
+    try makePNG(
+        width: 4, height: 4,
+        color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    ).write(to: directory.appending(path: "surface2.png"))
+
+    func animation(_ id: Int) -> SurfaceAnimation {
+        SurfaceAnimation(
+            id: id,
+            interval: "never",
+            patterns: [SurfaceAnimationPattern(
+                order: 0, method: "overlay", surfaceID: id,
+                waitMilliseconds: 0, x: 0, y: 0
+            )]
+        )
+    }
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [0: SurfaceDefinition(
+            id: 0,
+            collisions: [],
+            animations: [animation(2), animation(1)]
+        )],
+        usesSelfAlpha: true
+    )
+    #expect(shell.surfaces[0]?.animations.map(\.id) == [2, 1])
+    let controller = SurfaceWindowController()
+    try controller.show(shell: shell, scope: 0, surfaceID: 0)
+    defer { controller.hideAll() }
+
+    controller.playAnimation(id: 2, scope: 0)
+    controller.playAnimation(id: 1, scope: 0)
+    let color = try #require(controller.renderedImage(for: 0)?.colorAtCenter())
+    #expect(color.blueComponent > 0.9)
+    #expect(color.redComponent < 0.1)
+}
+
+@MainActor
+@Test func `runonce animation layers follow SERIKO animation ID order`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 4, height: 4, color: .clear).write(to: directory.appending(path: "surface0.png"))
+    try makePNG(
+        width: 4, height: 4,
+        color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    ).write(to: directory.appending(path: "surface1.png"))
+    try makePNG(
+        width: 4, height: 4,
+        color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    ).write(to: directory.appending(path: "surface2.png"))
+
+    func runonce(_ id: Int) -> SurfaceAnimation {
+        SurfaceAnimation(
+            id: id,
+            interval: "runonce",
+            patterns: [SurfaceAnimationPattern(
+                order: 0, method: "overlay", surfaceID: id,
+                waitMilliseconds: 0, x: 0, y: 0
+            )]
+        )
+    }
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [0: SurfaceDefinition(
+            id: 0,
+            collisions: [],
+            animations: [runonce(2), runonce(1)]
+        )],
+        usesSelfAlpha: true
+    )
+    let controller = SurfaceWindowController()
+    try controller.show(shell: shell, scope: 0, surfaceID: 0)
+    defer { controller.hideAll() }
+
+    let color = try #require(controller.renderedImage(for: 0)?.colorAtCenter())
+    #expect(color.blueComponent > 0.9)
+    #expect(color.redComponent < 0.1)
 }
 
 @Test func `head strokes emit at a finer movement interval`() {
@@ -927,13 +1050,56 @@ func `renders SakuraScript font styles by text range`() async throws {
     let halfLine = try #require(
         balloonController.textAttributes(at: 14, scope: 0)?[.paragraphStyle] as? NSParagraphStyle
     )
-    #expect(abs(halfLine.minimumLineHeight - 7) < 0.1)
+    #expect(halfLine.minimumLineHeight == 0)
+    #expect(halfLine.maximumLineHeight == 0)
     #expect(balloonController.textAttributes(at: 16, scope: 0)?[.paragraphStyle] == nil)
     let largeFont = try #require(balloonController.textAttributes(at: 17, scope: 0)?[.font] as? NSFont)
     let smallerFont = try #require(balloonController.textAttributes(at: 18, scope: 0)?[.font] as? NSFont)
     #expect(largeFont.fontName.contains("Menlo"))
     #expect(abs(largeFont.pointSize - 16.8) < 0.1)
     #expect(abs(smallerFont.pointSize - 14) < 0.1)
+}
+
+@Test
+@MainActor
+func `plain choice dispatches only the ordinary choice event`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    var ordinaryChoice: String?
+    var extendedChoice: String?
+    player.onChoice = { id, _ in ordinaryChoice = id }
+    player.onChoiceSelectEx = { _, id, _ in extendedChoice = id }
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\q[話す頻度はこれでいいの？,talkinterval]\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    let link = try #require(balloonController.textAndLinks(for: 0)?.1.first)
+    balloonController.onLinkActivate?(link, "話す頻度はこれでいいの？")
+    balloonController.onLinkClick?(link.id, link.arguments)
+
+    #expect(ordinaryChoice == "talkinterval")
+    #expect(extendedChoice == nil)
 }
 
 @Test

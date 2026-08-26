@@ -127,7 +127,9 @@ struct MisakaDictionary: Sendable {
                 index += 1
             }
             var body: [String] = []
-            if index < lines.count, lines[index].trimmingCharacters(in: .whitespaces) == "{" {
+            let usesBlockBody = index < lines.count
+                && lines[index].trimmingCharacters(in: .whitespaces) == "{"
+            if usesBlockBody {
                 index += 1
                 var depth = 1
                 while index < lines.count, depth > 0 {
@@ -163,7 +165,7 @@ struct MisakaDictionary: Sendable {
                     index += 1
                 }
             }
-            let values = Self.candidateValues(body).filter { !$0.isEmpty }
+            let values = Self.candidateValues(body, usesBlockBody: usesBlockBody).filter { !$0.isEmpty }
             symbols[name, default: []].append(MisakaCandidate(
                 conditions: conditions,
                 selection: selection,
@@ -177,21 +179,62 @@ struct MisakaDictionary: Sendable {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
     }
 
-    private static func candidateValues(_ lines: [String]) -> [String] {
+    private static func candidateValues(_ lines: [String], usesBlockBody: Bool) -> [String] {
+        if usesBlockBody {
+            var result: [String] = []
+            var current: [String] = []
+            var depth = 0
+            for line in lines {
+                let trimmed = line.trimmingCharacters(in: .whitespaces)
+                if trimmed == "{" {
+                    depth += 1
+                }
+                if trimmed == "}" {
+                    depth -= 1
+                }
+                if depth == 0, trimmed.isEmpty {
+                    if !current.isEmpty {
+                        result.append(current.joined(separator: "\n"))
+                        current = []
+                    }
+                } else {
+                    current.append(line)
+                }
+            }
+            if !current.isEmpty {
+                result.append(current.joined(separator: "\n"))
+            }
+            return result
+        }
+
+        // Without an enclosing block, each top-level line is an independent
+        // candidate. Explicit nested blocks still form multiline candidates.
         var result: [String] = []
         var current: [String] = []
         var depth = 0
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             if trimmed == "{" {
+                if depth == 0, !current.isEmpty {
+                    result.append(current.joined(separator: "\n"))
+                    current = []
+                }
+                current.append(line)
                 depth += 1
+                continue
             }
             if trimmed == "}" {
                 depth -= 1
+                current.append(line)
+                if depth == 0, !current.isEmpty {
+                    result.append(current.joined(separator: "\n"))
+                    current = []
+                }
+                continue
             }
-            if depth == 0, trimmed.isEmpty {
-                if !current.isEmpty {
-                    result.append(current.joined(separator: "\n")); current = []
+            if depth == 0 {
+                if !trimmed.isEmpty {
+                    result.append(line)
                 }
             } else {
                 current.append(line)

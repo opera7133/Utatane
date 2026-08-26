@@ -7,9 +7,6 @@ struct SurfaceImageLoader {
     private let context = CIContext()
 
     func load(_ surface: SurfaceAsset, usesSelfAlpha: Bool = false) throws -> NSImage {
-        guard let inputImage = CIImage(contentsOf: surface.imageURL) else {
-            throw SurfaceImageError.invalidImage(surface.imageURL)
-        }
         guard let alphaMaskURL = surface.alphaMaskURL else {
             if usesSelfAlpha {
                 guard let source = NSImage(contentsOf: surface.imageURL),
@@ -27,21 +24,12 @@ struct SurfaceImageLoader {
             }
             return try loadUsingTopLeftTransparency(surface.imageURL)
         }
-        guard let maskImage = CIImage(contentsOf: alphaMaskURL) else {
+        guard let source = NSImage(contentsOf: surface.imageURL),
+              let mask = NSImage(contentsOf: alphaMaskURL)
+        else {
             throw SurfaceImageError.invalidImage(alphaMaskURL)
         }
-
-        let filter = CIFilter.blendWithMask()
-        filter.inputImage = inputImage
-        filter.backgroundImage = CIImage(color: .clear).cropped(to: inputImage.extent)
-        filter.maskImage = maskImage
-
-        guard let outputImage = filter.outputImage,
-              let image = context.createCGImage(outputImage, from: inputImage.extent)
-        else {
-            throw SurfaceImageError.compositionFailed(surface.imageURL)
-        }
-        return NSImage(cgImage: image, size: inputImage.extent.size)
+        return try applyingAlphaMask(source: source, mask: mask, sourceURL: surface.imageURL)
     }
 
     func composite(
@@ -214,6 +202,60 @@ struct SurfaceImageLoader {
         let image = NSImage(size: pixelSize)
         image.addRepresentation(representation)
         return image
+    }
+
+    private func applyingAlphaMask(source: NSImage, mask: NSImage, sourceURL: URL) throws -> NSImage {
+        guard let sourceRepresentation = source.representations
+            .compactMap({ $0 as? NSBitmapImageRep }).first,
+            let maskRepresentation = mask.representations
+            .compactMap({ $0 as? NSBitmapImageRep }).first
+        else {
+            throw SurfaceImageError.invalidImage(sourceURL)
+        }
+        let width = sourceRepresentation.pixelsWide
+        let height = sourceRepresentation.pixelsHigh
+        guard let output = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: width,
+            pixelsHigh: height,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bitmapFormat: [],
+            bytesPerRow: width * 4,
+            bitsPerPixel: 32
+        )
+        else {
+            throw SurfaceImageError.compositionFailed(sourceURL)
+        }
+
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let sourceColor = sourceRepresentation.colorAt(x: x, y: y)?
+                    .usingColorSpace(.deviceRGB) ?? .clear
+                // PNA masks may use a larger canvas than their PNG. Both are
+                // aligned at the top-left; Core Image's bottom-left crop shifted
+                // such masks vertically (Juda-System's fringe mask is 100 px taller).
+                let maskColor = if x < maskRepresentation.pixelsWide, y < maskRepresentation.pixelsHigh {
+                    maskRepresentation.colorAt(x: x, y: y)?
+                        .usingColorSpace(.deviceRGB) ?? .black
+                } else {
+                    NSColor.black
+                }
+                output.setColor(NSColor(
+                    deviceRed: sourceColor.redComponent,
+                    green: sourceColor.greenComponent,
+                    blue: sourceColor.blueComponent,
+                    alpha: sourceColor.alphaComponent * maskColor.redComponent
+                ), atX: x, y: y)
+            }
+        }
+        output.size = NSSize(width: width, height: height)
+        let result = NSImage(size: output.size)
+        result.addRepresentation(output)
+        return result
     }
 }
 

@@ -30,3 +30,23 @@ func `adjacent links use the glyph under the pointer`() throws {
     #expect(balloonTextLinkID(at: point(nearRightEdgeOfCharacter: 0), in: textView) == "A")
     #expect(balloonTextLinkID(at: point(nearRightEdgeOfCharacter: 1), in: textView) == "B")
 }
+
+@Test
+@MainActor
+func `links accept a small margin around their glyphs`() throws {
+    let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 200, height: 80))
+    textView.textContainerInset = .zero
+    textView.textContainer?.lineFragmentPadding = 0
+    let text = NSMutableAttributedString(string: "Choice", attributes: [.font: NSFont.systemFont(ofSize: 18)])
+    text.addAttribute(.link, value: "choice", range: NSRange(location: 0, length: text.length))
+    textView.textStorage?.setAttributedString(text)
+
+    let layoutManager = try #require(textView.layoutManager)
+    let textContainer = try #require(textView.textContainer)
+    layoutManager.ensureLayout(for: textContainer)
+    let bounds = layoutManager.boundingRect(
+        forGlyphRange: NSRange(location: 0, length: layoutManager.numberOfGlyphs),
+        in: textContainer
+    )
+    #expect(balloonTextLinkID(at: NSPoint(x: bounds.midX, y: bounds.maxY + 1), in: textView) == "choice")
+}

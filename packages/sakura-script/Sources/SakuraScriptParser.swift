@@ -161,6 +161,12 @@ public struct SakuraScriptParser: Sendable {
             case "5":
                 tokens.append(.approachCharacters)
             case "q":
+                // Older SakuraScript assigns a display slot directly after
+                // \q, as in \q0[id][label]. The slot does not change the
+                // dispatched choice ID.
+                while index < characters.count, characters[index].isNumber {
+                    index += 1
+                }
                 let hasStar = index < characters.count && characters[index] == "*"
                 if hasStar {
                     index += 1

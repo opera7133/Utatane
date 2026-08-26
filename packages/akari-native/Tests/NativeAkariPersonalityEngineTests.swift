@@ -114,6 +114,24 @@ import UtataneShiori
     #expect(script?.rawValue == "\\0\\s[0]時刻：正午\n\\1\\s[10]相方。\\e")
 }
 
+@Test func `installed 639C free talks do not expose surface markers as text`() async throws {
+    let repositoryRoot = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let source = repositoryRoot.appending(path: "Content/Local/Ghosts/639C_tomoka/ghost/master", directoryHint: .isDirectory)
+    guard FileManager.default.fileExists(atPath: source.path) else { return }
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.copyItem(at: source, to: temporaryRoot)
+    let engine = try NativeAkariPersonalityEngine(masterDirectoryURL: temporaryRoot)
+    for _ in 0 ..< 100 {
+        let script = try #require(await engine.handle(event: .shiori(id: "OnFreeTalk", references: [:])))
+        #expect(script.rawValue.range(of: #"[（(][0-9０-９]+[）)]"#, options: .regularExpression) == nil)
+    }
+}
+
 @Test func `substitutes references`() async throws {
     let master = try fixture("""
     ＊OnChoiceSelect

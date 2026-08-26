@@ -900,6 +900,35 @@
         }
       }
     },
+    "Surfaceを再表示" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Surfaces Again"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Surface 다시 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新显示 Surface"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新顯示 Surface"
+          }
+        }
+      }
+    },
     "URLを指定して取得…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2056,6 +2085,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "呼叫Ghost"
+          }
+        }
+      }
+    },
+    "ゴーストを変更…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Change Ghost…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고스트 변경…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改 Ghost…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改 Ghost…"
           }
         }
       }
@@ -3448,6 +3506,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "資訊"
+          }
+        }
+      }
+    },
+    "操作" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Controls"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "조작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操作"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "操作"
           }
         }
       }

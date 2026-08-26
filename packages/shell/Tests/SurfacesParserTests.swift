@@ -2,6 +2,29 @@ import Foundation
 import Testing
 @testable import UtataneShell
 
+@Test func `parses legacy SERIKO interval and pattern directives`() throws {
+    let surfaces = SurfacesParser().parse("""
+    surface1
+    {
+    6interval,never
+    6pattern0,160,0,overlay,8,0
+    }
+    """)
+    let animation = try #require(surfaces[1]?.animations.first)
+    #expect(animation.id == 6)
+    #expect(animation.interval == "never")
+    #expect(animation.patterns == [
+        SurfaceAnimationPattern(
+            order: 0,
+            method: "overlay",
+            surfaceID: 160,
+            waitMilliseconds: 0,
+            x: 8,
+            y: 0
+        )
+    ])
+}
+
 @Test
 func `parses collisions and animation patterns`() throws {
     let source = """

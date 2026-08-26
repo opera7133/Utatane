@@ -104,7 +104,12 @@ public final class SakuraScriptPlayer {
             activatedLinkKind = link.kind
             switch link.kind {
             case .choice:
-                onChoiceSelectEx?(label, link.id, link.arguments)
+                // A plain \q choice is completed by OnChoiceSelect below. Sending
+                // OnChoiceSelectEx as well races the two SHIORI responses and can
+                // discard the follow-up script produced by the ordinary event.
+                if !link.arguments.isEmpty {
+                    onChoiceSelectEx?(label, link.id, link.arguments)
+                }
             case .anchor:
                 onAnchorSelectEx?(label, link.id, link.arguments)
                 onAnchorSelect?(link.id)
@@ -718,7 +723,13 @@ public final class SakuraScriptPlayer {
                         if let scale {
                             var breakStyle = BalloonTextStyle()
                             breakStyle.alignment = textStyleByScope[targetScope]?.alignment
-                            breakStyle.lineHeight = max(1, Double(balloon.fontHeight) * scale)
+                            // A reduced minimum/maximum line height clips the glyphs
+                            // on the preceding line. Keep a normal line box for
+                            // \n[half]; compact spacing can be approximated later
+                            // without shrinking the text line itself.
+                            if scale >= 1 {
+                                breakStyle.lineHeight = Double(balloon.fontHeight) * scale
+                            }
                             styleRunsByScope[targetScope, default: []].append(BalloonTextStyleRun(
                                 range: NSRange(location: lineStart, length: start - lineStart + 1),
                                 style: breakStyle

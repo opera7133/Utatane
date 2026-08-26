@@ -37,6 +37,43 @@ import UtataneShiori
     #expect(second.value == "B")
 }
 
+@Test func `top level MISAKA lines are separate random candidates`() throws {
+    let master = try makeMisakaMaster(dictionary: """
+    $A
+    alpha
+
+    $B
+    beta
+
+    $_Talk; nonoverlap;
+    {$A}
+    {$B}
+    """)
+    let session = try NativeMisakaSession(masterDirectoryURL: master)
+    let values = try (0 ..< 2).compactMap { _ in
+        try session.request(request(id: "_Talk")).value
+    }
+    #expect(Set(values) == ["alpha", "beta"])
+}
+
+@Test func `Juda menu choices return choices and one random talk`() throws {
+    let master = repositoryRoot
+        .appending(path: "Content/Local/Ghosts/Juda-System/ghost/master")
+    guard FileManager.default.fileExists(atPath: master.path) else { return }
+    let state = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".json")
+    let session = try NativeMisakaSession(masterDirectoryURL: master, variableStoreURL: state)
+
+    let interval = try session.request(request(id: "OnChoiceSelect", references: [0: "talkinterval"]))
+    #expect(interval.value?.contains("talkinterval_level2") == true)
+    #expect(interval.value?.contains("talkinterval_level1") == true)
+    #expect(interval.value?.contains("talkinterval_level0") == true)
+
+    let talk = try session.request(request(id: "OnChoiceSelect", references: [0: "forcedtalk"]))
+    #expect(talk.value?.contains(#"{$Mission}"#) != true)
+    #expect(talk.value?.contains(#"{$Circus}"#) != true)
+    #expect(talk.value?.contains(#"{$Dance}"#) != true)
+}
+
 @Test func `evaluates integer arithmetic without executing Foundation expressions`() throws {
     let master = try makeMisakaMaster(dictionary: """
     $OnBoot

@@ -24,6 +24,11 @@ import UtataneShell
 import UtataneWindowsShiori
 import UtataneYayaNative
 
+private extension Notification.Name {
+    static let showUtataneGhostPicker = Notification.Name("dev.utatane.showGhostPicker")
+    static let restoreUtataneSurfaces = Notification.Name("dev.utatane.restoreSurfaces")
+}
+
 @main
 struct UtataneApp: App {
     @NSApplicationDelegateAdaptor(UtataneApplicationDelegate.self)
@@ -116,6 +121,16 @@ struct UtataneApp: App {
             }
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesView(updater: updaterController.updater)
+            }
+            CommandMenu("操作") {
+                Button("ゴーストを変更…") {
+                    NotificationCenter.default.post(name: .showUtataneGhostPicker, object: nil)
+                }
+                .keyboardShortcut("g", modifiers: [.command, .shift])
+                Button("Surfaceを再表示") {
+                    NotificationCenter.default.post(name: .restoreUtataneSurfaces, object: nil)
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
             }
             CommandGroup(replacing: .help) {
                 Button("Utataneヘルプ") {
@@ -316,6 +331,12 @@ private struct UtataneRootView: View {
         }
         .task(id: "\(networkSettings.characterDelayMilliseconds)-\(networkSettings.dialogueDismissalSeconds)") {
             configurePlayback()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showUtataneGhostPicker)) { _ in
+            showGhostPicker()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .restoreUtataneSurfaces)) { _ in
+            surfaceWindowController.restoreSurfaces()
         }
         .task(id: "\(networkSettings.shellScalePercent)-\(networkSettings.balloonScalePercent)-\(networkSettings.linksBalloonScale)-\(networkSettings.balloonTextScalePercent)-\(networkSettings.locksShellToDesktopBottom)-\(networkSettings.keepsShellOnScreen)") {
             configureDisplay()

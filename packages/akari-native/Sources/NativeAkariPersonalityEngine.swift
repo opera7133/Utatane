@@ -355,12 +355,13 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
                 flushEvent(nextEvent: name)
                 event = name
             } else if line.hasPrefix("＠") || line.hasPrefix("@") {
-                flushEvent()
+                flushCandidate()
                 flushWord()
-                event = nil
                 word = String(line.dropFirst()).trimmingCharacters(in: .whitespaces)
             } else if word != nil {
-                if !line.isEmpty, !line.hasPrefix("#"), !line.hasPrefix("＃") {
+                if line.isEmpty {
+                    flushWord()
+                } else if !line.hasPrefix("#"), !line.hasPrefix("＃") {
                     wordValues.append(line)
                 }
             } else if line.hasPrefix("＞") || line.hasPrefix(">") {

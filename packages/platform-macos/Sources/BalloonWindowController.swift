@@ -974,9 +974,25 @@ private extension BalloonContentView {
         textView.textStorage?.setAttributedString(attributedText)
         textView.refreshLinkAppearance()
         textView.layoutManager?.ensureLayout(for: textView.textContainer!)
+        resizeTextDocumentToFitLayout()
         updateVerticalAlignment()
         if autoscroll, attributedText.length > 0 {
             textView.scrollRangeToVisible(NSRange(location: attributedText.length, length: 0))
+        } else if attributedText.length > 0 {
+            scrollView.contentView.scroll(to: .zero)
+            scrollView.reflectScrolledClipView(scrollView.contentView)
+        }
+    }
+
+    private func resizeTextDocumentToFitLayout() {
+        guard !isVerticalWriting,
+              let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer
+        else { return }
+        layoutManager.ensureLayout(for: textContainer)
+        let height = max(scrollView.contentSize.height, ceil(layoutManager.usedRect(for: textContainer).maxY))
+        if abs(textView.frame.height - height) > 0.5 {
+            textView.setFrameSize(NSSize(width: scrollView.contentSize.width, height: height))
         }
     }
 
@@ -1264,10 +1280,28 @@ func balloonTextLinkID(at point: NSPoint, in textView: NSTextView) -> String? {
     let glyphRange = NSRange(location: glyphIndex, length: 1)
     let glyphBounds = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
     let characterIndex = layoutManager.characterIndexForGlyph(at: glyphIndex)
-    guard glyphBounds.contains(containerPoint), characterIndex < (textView.textStorage?.length ?? 0) else {
-        return nil
+    if glyphBounds.contains(containerPoint), characterIndex < (textView.textStorage?.length ?? 0),
+       let token = textView.textStorage?.attribute(.link, at: characterIndex, effectiveRange: nil) as? String
+    {
+        return token
     }
-    return textView.textStorage?.attribute(.link, at: characterIndex, effectiveRange: nil) as? String
+
+    guard let textStorage = textView.textStorage else { return nil }
+    var index = 0
+    while index < textStorage.length {
+        var range = NSRange()
+        let value = textStorage.attribute(.link, at: index, effectiveRange: &range)
+        if let token = value as? String {
+            let linkGlyphRange = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            let linkBounds = layoutManager.boundingRect(forGlyphRange: linkGlyphRange, in: textContainer)
+                .insetBy(dx: -4, dy: -2)
+            if linkBounds.contains(containerPoint) {
+                return token
+            }
+        }
+        index = max(index + 1, NSMaxRange(range))
+    }
+    return nil
 }
 
 private extension NSColor {
