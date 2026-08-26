@@ -36,7 +36,7 @@ SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを�
 | GetGhostName／GetShellName／GetBalloonName | ✅ | 選択対象の現在値 |
 | GetVersion／GetShortVersion | ✅ | Utataneのbundle version |
 | GetGhostNameList／GetShellNameList／GetBalloonNameList／GetHeadlineNameList | ✅ | 認識済みコンテンツ一覧 |
-| GetPluginNameList | ✅ | plugin未実装のため空リスト |
+| GetPluginNameList | ✅ | 認識済みプラグイン名を改行区切りで返す |
 | Quiet／Restore | ✅ | 16秒またはRestoreまで通常SSTP再生を409で抑止 |
 | SetCookie／GetCookie | ✅ | Sender単位の実行中メモリ保存 |
 | SetProperty／GetProperty | ✅ | Property Systemへ接続。読み取り専用値への書込は420 |

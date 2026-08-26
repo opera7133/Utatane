@@ -3,6 +3,50 @@ import Testing
 @testable import UtataneAkariNative
 import UtataneCore
 import UtataneNativeSaori
+import UtataneShiori
+
+@Test func `installed AKARI plugin answers PLUGIN version request`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let pluginURL = repositoryRoot
+        .appendingPathComponent("Content/Local/Plugins/sudohaikuyu", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: pluginURL.path) else { return }
+
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.copyItem(at: pluginURL, to: temporaryRoot)
+    let engine = try NativeAkariPersonalityEngine(masterDirectoryURL: temporaryRoot)
+    let response = try await engine.pluginResponse(for: ShioriRequest(
+        method: "GET",
+        version: "PLUGIN/2.0",
+        headers: ShioriHeaders([
+            ShioriHeader(name: "Charset", value: "UTF-8"),
+            ShioriHeader(name: "ID", value: "version")
+        ])
+    ))
+
+    #expect(response.statusCode == 200)
+    #expect(response.value?.isEmpty == false)
+
+    let menuRequest = ShioriRequest(
+        method: "GET",
+        version: "PLUGIN/2.0",
+        headers: ShioriHeaders([
+            ShioriHeader(name: "Charset", value: "UTF-8"),
+            ShioriHeader(name: "Sender", value: "Ria"),
+            ShioriHeader(name: "ID", value: "OnMenuExec"),
+            ShioriHeader(name: "Reference0", value: "0"),
+            ShioriHeader(name: "Reference3", value: "ria")
+        ])
+    )
+    let initialMenuResponse = try await engine.pluginResponse(for: menuRequest)
+    let menuResponse = try await engine.pluginResponse(for: menuRequest)
+    #expect(initialMenuResponse.headers["Script"]?.isEmpty != false)
+    #expect(menuResponse.headers["Script"]?.contains("booting") == true)
+}
 
 @Test func `loads plain akari event resources`() async throws {
     let master = try fixture("""

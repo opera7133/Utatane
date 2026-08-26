@@ -69,6 +69,7 @@ public final class SakuraScriptPlayer {
     public var onOpen: (@MainActor (String) -> Void)?
     public var onContentAction: (@MainActor (SakuraScriptContentAction) -> Void)?
     public var onOtherEvent: (@MainActor (String, String, [String], Bool) async -> Void)?
+    public var onPluginEvent: (@MainActor (String, String, [String], Bool) async -> SakuraScript?)?
     public var onDialogueContent: (@MainActor () -> Void)?
     public var onDialogueDismissed: (@MainActor () -> Void)?
     public var onPlaybackFinished: (@MainActor () -> Void)?
@@ -937,6 +938,12 @@ public final class SakuraScriptPlayer {
                     _ = await onEmbeddedEvent?(id, arguments)
                 case let .otherEvent(target, id, arguments, reflectsResponse):
                     await onOtherEvent?(target, id, arguments, reflectsResponse)
+                case let .pluginEvent(target, id, arguments, reflectsResponse):
+                    if let response = await onPluginEvent?(target, id, arguments, reflectsResponse),
+                       reflectsResponse
+                    {
+                        pendingTokens = parser.parse(response)
+                    }
                 case let .timerEvent(milliseconds, repeats, reflectsResponse, id, arguments):
                     scheduleEventTimer(
                         milliseconds: milliseconds,

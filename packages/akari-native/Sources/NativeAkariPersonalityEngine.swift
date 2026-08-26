@@ -34,6 +34,7 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
     private let saoriCaller: (any NativeSaoriCalling)?
     private let httpFetcher: any AkariHTTPFetching
     private var loadedSaori: [String: String] = [:]
+    private var loadedPluginLifecycle = false
     private let adapter = GhostEventShioriAdapter()
 
     public init(
@@ -91,6 +92,78 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
               !value.stringValue.isEmpty
         else { return PersonalityResponse(script: nil) }
         return PersonalityResponse(script: SakuraScript(rawValue: value.stringValue))
+    }
+
+    public func pluginResponse(for request: ShioriRequest) throws -> ShioriResponse {
+        if !loadedPluginLifecycle {
+            loadedPluginLifecycle = true
+            if executeAZR(function: "load", arguments: [], request: request, depth: 0) == nil {
+                _ = executeAZR(function: "loadPlugin", arguments: [], request: request, depth: 0)
+            }
+        }
+        var values: [String: AkariValue] = [
+            "head": .string("\(request.method) \(request.version)")
+        ]
+        for header in request.headers.entries {
+            values[header.name] = .string(header.value)
+        }
+        guard let result = executeAZR(
+            function: "_customrequest",
+            arguments: [.dictionary(values)],
+            request: request,
+            depth: 0
+        ), case let .array(lines) = result
+        else {
+            return ShioriResponse(statusCode: 204, reasonPhrase: "No Content")
+        }
+        let responseLines = lines.map(\.stringValue)
+        guard responseLines.contains(where: { !$0.isEmpty }) else {
+            return ShioriResponse(version: request.version, statusCode: 204, reasonPhrase: "No Content")
+        }
+        let message = responseLines.joined(separator: "\r\n") + "\r\n"
+        var response = try ShioriMessageParser.parseResponse(message)
+        if request.id?.caseInsensitiveCompare("version") == .orderedSame,
+           response.value?.isEmpty != false,
+           let version = executeAZR(function: "version", arguments: [], request: request, depth: 0)?.stringValue,
+           !version.isEmpty
+        {
+            response.headers = ShioriHeaders(
+                response.headers.entries.filter { $0.name.caseInsensitiveCompare("Value") != .orderedSame }
+                    + [ShioriHeader(name: "Value", value: version)]
+            )
+        }
+        if request.method.caseInsensitiveCompare("GET") == .orderedSame,
+           response.headers["Script"]?.isEmpty != false,
+           let id = request.id,
+           id.caseInsensitiveCompare("version") != .orderedSame,
+           let script = executeAZR(
+               function: id,
+               arguments: [.dictionary(values)],
+               request: request,
+               depth: 0
+           )?.stringValue,
+           !script.isEmpty
+        {
+            var headers = response.headers.entries.filter {
+                $0.name.caseInsensitiveCompare("Script") != .orderedSame
+            }
+            headers.append(ShioriHeader(name: "Script", value: script))
+            if case let .dictionary(optional)? = program.variables["dictOptionalHeader"] {
+                for (key, headerName) in [
+                    "target": "Target", "event": "Event", "event_option": "EventOption",
+                    "script_option": "ScriptOption", "marker": "Marker"
+                ] where optional[key]?.stringValue.isEmpty == false {
+                    headers.append(ShioriHeader(name: headerName, value: optional[key]?.stringValue ?? ""))
+                }
+                if case let .array(references)? = optional["reference"] {
+                    for (index, value) in references.enumerated() {
+                        headers.append(ShioriHeader(name: "Reference\(index)", value: value.stringValue))
+                    }
+                }
+            }
+            response.headers = ShioriHeaders(headers)
+        }
+        return response
     }
 
     private static func loadProgram(from master: URL) throws -> AkariProgram {
@@ -466,6 +539,11 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
                   let data = httpFetcher.fetch(url: url, maximumBytes: 8_388_608)
             else { return .integer(0) }
             return .integer(fileSystem.writeData(path: arguments[1].stringValue, data: data) ? 1 : 0)
+        case "_CREATE_THREAD":
+            guard let function = arguments.first?.stringValue else { return .integer(0) }
+            _ = executeAZR(function: function, arguments: [], request: request, depth: 1)
+            return .integer(1)
+        case "_SLEEP": return .null
         default:
             if let result = AkariPureFunctions.evaluate(name, arguments: arguments) {
                 return result
@@ -535,7 +613,12 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
                     guard let value = expression.isEmpty ? AkariValue.null : evaluateAZRExpression(String(expression), locals: &locals, request: request, depth: depth) else { return nil }
                     return .returned(value)
                 }
-                guard executeSimpleAZRStatement(statement, locals: &locals, request: request, depth: depth) else { return nil }
+                guard executeSimpleAZRStatement(statement, locals: &locals, request: request, depth: depth) else {
+                    if ["_customrequest", "OnMenuExec"].contains(activeFunctionName) {
+                        print("AKARI failed", activeFunctionName ?? "", statement)
+                    }
+                    return nil
+                }
             case let .conditional(condition, thenBody, elseBody):
                 guard let value = evaluateAZRExpression(condition, locals: &locals, request: request, depth: depth) else { return nil }
                 let selected = truthy(value) ? thenBody : elseBody
@@ -672,6 +755,18 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
             guard let value = evaluateAZRExpression(String(source.dropFirst()), locals: &locals, request: request, depth: depth)?.integerValue else { return nil }
             return .integer(~value)
         }
+        if source.hasPrefix("{"), source.hasSuffix("}"), !source.hasPrefix("${") {
+            let contents = String(source.dropFirst().dropLast())
+            if contents.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return .array([])
+            }
+            let elements = splitArguments(contents)
+            let values = elements.compactMap {
+                evaluateAZRExpression($0, locals: &locals, request: request, depth: depth + 1)
+            }
+            guard values.count == elements.count else { return nil }
+            return .array(values)
+        }
         for operation in ["||", "&&"] {
             if let parts = splitTopLevel(source, operator: operation), parts.count > 1 {
                 let values = parts.compactMap { evaluateAZRExpression($0, locals: &locals, request: request, depth: depth) }
@@ -724,16 +819,6 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
                 }
             }
         }
-        if let call = parseAZRCall(source) {
-            let values = splitArguments(call.arguments).compactMap {
-                evaluateAZRExpression($0, locals: &locals, request: request, depth: depth + 1)
-            }
-            guard values.count == splitArguments(call.arguments).count else { return nil }
-            if program.functions[call.name] != nil {
-                return executeAZR(function: call.name, arguments: values, request: request, depth: depth + 1)
-            }
-            return evaluate(function: call.name, arguments: values.map(\.literal), request: request)
-        }
         if let indexed = parseIndexedValue(source),
            let base = evaluateAZRExpression(indexed.name, locals: &locals, request: request, depth: depth),
            let key = evaluateAZRExpression(indexed.index, locals: &locals, request: request, depth: depth)
@@ -745,6 +830,16 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
             case let .dictionary(values): return values[key.stringValue] ?? .null
             default: return nil
             }
+        }
+        if let call = parseAZRCall(source) {
+            let values = splitArguments(call.arguments).compactMap {
+                evaluateAZRExpression($0, locals: &locals, request: request, depth: depth + 1)
+            }
+            guard values.count == splitArguments(call.arguments).count else { return nil }
+            if program.functions[call.name] != nil {
+                return executeAZR(function: call.name, arguments: values, request: request, depth: depth + 1)
+            }
+            return evaluate(function: call.name, arguments: values.map(\.literal), request: request)
         }
         if let value = locals[source] ?? program.variables[source] {
             return value
@@ -957,7 +1052,22 @@ public actor NativeAkariPersonalityEngine: PersonalityEngine {
     }
 
     private func parseIndexedValue(_ source: String) -> (name: String, index: String)? {
-        guard let opening = source.firstIndex(of: "["), source.last == "]" else { return nil }
+        guard source.last == "]" else { return nil }
+        var depth = 0
+        var opening: String.Index?
+        indexSearch: for index in source.indices.reversed() {
+            switch source[index] {
+            case "]": depth += 1
+            case "[":
+                depth -= 1
+                if depth == 0 {
+                    opening = index
+                    break indexSearch
+                }
+            default: break
+            }
+        }
+        guard let opening, opening > source.startIndex else { return nil }
         return (
             String(source[..<opening]).trimmingCharacters(in: .whitespaces),
             String(source[source.index(after: opening) ..< source.index(before: source.endIndex)])

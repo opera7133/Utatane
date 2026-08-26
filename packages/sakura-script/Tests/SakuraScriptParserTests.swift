@@ -856,3 +856,13 @@ func `parses fixed position commands`() {
         .resetPosition
     ])
 }
+
+@Test
+func `parses plugin raise and notify commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![raiseplugin,clock,OnAlarm,one,two]\![notifyplugin,clock,OnQuiet]"#
+    ) == [
+        .pluginEvent(target: "clock", id: "OnAlarm", arguments: ["one", "two"], reflectsResponse: true),
+        .pluginEvent(target: "clock", id: "OnQuiet", arguments: [], reflectsResponse: false)
+    ])
+}

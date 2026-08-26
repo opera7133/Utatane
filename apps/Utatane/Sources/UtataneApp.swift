@@ -14,6 +14,7 @@ import UtataneMisakaNative
 import UtataneNativeSaori
 import UtataneNetwork
 import UtatanePlatformMacOS
+import UtatanePlugin
 import UtatanePOSIXShiori
 import UtataneRealtime
 import UtataneRuntime
@@ -196,6 +197,8 @@ private struct UtataneRootView: View {
     @State private var selectedShell: InstalledShell?
     @State private var installedBalloons: [BalloonDefinition] = []
     @State private var installedHeadlines: [InstalledHeadline] = []
+    @State private var installedPlugins: [InstalledPlugin] = []
+    private let pluginRuntime = PluginRuntime()
     @State private var isUpdatingContent = false
     @State private var debugWindow: NSWindow?
     @State private var showsOnboarding = false
@@ -275,6 +278,7 @@ private struct UtataneRootView: View {
             await model.load()
             showsOnboarding = model.ghosts.isEmpty
             reloadHeadlines()
+            await reloadPlugins()
             switch networkSettings.startupBehavior {
             case .restore:
                 let restoredGhost = model.ghosts.first {
@@ -333,6 +337,7 @@ private struct UtataneRootView: View {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
                 sendSecondChange()
+                sendPluginSecondChange()
                 sendClockEvents(at: Date())
                 dispatchWindowLayoutEvents()
             }
@@ -863,6 +868,104 @@ private struct UtataneRootView: View {
         }
     }
 
+    private func sendPluginSecondChange() {
+        Task {
+            for (_, response) in await pluginRuntime.secondChangeResponses() {
+                if let script = await resolvePluginResponse(response), let balloon {
+                    scriptPlayer.play(script, balloon: balloon)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func resolvePluginResponse(_ response: PluginResponse) async -> SakuraScript? {
+        var script = response.script.map(SakuraScript.init(rawValue:))
+        if let event = response.event, let session,
+           let eventResponse = try? await session.response(for: .shiori(
+               id: event,
+               references: response.references
+           ))
+        {
+            script = eventResponse.script ?? script
+        }
+        return script
+    }
+
+    @MainActor
+    private func invokePlugin(
+        target: String,
+        event: String,
+        arguments: [String],
+        reflectsResponse: Bool
+    ) async -> SakuraScript? {
+        let references = Dictionary(uniqueKeysWithValues: arguments.enumerated().map { ($0.offset, $0.element) })
+        do {
+            guard let response = try await pluginRuntime.request(
+                pluginIDOrName: target,
+                method: reflectsResponse ? "GET" : "NOTIFY",
+                event: event,
+                sender: currentGhost?.name,
+                references: references
+            ) else {
+                return await pluginFailureScript(
+                    reason: pluginExists(target) ? "disabled" : "notfound",
+                    target: target,
+                    event: event,
+                    arguments: arguments,
+                    reflectsResponse: reflectsResponse
+                )
+            }
+            guard response.statusCode == 200 else {
+                return await pluginFailureScript(
+                    reason: String(response.statusCode),
+                    target: target,
+                    event: event,
+                    arguments: arguments,
+                    reflectsResponse: reflectsResponse
+                )
+            }
+            return reflectsResponse ? await resolvePluginResponse(response) : nil
+        } catch {
+            AppLogStore.shared.error(
+                "プラグイン実行エラー: \(target) / \(event): \(error.localizedDescription)",
+                category: "Plugin"
+            )
+            return await pluginFailureScript(
+                reason: "500",
+                target: target,
+                event: event,
+                arguments: arguments,
+                reflectsResponse: reflectsResponse
+            )
+        }
+    }
+
+    private func pluginExists(_ target: String) -> Bool {
+        installedPlugins.contains {
+            $0.id.caseInsensitiveCompare(target) == .orderedSame
+                || $0.name.caseInsensitiveCompare(target) == .orderedSame
+        }
+    }
+
+    @MainActor
+    private func pluginFailureScript(
+        reason: String,
+        target: String,
+        event: String,
+        arguments: [String],
+        reflectsResponse: Bool
+    ) async -> SakuraScript? {
+        guard let session else { return nil }
+        var references = [0: reason, 1: target, 2: event]
+        for (index, argument) in arguments.enumerated() {
+            references[index + 3] = argument
+        }
+        let failureEvent = reflectsResponse ? "OnRaisePluginFailure" : "OnNotifyPluginFailure"
+        let script = try? await session.handle(event: .shiori(id: failureEvent, references: references))
+        return reflectsResponse ? script : nil
+    }
+
     private func sendClockEvents(at date: Date) {
         let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
         defer { lastClockMinute = components }
@@ -1017,6 +1120,14 @@ private struct UtataneRootView: View {
 
     private func closeCurrentGhost(reason: GhostStopReason) async -> String {
         guard let activeSession = session else { return "" }
+        if let currentGhost {
+            _ = await pluginRuntime.broadcast(
+                method: "NOTIFY",
+                event: "OnGhostExit",
+                sender: currentGhost.name,
+                references: pluginGhostReferences(for: currentGhost)
+            )
+        }
         session = nil
         configureContextMenu()
 
@@ -1260,6 +1371,14 @@ private struct UtataneRootView: View {
                     })
                 ))
             }
+            scriptPlayer.onPluginEvent = { target, id, arguments, reflectsResponse in
+                await invokePlugin(
+                    target: target,
+                    event: id,
+                    arguments: arguments,
+                    reflectsResponse: reflectsResponse
+                )
+            }
             scriptPlayer.onPropertyValue = { property in
                 await registerCurrentGhostProperties()
                 return try? await propertySystem.value(for: property)
@@ -1412,6 +1531,7 @@ private struct UtataneRootView: View {
                 installedGhosts: model.ghosts,
                 installedBalloons: installedBalloons,
                 installedHeadlines: installedHeadlines,
+                installedPlugins: installedPlugins,
                 surfaceWindowNumbers: surfaceWindowController.windowNumbers,
                 balloonWindowNumbers: balloonWindowController.windowNumbers,
                 otherGhosts: calledGhosts.values.map { runtime in
@@ -1423,6 +1543,15 @@ private struct UtataneRootView: View {
                 }
             ) {
                 _ = try? await ghostSession.handle(event: .shiori(id: event.id, references: event.references))
+            }
+            for (_, response) in await pluginRuntime.broadcast(
+                event: "OnGhostBoot",
+                sender: ghost.name,
+                references: pluginGhostReferences(for: ghost)
+            ) {
+                if let script = await resolvePluginResponse(response), let balloon {
+                    await scriptPlayer.playAndWait(script, balloon: balloon)
+                }
             }
             let bootEvent = GhostEvent.shiori(id: "OnBoot", references: [0: shellChoice.name])
             let startupScript: SakuraScript?
@@ -2420,6 +2549,7 @@ private struct UtataneRootView: View {
             [
                 networkUpdateMenu(),
                 headlineMenu(),
+                pluginMenu(),
                 functionMenu(),
                 settingsMenu(),
                 .separator,
@@ -2505,6 +2635,58 @@ private struct UtataneRootView: View {
                 .action(title: String(localized: "URLを指定して取得…"), handler: showRSSInput)
             ]
         )
+    }
+
+    private func pluginMenu() -> SurfaceContextMenuItem {
+        .submenu(
+            title: String(localized: "プラグイン"),
+            items: installedPlugins.map { plugin in
+                .action(
+                    title: plugin.name,
+                    isEnabled: isNativePlugin(plugin),
+                    handler: {
+                        Task {
+                            let script = await invokePlugin(
+                                target: plugin.id,
+                                event: "OnMenuExec",
+                                arguments: pluginMenuReferences(),
+                                reflectsResponse: true
+                            )
+                            if let script, let balloon {
+                                scriptPlayer.play(script, balloon: balloon)
+                            }
+                        }
+                    }
+                )
+            }
+        )
+    }
+
+    private func pluginMenuReferences() -> [String] {
+        guard let currentGhost else { return [] }
+        let references = pluginGhostReferences(for: currentGhost)
+        return (0 ... 4).map { references[$0] ?? "" }
+    }
+
+    private func pluginGhostReferences(for ghost: InstalledGhost) -> [Int: String] {
+        [
+            0: surfaceWindowController.windowNumbers.map(String.init).joined(separator: "\u{1}"),
+            1: ghost.name,
+            2: selectedShell?.name ?? "",
+            3: ghost.id.absoluteString,
+            4: ghost.rootDirectory.path
+        ]
+    }
+
+    private func isNativePlugin(_ plugin: InstalledPlugin) -> Bool {
+        switch plugin.runtime {
+        case .nativeSHIORI, .dynamicLibrary:
+            true
+        case .windowsDLL:
+            ContentRoot.windowsPluginConfiguration(for: plugin) != nil
+        case .unavailable:
+            false
+        }
     }
 
     private func functionMenu() -> SurfaceContextMenuItem {
@@ -3401,6 +3583,29 @@ private struct UtataneRootView: View {
         configureContextMenu()
     }
 
+    private func reloadPlugins() async {
+        installedPlugins = (try? PluginCatalog().load(from: ContentRoot.pluginReadDirectories)) ?? []
+        let failures = await pluginRuntime.reload(installedPlugins) { plugin in
+            switch plugin.runtime {
+            case .nativeSHIORI: return try NativeSHIORIPluginTransport(plugin: plugin)
+            case .dynamicLibrary: return try DynamicLibraryPluginTransport(plugin: plugin)
+            case .windowsDLL:
+                guard let configuration = ContentRoot.windowsPluginConfiguration(for: plugin) else {
+                    throw NativeSHIORIPluginError.unsupportedRuntime
+                }
+                return try WindowsDLLPluginTransport(configuration: configuration)
+            case .unavailable: throw NativeSHIORIPluginError.unsupportedRuntime
+            }
+        }
+        for failure in failures {
+            AppLogStore.shared.error(
+                "プラグイン「\(failure.plugin.name)」を読み込めませんでした: \(failure.message)",
+                category: "Plugin",
+                details: failure.plugin.directory.path
+            )
+        }
+    }
+
     private func sanitizeNetworkText(_ source: String) -> String {
         source
             .replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
@@ -3590,7 +3795,7 @@ private struct UtataneRootView: View {
         case "getshellnamelist": data = target?.ghost.shells.map(\.name).joined(separator: "\r\n")
         case "getballoonnamelist": data = installedBalloons.map(\.name).joined(separator: "\r\n")
         case "getheadlinenamelist": data = installedHeadlines.map(\.name).joined(separator: "\r\n")
-        case "getpluginnamelist": data = ""
+        case "getpluginnamelist": data = installedPlugins.map(\.name).joined(separator: "\r\n")
         case "quiet":
             sstpQuietUntil = Date().addingTimeInterval(16)
             return SSTPResponse(statusCode: 204, reason: "No Content")
@@ -4079,6 +4284,7 @@ func startupInformationEvents(
     installedGhosts: [InstalledGhost]? = nil,
     installedBalloons: [BalloonDefinition]? = nil,
     installedHeadlines: [InstalledHeadline] = [],
+    installedPlugins: [InstalledPlugin] = [],
     surfaceWindowNumbers: [Int] = [],
     balloonWindowNumbers: [Int] = [],
     otherGhosts: [String] = []
@@ -4129,9 +4335,9 @@ func startupInformationEvents(
         ("ghostpathlist", indexed(ContentRoot.ghostReadDirectories.map(\.path))),
         ("balloonpathlist", indexed(ContentRoot.balloonReadDirectories.map(\.path))),
         ("headlinepathlist", [0: ContentRoot.headlinesDirectory.path]),
-        ("installedplugin", [:]),
+        ("installedplugin", indexed(installedPlugins.map { [$0.name, $0.id].joined(separator: "\u{1}") })),
         ("configuredbiffname", [:]),
-        ("pluginpathlist", [:]),
+        ("pluginpathlist", indexed(ContentRoot.pluginReadDirectories.map(\.path))),
         ("calendarskinpathlist", [:]),
         ("calendarpluginpathlist", [:]),
         ("rateofusegraph", [0: [ghost.name, mainName, partnerName, "0", "0", "0", "boot"]
@@ -4465,7 +4671,8 @@ enum ContentRoot {
             contentDirectory,
             ghostsDirectory,
             balloonsDirectory,
-            headlinesDirectory
+            headlinesDirectory,
+            pluginsDirectory
         ] {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         }
@@ -4626,6 +4833,41 @@ enum ContentRoot {
         )
     }
 
+    static func windowsPluginConfiguration(for plugin: InstalledPlugin) -> WindowsPluginDLLProcessConfiguration? {
+        guard case let .windowsDLL(dllURL) = plugin.runtime else { return nil }
+        let environment = ProcessInfo.processInfo.environment
+        let defaults = UserDefaults.standard
+        let fileManager = FileManager.default
+        guard let winePath = environment["UTATANE_WINE_EXECUTABLE"]
+            ?? defaults.string(forKey: "windowsShiori.wineExecutablePath"),
+            !winePath.isEmpty,
+            let prefixPath = environment["UTATANE_WINE_PREFIX"]
+            ?? defaults.string(forKey: "windowsShiori.winePrefixPath"),
+            !prefixPath.isEmpty
+        else { return nil }
+
+        let wineURL = URL(filePath: winePath, directoryHint: .notDirectory)
+        let prefixURL = URL(filePath: prefixPath, directoryHint: .isDirectory)
+        #if DEBUG
+            let local = repositoryRoot.appending(path: "Content/Local", directoryHint: .isDirectory)
+            let hostURL = environment["UTATANE_WINDOWS_DLL_HOST"].map {
+                URL(filePath: $0, directoryHint: .notDirectory)
+            } ?? local.appending(path: "WindowsDLLBridge/utatane-dll-host.exe", directoryHint: .notDirectory)
+        #else
+            guard let hostPath = environment["UTATANE_WINDOWS_DLL_HOST"] else { return nil }
+            let hostURL = URL(filePath: hostPath, directoryHint: .notDirectory)
+        #endif
+        guard [wineURL, prefixURL, hostURL, dllURL].allSatisfy({
+            fileManager.fileExists(atPath: $0.path)
+        }) else { return nil }
+        return WindowsPluginDLLProcessConfiguration(
+            wineExecutableURL: wineURL,
+            winePrefixURL: prefixURL,
+            hostExecutableURL: hostURL,
+            dllURL: dllURL
+        )
+    }
+
     static func windowsHeadlineConfiguration() -> WindowsHeadlineHostConfiguration? {
         let environment = ProcessInfo.processInfo.environment
         let defaults = UserDefaults.standard
@@ -4744,6 +4986,22 @@ enum ContentRoot {
         #endif
 
         return contentDirectory.appending(path: "Headline", directoryHint: .isDirectory)
+    }
+
+    static var pluginsDirectory: URL {
+        if let override = ProcessInfo.processInfo.environment["UTATANE_PLUGINS_ROOT"] {
+            return URL(filePath: override, directoryHint: .isDirectory)
+        }
+        return contentDirectory.appending(path: "Plugins", directoryHint: .isDirectory)
+    }
+
+    static var pluginReadDirectories: [URL] {
+        #if DEBUG
+            let local = repositoryRoot.appending(path: "Content/Local/Plugins", directoryHint: .isDirectory)
+            return [local, pluginsDirectory]
+        #else
+            return [pluginsDirectory]
+        #endif
     }
 
     static var repositoryRoot: URL {

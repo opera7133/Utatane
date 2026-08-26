@@ -5,6 +5,29 @@ import UtataneSakuraScript
 import UtataneShiori
 @testable import UtataneYayaNative
 
+@Test func `installed YAYA plugin answers PLUGIN menu request`() throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let pluginURL = repositoryRoot
+        .appendingPathComponent("Content/Local/Plugins/wallet_of_unyu", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: pluginURL.path) else { return }
+
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.copyItem(at: pluginURL, to: temporaryRoot)
+    let session = try NativeYayaSession(masterDirectoryURL: temporaryRoot)
+    let response = try ShioriMessageParser.parseResponse(session.request(
+        "GET PLUGIN/2.0\r\nCharset: UTF-8\r\nSender: Ria\r\nID: OnMenuExec\r\nReference0: 0\r\nReference1: Ria\r\n\r\n"
+    ))
+
+    #expect(response.statusCode == 200)
+    #expect(response.headers["Script"]?.contains("所持金") == true)
+    #expect(response.headers["Event"] == "OnWalletOfUnyu")
+}
+
 @Test func `native YAYA loads Emily and answers OnBoot`() throws {
     let repositoryRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()

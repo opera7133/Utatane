@@ -37,6 +37,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
 - `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
 - Materiaの「さくら」をWineなしで実行
+- プラグインの利用（ネイティブ対応SHIORIおよびmacOS向けにビルドされたdylibを使用するプラグインのみ）
 - OpenAI Realtime APIまたは互換APIへ接続するリアルタイム音声会話（実験的）
 
 ## まだ無理なこと

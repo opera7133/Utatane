@@ -19,6 +19,7 @@ let package = Package(
         .library(name: "UtataneShiori", targets: ["UtataneShiori"]),
         .library(name: "UtataneWindowsShiori", targets: ["UtataneWindowsShiori"]),
         .library(name: "UtatanePOSIXShiori", targets: ["UtatanePOSIXShiori"]),
+        .library(name: "UtatanePlugin", targets: ["UtatanePlugin"]),
         .library(name: "UtataneKawariNative", targets: ["UtataneKawariNative"]),
         .library(name: "UtataneYayaNative", targets: ["UtataneYayaNative"]),
         .library(name: "UtataneSatoriNative", targets: ["UtataneSatoriNative"]),
@@ -114,6 +115,11 @@ let package = Package(
                 "UtataneShiori"
             ],
             path: "posix-shiori/Sources"
+        ),
+        .target(
+            name: "UtatanePlugin",
+            dependencies: ["UtataneShiori"],
+            path: "plugin/Sources"
         ),
         .target(
             name: "CKawariNative",
@@ -386,6 +392,11 @@ let package = Package(
             name: "UtatanePOSIXShioriTests",
             dependencies: ["UtatanePOSIXShiori"],
             path: "posix-shiori/Tests"
+        ),
+        .testTarget(
+            name: "UtatanePluginTests",
+            dependencies: ["UtatanePlugin"],
+            path: "plugin/Tests"
         ),
         .testTarget(
             name: "UtataneKawariNativeTests",

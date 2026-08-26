@@ -69,6 +69,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case raisedEvent(id: String, arguments: [String])
     case notifyEvent(id: String, arguments: [String])
     case otherEvent(target: String, id: String, arguments: [String], reflectsResponse: Bool)
+    case pluginEvent(target: String, id: String, arguments: [String], reflectsResponse: Bool)
     case timerEvent(milliseconds: Int, repeats: Bool, reflectsResponse: Bool, id: String, arguments: [String])
     case moveSurface(x: Int?, y: Int?, time: Int, isAsync: Bool, options: [String])
     case setPosition(x: Int, y: Int, scope: Int)

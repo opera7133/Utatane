@@ -514,6 +514,15 @@ public struct SakuraScriptParser: Sendable {
                     {
                         tokens.append(.balloonOffset(x: x, y: y))
                     } else if arguments.count >= 3,
+                              ["raiseplugin", "notifyplugin"].contains(arguments[0].lowercased())
+                    {
+                        tokens.append(.pluginEvent(
+                            target: arguments[1],
+                            id: arguments[2],
+                            arguments: Array(arguments.dropFirst(3)),
+                            reflectsResponse: arguments[0].lowercased() == "raiseplugin"
+                        ))
+                    } else if arguments.count >= 3,
                               arguments[0].lowercased() == "set",
                               arguments[1].lowercased() == "balloonalign"
                     {

@@ -323,8 +323,8 @@ UKADOC掲載イベント数: 290
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnRaisePluginFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRaisePluginFailure) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnNotifyPluginFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyPluginFailure) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnRaisePluginFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRaisePluginFailure) | ✅ | 実装＋UKADOC照合 | 低 | raisepluginの対象未発見・無効・非200・実行例外時に、理由・対象・イベント・元Referenceを通知し、応答スクリプトを反映 |
+| [`OnNotifyPluginFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyPluginFailure) | ✅ | 実装＋UKADOC照合 | 低 | notifypluginの対象未発見・無効・非200・実行例外時に、理由・対象・イベント・元ReferenceをNOTIFY相当で通知 |
 | [`OnRaiseOtherFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRaiseOtherFailure) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnNotifyOtherFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyOtherFailure) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 
@@ -439,12 +439,12 @@ UKADOC掲載イベント数: 290
 | [`installedshellname`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#installedshellname) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動中ゴーストにインストールされたシェル名をReference列へNOTIFY。他ゴーストのシェルは含めない |
 | [`installedballoonname`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#installedballoonname) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に全インストール済みバルーン名をReference列へNOTIFY |
 | [`installedheadlinename`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#installedheadlinename) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に全インストール済みRSS・ヘッドライン名をReference列へNOTIFY |
-| [`installedplugin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#installedplugin) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に空のNOTIFYを送り、プラグインがインストールされていない状態を通知。プラグイン機能自体は未実装 |
+| [`installedplugin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#installedplugin) | ✅ | 実装＋自動テスト | 低 | 起動時に認識済みプラグインの「名前、ID」をバイト値1で結合し、Reference列へNOTIFY。ネイティブSHIORI型のロード、定期イベント、メニュー・SakuraScript明示呼び出しを接続 |
 | [`configuredbiffname`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#configuredbiffname) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に空のNOTIFYを送り、設定済みメールアカウントがない状態を通知。メールチェック機能自体は未実装 |
 | [`ghostpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#ghostpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にUtataneが参照するゴースト格納フォルダの絶対パスをNOTIFY。DebugではBundledとLocalの双方を含む |
 | [`balloonpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#balloonpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にUtataneが参照するバルーン格納フォルダの絶対パスをNOTIFY。DebugではBundledとLocalの双方を含む |
 | [`headlinepathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#headlinepathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にヘッドライン格納フォルダの絶対パスをReference0へNOTIFY |
-| [`pluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#pluginpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に空のNOTIFYを送り、プラグイン格納パスがない状態を通知。プラグイン機能自体は未実装 |
+| [`pluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#pluginpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にUtataneが参照するプラグイン格納フォルダの絶対パスをNOTIFY。DebugではLocalとApplication Supportの双方を含む |
 | [`calendarskinpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#calendarskinpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に空のNOTIFYを送り、カレンダースキン格納パスがない状態を通知。カレンダー機能自体は未実装 |
 | [`calendarpluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#calendarpluginpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に空のNOTIFYを送り、カレンダープラグイン格納パスがない状態を通知。カレンダー機能自体は未実装 |
 | [`rateofusegraph`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#rateofusegraph) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動中ゴーストをboot状態の1レコードとしてNOTIFY。起動回数・時間・割合は0固定で履歴集計は未実装 |

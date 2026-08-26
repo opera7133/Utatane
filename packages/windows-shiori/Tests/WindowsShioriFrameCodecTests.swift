@@ -20,6 +20,19 @@ import Testing
     #expect(WindowsShioriProcessSession.windowsPath(for: url) == "Z:\\Users\\test\\Ghosts\\first.dll")
 }
 
+@Test func `generic Windows DLL host receives only the DLL path`() {
+    let configuration = WindowsPluginDLLProcessConfiguration(
+        wineExecutableURL: URL(filePath: "/Applications/Wine.app/Contents/Resources/wine/bin/wine64"),
+        winePrefixURL: URL(filePath: "/tmp/utatane-wine", directoryHint: .isDirectory),
+        hostExecutableURL: URL(filePath: "/tmp/utatane-dll-host.exe"),
+        dllURL: URL(filePath: "/Users/test/Plugins/sample/plugin.dll")
+    )
+    #expect(WindowsPluginDLLProcessSession.processArguments(configuration: configuration) == [
+        "/tmp/utatane-dll-host.exe",
+        "Z:\\Users\\test\\Plugins\\sample\\plugin.dll"
+    ])
+}
+
 @Test func `maps Materia kero local surfaces to shell surface IDs`() {
     let script = #"\0\s0さくら\1\s0うにゅう\s[3]\0\s4さくら"#
     #expect(

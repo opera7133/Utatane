@@ -22,7 +22,7 @@ UKADOCに掲載されているゴースト関連の設定・配布用テキス�
 | Ghost `descript.txt` | 🟡 | UTF-8／Shift_JIS、基本情報、SHIORI名、キャラクター名、既定surface・balloon、更新URL、README、推奨balloon | 74項目中、配置、SSTP制御、SHIORI詳細設定、カーソル、メニュー、アイコン等が未反映 |
 | Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`、bindgroup／bindoption | 102項目中、初期配置、balloon offset、メニュー装飾、z-order、sticky-window等が未反映 |
 | Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、arrow座標、cursor／anchorのstyle・色 | 162項目中、visited、marker配置、入力欄、透過方式、ウインドウ位置等が未反映 |
-| Plugin `descript.txt` | ❌ | なし | PLUGIN機構自体が未実装。UKADOC掲載13項目は未使用 |
+| Plugin `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、name、id、filename、charset、作者、URL、README、secondchangeinterval、otherghosttalkを読み込み、SHIORI／dylib／Windows DLLへ分類。ネイティブSHIORI型は実体をロードし、OnSecondChange・OnMenuExec・raiseplugin／notifypluginを配送。YAYA製wallet_of_unyuとAKARI製sudohaikuyuは実ファイルでOnMenuExecを確認。macOS dylibは標準`loadu/load`・`unload`・`request`を優先 | dylib実物とWine DLLは未確認。AKARIの`_create_thread`は同期実行で、type・更新、README表示は未対応 |
 | Headline `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、名前、DLL名、URL、open URL、homeurl、charset、alwaysdisplay、readme、readme.charset。RSS用`type`・`feed`拡張も利用 | UKADOC掲載項目は保持・利用。Windows DLL実行は実行環境依存 |
 | `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline、安全な新規インストールに加え、refreshとrefreshundeletemaskをバックアップ付き置換で実装 | plugin・calendar系の種別と同梱は未対応 |
 | `delete.txt` | 🟡 | UTF-8／Shift_JIS、charset行、Windows区切りの相対ファイル・ディレクトリを更新後に安全確認して削除 | 更新本体と削除を合わせた完全なロールバックは未対応 |

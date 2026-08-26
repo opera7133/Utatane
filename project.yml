@@ -104,6 +104,8 @@ targets:
       - package: UtataneKit
         product: UtatanePOSIXShiori
       - package: UtataneKit
+        product: UtatanePlugin
+      - package: UtataneKit
         product: UtataneKawariNative
       - package: UtataneKit
         product: UtataneYayaNative
