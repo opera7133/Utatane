@@ -38,6 +38,18 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
 - Materiaの「さくら」をWineなしで実行
 - プラグインの利用（ネイティブ対応SHIORIおよびmacOS向けにビルドされたdylibを使用するプラグインのみ）
+- カレンダー
+
+<details>
+<summary>実験的な機能</summary>
+
+- 利用者がビルドした蒼空のmacOS用モジュールを外部から読み込めます
+- OpenAI Realtime APIまたは互換APIへ接続するリアルタイム音声会話
+- ゴーストのAI連携
+
+詳しくは[Native SHIORI / SAORI](Docs/Native-SHIORI.md)を参照してください。
+
+</details>
 
 ## まだ無理なこと
 
@@ -48,16 +60,6 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - SakuraScript、SERIKO、着せ替えなどは未対応の命令や定義があります
 - ネットワーク更新はゴーストと単体バルーンが対象です。SSPの修復モードや、別配布のシェル・バルーンをまとめて更新する機能には未対応です
 - ゴーストによっては表示、文字コード、イベントの互換性に問題があります
-
-<details>
-<summary>実験的な機能</summary>
-
-- 利用者がビルドした蒼空のmacOS用モジュールを外部から読み込めます
-- OpenAI Realtime APIまたは互換APIへ接続するリアルタイム音声会話
-
-詳しくは[Native SHIORI / SAORI](Docs/Native-SHIORI.md)を参照してください。
-
-</details>
 
 ## とりあえず使う
 

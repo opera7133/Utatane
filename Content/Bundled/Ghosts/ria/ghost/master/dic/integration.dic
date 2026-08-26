@@ -39,7 +39,23 @@ OnUpdateFailure
 OnGhostChanging
 {
 	_name = reference0
-	if _name {
+	_ghost = reference2
+	if _name == 'りあ' || _ghost == 'りあ' {
+		'\0\s[4]私を私に切り替えるの。\w5……再読み込みね。\w5\s[103]はいはい、ちょっと待って。\e'
+	}
+	elseif _name == 'Emily' || _ghost == 'Emily/Phase4.5' {
+		'\0\s[103]Emilyのところね。\w5あっちは賑やかそうだし、退屈はしないんじゃない。\e'
+	}
+	elseif _name == 'まゆら' || _ghost == 'まゆらと黒うにゅう' {
+		'\0\s[103]まゆらのところ行くんだ。\w5黒うにゅうに変なこと吹き込まれないようにね。\e'
+	}
+	elseif _name == 'めもりーな' || _ghost == 'めもりーな' {
+		'\0\s[103]めもりーなのところね。\w5メモリの掃除ついでに、お兄の頭も軽くしてもらえば。\e'
+	}
+	elseif _name == 'さくら' || _ghost == 'さくら' {
+		'\0\s[103]さくらのところか。\w5有名人に会いに行くみたいで、よかったね。\e'
+	}
+	elseif _name {
 		_talks = RiaGhostChangingTalksNamed
 		REPLACE(_talks[RAND(ARRAYSIZE(_talks))], '%ghost%', _name)
 	}
@@ -65,7 +81,23 @@ RiaGhostChangingTalks : array
 OnGhostChanged
 {
 	_name = reference0
-	if _name {
+	_ghost = reference2
+	if _name == 'りあ' || _ghost == 'りあ' {
+		'\0\s[103]再読み込み終わり。\w5私の中身、そんなに気になったの。\w5\s[0]まあ、続ければ。\e'
+	}
+	elseif _name == 'Emily' || _ghost == 'Emily/Phase4.5' {
+		'\0\s[103]Emilyのところから戻ったんだ。\w5向こう、相変わらず賑やかだった？\e'
+	}
+	elseif _name == 'まゆら' || _ghost == 'まゆらと黒うにゅう' {
+		'\0\s[103]まゆらのところから戻ったの。\w5黒うにゅうの話、真に受けてないよね。\e'
+	}
+	elseif _name == 'めもりーな' || _ghost == 'めもりーな' {
+		'\0\s[103]めもりーなから戻ったんだ。\w5少しは頭の空き、増えた？\e'
+	}
+	elseif _name == 'さくら' || _ghost == 'さくら' {
+		'\0\s[103]さくらのところから戻ったの。\w5で、今度は私に何の用。\e'
+	}
+	elseif _name {
 		"\0\s[103]%(_name)から私に戻したんだ。\w5ふーん。\w5\s[0]それで、今度は何。\e"
 	}
 	else {

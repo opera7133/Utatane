@@ -26,6 +26,7 @@ import UtataneYayaNative
 
 private extension Notification.Name {
     static let showUtataneGhostPicker = Notification.Name("dev.utatane.showGhostPicker")
+    static let showUtataneCalendar = Notification.Name("dev.utatane.showCalendar")
     static let restoreUtataneSurfaces = Notification.Name("dev.utatane.restoreSurfaces")
 }
 
@@ -123,6 +124,10 @@ struct UtataneApp: App {
                 CheckForUpdatesView(updater: updaterController.updater)
             }
             CommandMenu("操作") {
+                Button("カレンダー") {
+                    NotificationCenter.default.post(name: .showUtataneCalendar, object: nil)
+                }
+                .keyboardShortcut("k", modifiers: [.command, .shift])
                 Button("ゴーストを変更…") {
                     NotificationCenter.default.post(name: .showUtataneGhostPicker, object: nil)
                 }
@@ -220,6 +225,7 @@ private struct UtataneRootView: View {
     @State private var calledGhosts: [URL: CalledGhostRuntime] = [:]
     @State private var sstpCookies: [String: [String: String]] = [:]
     @State private var sstpQuietUntil: Date?
+    @State private var activeSSTPScripts: [URL: String] = [:]
     @State private var contentPickerController = ContentPickerWindowController()
     @State private var textInputWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
@@ -248,6 +254,10 @@ private struct UtataneRootView: View {
     @State private var systemInputMonitor = SystemInputEventMonitor()
     @State private var systemLoadDetector = SystemLoadTransitionDetector()
     @State private var realtimeVoiceWindowController: RealtimeVoiceWindowController?
+    @State private var calendarWindowController = CalendarWindowController(
+        storeURL: ContentRoot.calendarSchedulesURL,
+        skinDirectories: ContentRoot.calendarSkinReadDirectories
+    )
 
     var body: some View {
         Group {
@@ -308,6 +318,12 @@ private struct UtataneRootView: View {
                 selectedGhostID = model.ghosts.randomElement()?.id
             }
             configurePlayback()
+            calendarWindowController.onRead = { schedule, eventID in
+                readSchedule(schedule, eventID: eventID)
+            }
+            calendarWindowController.onCalendarEvent = { eventID, references in
+                sendEvent(.shiori(id: eventID, references: references))
+            }
             applyAppearance()
             gamepadMonitor.onEvent = { id, references in
                 broadcastEvent(.shiori(id: id, references: references))
@@ -334,6 +350,9 @@ private struct UtataneRootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .showUtataneGhostPicker)) { _ in
             showGhostPicker()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showUtataneCalendar)) { _ in
+            calendarWindowController.showCalendar()
         }
         .onReceive(NotificationCenter.default.publisher(for: .restoreUtataneSurfaces)) { _ in
             surfaceWindowController.restoreSurfaces()
@@ -855,6 +874,7 @@ private struct UtataneRootView: View {
     }
 
     private func sendSecondChange() {
+        calendarWindowController.checkFiveMinuteReminders(at: Date())
         guard !isTransitioningGhost else { return }
         let references = secondChangeReferences(for: surfaceWindowController)
         if let session {
@@ -886,6 +906,25 @@ private struct UtataneRootView: View {
         }
         for runtime in calledGhosts.values {
             runtime.sendSecondChange(references: secondChangeReferences(for: runtime.surfaceController))
+        }
+    }
+
+    private func readSchedule(_ schedule: UtataneSchedule, eventID: String) {
+        guard let session else { return }
+        Task {
+            let response = try? await session.handle(event: .shiori(id: eventID, references: [
+                0: schedule.type,
+                1: schedule.caption,
+                2: schedule.subtitle,
+                3: schedule.script
+            ]))
+            let fallback = schedule.script.isEmpty
+                ? SakuraScript(rawValue: "\\0\(schedule.caption)\\e")
+                : SakuraScript(rawValue: schedule.script)
+            let script = response ?? fallback
+            if let balloon {
+                scriptPlayer.play(script, balloon: balloon)
+            }
         }
     }
 
@@ -1092,7 +1131,7 @@ private struct UtataneRootView: View {
             path: ghost.rootDirectory.path
         ))
         guard !Task.isCancelled else { return }
-        let startup: GhostStartup = if let previousGhost, !forceReload {
+        let startup: GhostStartup = if let previousGhost {
             .changed(from: previousGhost, script: changeScript)
         } else {
             .boot
@@ -1347,6 +1386,10 @@ private struct UtataneRootView: View {
                 sendEvent(.shiori(id: "OnChoiceTimeout", references: [0: script]))
             }
             scriptPlayer.onOpen = { target in
+                if target.caseInsensitiveCompare("calendar") == .orderedSame {
+                    calendarWindowController.showCalendar()
+                    return
+                }
                 guard let url = URL(string: target),
                       let scheme = url.scheme?.lowercased(),
                       ["http", "https"].contains(scheme)
@@ -2603,6 +2646,10 @@ private struct UtataneRootView: View {
         surfaceWindowController.contextMenuItems = {
             [
                 networkUpdateMenu(),
+                .action(
+                    title: String(localized: "カレンダー"),
+                    handler: { calendarWindowController.showCalendar() }
+                ),
                 headlineMenu(),
                 pluginMenu(),
                 functionMenu(),
@@ -3760,6 +3807,9 @@ private struct UtataneRootView: View {
         }
         let activeSession = target.session
         let activeBalloon = target.balloon
+        let options = Set((request.value(for: "Option") ?? "").lowercased().split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespaces)
+        })
         guard sstpQuietUntil.map({ $0 <= Date() }) ?? true else {
             return SSTPResponse(statusCode: 409, reason: "Conflict")
         }
@@ -3783,14 +3833,24 @@ private struct UtataneRootView: View {
             return SSTPResponse(statusCode: 204, reason: "No Content")
         }
         AppLogStore.shared.info("SSTPスクリプト再生", category: "SSTP", details: script.rawValue)
-        let options = Set((request.value(for: "Option") ?? "").lowercased().split(separator: ",").map {
-            $0.trimmingCharacters(in: .whitespaces)
-        })
         if options.contains("nobreak") {
             target.player.enqueue(script, balloon: activeBalloon)
+        } else if let interrupted = activeSSTPScripts[target.ghost.id], target.player.isDialogueActive {
+            let breakResponse = try? await activeSession.handle(event: .shiori(id: "OnSSTPBreak", references: [
+                0: interrupted,
+                1: "0",
+                2: "0"
+            ]))
+            if let breakResponse, !breakResponse.rawValue.isEmpty {
+                target.player.play(breakResponse, balloon: activeBalloon)
+                target.player.enqueue(script, balloon: activeBalloon)
+            } else {
+                target.player.play(script, balloon: activeBalloon)
+            }
         } else {
             target.player.play(script, balloon: activeBalloon)
         }
+        activeSSTPScripts[target.ghost.id] = script.rawValue
         return SSTPResponse(script: script.rawValue)
     }
 
@@ -4163,6 +4223,7 @@ private struct UtataneRootView: View {
                     currentGhost = refreshedGhost
                 }
                 installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonReadDirectories)
+                calendarWindowController.reloadSkins()
                 reloadHeadlines()
                 await reloadPlugins()
                 configureContextMenu()
@@ -5130,8 +5191,20 @@ enum ContentRoot {
         contentDirectory.appending(path: "Calendar/Skins", directoryHint: .isDirectory)
     }
 
+    static var calendarSkinReadDirectories: [URL] {
+        #if DEBUG
+            [repositoryRoot.appending(path: "Content/Local/Skins", directoryHint: .isDirectory), calendarSkinsDirectory]
+        #else
+            [calendarSkinsDirectory]
+        #endif
+    }
+
     static var calendarPluginsDirectory: URL {
         contentDirectory.appending(path: "Calendar/Plugins", directoryHint: .isDirectory)
+    }
+
+    static var calendarSchedulesURL: URL {
+        contentDirectory.appending(path: "Calendar/schedules.json", directoryHint: .notDirectory)
     }
 
     static var pluginReadDirectories: [URL] {

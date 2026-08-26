@@ -7,7 +7,7 @@ Utatane が発行する SHIORI Event を UKADOC の一覧と比較するため�
 
 UKADOC掲載イベント数: 290
 調査日: 2026-08-25
-調査結果: ✅ 6 / 🟡 198 / ❌ 83 / ➖ 3
+調査結果: ✅ 6 / 🟡 206 / ❌ 74 / ➖ 4
 
 ## 判定
 
@@ -281,20 +281,20 @@ UKADOC掲載イベント数: 290
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnSchedule5MinutesToGo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedule5MinutesToGo) | ❌ | カレンダー／スケジュール機能 | 高 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnScheduleRead`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnScheduleRead) | ❌ | カレンダー／スケジュール機能 | 高 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSchedulesenseBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseBegin) | ❌ | カレンダー／スケジュール機能 | 高 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSchedulesenseComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseComplete) | ❌ | カレンダー／スケジュール機能 | 高 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSchedulesenseFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseFailure) | ❌ | カレンダー／スケジュール機能 | 高 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSchedulepostBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulepostBegin) | ❌ | カレンダー／スケジュール機能 | 高 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSchedulepostComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulepostComplete) | ❌ | カレンダー／スケジュール機能 | 高 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnSchedule5MinutesToGo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedule5MinutesToGo) | 🟡 | 通知経路の実動確認 | 低 | 時刻指定予定の5分前にReference0〜3へtype/caption/subtitle/scriptを通知。アプリが停止中だった期間の追跡はしない |
+| [`OnScheduleRead`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnScheduleRead) | 🟡 | 通知経路の実動確認 | 低 | カレンダー詳細の「予定を読む」からReference0〜3を通知。スキンアイコンのホバー読み上げは未実装 |
+| [`OnSchedulesenseBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseBegin) | 🟡 | 通知経路の実動確認 | 低 | 内蔵iCalendarセンサの読み込み開始時にReference0へファイル名を通知。外部calendar pluginは未対応 |
+| [`OnSchedulesenseComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseComplete) | 🟡 | 通知経路の実動確認 | 低 | iCalendar読み込み完了時にReference0へ名前、Reference1へ件数を通知 |
+| [`OnSchedulesenseFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseFailure) | 🟡 | 通知経路の実動確認 | 低 | iCalendarの解析・ファイル入出力失敗時にcan't analyzeまたはfileioをReference0へ通知 |
+| [`OnSchedulepostBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulepostBegin) | 🟡 | 通知経路の実動確認 | 低 | iCalendar書き出し開始時にReference0=iCalendarで通知 |
+| [`OnSchedulepostComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulepostComplete) | 🟡 | 通知経路の実動確認 | 低 | iCalendar書き出し成功時にReference0=iCalendarで通知。キャンセル・失敗時は完了イベントを発行しない |
 
 ## SSTPイベント
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnSSTPBreak`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSSTPBreak) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSSTPBlacklisting`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSSTPBlacklisting) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnSSTPBreak`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSSTPBreak) | 🟡 | 再生位置Referenceの精密化 | 中 | nobreakなしの新しいSSTPが再生中SSTPを中断する際に発行。Reference0は中断スクリプト、Reference1は0。Reference2は現在0固定 |
+| [`OnSSTPBlacklisting`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSSTPBlacklisting) | ➖ | localhost限定SSTPの安全設計 | 中 | UtataneのSSTPはlocalhost限定で、送信元IPをブラックリスト化すると全ローカルクライアントを一括拒否するため未提供 |
 
 ## その他通信イベント
 

@@ -316,6 +316,49 @@ import UtataneShiori
     #expect(talks.contains { $0.contains("お兄") })
 }
 
+@Test func `installed ria distinguishes reload and familiar ghost changes`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-ghost-change-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+
+    let reload = try await engine.handle(event: .shiori(
+        id: "OnGhostChanging",
+        references: [0: "りあ", 2: "りあ"]
+    ))
+    let reloadComplete = try await engine.handle(event: .shiori(
+        id: "OnGhostChanged",
+        references: [0: "りあ", 2: "りあ"]
+    ))
+    let emily = try await engine.handle(event: .shiori(
+        id: "OnGhostChanging",
+        references: [0: "Emily", 2: "Emily/Phase4.5"]
+    ))
+    let mayura = try await engine.handle(event: .shiori(
+        id: "OnGhostChanged",
+        references: [0: "まゆら", 2: "まゆらと黒うにゅう"]
+    ))
+
+    #expect(reload?.rawValue.contains("再読み込み") == true)
+    #expect(reloadComplete?.rawValue.contains("再読み込み終わり") == true)
+    #expect(emily?.rawValue.contains("Emily") == true)
+    #expect(mayura?.rawValue.contains("まゆら") == true)
+}
+
 @Test func `installed ria resets pet count after idle or event`() async throws {
     let repositoryRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
