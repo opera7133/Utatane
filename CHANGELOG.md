@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.1.0-alpha.14] - 2026-08-26
+
+### 追加
+
+- プラグインシステムを実装。`PluginCatalog`・`PluginRuntime`・`PluginMessage`を新設し、ネイティブSHIORI型（YAYA・SATORI・KAWARI・美坂・灯）・macOS dylib・Windows DLLをプラグインとして認識・読み込みできるようにした
+- SakuraScriptの`\![raiseplugin,...]`・`\![notifyplugin,...]`でプラグインを呼び出し、ゴーストへ結果を返せるようにした。プラグイン呼び出し失敗時は`OnRaisePluginFailure`・`OnNotifyPluginFailure`をゴーストへ送信
+- プラグインの`OnSecondChange`を毎秒配送するようにした
+- macOS dylib（`loadu`/`load`・`unload`・`request` ABI）を`DynamicLibraryModuleSession`で直接ロードし、SHIORIおよびSAORIとして呼び出せるようにした
+- Wine経由の Windows DLL を汎用ホストプロセスとして`WindowsDLLModuleProcessSession`で管理し、SHIORI・SAORIとして呼び出せるようにした
+- `NativeSaoriRegistry`に外部モジュールファクトリを追加し、dylib・DLLをSAORIとしても利用できるようにした
+- `ExternalModuleRuntime`でdylib/DLL SHIORIをPersonalityEngineとして接続できるようにした
+- カレンダー機能を追加。スケジュールの作成・編集・繰り返し（毎週・毎月・毎年）・iCalendarファイルからの取り込みに対応したウィンドウ（`CalendarWindowController`）を追加
+- カレンダーのスキン（HTMLベース）に対応。`CalendarSkin`・`CalendarSkinLoader`でスキンディレクトリを読み込み、カレンダーウィンドウに適用できるようにした
+- スケジュール開始5分前に`OnSchedule5MinutesToGo`をゴーストへ送信するようにした
+- スケジュールのSHIORIイベント（`OnScheduleRead`・`OnSchedulesenseBegin`/`Complete`/`Failure`・`OnSchedulepostBegin`/`Complete`）をゴーストへ送信するようにした
+- NARの`install.txt`でプラグイン・カレンダースキン・カレンダープラグイン種別のコンテンツをインストールできるようにした
+- SSTPの`GetPluginNameList`で認識済みプラグイン名を返すようにした
+- 灯（Akari）のプラグインライフサイクル（`load`・`loadPlugin`・`_create_thread`によるバックグラウンドワーカー・グローバル変数の完了時反映）と`_customrequest`によるプラグイン要求処理に対応
+- 操作メニューに「カレンダー」（⌘⇧K）と「Surfaceを再表示」（⌘⇧R）を追加
+
+### 変更
+
+- KAWARIレガシー変換（`kawari.ini`）でダブルクリックエントリーとサーフェス復元スクリプトを抽出し、互換性を向上
+- KAWARIレガシー変換で`translateLegacyIfSyntax`によるIF構文の翻訳を追加
+
+### 修正
+
+- 美坂（Misaka）の文字コード処理とサーフェス定義解析の互換性を改善
+- 灯（Akari）のAZR実行と変数処理の不具合を修正
+- SATORIのPOSIX文字コード処理を修正
+- `OnRestoreSurface`イベントが正しく処理されない問題を修正
+- surfaces.txtのサーフェス範囲解析を修正
+- SakuraScriptパーサーで`\q`の直後に数値スロットが付く旧形式を正しく扱えるようにした
+- バルーンのテキストリンクヒット判定を修正
+- SurfaceWindowControllerのテスト対象コードを修正
+
 ## [0.1.0-alpha.13] - 2026-08-26
 
 ### 追加
@@ -199,7 +235,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[0.1.0-alpha.13]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.12...HEAD
+[0.1.0-alpha.14]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.13...HEAD
+[0.1.0-alpha.13]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.12...v0.1.0-alpha.13
 [0.1.0-alpha.12]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.11...v0.1.0-alpha.12
 [0.1.0-alpha.11]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.10...v0.1.0-alpha.11
 [0.1.0-alpha.10]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.9...v0.1.0-alpha.10
