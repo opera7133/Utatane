@@ -32,6 +32,8 @@ public final class NativeKawariSession: @unchecked Sendable {
     private let handle: UInt32
     private let compatibilityDirectoryURL: URL?
     private let usesLegacyCompatibility: Bool
+    private let legacyDoubleClickEntries: [String: String]
+    private let legacySurfaceRestoreScript: String?
     private let saoriRegistry: NativeSaoriRegistry
 
     public init(masterDirectoryURL: URL, saoriRegistry: NativeSaoriRegistry? = nil) throws {
@@ -41,6 +43,8 @@ public final class NativeKawariSession: @unchecked Sendable {
         let preparedDirectory = preparation.directory
         compatibilityDirectoryURL = preparation.isLegacy ? preparedDirectory : nil
         usesLegacyCompatibility = preparation.isLegacy
+        legacyDoubleClickEntries = preparation.doubleClickEntries
+        legacySurfaceRestoreScript = preparation.surfaceRestoreScript
         let path = preparedDirectory.standardizedFileURL.path + "/"
         guard let data = path.data(using: .shiftJIS) else {
             throw NativeKawariError.loadFailed
@@ -67,15 +71,20 @@ public final class NativeKawariSession: @unchecked Sendable {
         }
     }
 
-    private static func prepareDirectoryIfNeeded(_ masterDirectoryURL: URL) throws -> (directory: URL, isLegacy: Bool) {
+    private static func prepareDirectoryIfNeeded(_ masterDirectoryURL: URL) throws -> (
+        directory: URL,
+        isLegacy: Bool,
+        doubleClickEntries: [String: String],
+        surfaceRestoreScript: String?
+    ) {
         let currentConfig = masterDirectoryURL.appending(path: "kawarirc.kis")
         guard !FileManager.default.fileExists(atPath: currentConfig.path) else {
-            return (masterDirectoryURL, false)
+            return (masterDirectoryURL, false, [:], nil)
         }
 
         let legacyConfig = masterDirectoryURL.appending(path: "kawari.ini")
         guard FileManager.default.fileExists(atPath: legacyConfig.path) else {
-            return (masterDirectoryURL, false)
+            return (masterDirectoryURL, false, [:], nil)
         }
         let data = try Data(contentsOf: legacyConfig)
         guard let source = String(data: data, encoding: .shiftJIS) else {
@@ -101,11 +110,15 @@ public final class NativeKawariSession: @unchecked Sendable {
 
         var eventIDs = Set<String>()
         var generatedDictionaries: [(filename: String, data: Data)] = []
+        var doubleClickEntries: [String: String] = [:]
+        var legacyEntries: [String: [String]] = [:]
         for (dictionaryIndex, filename) in dictionaryFilenames.enumerated() {
             let dictionaryURL = masterDirectoryURL.appending(path: filename)
             guard let data = try? Data(contentsOf: dictionaryURL),
                   var dictionary = String(data: data, encoding: .shiftJIS)
             else { continue }
+            doubleClickEntries.merge(extractLegacyDoubleClickEntries(from: dictionary)) { _, newer in newer }
+            dictionary = translateLegacyIfSyntax(in: dictionary)
             for index in (0 ... 7).reversed() {
                 dictionary = dictionary.replacingOccurrences(
                     of: "system.Reference\(index)",
@@ -114,13 +127,16 @@ public final class NativeKawariSession: @unchecked Sendable {
             }
             for rawLine in dictionary.components(separatedBy: .newlines) {
                 let line = rawLine.trimmingCharacters(in: .whitespaces)
-                guard line.hasPrefix("event."), let colon = line.firstIndex(of: ":") else {
+                guard let colon = line.firstIndex(of: ":") else {
                     continue
                 }
-                let name = line[line.index(line.startIndex, offsetBy: 6) ..< colon]
-                    .trimmingCharacters(in: .whitespaces)
-                if !name.isEmpty {
-                    eventIDs.insert(name)
+                let entryName = line[..<colon].trimmingCharacters(in: .whitespaces)
+                let entryValue = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+                if !entryName.isEmpty {
+                    legacyEntries[entryName, default: []].append(entryValue)
+                }
+                if entryName.hasPrefix("event.") {
+                    eventIDs.insert(String(entryName.dropFirst(6)))
                 }
             }
             for (lineIndex, rawLine) in dictionary.components(separatedBy: .newlines).enumerated() {
@@ -162,22 +178,300 @@ public final class NativeKawariSession: @unchecked Sendable {
                 throw NativeKawariError.loadFailed
             }
             try configData.write(to: directory.appending(path: "kawarirc.kis"), options: .atomic)
-            return (directory, true)
+            return (
+                directory,
+                true,
+                doubleClickEntries,
+                extractLegacySurfaceRestoreScript(from: legacyEntries)
+            )
         } catch {
             try? FileManager.default.removeItem(at: directory)
             throw error
         }
     }
 
+    private static func extractLegacyDoubleClickEntries(from dictionary: String) -> [String: String] {
+        var entries: [String: String] = [:]
+        for rawLine in dictionary.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            guard line.hasPrefix("event.OnMouseDoubleClick") else { continue }
+            let aliasPattern = #"set\s+([A-Za-z0-9_.]+)\s+\$\{system\.Reference4\}"#
+            let aliasExpression = try? NSRegularExpression(pattern: aliasPattern)
+            let range = NSRange(line.startIndex ..< line.endIndex, in: line)
+            let alias = aliasExpression?.firstMatch(in: line, range: range).flatMap { match -> String? in
+                guard let range = Range(match.range(at: 1), in: line) else { return nil }
+                return String(line[range])
+            }
+            let reference = alias.map { NSRegularExpression.escapedPattern(for: $0) }
+                ?? "system\\.Reference4"
+            let pattern = #"\$\(\[\s*\$\{"# + reference
+                + #"\}\s*==\s*"([^"]+)"\s*\]\)\s*\$\{([^}]+)\}"#
+            guard let expression = try? NSRegularExpression(pattern: pattern) else { continue }
+            for match in expression.matches(in: line, range: range) {
+                guard let regionRange = Range(match.range(at: 1), in: line),
+                      let entryRange = Range(match.range(at: 2), in: line)
+                else { continue }
+                entries[String(line[regionRange])] = String(line[entryRange])
+            }
+        }
+        return entries
+    }
+
+    private static func extractLegacySurfaceRestoreScript(from entries: [String: [String]]) -> String? {
+        var pending = ["event.OnSurfaceRestore"]
+        var visited = Set<String>()
+        var surfaces: [Int: Int] = [:]
+        let referenceExpression = try? NSRegularExpression(pattern: #"\$\{([A-Za-z0-9_.]+)\}"#)
+        let surfaceExpression = try? NSRegularExpression(pattern: #"\\([01])\\s\[(-?\d+)\]"#)
+
+        while let entry = pending.popLast() {
+            guard visited.insert(entry).inserted else { continue }
+            for value in entries[entry] ?? [] {
+                let range = NSRange(value.startIndex ..< value.endIndex, in: value)
+                for match in referenceExpression?.matches(in: value, range: range) ?? [] {
+                    guard let nameRange = Range(match.range(at: 1), in: value) else { continue }
+                    let name = String(value[nameRange])
+                    if entries[name] != nil {
+                        pending.append(name)
+                    }
+                }
+                for quotedValue in quotedContents(in: value) {
+                    let quotedRange = NSRange(quotedValue.startIndex ..< quotedValue.endIndex, in: quotedValue)
+                    for match in surfaceExpression?.matches(in: quotedValue, range: quotedRange) ?? [] {
+                        guard let scopeRange = Range(match.range(at: 1), in: quotedValue),
+                              let surfaceRange = Range(match.range(at: 2), in: quotedValue),
+                              let scope = Int(quotedValue[scopeRange]), let surface = Int(quotedValue[surfaceRange])
+                        else { continue }
+                        surfaces[scope] = surface
+                    }
+                }
+            }
+        }
+        guard !surfaces.isEmpty else { return nil }
+        return surfaces.keys.sorted(by: >).map { "\\\($0)\\s[\(surfaces[$0]!)]" }.joined()
+    }
+
+    private static func quotedContents(in source: String) -> [String] {
+        let characters = Array(source)
+        var values: [String] = []
+        var start: Int?
+        var escaped = false
+        for index in characters.indices {
+            let character = characters[index]
+            if escaped {
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            guard character == "\"" else { continue }
+            if let openingIndex = start {
+                values.append(String(characters[(openingIndex + 1) ..< index]))
+                start = nil
+            } else {
+                start = index
+            }
+        }
+        return values
+    }
+
+    static func translateLegacyIfSyntax(in source: String) -> String {
+        translateLegacyIfSyntax(in: Array(source))
+    }
+
+    private static func translateLegacyIfSyntax(in characters: [Character]) -> String {
+        var result = ""
+        var index = 0
+        while index < characters.count {
+            guard index + 1 < characters.count,
+                  characters[index] == "$", characters[index + 1] == "("
+            else {
+                result.append(characters[index])
+                index += 1
+                continue
+            }
+            guard let closingIndex = matchingParenthesis(in: characters, openingAt: index + 1) else {
+                result.append(characters[index])
+                index += 1
+                continue
+            }
+            let body = Array(characters[(index + 2) ..< closingIndex])
+            let translatedBody = translateLegacyIfSyntax(in: body)
+            let commands = topLevelCommands(in: translatedBody)
+            if commands.count > 1 {
+                result += commands.map { "$(" + addLegacyElseIfNeeded(to: $0) + ")" }.joined()
+            } else {
+                result += "$(" + addLegacyElseIfNeeded(to: translatedBody) + ")"
+            }
+            index = closingIndex + 1
+        }
+        return result
+    }
+
+    private static func matchingParenthesis(in characters: [Character], openingAt openingIndex: Int) -> Int? {
+        var depth = 0
+        var quote: Character?
+        var escaped = false
+        for index in openingIndex ..< characters.count {
+            let character = characters[index]
+            if escaped {
+                escaped = false
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                continue
+            }
+            if let activeQuote = quote {
+                if character == activeQuote {
+                    quote = nil
+                }
+                continue
+            }
+            if character == "\"" || character == "'" {
+                quote = character
+            } else if character == "(" {
+                depth += 1
+            } else if character == ")" {
+                depth -= 1
+                if depth == 0 {
+                    return index
+                }
+            }
+        }
+        return nil
+    }
+
+    private static func addLegacyElseIfNeeded(to body: String) -> String {
+        let characters = Array(body)
+        let words = topLevelWordRanges(in: characters)
+        guard words.count >= 4,
+              String(characters[words[0]]).lowercased() == "if",
+              String(characters[words[3]]).lowercased() != "else"
+        else { return body }
+        let insertionIndex = words[3].lowerBound
+        return String(characters[..<insertionIndex]) + "else " + String(characters[insertionIndex...])
+    }
+
+    private static func topLevelWordRanges(in characters: [Character]) -> [Range<Int>] {
+        var ranges: [Range<Int>] = []
+        var wordStart: Int?
+        var parenthesisDepth = 0
+        var braceDepth = 0
+        var bracketDepth = 0
+        var quote: Character?
+        var escaped = false
+
+        for index in characters.indices {
+            let character = characters[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if let activeQuote = quote {
+                if character == activeQuote {
+                    quote = nil
+                }
+            } else if character == "\"" || character == "'" {
+                quote = character
+            } else {
+                switch character {
+                case "(": parenthesisDepth += 1
+                case ")": parenthesisDepth -= 1
+                case "{": braceDepth += 1
+                case "}": braceDepth -= 1
+                case "[": bracketDepth += 1
+                case "]": bracketDepth -= 1
+                default: break
+                }
+            }
+
+            let isSeparator = character.isWhitespace
+                && parenthesisDepth == 0 && braceDepth == 0 && bracketDepth == 0 && quote == nil
+            if isSeparator, let start = wordStart {
+                ranges.append(start ..< index)
+                wordStart = nil
+            } else if !isSeparator, wordStart == nil {
+                wordStart = index
+            }
+        }
+        if let wordStart {
+            ranges.append(wordStart ..< characters.count)
+        }
+        return ranges
+    }
+
+    private static func topLevelCommands(in body: String) -> [String] {
+        let characters = Array(body)
+        var commands: [String] = []
+        var commandStart = 0
+        var parenthesisDepth = 0
+        var braceDepth = 0
+        var bracketDepth = 0
+        var quote: Character?
+        var escaped = false
+
+        for index in characters.indices {
+            let character = characters[index]
+            if escaped {
+                escaped = false
+            } else if character == "\\" {
+                escaped = true
+            } else if let activeQuote = quote {
+                if character == activeQuote {
+                    quote = nil
+                }
+            } else if character == "\"" || character == "'" {
+                quote = character
+            } else {
+                switch character {
+                case "(": parenthesisDepth += 1
+                case ")": parenthesisDepth -= 1
+                case "{": braceDepth += 1
+                case "}": braceDepth -= 1
+                case "[": bracketDepth += 1
+                case "]": bracketDepth -= 1
+                default: break
+                }
+            }
+            guard character == ";", parenthesisDepth == 0, braceDepth == 0,
+                  bracketDepth == 0, quote == nil
+            else { continue }
+            let command = String(characters[commandStart ..< index]).trimmingCharacters(in: .whitespaces)
+            if !command.isEmpty {
+                commands.append(command)
+            }
+            commandStart = index + 1
+        }
+        let command = String(characters[commandStart...]).trimmingCharacters(in: .whitespaces)
+        if !command.isEmpty {
+            commands.append(command)
+        }
+        return commands
+    }
+
     public func request(_ request: ShioriRequest) throws -> ShioriResponse {
         guard usesLegacyCompatibility, let id = request.id else {
             return try ShioriMessageParser.parseResponse(self.request(request.serialized()))
         }
+        let entry = id == "OnMouseDoubleClick"
+            ? request.reference(4).flatMap { legacyDoubleClickEntries[$0] }
+            : nil
         let effectiveRequest = legacyEchoRequest(
-            expression: "${event.\(id)}",
+            expression: "${\(entry ?? "event.\(id)")}",
             originalRequest: request
         )
-        return try ShioriMessageParser.parseResponse(self.request(effectiveRequest.serialized()))
+        var response = try ShioriMessageParser.parseResponse(self.request(effectiveRequest.serialized()))
+        if id == "OnSurfaceRestore", response.value == #"\e"#, let legacySurfaceRestoreScript {
+            response.headers = ShioriHeaders(response.headers.entries.map { header in
+                header.name.caseInsensitiveCompare("Value") == .orderedSame
+                    ? ShioriHeader(name: header.name, value: legacySurfaceRestoreScript + #"\e"#)
+                    : header
+            })
+        }
+        return response
     }
 
     private func legacyEchoRequest(expression: String, originalRequest request: ShioriRequest) -> ShioriRequest {

@@ -7,6 +7,15 @@ import UtataneShiori
 
 @Suite(.serialized)
 struct NativeKawariSessionTests {
+    @Test func `translates legacy KAWARI if false branches`() {
+        #expect(NativeKawariSession.translateLegacyIfSyntax(
+            in: #"$(if $([ ${value} -eq 1 ]) ${yes} ${no})"#
+        ) == #"$(if $([ ${value} -eq 1 ]) ${yes} else ${no})"#)
+        #expect(NativeKawariSession.translateLegacyIfSyntax(
+            in: #"$(set value 1 ; if $([ ${value} -eq 1 ]) ${yes})"#
+        ) == #"$(set value 1)$(if $([ ${value} -eq 1 ]) ${yes})"#)
+    }
+
     @Test
     @MainActor
     func `native textcopy2 SAORI writes the macOS pasteboard`() {
@@ -71,6 +80,23 @@ struct NativeKawariSessionTests {
             y: 80
         ))))
         #expect(initialMenu.value?.contains("メニュー") == true)
+        for (region, marker) in [
+            ("face", #"\s[4]"#),
+            ("head", #"\s[3]"#),
+            ("bust", #"\s[1]"#),
+            ("skirt", #"\s[7]"#),
+            ("bracelet", #"\s[5]"#)
+        ] {
+            let response = try session.request(GhostEventShioriAdapter().request(for: .mouse(GhostMouseEvent(
+                kind: .doubleClick,
+                scope: 0,
+                region: region,
+                x: 200,
+                y: 200
+            ))))
+            #expect(response.value?.contains(marker) == true, "region: \(region), value: \(response.value ?? "nil")")
+            #expect(response.value?.contains("メニュー") != true, "region: \(region), value: \(response.value ?? "nil")")
+        }
         let engine = try NativeKawariPersonalityEngine(masterDirectoryURL: master)
         for kind in [
             GhostMouseEvent.Kind.down,
@@ -96,6 +122,17 @@ struct NativeKawariSessionTests {
         #expect((200 ..< 300).contains(response.statusCode))
         #expect(response.value?.isEmpty == false)
         #expect(response.value?.contains("�") != true)
+        #expect(response.value?.contains("; if") != true)
+        #expect(response.value?.contains(#"\1\s[10]"#) == true)
+        #expect(response.value?.hasSuffix(#"\e"#) == true)
+
+        let restore = try session.request(GhostEventShioriAdapter().request(for: .shiori(
+            id: "OnSurfaceRestore",
+            references: [0: "5", 1: "10"]
+        )))
+        #expect(restore.value?.contains(#"\0\s[0]"#) == true)
+        #expect(restore.value?.contains(#"\1\s[10]"#) == true)
+        #expect(restore.value?.hasSuffix(#"\e"#) == true)
 
         let menu = try session.request(GhostEventShioriAdapter().request(for: .mouse(GhostMouseEvent(
             kind: .doubleClick,
