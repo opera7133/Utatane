@@ -21,13 +21,13 @@ import Testing
 }
 
 @Test func `generic Windows DLL host receives only the DLL path`() {
-    let configuration = WindowsPluginDLLProcessConfiguration(
+    let configuration = WindowsDLLModuleProcessConfiguration(
         wineExecutableURL: URL(filePath: "/Applications/Wine.app/Contents/Resources/wine/bin/wine64"),
         winePrefixURL: URL(filePath: "/tmp/utatane-wine", directoryHint: .isDirectory),
         hostExecutableURL: URL(filePath: "/tmp/utatane-dll-host.exe"),
         dllURL: URL(filePath: "/Users/test/Plugins/sample/plugin.dll")
     )
-    #expect(WindowsPluginDLLProcessSession.processArguments(configuration: configuration) == [
+    #expect(WindowsDLLModuleProcessSession.processArguments(configuration: configuration) == [
         "/tmp/utatane-dll-host.exe",
         "Z:\\Users\\test\\Plugins\\sample\\plugin.dll"
     ])

@@ -658,7 +658,7 @@ struct UtataneSettingsView: View {
                 Section("Windows互換モジュール") {
                     TextField("Wine実行ファイル", text: $settings.wineExecutablePath)
                     TextField("WINEPREFIX", text: $settings.winePrefixPath)
-                    Text("MateriaのFIRSTと、config.txtで解析できないHEADLINE DLLに使用する。32-bit Windowsアプリを実行できるWineと、専用のprefixを指定する。")
+                    Text("MateriaのFIRST、外部SHIORI・SAORI・プラグインDLL、config.txtで解析できないHEADLINE DLLに使用する。32-bit Windowsアプリを実行できるWineと、専用のprefixを指定する。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -1,6 +1,6 @@
 import Foundation
 
-public struct WindowsPluginDLLProcessConfiguration: Sendable, Equatable {
+public struct WindowsDLLModuleProcessConfiguration: Sendable, Equatable {
     public let wineExecutableURL: URL
     public let winePrefixURL: URL
     public let hostExecutableURL: URL
@@ -23,14 +23,14 @@ public struct WindowsPluginDLLProcessConfiguration: Sendable, Equatable {
 }
 
 /// Runs a conventional load/request/unload Windows DLL through the generic Wine host.
-public final class WindowsPluginDLLProcessSession: @unchecked Sendable {
+public final class WindowsDLLModuleProcessSession: @unchecked Sendable {
     private let lock = NSLock()
     private let process: Process
     private let input: FileHandle
     private let output: FileHandle
     private var isClosed = false
 
-    public init(configuration: WindowsPluginDLLProcessConfiguration) throws {
+    public init(configuration: WindowsDLLModuleProcessConfiguration) throws {
         for url in [
             configuration.wineExecutableURL,
             configuration.hostExecutableURL,
@@ -117,7 +117,7 @@ public final class WindowsPluginDLLProcessSession: @unchecked Sendable {
         }
     }
 
-    public static func processArguments(configuration: WindowsPluginDLLProcessConfiguration) -> [String] {
+    public static func processArguments(configuration: WindowsDLLModuleProcessConfiguration) -> [String] {
         [
             configuration.hostExecutableURL.path,
             WindowsShioriProcessSession.windowsPath(for: configuration.dllURL)

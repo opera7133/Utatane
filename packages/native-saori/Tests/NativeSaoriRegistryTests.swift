@@ -34,6 +34,36 @@ import Testing
         == "場所\u{1}飲み物")
 }
 
+@Test func `unknown module can use external factory within master directory`() {
+    let module = RecordingExternalModule()
+    let registry = NativeSaoriRegistry(
+        baseDirectoryURL: URL(filePath: "/ghost/master"),
+        externalModuleFactory: { url in
+            url.path == "/ghost/master/saori/custom.dylib" ? module : nil
+        }
+    )
+
+    registry.load("saori\\custom.dylib")
+    #expect(registry.call("custom.dylib", arguments: ["one", "two"]) == "external")
+    #expect(module.arguments == [["one", "two"]])
+    registry.unload("custom.dylib")
+    #expect(registry.call("custom.dylib", arguments: []) == "")
+}
+
+@Test func `external factory rejects relative paths outside master directory`() {
+    let recorder = FactoryCallRecorder()
+    let registry = NativeSaoriRegistry(
+        baseDirectoryURL: URL(filePath: "/ghost/master"),
+        externalModuleFactory: { _ in
+            recorder.wasCalled = true
+            return RecordingExternalModule()
+        }
+    )
+
+    registry.load("../outside.dll")
+    #expect(!recorder.wasCalled)
+}
+
 private final class RecordingWindowController: NativeSaoriWindowControlling, @unchecked Sendable {
     struct Move: Equatable { var scope: Int; var x: Int; var speed: Int }
     var moves: [Move] = []
@@ -48,4 +78,17 @@ private final class RecordingWindowController: NativeSaoriWindowControlling, @un
     func move(scope: Int, x: Int, speed: Int) {
         moves.append(.init(scope: scope, x: x, speed: speed))
     }
+}
+
+private final class RecordingExternalModule: ExternalSaoriModule, @unchecked Sendable {
+    var arguments: [[String]] = []
+
+    func call(arguments: [String]) -> String {
+        self.arguments.append(arguments)
+        return "external"
+    }
+}
+
+private final class FactoryCallRecorder: @unchecked Sendable {
+    var wasCalled = false
 }

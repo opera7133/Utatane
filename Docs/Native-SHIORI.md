@@ -1,6 +1,6 @@
 # Native SHIORI / SAORI
 
-なるべくWineを使わずにゴーストを動かすための話です。KAWARIはアプリへ静的リンク、Aosoraは外部のmacOS用dynamic libraryを読み込みます。
+なるべくWineを使わずにゴーストを動かすための話です。既知のSHIORIとSAORIはUtataneのネイティブ実装を優先し、未知のモジュールには標準ABIのmacOS dynamic libraryと、設定済みWineホストによるWindows DLLの経路があります。
 
 ## 共通ネイティブSAORI
 
@@ -16,7 +16,13 @@
 
 SSUはSATORIに同梱された既存実装を使います。`saori_cpuid.dll`と`kenonoke.dll`はSATORI固有実装から共通レジストリへ移し、SATORIの既存呼び出し構文からも同じ実装を利用します。
 
-外部macOS SHIORIやWindows DLLホストへ任意のSAORIを注入する機構ではありません。ここでいう共通対応は、Utatane内蔵のネイティブSHIORI経路が対象です。
+内蔵実装にないSAORIは、`.dylib`、`.so`、`.bundle`なら標準の`loadu/load`・`request`・`unload` ABIで読み込みます。`.dll`はWineと汎用DLLホストを設定している場合だけ同じABIを介して実行します。相対パスはゴーストのmasterディレクトリ内に制限します。
+
+## 外部SHIORI
+
+ネイティブ対応に該当しないSHIORIも、macOS用の`.dylib`、`.so`、`.bundle`なら標準ABIで読み込みます。Windowsの`.dll`は`UTATANE_WINE_EXECUTABLE`、`UTATANE_WINE_PREFIX`、`UTATANE_WINDOWS_DLL_HOST`（Debug版では`Content/Local/WindowsDLLBridge/utatane-dll-host.exe`も可）が揃う場合にWineへ渡します。
+
+この経路は一般的なSHIORI/3.0とSAORI/1.0の電文、および標準エントリポイントを扱うものです。Windows固有の補助DLL、レジストリ、COM、別プロセスなどへ依存するモジュールまで動作を保証するものではありません。
 
 ## MISAKA
 
@@ -54,7 +60,7 @@ MISAKAは`misaka.dll`をロードせず、Shift_JIS辞書をSwift実装で解釈
 
 ファイル関数は`_readtext`、`_writetext`、`_isfile`、`_fenum`、`_abspath`、`_readcsv`、`_savecsv`、`_vsave`、`_vload`とコピー・移動・作成・削除に対応しています。相対パスはゴーストmasterから読み、変更分はApplication Support内の専用領域へ保存します。絶対パス、ドライブ指定、`..`、領域外を指すシンボリックリンクは拒否し、ゴーストの配布物へ直接書き込みません。削除と移動は専用領域にある項目だけが対象です。テキストはUTF-8とShift_JIS、改行はLFとCRLFを扱います。
 
-`_saoriload`、`_saorirequest`、`_saoriunload`は他のネイティブSHIORIと同じSAORIレジストリへ接続します。IDを付けたuniversal SAORIと、パスを直接指定するbasic SAORIの呼び出し形式を扱い、結果を`Result`と`ValueN`の辞書で返します。Utataneがネイティブ実装を持つモジュールだけが対象で、未知のDLLをWineで実行しません。
+`_saoriload`、`_saorirequest`、`_saoriunload`は他のネイティブSHIORIと同じSAORIレジストリへ接続します。IDを付けたuniversal SAORIと、パスを直接指定するbasic SAORIの呼び出し形式を扱い、結果を`Result`と`ValueN`の辞書で返します。内蔵実装にないモジュールは、上記の外部SAORI経路を利用できます。
 
 `_httpget`はHTTP/HTTPSの2xx応答を同期取得し、Shift_JIS、UTF-8、EUC-JP、ISO-2022-JPを行配列へ変換します。本文は1MB、待機は15秒までです。`_http_download`は8MBまで取得し、ファイル関数と同じApplication Support内の専用領域へ保存します。リダイレクト後もHTTP/HTTPS以外は拒否します。
 

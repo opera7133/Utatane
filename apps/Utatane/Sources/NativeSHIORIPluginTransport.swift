@@ -59,10 +59,10 @@ enum NativeSHIORIPluginError: LocalizedError {
 }
 
 actor WindowsDLLPluginTransport: PluginTransport {
-    private let session: WindowsPluginDLLProcessSession
+    private let session: WindowsDLLModuleProcessSession
 
-    init(configuration: WindowsPluginDLLProcessConfiguration) throws {
-        session = try WindowsPluginDLLProcessSession(configuration: configuration)
+    init(configuration: WindowsDLLModuleProcessConfiguration) throws {
+        session = try WindowsDLLModuleProcessSession(configuration: configuration)
     }
 
     func request(_ request: PluginRequest) async throws -> PluginResponse {

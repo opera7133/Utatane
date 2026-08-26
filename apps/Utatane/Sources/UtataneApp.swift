@@ -1672,6 +1672,23 @@ private struct UtataneRootView: View {
         } else if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename) {
             throw AppError.windowsShioriUnavailable
         }
+        if let moduleURL = ContentRoot.shioriModuleURL(for: ghost) {
+            switch moduleURL.pathExtension.lowercased() {
+            case "dylib", "so", "bundle":
+                return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
+                    DynamicLibraryModuleSession(directoryURL: masterDirectory, moduleURL: moduleURL)
+                ))
+            case "dll":
+                guard let configuration = ContentRoot.windowsDLLConfiguration(for: moduleURL) else {
+                    throw AppError.windowsShioriUnavailable
+                }
+                return try ExternalSHIORIPersonalityEngine(backend: .windowsDLL(
+                    WindowsDLLModuleProcessSession(configuration: configuration)
+                ))
+            default:
+                break
+            }
+        }
 
         guard let dialogueURL = ContentRoot.dialogueURL(for: ghost) else {
             throw AppError.unsupportedShiori(ghost.shioriFilename)
@@ -1683,7 +1700,24 @@ private struct UtataneRootView: View {
     private func nativeSaoriRegistry(for masterDirectory: URL) -> NativeSaoriRegistry {
         NativeSaoriRegistry(
             baseDirectoryURL: masterDirectory,
-            windowController: NativeSaoriWindowAdapter(controller: surfaceWindowController)
+            windowController: NativeSaoriWindowAdapter(controller: surfaceWindowController),
+            externalModuleFactory: { moduleURL in
+                switch moduleURL.pathExtension.lowercased() {
+                case "dylib", "so", "bundle":
+                    guard let session = try? DynamicLibraryModuleSession(
+                        directoryURL: moduleURL.deletingLastPathComponent(),
+                        moduleURL: moduleURL
+                    ) else { return nil }
+                    return ExternalSaoriModuleSession(backend: .dynamicLibrary(session))
+                case "dll":
+                    guard let configuration = ContentRoot.windowsDLLConfiguration(for: moduleURL),
+                          let session = try? WindowsDLLModuleProcessSession(configuration: configuration)
+                    else { return nil }
+                    return ExternalSaoriModuleSession(backend: .windowsDLL(session))
+                default:
+                    return nil
+                }
+            }
         )
     }
 
@@ -4578,7 +4612,7 @@ enum AppError: LocalizedError {
         case let .unsupportedShiori(filename):
             String(localized: "このゴーストのSHIORIにはまだ対応していない: \(filename ?? "SHIORI不明")")
         case .windowsShioriUnavailable:
-            String(localized: "この版のFIRSTにはネイティブ対応していない。配布版ではMateria用Wineホストも利用できない")
+            String(localized: "このWindows SHIORIを使うにはWineと対応するDLLホストの設定が必要")
         }
     }
 }
@@ -4833,8 +4867,12 @@ enum ContentRoot {
         )
     }
 
-    static func windowsPluginConfiguration(for plugin: InstalledPlugin) -> WindowsPluginDLLProcessConfiguration? {
+    static func windowsPluginConfiguration(for plugin: InstalledPlugin) -> WindowsDLLModuleProcessConfiguration? {
         guard case let .windowsDLL(dllURL) = plugin.runtime else { return nil }
+        return windowsDLLConfiguration(for: dllURL)
+    }
+
+    static func windowsDLLConfiguration(for dllURL: URL) -> WindowsDLLModuleProcessConfiguration? {
         let environment = ProcessInfo.processInfo.environment
         let defaults = UserDefaults.standard
         let fileManager = FileManager.default
@@ -4860,12 +4898,25 @@ enum ContentRoot {
         guard [wineURL, prefixURL, hostURL, dllURL].allSatisfy({
             fileManager.fileExists(atPath: $0.path)
         }) else { return nil }
-        return WindowsPluginDLLProcessConfiguration(
+        return WindowsDLLModuleProcessConfiguration(
             wineExecutableURL: wineURL,
             winePrefixURL: prefixURL,
             hostExecutableURL: hostURL,
             dllURL: dllURL
         )
+    }
+
+    static func shioriModuleURL(for ghost: InstalledGhost) -> URL? {
+        guard let filename = ghost.shioriFilename?.replacingOccurrences(of: "\\", with: "/"),
+              !filename.isEmpty, !filename.hasPrefix("/")
+        else { return nil }
+        let masterDirectory = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
+        let moduleURL = masterDirectory.appending(path: filename, directoryHint: .notDirectory).standardizedFileURL
+        let masterPath = masterDirectory.standardizedFileURL.path
+        guard moduleURL.path.hasPrefix(masterPath + "/"),
+              FileManager.default.fileExists(atPath: moduleURL.path)
+        else { return nil }
+        return moduleURL
     }
 
     static func windowsHeadlineConfiguration() -> WindowsHeadlineHostConfiguration? {

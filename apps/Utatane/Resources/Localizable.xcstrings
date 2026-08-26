@@ -436,31 +436,31 @@
         }
       }
     },
-    "MateriaのFIRSTと、config.txtで解析できないHEADLINE DLLに使用する。32-bit Windowsアプリを実行できるWineと、専用のprefixを指定する。" : {
+    "MateriaのFIRST、外部SHIORI・SAORI・プラグインDLL、config.txtで解析できないHEADLINE DLLに使用する。32-bit Windowsアプリを実行できるWineと、専用のprefixを指定する。" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Used for Materia FIRST and HEADLINE DLLs not supported via config.txt. Specify Wine capable of running 32-bit Windows apps along with a dedicated prefix."
+            "value" : "Used for Materia FIRST, external SHIORI, SAORI, and plugin DLLs, and HEADLINE DLLs not supported via config.txt. Specify Wine capable of running 32-bit Windows apps along with a dedicated prefix."
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Materia FIRST와 config.txt로 해석할 수 없는 HEADLINE DLL에 사용합니다. 32비트 Windows 앱을 실행할 수 있는 Wine과 전용 prefix를 지정하세요."
+            "value" : "Materia FIRST, 외부 SHIORI·SAORI·플러그인 DLL 및 config.txt로 해석할 수 없는 HEADLINE DLL에 사용합니다. 32비트 Windows 앱을 실행할 수 있는 Wine과 전용 prefix를 지정하세요."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用于Materia FIRST以及无法通过config.txt解析的HEADLINE DLL。请指定可运行32位Windows应用的Wine和专用prefix。"
+            "value" : "用于Materia FIRST、外部SHIORI、SAORI、插件DLL以及无法通过config.txt解析的HEADLINE DLL。请指定可运行32位Windows应用的Wine和专用prefix。"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "用於Materia FIRST以及無法透過config.txt解析的HEADLINE DLL。請指定可執行32位元Windows App的Wine和專用prefix。"
+            "value" : "用於Materia FIRST、外部SHIORI、SAORI、外掛DLL以及無法透過config.txt解析的HEADLINE DLL。請指定可執行32位元Windows App的Wine和專用prefix。"
           }
         }
       }
@@ -1480,6 +1480,35 @@
         }
       }
     },
+    "このWindows SHIORIを使うにはWineと対応するDLLホストの設定が必要" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Windows SHIORI requires Wine and a compatible DLL host to be configured."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Windows SHIORI를 사용하려면 Wine과 호환 DLL 호스트를 설정해야 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "要使用此Windows SHIORI，需要配置Wine和兼容的DLL主机。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "若要使用此Windows SHIORI，必須設定Wine和相容的DLL主機。"
+          }
+        }
+      }
+    },
     "このゴーストのSHIORIにはまだ対応していない: %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1534,35 +1563,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "關閉此Ghost"
-          }
-        }
-      }
-    },
-    "この版のFIRSTにはネイティブ対応していない。配布版ではMateria用Wineホストも利用できない" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "This version of FIRST is not natively supported. Wine host for Materia is also unavailable in distribution build."
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "이 버전의 FIRST는 네이티브로 지원되지 않습니다. 배포 빌드에서는 Materia용 Wine 호스트도 사용할 수 없습니다."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "尚未原生支持此版本的FIRST。发行版也无法使用Materia的Wine主机。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "尚未原生支持此版本的FIRST。發行版也無法使用Materia的Wine主機。"
           }
         }
       }

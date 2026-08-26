@@ -8,6 +8,10 @@ public protocol NativeSaoriCalling: Sendable {
     func call(_ path: String, arguments: [String]) -> String
 }
 
+public protocol ExternalSaoriModule: AnyObject, Sendable {
+    func call(arguments: [String]) -> String
+}
+
 public struct NativeSaoriWindowFrame: Sendable, Equatable {
     public var x: Int
     public var y: Int
@@ -31,32 +35,46 @@ public protocol NativeSaoriWindowControlling: Sendable {
 public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable {
     private let baseDirectoryURL: URL
     private let windowController: (any NativeSaoriWindowControlling)?
+    private let externalModuleFactory: (@Sendable (URL) -> (any ExternalSaoriModule)?)?
     private var modules: [String: any NativeSaoriModule] = [:]
+    private var externalModules: [String: any ExternalSaoriModule] = [:]
 
-    public init(baseDirectoryURL: URL, windowController: (any NativeSaoriWindowControlling)? = nil) {
+    public init(
+        baseDirectoryURL: URL,
+        windowController: (any NativeSaoriWindowControlling)? = nil,
+        externalModuleFactory: (@Sendable (URL) -> (any ExternalSaoriModule)?)? = nil
+    ) {
         self.baseDirectoryURL = baseDirectoryURL
         self.windowController = windowController
+        self.externalModuleFactory = externalModuleFactory
     }
 
     public func load(_ path: String) {
         let key = moduleKey(path)
-        guard modules[key] == nil else { return }
+        guard modules[key] == nil, externalModules[key] == nil else { return }
         switch key {
         case "saori_cpuid.dll": modules[key] = NativeSystemInfo()
         case "kenonoke.dll": modules[key] = NativeKeyword(moduleURL: resolvedModuleURL(path))
         case "mciaudior.dll": modules[key] = NativeMciAudioR(baseDirectoryURL: baseDirectoryURL)
         case "wmove.dll": modules[key] = NativeWmove(windowController: windowController)
         case "textcopy2.dll": modules[key] = NativeTextCopy()
-        default: break
+        default:
+            if let moduleURL = safeExternalModuleURL(path),
+               let module = externalModuleFactory?(moduleURL)
+            {
+                externalModules[key] = module
+            }
         }
     }
 
     public func unload(_ path: String) {
         modules.removeValue(forKey: moduleKey(path))?.unload()
+        externalModules.removeValue(forKey: moduleKey(path))
     }
 
     public func call(_ path: String, arguments: [String]) -> String {
-        modules[moduleKey(path)]?.call(arguments) ?? ""
+        let key = moduleKey(path)
+        return modules[key]?.call(arguments) ?? externalModules[key]?.call(arguments: arguments) ?? ""
     }
 
     public func response(path: String, request: String) -> String {
@@ -94,6 +112,14 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
         return normalized.hasPrefix("/")
             ? URL(filePath: normalized).standardizedFileURL
             : baseDirectoryURL.appending(path: normalized).standardizedFileURL
+    }
+
+    private func safeExternalModuleURL(_ path: String) -> URL? {
+        let normalized = path.replacingOccurrences(of: "\\", with: "/")
+        let url = resolvedModuleURL(normalized)
+        guard !normalized.hasPrefix("/") else { return url }
+        let basePath = baseDirectoryURL.standardizedFileURL.path
+        return url.path == basePath || url.path.hasPrefix(basePath + "/") ? url : nil
     }
 }
 

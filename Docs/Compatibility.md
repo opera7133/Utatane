@@ -10,6 +10,7 @@
 | 酒の神さま | SATORI | 起動と`kenonoke.dll`のキーワード分類をテスト済み | 音声系SAORI、画面効果 |
 | COLORSβ | KAWARI | 起動、シェル、クリップボードをテスト済み | COLORS専用SAORIは後回し |
 | Aosora demo | Aosora | 外部macOSモジュールで実際に起動確認済み | 上流変更への追従、配布方法 |
+| 伺かWizまゆら | KAWARI(Legacy) | 起動、各メッセージ確認済み | 不明 |
 | さくら | Materia first | 対応版`first.dll`をWineなしで起動。会話、クリック、眠気・睡眠・入浴、主要メニューと状態保存を確認 | Materia固有のニュース、メール、Windows終了・再起動など |
 
 ## SAORI
@@ -23,8 +24,8 @@
 | `mciaudior.dll` | 対応 | AVFoundationによる`load`、`play`、`loop`、`stop` |
 | `wmove.dll` | 一部対応 | `MOVETO`、`MOVETO_INSIDE`、`GET_POSITION`、`GET_DESKTOP_SIZE` |
 | `exec.dll` / `process.dll` / `proxy.dll` | 未対応 | 権限と安全な挙動を決めてから |
-| その他のWindows DLL | 原則未対応 | Wineへ何でも投げる方針にはしない |
+| その他の標準SAORI DLL | 条件付き | 内蔵実装を優先し、汎用DLLホストとWineの設定時だけ実行。実DLL確認は未実施 |
 
 実ゴーストを手元へ置く場所やテスト方法は[開発ガイド](Development.md)と[Native SHIORI / SAORI](Native-SHIORI.md)を参照してください。
 
-表にあるネイティブSAORIは、SSUを除いてSHIORI非依存の共通レジストリにあり、ネイティブMISAKA、YAYA、SATORI、KAWARIから利用できます。SSUはSATORI同梱実装を維持しています。
+表にあるネイティブSAORIは、SSUを除いてSHIORI非依存の共通レジストリにあり、ネイティブMISAKA、YAYA、SATORI、KAWARIから利用できます。SSUはSATORI同梱実装を維持しています。未知のmacOS用標準ABIモジュールとWindows DLLにも読み込み経路はありますが、Windows固有機能への依存まで吸収するものではありません。
