@@ -25,11 +25,11 @@ OnRiaChoiceState
 	if TOINT(_spoiling) {
 		'\0\s[1]お兄のこと大好き。\w5一人にされたくないし、ずっと構ってほしい。\w5……状態を聞いたお兄が悪いからね。\e'
 	}
-	elseif _hour < 5 || _elapsed >= 10800 {
-		'\0\s[100]眠い。\w5私を起動してからも結構経ってるし、静かにしてたい。\e'
-	}
 	elseif ria_session_pet_count >= 7 {
 		'\0\s[9]普通。\w5ただ、今日は撫でられすぎて髪が気になる。\e'
+	}
+	elseif _hour < 5 || _elapsed >= 10800 {
+		'\0\s[100]眠い。\w5私を起動してからも結構経ってるし、静かにしてたい。\e'
 	}
 	elseif ria_mood_saved >= 4 {
 		'\0\s[1]まあまあ。\w5さっきよりちょっと機嫌いい。\e'

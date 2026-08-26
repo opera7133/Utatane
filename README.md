@@ -37,6 +37,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
 - `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
 - Materiaの「さくら」をWineなしで実行
+- OpenAI Realtime APIまたは互換APIへ接続するリアルタイム音声会話（実験的）
 
 ## まだ無理なこと
 
@@ -127,6 +128,7 @@ Content/Local/
 - [開発・ビルド](Docs/Development.md)
 - [ゴースト互換状況](Docs/Compatibility.md)
 - [Native SHIORI / SAORI](Docs/Native-SHIORI.md)
+- [Realtime音声会話](Docs/Realtime-Voice.md)
 - [SakuraScript対応状況](Docs/UKADOC-SakuraScript-Compatibility.md)
 - [SHIORI対応状況](Docs/UKADOC-SHIORI-Event-Compatibility.md)
 

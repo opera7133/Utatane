@@ -58,6 +58,8 @@
 	<string>ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>音声認識やゴーストとのリアルタイム音声会話に使用します。音声は選択したRealtime APIへ送信されます。</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>SUEnableAutomaticChecks</key>

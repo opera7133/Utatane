@@ -41,6 +41,7 @@ targets:
         NSHumanReadableCopyright: "Copyright © 2026 opera7133."
         NSLocationUsageDescription: "ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。"
         NSLocationWhenInUseUsageDescription: "ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。"
+        NSMicrophoneUsageDescription: "音声認識やゴーストとのリアルタイム音声会話に使用します。音声は選択したRealtime APIへ送信されます。"
         NSPrincipalClass: NSApplication
         SUFeedURL: https://dl.wmsci.com/utatane/appcast.xml
         SUEnableAutomaticChecks: true
@@ -82,6 +83,8 @@ targets:
         product: UtataneCore
       - package: UtataneKit
         product: UtataneAI
+      - package: UtataneKit
+        product: UtataneRealtime
       - package: UtataneKit
         product: UtataneContent
       - package: UtataneKit

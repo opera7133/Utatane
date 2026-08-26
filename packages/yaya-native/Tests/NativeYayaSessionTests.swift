@@ -318,7 +318,7 @@ import UtataneShiori
 
     // Pet head 7+ times to trigger too-much-pet state
     var tooMuchPetTriggered = false
-    for _ in 0 ..< 10 {
+    for _ in 0 ..< 15 {
         for x in 0 ..< 80 {
             if let response = try await engine.handle(event: .mouse(GhostMouseEvent(
                 kind: .move,
@@ -330,7 +330,11 @@ import UtataneShiori
                 if ["撫ですぎ", "十分", "一回離して"].contains(where: { response.rawValue.contains($0) }) {
                     tooMuchPetTriggered = true
                 }
+                break
             }
+        }
+        if tooMuchPetTriggered {
+            break
         }
     }
     #expect(tooMuchPetTriggered)
@@ -341,19 +345,28 @@ import UtataneShiori
     // Trigger AI talk event (simulates idle elapsed time)
     _ = try await engine.handle(event: .shiori(id: "OnAITalkNewEvent", references: [4: "600"]))
 
+    let stateAfterReset = try await engine.handle(event: .shiori(id: "OnRiaChoiceState", references: [:]))
+    #expect(stateAfterReset?.rawValue.contains("髪が気になる") == false)
+
     // Petting again should no longer trigger the too-much-pet response
     var resetPetResponse = false
-    for x in 0 ..< 80 {
-        if let response = try await engine.handle(event: .mouse(GhostMouseEvent(
-            kind: .move,
-            scope: 0,
-            region: "Head",
-            x: 80 + (x % 20),
-            y: 50
-        ))) {
-            if !["撫ですぎ", "十分", "一回離して"].contains(where: { response.rawValue.contains($0) }) {
-                resetPetResponse = true
+    for _ in 0 ..< 5 {
+        for x in 0 ..< 80 {
+            if let response = try await engine.handle(event: .mouse(GhostMouseEvent(
+                kind: .move,
+                scope: 0,
+                region: "Head",
+                x: 80 + (x % 20),
+                y: 50
+            ))) {
+                if !["撫ですぎ", "十分", "一回離して"].contains(where: { response.rawValue.contains($0) }) {
+                    resetPetResponse = true
+                }
+                break
             }
+        }
+        if resetPetResponse {
+            break
         }
     }
     #expect(resetPetResponse)

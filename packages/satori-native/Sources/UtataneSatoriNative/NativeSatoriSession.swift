@@ -53,7 +53,13 @@ public final class NativeSatoriSession: @unchecked Sendable {
     }
 
     public func request(_ request: ShioriRequest) throws -> ShioriResponse {
-        try ShioriMessageParser.parseResponse(self.request(request.serialized()))
+        var request = request
+        if request.id == "OnSurfaceChange" {
+            for index in 0 ... 1 where request.reference(index) == nil {
+                request.headers.append(name: "Reference\(index)", value: "-1")
+            }
+        }
+        return try ShioriMessageParser.parseResponse(self.request(request.serialized()))
     }
 
     public func request(_ request: String) throws -> String {

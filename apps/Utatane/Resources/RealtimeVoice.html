@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { color-scheme: light dark; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    body { margin: 0; padding: 24px; background: Canvas; color: CanvasText; }
+    h1 { margin: 0 0 8px; font-size: 22px; }
+    p { color: GrayText; line-height: 1.5; }
+    .buttons { display: flex; gap: 10px; margin: 20px 0; }
+    button { appearance: none; border: 0; border-radius: 8px; padding: 10px 18px; font: inherit; color: white; background: #356cf0; }
+    button.secondary { background: #666; }
+    button:disabled { opacity: .45; }
+    #status { padding: 12px; border-radius: 8px; background: color-mix(in srgb, CanvasText 8%, Canvas); }
+    .metrics { display: grid; grid-template-columns: auto 1fr auto; gap: 8px 12px; align-items: center; margin: 14px 0; }
+    meter, input[type="range"] { width: 100%; }
+    #latency { grid-column: 1 / -1; color: GrayText; }
+    #events { height: 300px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; padding: 12px; border-radius: 8px; background: color-mix(in srgb, CanvasText 6%, Canvas); font: 11px/1.45 ui-monospace, monospace; }
+    audio { width: 100%; margin: 16px 0; }
+  </style>
+</head>
+<body>
+  <h1>リアルタイム音声会話</h1>
+  <p>マイク音声は設定中のRealtime APIへ送信される。APIキーはこの画面には渡されない。</p>
+  <div class="buttons">
+    <button id="start">会話を開始</button>
+    <button id="stop" class="secondary" disabled>終了</button>
+  </div>
+  <div id="status">未接続</div>
+  <div class="metrics">
+    <label for="inputLevel">入力</label><meter id="inputLevel" min="-60" max="0" low="-40" high="-25" optimum="-18" value="-60"></meter><span id="inputDb">−∞ dBFS（小さい）</span>
+    <label for="outputGain">出力</label><input id="outputGain" type="range" min="50" max="500" step="10" value="250"><span id="outputGainValue">250%</span>
+    <span id="latency">応答遅延: — / WebRTC RTT: —</span>
+  </div>
+  <audio id="audio" autoplay muted></audio>
+  <pre id="events"></pre>
+
+  <script>
+    const bridge = window.webkit.messageHandlers.realtime;
+    const startButton = document.querySelector('#start');
+    const stopButton = document.querySelector('#stop');
+    const statusView = document.querySelector('#status');
+    const eventsView = document.querySelector('#events');
+    const audioView = document.querySelector('#audio');
+    const inputLevelView = document.querySelector('#inputLevel');
+    const inputDbView = document.querySelector('#inputDb');
+    const outputGainView = document.querySelector('#outputGain');
+    const outputGainValue = document.querySelector('#outputGainValue');
+    const latencyView = document.querySelector('#latency');
+    let peerConnection = null;
+    let microphone = null;
+    let callID = '';
+    let audioContext = null;
+    let outputGain = null;
+    let meterFrame = 0;
+    let statsTimer = 0;
+    let turnEndedAt = 0;
+    let responseLatency = null;
+    let roundTripTime = null;
+    let smoothedInputRms = 0;
+    const inputDetectionThresholdDb = -25;
+
+    function post(message) { bridge.postMessage(message); }
+    function status(message) { statusView.textContent = message; }
+    function log(label, value) {
+      const body = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+      eventsView.textContent += `[${new Date().toLocaleTimeString()}] ${label}\n${body}\n\n`;
+      eventsView.scrollTop = eventsView.scrollHeight;
+    }
+    function waitForICE(pc) {
+      if (pc.iceGatheringState === 'complete') return Promise.resolve();
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('ICE gathering timed out')), 10000);
+        pc.addEventListener('icegatheringstatechange', function changed() {
+          if (pc.iceGatheringState !== 'complete') return;
+          pc.removeEventListener('icegatheringstatechange', changed);
+          clearTimeout(timeout);
+          resolve();
+        });
+      });
+    }
+    function updateLatency() {
+      const response = responseLatency == null ? '—' : `${Math.round(responseLatency)} ms`;
+      const rtt = roundTripTime == null ? '—' : `${Math.round(roundTripTime * 1000)} ms`;
+      latencyView.textContent = `応答遅延: ${response} / WebRTC RTT: ${rtt}`;
+    }
+    function startInputMeter(stream) {
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 1024;
+      source.connect(analyser);
+      const samples = new Float32Array(analyser.fftSize);
+      const draw = () => {
+        analyser.getFloatTimeDomainData(samples);
+        let sum = 0;
+        for (const sample of samples) sum += sample * sample;
+        const rms = Math.sqrt(sum / samples.length);
+        smoothedInputRms = Math.max(rms, smoothedInputRms * 0.92);
+        const db = smoothedInputRms > 0.00001 ? 20 * Math.log10(smoothedInputRms) : -Infinity;
+        const detected = db >= inputDetectionThresholdDb;
+        inputLevelView.value = Number.isFinite(db) ? Math.max(-60, db) : -60;
+        inputDbView.textContent = Number.isFinite(db)
+          ? `${db.toFixed(1)} dBFS（${detected ? '入力あり' : '小さい'}）`
+          : '−∞ dBFS（小さい）';
+        meterFrame = requestAnimationFrame(draw);
+      };
+      draw();
+    }
+    async function updateStats(pc) {
+      for (const report of (await pc.getStats()).values()) {
+        if (report.type === 'candidate-pair' && report.state === 'succeeded' && report.currentRoundTripTime != null) {
+          roundTripTime = report.currentRoundTripTime;
+        }
+      }
+      updateLatency();
+    }
+
+    async function start() {
+      startButton.disabled = true;
+      stopButton.disabled = false;
+      eventsView.textContent = '';
+      try {
+        status('マイクを準備中');
+        microphone = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          video: false,
+        });
+        audioContext = new AudioContext();
+        await audioContext.resume();
+        outputGain = audioContext.createGain();
+        outputGain.gain.value = Number(outputGainView.value) / 100;
+        outputGain.connect(audioContext.destination);
+        startInputMeter(microphone);
+        const pc = new RTCPeerConnection({ bundlePolicy: 'max-bundle' });
+        peerConnection = pc;
+        const remoteStream = new MediaStream();
+        audioView.srcObject = remoteStream;
+        microphone.getTracks().forEach((track) => pc.addTrack(track, microphone));
+        pc.addEventListener('track', (event) => {
+          remoteStream.addTrack(event.track);
+          if (remoteStream.getAudioTracks().length === 1) {
+            audioContext.createMediaStreamSource(remoteStream).connect(outputGain);
+          }
+        });
+        pc.addEventListener('connectionstatechange', () => {
+          status(`WebRTC: ${pc.connectionState}`);
+          log('connection', pc.connectionState);
+        });
+        pc.addEventListener('iceconnectionstatechange', () => log('ICE', pc.iceConnectionState));
+        statsTimer = setInterval(() => updateStats(pc).catch(() => {}), 1000);
+
+        const events = pc.createDataChannel('oai-events');
+        events.addEventListener('open', () => log('oai-events', 'open'));
+        events.addEventListener('message', (message) => {
+          try {
+            const event = JSON.parse(message.data);
+            if (!callID && event.type === 'session.created') callID = event.session?.id || '';
+            if (event.type === 'input_audio_buffer.speech_stopped' || event.type === 'conversation.item.input_audio_transcription.completed') {
+              turnEndedAt = performance.now();
+              responseLatency = null;
+            }
+            if (turnEndedAt && (event.type === 'response.output_audio_transcript.delta' || event.type === 'response.audio_transcript.delta')) {
+              responseLatency = performance.now() - turnEndedAt;
+              turnEndedAt = 0;
+              updateLatency();
+            }
+            log('event', event);
+            post({ type: 'event', event });
+          } catch {
+            log('event', message.data);
+          }
+        });
+
+        await pc.setLocalDescription(await pc.createOffer());
+        await waitForICE(pc);
+        status('SDP answerを待機中');
+        post({ type: 'offer', sdp: pc.localDescription.sdp });
+      } catch (error) {
+        receiveError({ message: String(error) });
+      }
+    }
+
+    async function stop() {
+      const endingCallID = callID;
+      callID = '';
+      if (microphone) microphone.getTracks().forEach((track) => track.stop());
+      microphone = null;
+      cancelAnimationFrame(meterFrame);
+      clearInterval(statsTimer);
+      inputLevelView.value = -60;
+      inputDbView.textContent = '−∞ dBFS（小さい）';
+      smoothedInputRms = 0;
+      if (audioContext) audioContext.close();
+      audioContext = null;
+      outputGain = null;
+      if (peerConnection) peerConnection.close();
+      peerConnection = null;
+      audioView.srcObject = null;
+      startButton.disabled = false;
+      stopButton.disabled = true;
+      status('切断済み');
+      if (endingCallID) post({ type: 'hangup', callID: endingCallID });
+    }
+
+    async function receiveAnswer(payload) {
+      try {
+        if (!peerConnection) throw new Error('PeerConnection is already closed');
+        callID = payload.callID || callID;
+        await peerConnection.setRemoteDescription({ type: 'answer', sdp: payload.sdp });
+        status('WebRTC接続を確立中');
+      } catch (error) {
+        receiveError({ message: String(error) });
+      }
+    }
+
+    function receiveError(payload) {
+      log('error', payload.message);
+      post({ type: 'error', message: payload.message });
+      stop();
+    }
+
+    window.utataneRealtime = { receiveAnswer, receiveError, stop };
+    outputGainView.addEventListener('input', () => {
+      outputGainValue.textContent = `${outputGainView.value}%`;
+      if (outputGain) outputGain.gain.value = Number(outputGainView.value) / 100;
+    });
+    startButton.addEventListener('click', start);
+    stopButton.addEventListener('click', stop);
+    window.addEventListener('pagehide', stop);
+  </script>
+</body>
+</html>

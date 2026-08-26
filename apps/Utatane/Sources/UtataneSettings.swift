@@ -4,6 +4,7 @@ import SwiftUI
 import UtataneAI
 import UtataneBalloon
 import UtataneNetwork
+import UtataneRealtime
 
 @MainActor
 final class UtataneSettingsStore: ObservableObject {
@@ -82,6 +83,10 @@ final class UtataneSettingsStore: ObservableObject {
         static let aiProvider = "ai.provider"
         static let aiModel = "ai.model"
         static let aiBaseURL = "ai.baseURL"
+        static let realtimeProvider = "realtime.provider"
+        static let realtimeModel = "realtime.model"
+        static let realtimeVoice = "realtime.voice"
+        static let realtimeBaseURL = "realtime.baseURL"
     }
 
     @Published var automaticHeadlineRefresh: Bool {
@@ -196,6 +201,26 @@ final class UtataneSettingsStore: ObservableObject {
         didSet { AIAPIKeyStore.save(aiAPIKey) }
     }
 
+    @Published var realtimeProvider: RealtimeProviderKind {
+        didSet { defaults.set(realtimeProvider.rawValue, forKey: Key.realtimeProvider) }
+    }
+
+    @Published var realtimeModel: String {
+        didSet { defaults.set(realtimeModel, forKey: Key.realtimeModel) }
+    }
+
+    @Published var realtimeVoice: String {
+        didSet { defaults.set(realtimeVoice, forKey: Key.realtimeVoice) }
+    }
+
+    @Published var realtimeBaseURL: String {
+        didSet { defaults.set(realtimeBaseURL, forKey: Key.realtimeBaseURL) }
+    }
+
+    @Published var realtimeAPIKey: String {
+        didSet { AIAPIKeyStore.save(realtimeAPIKey, account: "realtime") }
+    }
+
     @Published var selectedPane: Pane = .general
     @Published private(set) var activeGhostName: String?
 
@@ -248,6 +273,13 @@ final class UtataneSettingsStore: ObservableObject {
         aiModel = defaults.string(forKey: Key.aiModel) ?? "llama3.2"
         aiBaseURL = defaults.string(forKey: Key.aiBaseURL) ?? ""
         aiAPIKey = AIAPIKeyStore.load()
+        realtimeProvider = RealtimeProviderKind(
+            rawValue: defaults.string(forKey: Key.realtimeProvider) ?? ""
+        ) ?? .openAI
+        realtimeModel = defaults.string(forKey: Key.realtimeModel) ?? "gpt-realtime"
+        realtimeVoice = defaults.string(forKey: Key.realtimeVoice) ?? "alloy"
+        realtimeBaseURL = defaults.string(forKey: Key.realtimeBaseURL) ?? ""
+        realtimeAPIKey = AIAPIKeyStore.load(account: "realtime")
         Self.apply(appLanguage, to: defaults)
     }
 
@@ -550,6 +582,20 @@ struct UtataneSettingsView: View {
                     TextField("Base URL", text: $settings.aiBaseURL)
                     SecureField("APIキー（Keychainに保存）", text: $settings.aiAPIKey)
                     Text("OpenAI互換ではAPIキーを空にできる。設定変更後はAIゴーストを再読み込みする。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("リアルタイム音声会話") {
+                    Picker("プロバイダー", selection: $settings.realtimeProvider) {
+                        Text("OpenAI Realtime").tag(RealtimeProviderKind.openAI)
+                        Text("OpenAI Realtime互換").tag(RealtimeProviderKind.openAICompatible)
+                    }
+                    TextField("モデル", text: $settings.realtimeModel)
+                    TextField("Voice", text: $settings.realtimeVoice)
+                    TextField("Base URL", text: $settings.realtimeBaseURL)
+                    SecureField("APIキー（Keychainに保存）", text: $settings.realtimeAPIKey)
+                    Text("OpenAIではBase URLを空にできる。互換APIではサービスのURLを設定する。設定値は配布するゴーストへ保存されない。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -15,6 +15,7 @@ import UtataneNativeSaori
 import UtataneNetwork
 import UtatanePlatformMacOS
 import UtatanePOSIXShiori
+import UtataneRealtime
 import UtataneRuntime
 import UtataneSakuraScript
 import UtataneSatoriNative
@@ -228,6 +229,7 @@ private struct UtataneRootView: View {
     @State private var gamepadMonitor = GamepadEventMonitor()
     @State private var systemInputMonitor = SystemInputEventMonitor()
     @State private var systemLoadDetector = SystemLoadTransitionDetector()
+    @State private var realtimeVoiceWindowController: RealtimeVoiceWindowController?
 
     var body: some View {
         Group {
@@ -944,8 +946,8 @@ private struct UtataneRootView: View {
     }
 
     private func currentSurfaceReferences(for controller: SurfaceWindowController) -> [Int: String] {
-        Dictionary(uniqueKeysWithValues: [0, 1].compactMap { scope in
-            controller.surfaceID(for: scope).map { (scope, String($0)) }
+        Dictionary(uniqueKeysWithValues: [0, 1].map { scope in
+            (scope, String(controller.surfaceID(for: scope) ?? -1))
         })
     }
 
@@ -2510,6 +2512,10 @@ private struct UtataneRootView: View {
             title: String(localized: "機能"),
             items: [
                 .action(
+                    title: String(localized: "リアルタイム音声会話…"),
+                    handler: showRealtimeVoice
+                ),
+                .action(
                     title: String(localized: "ランダムトーク"),
                     isEnabled: session != nil,
                     handler: { sendEvent(.randomTalk) }
@@ -2530,6 +2536,75 @@ private struct UtataneRootView: View {
                 )
             ]
         )
+    }
+
+    private func showRealtimeVoice() {
+        if let realtimeVoiceWindowController {
+            realtimeVoiceWindowController.showWindow(nil)
+            realtimeVoiceWindowController.window?.makeKeyAndOrderFront(nil)
+            NSApplication.shared.activate(ignoringOtherApps: true)
+            return
+        }
+        let configuredBaseURL = networkSettings.realtimeBaseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        let baseURL = configuredBaseURL.isEmpty
+            ? RealtimeAPIConfiguration.defaultBaseURL(for: networkSettings.realtimeProvider)
+            : URL(string: configuredBaseURL)
+        guard let baseURL else {
+            showError("Realtime APIのBase URLを設定して。")
+            return
+        }
+        guard !networkSettings.realtimeModel.isEmpty, !networkSettings.realtimeVoice.isEmpty else {
+            showError("Realtime APIのモデルとVoiceを設定して。")
+            return
+        }
+        guard !networkSettings.realtimeAPIKey.isEmpty else {
+            showError("Realtime APIキーを設定して。")
+            return
+        }
+        let configuration = RealtimeAPIConfiguration(
+            provider: networkSettings.realtimeProvider,
+            baseURL: baseURL,
+            model: networkSettings.realtimeModel,
+            voice: networkSettings.realtimeVoice,
+            apiKey: networkSettings.realtimeAPIKey
+        )
+        let controller = RealtimeVoiceWindowController(configuration: configuration)
+        let realtimeManifest = currentGhost.map {
+            RealtimeGhostManifestLoader.loadIfPresent(
+                masterDirectoryURL: $0.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
+            )
+        } ?? nil
+        var surfaceBeforeRealtimeResponse: Int?
+        controller.onAssistantTranscript = { update in
+            guard let balloon else { return }
+            let escaped = AIPersonalityEngine.escape("AI：" + update.text)
+            scriptPlayer.play(
+                SakuraScript(rawValue: "\\0\(escaped)\\e"),
+                balloon: balloon,
+                characterDelayMilliseconds: 0
+            )
+        }
+        controller.onExpressionChange = { expression in
+            switch expression {
+            case .thinking, .speaking:
+                guard let surface = realtimeManifest?.expressions[expression] else { return }
+                if surfaceBeforeRealtimeResponse == nil {
+                    surfaceBeforeRealtimeResponse = surfaceWindowController.surfaceID(for: 0)
+                }
+                try? surfaceWindowController.changeSurface(scope: 0, to: surface)
+            case .restore:
+                guard let surface = surfaceBeforeRealtimeResponse else { return }
+                surfaceBeforeRealtimeResponse = nil
+                try? surfaceWindowController.changeSurface(scope: 0, to: surface)
+            }
+        }
+        controller.onError = { message in
+            AppLogStore.shared.error(message, category: "Realtime", ghostName: currentGhost?.name)
+        }
+        controller.onClose = { realtimeVoiceWindowController = nil }
+        realtimeVoiceWindowController = controller
+        controller.showWindow(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
     private func settingsMenu() -> SurfaceContextMenuItem {

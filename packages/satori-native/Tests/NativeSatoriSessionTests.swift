@@ -6,6 +6,29 @@ import UtataneShiori
 
 @Suite(.serialized)
 struct NativeSatoriSessionTests {
+    @Test func `native SATORI accepts surface change for a single character`() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+            path: UUID().uuidString,
+            directoryHint: .isDirectory
+        )
+        let master = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+        try FileManager.default.createDirectory(at: master, withIntermediateDirectories: true)
+        let dictionary = "＊OnBoot\r\n：起動。\r\n"
+        try #require(dictionary.data(using: .shiftJIS)).write(
+            to: master.appending(path: "dic00_base.txt")
+        )
+
+        let session = try NativeSatoriSession(masterDirectoryURL: master)
+        _ = try session.request(GhostEventShioriAdapter().request(for: .boot))
+        let response = try session.request(GhostEventShioriAdapter().request(for: .shiori(
+            id: "OnSurfaceChange",
+            references: [0: "0"]
+        )))
+
+        #expect((200 ..< 300).contains(response.statusCode))
+    }
+
     @Test func `native SATORI loads memory-na and answers boot`() throws {
         let source = repositoryRoot.appending(path: "Content/Local/Ghosts/memory-na/ghost/master", directoryHint: .isDirectory)
         guard hasLocalContent(source) else { return }
