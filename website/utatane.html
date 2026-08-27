@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="macOSネイティブな伺かベースウェア、Utatane"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="ja_JP" />
+    <meta property="og:site_name" content="Download Center" />
+    <meta property="og:title" content="Utatane - macOS用伺か本体" />
+    <meta
+      property="og:description"
+      content="macOSネイティブな伺かベースウェア、Utatane"
+    />
+    <meta property="og:url" content="https://dl.wmsci.com/utatane.html" />
+    <meta
+      property="og:image"
+      content="https://dl.wmsci.com/assets/utatane-icon.png"
+    />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:alt" content="Utataneのアプリアイコン" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Utatane - macOS用伺かベースウェア" />
+    <meta
+      name="twitter:description"
+      content="macOSネイティブな伺かベースウェア、Utatane"
+    />
+    <meta
+      name="twitter:image"
+      content="https://dl.wmsci.com/assets/utatane-icon.png"
+    />
+    <meta name="twitter:image:alt" content="Utataneのアプリアイコン" />
+    <link rel="canonical" href="https://dl.wmsci.com/utatane.html" />
+    <link
+      rel="icon"
+      type="image/png"
+      href="./assets/utatane-icon.png"
+      sizes="512x512"
+    />
+    <title>Utatane - Download Center</title>
+  </head>
+  <body>
+    <header>
+      <p><a href="./index.html">&larr; Download Centerへ戻る</a></p>
+      <h1>Utatane</h1>
+      <img
+        src="./assets/utatane-icon.png"
+        alt="Utataneのアプリアイコン"
+        width="128"
+        height="128"
+      />
+      <p>伺かをmacOSで動かすための本体アプリです。</p>
+    </header>
+
+    <main>
+      <p>
+        <strong>まだ開発中です。</strong
+        >既存ゴーストとの互換性を地道に増やしています。SSP全部入りではありません。
+      </p>
+
+      <p>
+        <a
+          id="download-link"
+          href="https://github.com/opera7133/Utatane/releases"
+          >Utataneをダウンロード</a
+        >
+        <span id="version-info"
+          >（最新バージョン:
+          <a
+            id="release-link"
+            href="https://github.com/opera7133/Utatane/releases"
+            ><code id="latest-version">取得中...</code></a
+          ><span id="release-date"></span>）</span
+        >
+      </p>
+
+      <figure>
+        <img
+          src="./assets/utatane-screenshot.png"
+          alt="Utataneでゴーストのりあを表示している画面"
+          width="654"
+          height="607"
+          style="max-width: 100%; height: auto"
+        />
+        <figcaption>同梱ゴースト「りあ」を表示したところ。</figcaption>
+      </figure>
+
+      <h2>動作環境</h2>
+      <ul>
+        <li>macOS 14以降</li>
+        <li>Apple Silicon / Intel Mac</li>
+      </ul>
+
+      <h2>だいたいできること</h2>
+      <ul>
+        <li>複数キャラクター、SERIKOアニメーション、着せ替えの表示</li>
+        <li>SakuraScriptによる会話、選択肢、リンクの再生</li>
+        <li>クリック、ダブルクリック、撫で、ホイールなどのマウス操作</li>
+        <li>NARや、展開済みSSPフォルダからのゴースト・バルーンの取り込み</li>
+        <li>YAYA / 里々 / 華和梨 / 美坂 / 灯を使うゴーストのネイティブ実行</li>
+        <li>ゴーストのネットワーク更新、SSTP、RSS / Atom、HEADLINE/2.0</li>
+        <li>日本語、英語、中国語（簡体・繁体）、韓国語の画面表示</li>
+      </ul>
+
+      <h2>ほかの本体とざっくり比較</h2>
+      <p>ゴーストごとの差も大きいので、かなり雑な目安です。</p>
+      <div style="overflow-x: auto">
+        <table border="1" cellpadding="6" style="border-collapse: collapse">
+          <thead>
+            <tr>
+              <th>機能</th>
+              <th>Utatane</th>
+              <th><a href="https://ssp.shillest.net/">SSP</a></th>
+              <th>
+                <a href="https://github.com/Tatakinov/ninix-kagari"
+                  >ninix-kagari</a
+                >
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <th>主なOS</th>
+              <td>macOS</td>
+              <td>Windows</td>
+              <td>Linux / Windows / BSD</td>
+            </tr>
+            <tr>
+              <th>ゴースト・シェル・バルーン</th>
+              <td>○ 基本対応</td>
+              <td>◎ 高互換</td>
+              <td>○ 基本対応</td>
+            </tr>
+            <tr>
+              <th>SakuraScript / SERIKO / 着せ替え</th>
+              <td>○ 一部未対応</td>
+              <td>◎</td>
+              <td>○ 一部差異あり</td>
+            </tr>
+            <tr>
+              <th>NARインストール</th>
+              <td>○ ファイル・D&amp;D・URL</td>
+              <td>◎</td>
+              <td>○</td>
+            </tr>
+            <tr>
+              <th>SHIORI</th>
+              <td>○ YAYA・里々・華和梨・美坂・灯などをネイティブ実行</td>
+              <td>◎ Windows DLLを広く利用可能</td>
+              <td>○ 同梱・対応モジュール中心</td>
+            </tr>
+            <tr>
+              <th>Windows DLL / exe</th>
+              <td>△ 一部Wine経由。ネイティブ互換も限定提供</td>
+              <td>◎</td>
+              <td>△ 環境・モジュールによる</td>
+            </tr>
+            <tr>
+              <th>SSTP</th>
+              <td>○ localhost Socket / HTTP</td>
+              <td>◎</td>
+              <td>○ TCP / UNIX socket</td>
+            </tr>
+            <tr>
+              <th>ネットワーク更新</th>
+              <td>○ ゴースト・単体バルーン。修復などは未対応</td>
+              <td>◎</td>
+              <td>○</td>
+            </tr>
+            <tr>
+              <th>RSS / HEADLINE</th>
+              <td>○ RSS・Atom・HEADLINE/2.0</td>
+              <td>◎</td>
+              <td>○</td>
+            </tr>
+            <tr>
+              <th>本体独自機能</th>
+              <td>Realtime音声・AI連携・MCP（実験的）</td>
+              <td>開発支援やプラグインなど多数</td>
+              <td>Ruby / GTK4で動くオープンソース実装</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p>◎: 代表的な基準、○: 基本対応、△: 条件付き・限定的</p>
+
+      <h2>Utatane独自機能</h2>
+      <ul>
+        <li>
+          Materia付属の「さくら」を、対応する会話データの解析によりWineなしで実行
+        </li>
+        <li>
+          OpenAI Realtime APIまたは互換APIを使ったリアルタイム音声会話（実験的）
+        </li>
+        <li>
+          ゴーストのAI連携と、外部ツールから会話・操作できる同梱MCPサーバー（実験的）
+        </li>
+      </ul>
+
+      <h2>まだ無理なこと</h2>
+      <ul>
+        <li>
+          一般のWindows向けSHIORI / SAORI /
+          プラグインDLLやexeのmacOSネイティブ実行（一部はWine設定で利用可能）
+        </li>
+        <li>Windows固有のFMO</li>
+        <li>一部のSakuraScript、SERIKO、着せ替え定義</li>
+        <li>
+          SSPの修復モードや、別配布シェルなどをまとめて扱うネットワーク更新
+        </li>
+      </ul>
+      <p>
+        ゴーストによっては表示、文字コード、イベントの互換性に問題があります。
+      </p>
+
+      <h2>使い方</h2>
+      <ol>
+        <li>
+          Releasesから最新のpre-releaseにある
+          <code>Utatane-macOS.zip</code> をダウンロード
+        </li>
+        <li>
+          ZIPを展開し、<code>Utatane.app</code>を「アプリケーション」フォルダへ移動
+        </li>
+        <li>Utataneを起動</li>
+      </ol>
+      <p>最初から同梱ゴースト「りあ」と専用バルーン「Ria」を利用できます。</p>
+
+      <h2>初回起動でmacOSに止められた場合</h2>
+      <p>
+        現在のpre-releaseは未署名です。一度起動を試してから、「システム設定」→「プライバシーとセキュリティ」で起動を許可してください。
+      </p>
+      <p>
+        もしくは、アプリケーションフォルダで
+        <code>sudo xattr -rc Utatane.app</code> を実行してください。
+      </p>
+      <p>
+        なお、GitHub
+        Actionsによるビルド時にVirusTotalでの自動検査を実施しており、各<a
+          href="https://github.com/opera7133/Utatane/releases"
+          >Releasesページ</a
+        >のリリースノートに検査結果およびレポートへのリンクを掲載しています。気になる方はご確認ください。
+      </p>
+
+      <h2>リンク</h2>
+      <ul>
+        <li>
+          <a href="https://github.com/opera7133/Utatane/releases"
+            >ダウンロード（GitHub Releases）</a
+          >
+        </li>
+        <li>
+          <a href="https://github.com/opera7133/Utatane"
+            >ソースコードと詳しい説明</a
+          >
+        </li>
+      </ul>
+
+      <h2>バグなど</h2>
+      <s>デバッグなんてしてません</s>
+      <p>
+        <a href="https://github.com/opera7133/Utatane/issues">Issues</a
+        >に報告してください。
+      </p>
+
+      <h2>ライセンス</h2>
+      <p>
+        Utatane本体はMIT
+        Licenseで公開しています。ゴースト、シェル、バルーンは各配布元のルールに従ってください。
+      </p>
+      <p>
+        同梱ゴースト「りあ」のシェルには、ボトル猫さんの<a
+          href="https://catbottle.sakura.ne.jp/souko_fs.html"
+          >「p016（寝不足）」</a
+        >を使用しています。専用バルーン「Ria」は、ろすえんさんの<a
+          href="https://github.com/lost-nd-xxx/something_like_balloon"
+          >「something like Template」</a
+        >を元に制作しています。詳しい規約とクレジットは同梱READMEを参照してください。
+      </p>
+    </main>
+
+    <footer>
+      <hr />
+      <p>&copy; 2026 wamo.</p>
+    </footer>
+
+    <script>
+      (async function fetchLatestVersion() {
+        const versionEl = document.getElementById("latest-version");
+        const releaseLinkEl = document.getElementById("release-link");
+        const releaseDateEl = document.getElementById("release-date");
+        const downloadLinkEl = document.getElementById("download-link");
+        const versionInfoEl = document.getElementById("version-info");
+
+        try {
+          const response = await fetch(
+            "https://api.github.com/repos/opera7133/Utatane/releases",
+          );
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const releases = await response.json();
+          const latestRelease =
+            releases.find((release) => !release.draft) || releases[0];
+
+          if (latestRelease) {
+            const version = latestRelease.tag_name || latestRelease.name;
+            if (versionEl) {
+              versionEl.textContent = version;
+            }
+            if (releaseLinkEl && latestRelease.html_url) {
+              releaseLinkEl.href = latestRelease.html_url;
+            }
+            const releaseDateStr =
+              latestRelease.published_at || latestRelease.created_at;
+            if (releaseDateEl && releaseDateStr) {
+              const date = new Date(releaseDateStr);
+              if (!isNaN(date.getTime())) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, "0");
+                const day = String(date.getDate()).padStart(2, "0");
+                const hours = String(date.getHours()).padStart(2, "0");
+                const minutes = String(date.getMinutes()).padStart(2, "0");
+                releaseDateEl.textContent = ` / ${year}-${month}-${day} ${hours}:${minutes} 更新`;
+              }
+            }
+            const zipAsset = latestRelease.assets?.find(
+              (asset) =>
+                asset.name === "Utatane-macOS.zip" ||
+                asset.name.endsWith(".zip"),
+            );
+            if (downloadLinkEl && zipAsset?.browser_download_url) {
+              downloadLinkEl.href = zipAsset.browser_download_url;
+              downloadLinkEl.setAttribute("download", zipAsset.name);
+            } else if (downloadLinkEl && latestRelease.html_url) {
+              downloadLinkEl.href = latestRelease.html_url;
+            }
+          }
+        } catch (error) {
+          console.warn("最新バージョンの取得に失敗しました:", error);
+          if (versionInfoEl) {
+            versionInfoEl.innerHTML =
+              "（最新のpre-releaseにある <code>Utatane-macOS.zip</code>）";
+          }
+        }
+      })();
+    </script>
+  </body>
+</html>

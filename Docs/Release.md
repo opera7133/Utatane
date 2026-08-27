@@ -52,6 +52,15 @@ FTPS接続には次のGitHub Actions Secretsを使用します。コアサーバ
 - `DEPLOY_PASSWORD`
 - `DEPLOY_PATH`（例: `/public_html/utatane`）
 
+配布サイトの `utatane.html` と画像は、`main` に該当ファイルをpushすると
+`Deploy website` workflowが別にアップロードします。上記4つに加えて、リポジトリへ
+次のGitHub Actions Secretを設定します。
+
+- `WEBSITE_DEPLOY_PATH`（例: `/public_html`）
+
+サイト更新ではアプリのビルドを行わず、`utatane.html` と2枚の画像だけをExplicit
+FTPSで上書きします。`index.html`など、同じ公開ルートにある他のファイルは変更しません。
+
 以前の設定が`/public_html/utatane/appcast.xml`なら、ファイル名を外した`/public_html/utatane`へ変更してください。公開先では次の構成になります。
 
 ```text

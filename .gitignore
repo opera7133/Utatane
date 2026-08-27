@@ -16,7 +16,6 @@ Internal-Docs
 dist
 build
 apps/Utatane/Resources/*Host
-website
 
 # Ghost local extensions
 Content/Bundled/Ghosts/*/shell/master/*_local.*
