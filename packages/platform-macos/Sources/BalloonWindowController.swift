@@ -44,6 +44,9 @@ public struct BalloonTextStyle: Sendable, Equatable {
     public var alignment: Alignment?
     public var anchorFontColor: BalloonColor?
     public var lineHeight: Double?
+    public var paragraphIndent: Double?
+    public var paragraphSpacingBefore: Double?
+    public var rightTabStop: Double?
     public var bold = false
     public var italic = false
     public var strike = false
@@ -198,6 +201,19 @@ public final class BalloonWindowController {
         presentations[scope].map { ($0.text, $0.links) }
     }
 
+    func contentSnapshots(scopes: some Sequence<Int>) -> [Int: BalloonContentSnapshot] {
+        Dictionary(uniqueKeysWithValues: scopes.compactMap { scope in
+            presentations[scope].map { presentation in
+                (scope, BalloonContentSnapshot(
+                    text: presentation.text,
+                    links: presentation.links,
+                    styles: presentation.styles,
+                    inlineImages: presentation.inlineImages
+                ))
+            }
+        })
+    }
+
     func displayedText(for scope: Int) -> String? {
         presentations[scope]?.contentView.text
     }
@@ -293,6 +309,14 @@ public final class BalloonWindowController {
 
     public func updateContent(text: String, links: [BalloonTextLink], scope: Int = 0) {
         updateContent(text: text, links: links, styles: [], scope: scope)
+    }
+
+    public func textCursorPosition(scope: Int) -> NSPoint {
+        presentations[scope]?.contentView.textCursorPosition ?? .zero
+    }
+
+    public func textContentSize(scope: Int) -> NSSize {
+        presentations[scope]?.contentView.textContentSize ?? .zero
     }
 
     public func updateContent(
@@ -538,6 +562,13 @@ public final class BalloonWindowController {
     }
 }
 
+struct BalloonContentSnapshot {
+    let text: String
+    let links: [BalloonTextLink]
+    let styles: [BalloonTextStyleRun]
+    let inlineImages: [NSRange: NSImage]
+}
+
 @MainActor
 private final class BalloonPresentation {
     let window: NSWindow
@@ -629,6 +660,33 @@ private final class BalloonContentView: NSView {
 
     var markerText: String {
         markerTextField.stringValue
+    }
+
+    var textCursorPosition: NSPoint {
+        guard let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer,
+              !textView.string.isEmpty
+        else { return .zero }
+        layoutManager.ensureLayout(for: textContainer)
+        if textView.string.hasSuffix("\n") {
+            let rect = layoutManager.extraLineFragmentRect
+            return NSPoint(x: rect.minX / displayScale, y: rect.minY / displayScale)
+        }
+        let characterIndex = (textView.string as NSString).length - 1
+        let glyphRange = layoutManager.glyphRange(
+            forCharacterRange: NSRange(location: characterIndex, length: 1),
+            actualCharacterRange: nil
+        )
+        guard glyphRange.length > 0 else { return .zero }
+        let rect = layoutManager.boundingRect(forGlyphRange: glyphRange, in: textContainer)
+        return NSPoint(x: rect.maxX / displayScale, y: rect.minY / displayScale)
+    }
+
+    var textContentSize: NSSize {
+        NSSize(
+            width: scrollView.contentSize.width / displayScale,
+            height: scrollView.contentSize.height / displayScale
+        )
     }
 
     func textAttributes(at location: Int) -> [NSAttributedString.Key: Any]? {
@@ -1037,7 +1095,9 @@ private extension BalloonContentView {
         if style.baseline != 0 {
             result[.baselineOffset] = CGFloat(style.baseline) * font.pointSize * 0.3
         }
-        if style.alignment != nil || style.lineHeight != nil {
+        if style.alignment != nil || style.lineHeight != nil || style.paragraphIndent != nil
+            || style.paragraphSpacingBefore != nil || style.rightTabStop != nil
+        {
             let paragraph = NSMutableParagraphStyle()
             if let alignment = style.alignment {
                 paragraph.alignment = switch alignment {
@@ -1049,6 +1109,19 @@ private extension BalloonContentView {
             if let lineHeight = style.lineHeight {
                 paragraph.minimumLineHeight = CGFloat(lineHeight) * displayScale * textScale
                 paragraph.maximumLineHeight = CGFloat(lineHeight) * displayScale * textScale
+            }
+            if let indent = style.paragraphIndent {
+                paragraph.firstLineHeadIndent = CGFloat(indent) * displayScale
+                paragraph.headIndent = CGFloat(indent) * displayScale
+            }
+            if let spacing = style.paragraphSpacingBefore {
+                paragraph.paragraphSpacingBefore = CGFloat(spacing) * displayScale
+            }
+            if let rightTabStop = style.rightTabStop {
+                paragraph.tabStops = [NSTextTab(
+                    textAlignment: .right,
+                    location: CGFloat(rightTabStop) * displayScale
+                )]
             }
             result[.paragraphStyle] = paragraph
         }

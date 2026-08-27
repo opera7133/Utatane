@@ -272,6 +272,24 @@ public struct SakuraScriptParser: Sendable {
                 } else if index < characters.count, characters[index] == "q" {
                     index += 1
                     tokens.append(.quickSection(nil))
+                } else if index < characters.count, characters[index] == "l" {
+                    index += 1
+                    if let argument = bracketArgument(in: characters, index: &index) {
+                        let arguments = splitArguments(argument)
+                        if arguments.count == 2 {
+                            let x = arguments[0].isEmpty ? nil : Self.balloonCoordinate(arguments[0])
+                            let y = arguments[1].isEmpty ? nil : Self.balloonCoordinate(arguments[1])
+                            if arguments[0].isEmpty || x != nil, arguments[1].isEmpty || y != nil {
+                                tokens.append(.cursorMove(x: x, y: y))
+                            } else {
+                                tokens.append(.unknown("\\_l[\(argument)]"))
+                            }
+                        } else {
+                            tokens.append(.unknown("\\_l[\(argument)]"))
+                        }
+                    } else {
+                        tokens.append(.unknown("\\_l"))
+                    }
                 } else if index < characters.count, characters[index] == "s" {
                     index += 1
                     if let argument = bracketArgument(in: characters, index: &index) {
@@ -524,7 +542,9 @@ public struct SakuraScriptParser: Sendable {
                               arguments[1].lowercased() == "balloonoffset",
                               arguments.count >= 4,
                               let x = Self.balloonCoordinate(arguments[2]),
-                              let y = Self.balloonCoordinate(arguments[3])
+                              let y = Self.balloonCoordinate(arguments[3]),
+                              x.unit == .pixel,
+                              y.unit == .pixel
                     {
                         tokens.append(.balloonOffset(x: x, y: y))
                     } else if arguments.count >= 3,
@@ -1205,9 +1225,22 @@ public struct SakuraScriptParser: Sendable {
 
     private static func balloonCoordinate(_ rawValue: String) -> SakuraScriptBalloonCoordinate? {
         let isRelative = rawValue.hasPrefix("@")
-        let number = isRelative ? String(rawValue.dropFirst()) : rawValue
-        guard let value = Int(number) else { return nil }
-        return SakuraScriptBalloonCoordinate(value: value, isRelative: isRelative)
+        var number = isRelative ? String(rawValue.dropFirst()) : rawValue
+        let unit: SakuraScriptBalloonCoordinate.Unit
+        if number.lowercased().hasSuffix("em") {
+            number.removeLast(2)
+            unit = .em
+        } else if number.lowercased().hasSuffix("lh") {
+            number.removeLast(2)
+            unit = .lineHeight
+        } else if number.hasSuffix("%") {
+            number.removeLast()
+            unit = .percent
+        } else {
+            unit = .pixel
+        }
+        guard let value = Double(number), value.isFinite else { return nil }
+        return SakuraScriptBalloonCoordinate(value: value, isRelative: isRelative, unit: unit)
     }
 
     private static func optionValue(_ name: String, in options: [String]) -> String? {

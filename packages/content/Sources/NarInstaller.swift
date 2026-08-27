@@ -170,10 +170,14 @@ public struct NarInstaller: Sendable {
         try fileManager.createDirectory(at: extractionRoot, withIntermediateDirectories: true)
         defer { try? fileManager.removeItem(at: extractionRoot) }
 
+        // Older NAR creators commonly store Windows-style backslashes in ZIP entry names.
+        // ditto extracts them as literal filename characters, then the isolated tree is normalized below.
         try run(
             executable: "/usr/bin/ditto",
             arguments: ["-x", "-k", "--norsrc", archiveURL.path, extractionRoot.path]
         )
+        try validateExtractedTree(at: extractionRoot)
+        try normalizeWindowsSeparatedPaths(at: extractionRoot)
         try validateExtractedTree(at: extractionRoot)
 
         let installURL = try primaryInstallFile(in: extractionRoot)
@@ -259,15 +263,21 @@ public struct NarInstaller: Sendable {
 
     func validate(entries: [String]) throws {
         guard entries.count <= maximumEntryCount else { throw NarInstallError.tooManyEntries }
+        var normalizedEntries = Set<String>()
         for entry in entries {
+            let normalizedEntry = entry.replacingOccurrences(of: "\\", with: "/")
             guard !entry.isEmpty,
                   entry.utf8.count <= 1024,
-                  !entry.contains("\\"),
-                  !entry.hasPrefix("/"),
+                  !normalizedEntry.hasPrefix("/"),
                   !entry.contains("\0")
             else { throw NarInstallError.unsafeEntry(entry) }
-            let components = entry.split(separator: "/", omittingEmptySubsequences: false)
-            guard !components.contains(where: { $0 == ".." || $0 == "." }) else {
+            let components = normalizedEntry.split(separator: "/", omittingEmptySubsequences: false)
+            guard !components.contains(where: { $0 == ".." || $0 == "." }),
+                  components.first?.contains(":") != true
+            else {
+                throw NarInstallError.unsafeEntry(entry)
+            }
+            guard normalizedEntry.hasSuffix("/") || normalizedEntries.insert(normalizedEntry).inserted else {
                 throw NarInstallError.unsafeEntry(entry)
             }
         }
@@ -321,6 +331,51 @@ public struct NarInstaller: Sendable {
                     throw NarInstallError.extractedContentTooLarge
                 }
             }
+        }
+    }
+
+    private func normalizeWindowsSeparatedPaths(at root: URL) throws {
+        let fileManager = FileManager.default
+        guard let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: []
+        ) else { throw NarInstallError.unreadableArchive }
+        let resolvedRootPath = root.resolvingSymlinksInPath().path
+        let rootPath = resolvedRootPath.hasSuffix("/") ? resolvedRootPath : resolvedRootPath + "/"
+        var files: [URL] = []
+        var directories: [URL] = []
+        for case let url as URL in enumerator {
+            let values = try url.resourceValues(forKeys: [.isDirectoryKey])
+            if values.isDirectory == true {
+                directories.append(url)
+            } else {
+                files.append(url)
+            }
+        }
+        for source in files where source.path.contains("\\") {
+            let resolvedSourcePath = source.resolvingSymlinksInPath().path
+            guard resolvedSourcePath.hasPrefix(rootPath) else { throw NarInstallError.unsafeEntry(source.path) }
+            let relativePath = String(resolvedSourcePath.dropFirst(rootPath.count))
+                .replacingOccurrences(of: "\\", with: "/")
+            if relativePath.hasSuffix("/") {
+                try fileManager.removeItem(at: source)
+                continue
+            }
+            let destination = root.appending(path: relativePath)
+            guard !fileManager.fileExists(atPath: destination.path) else {
+                throw NarInstallError.unsafeEntry(relativePath)
+            }
+            try fileManager.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try fileManager.moveItem(at: source, to: destination)
+        }
+        for directory in directories.sorted(by: { $0.pathComponents.count > $1.pathComponents.count })
+            where directory.path.contains("\\")
+        {
+            try? fileManager.removeItem(at: directory)
         }
     }
 

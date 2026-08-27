@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import UtataneCore
 @testable import UtatanePlatformMacOS
 
 @Test
@@ -67,6 +68,70 @@ func `maps SERIKO blend and mask methods to native compositing`() {
     #expect(surfaceCompositingOperation(for: "interpolate") == .destinationOver)
     #expect(surfaceCompositingOperation(for: "reduce") == .destinationIn)
     #expect(surfaceCompositingOperation(for: "asis") == nil)
+}
+
+@Test
+func `multiply fast clips the overlay to the base alpha`() throws {
+    let base = try makeTestImage(colors: [
+        NSColor(deviceRed: 1, green: 1, blue: 1, alpha: 0),
+        NSColor(deviceRed: 1, green: 1, blue: 1, alpha: 1)
+    ])
+    let overlay = try makeTestImage(colors: [
+        NSColor(deviceRed: 0.5, green: 0.25, blue: 0.25, alpha: 1),
+        NSColor(deviceRed: 0.5, green: 0.25, blue: 0.25, alpha: 1)
+    ])
+
+    let image = SurfaceImageLoader().composite(
+        base: base,
+        overlay: overlay,
+        x: 0,
+        y: 0,
+        operation: .multiply,
+        clipsToBaseAlpha: true
+    )
+    let data = try #require(image.tiffRepresentation)
+    let output = try #require(NSBitmapImageRep(data: data))
+    #expect((output.colorAt(x: 0, y: 0)?.alphaComponent ?? 1) < 0.1)
+    #expect((output.colorAt(x: 1, y: 0)?.redComponent ?? 0) > 0.4)
+    #expect((output.colorAt(x: 1, y: 0)?.redComponent ?? 1) < 0.6)
+}
+
+@Test
+func `self alpha falls back to the top left key for a PNG without alpha`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appending(path: "surface0.png")
+    let bitmap = try #require(NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: 2,
+        pixelsHigh: 1,
+        bitsPerSample: 8,
+        samplesPerPixel: 3,
+        hasAlpha: false,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 6,
+        bitsPerPixel: 24
+    ))
+    let bytes = try #require(bitmap.bitmapData)
+    bytes[0] = 255
+    bytes[1] = 255
+    bytes[2] = 255
+    bytes[3] = 0
+    bytes[4] = 0
+    bytes[5] = 0
+    try #require(bitmap.representation(using: .png, properties: [:])).write(to: url)
+
+    let image = try SurfaceImageLoader().load(
+        SurfaceAsset(id: 0, imageURL: url, alphaMaskURL: nil),
+        usesSelfAlpha: true
+    )
+    let data = try #require(image.tiffRepresentation)
+    let output = try #require(NSBitmapImageRep(data: data))
+    #expect((output.colorAt(x: 0, y: 0)?.alphaComponent ?? 1) < 0.1)
+    #expect((output.colorAt(x: 1, y: 0)?.alphaComponent ?? 0) > 0.9)
 }
 
 @Test

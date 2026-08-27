@@ -7,12 +7,14 @@ import UtataneSakuraScript
 public final class SakuraScriptPlayer {
     private static var signaledSyncObjects: Set<String> = []
     private let parser = SakuraScriptParser()
+    private let imageLoader = SurfaceImageLoader()
     private let surfaceWindowController: SurfaceWindowController
     private let balloonWindowController: BalloonWindowController
     private var characterDelayMilliseconds = 50
     private var postDialogueDismissalMilliseconds: Int
     private var playbackTask: Task<Void, Never>?
     private var queuedPlaybackTail: Task<Void, Never>?
+    private var pendingInterrupts: [[SakuraScriptToken]] = []
     private var dismissalTask: Task<Void, Never>?
     private var surfaceRestoreTask: Task<Void, Never>?
     private let surfaceRestoreDelayMilliseconds: Int
@@ -124,12 +126,14 @@ public final class SakuraScriptPlayer {
             if id.lowercased().hasPrefix("script:") {
                 let script = String(id.dropFirst("script:".count))
                 let balloon = currentBalloon
-                cancel()
+                cancel(hidesBalloon: false)
                 if let balloon {
                     play(SakuraScript(rawValue: script), balloon: balloon)
                 }
             } else {
-                cancel()
+                if linkKind != .anchor {
+                    cancel(hidesBalloon: false)
+                }
                 if linkKind != .anchor {
                     onChoice?(id, arguments)
                 }
@@ -164,6 +168,7 @@ public final class SakuraScriptPlayer {
         guard !(preventsUserBreak && playbackTask != nil) else { return }
         finishPlaybackWait()
         playbackTask?.cancel()
+        pendingInterrupts.removeAll()
         dismissalTask?.cancel()
         surfaceRestoreTask?.cancel()
         fastForwardRequested = false
@@ -173,16 +178,22 @@ public final class SakuraScriptPlayer {
         isTimeCritical = false
         currentBalloon = balloon
         currentScriptRawValue = script.rawValue
-        balloonWindowController.hideAll()
         balloonWindowController.setWaitingForClick(false)
-        let tokens = parser.parse(script)
+        var tokens = parser.parse(script)
+        let continuesPreviousDialogue = tokens.first == .clearAll
+        if continuesPreviousDialogue {
+            tokens.removeFirst()
+        } else {
+            balloonWindowController.hideAll()
+        }
         configureCompletionTimeout(for: tokens)
         let effectiveCharacterDelay = characterDelayMilliseconds ?? self.characterDelayMilliseconds
         playbackTask = Task { [weak self] in
             await self?.run(
                 tokens,
                 balloon: balloon,
-                characterDelayMilliseconds: effectiveCharacterDelay
+                characterDelayMilliseconds: effectiveCharacterDelay,
+                continuesPreviousDialogue: continuesPreviousDialogue
             )
             guard !Task.isCancelled else { return }
             self?.playbackDidFinish()
@@ -225,6 +236,26 @@ public final class SakuraScriptPlayer {
         queuedPlaybackTail = task
     }
 
+    public func interrupt(
+        with script: SakuraScript,
+        balloon: BalloonDefinition,
+        characterDelayMilliseconds: Int? = nil
+    ) {
+        guard playbackTask != nil else {
+            play(script, balloon: balloon, characterDelayMilliseconds: characterDelayMilliseconds)
+            return
+        }
+        var tokens = parser.parse(script)
+        if tokens.first == .clearAll {
+            tokens.removeFirst()
+        }
+        while tokens.last == .end {
+            tokens.removeLast()
+        }
+        guard !tokens.isEmpty else { return }
+        pendingInterrupts.append(tokens)
+    }
+
     public func configure(defaultBalloonSurfaceIDs: [Int: Int]) {
         self.defaultBalloonSurfaceIDs = defaultBalloonSurfaceIDs
     }
@@ -257,8 +288,13 @@ public final class SakuraScriptPlayer {
     }
 
     public func cancel() {
+        cancel(hidesBalloon: true)
+    }
+
+    private func cancel(hidesBalloon: Bool) {
         queuedPlaybackTail?.cancel()
         queuedPlaybackTail = nil
+        pendingInterrupts.removeAll()
         playbackTask?.cancel()
         dismissalTask?.cancel()
         surfaceRestoreTask?.cancel()
@@ -272,7 +308,9 @@ public final class SakuraScriptPlayer {
         isTimeCritical = false
         preventsUserBreak = false
         balloonWindowController.setWaitingForClick(false)
-        balloonWindowController.hideAll()
+        if hidesBalloon {
+            balloonWindowController.hideAll()
+        }
         finishPlaybackWait()
     }
 
@@ -292,18 +330,24 @@ public final class SakuraScriptPlayer {
     private func run(
         _ tokens: [SakuraScriptToken],
         balloon: BalloonDefinition,
-        characterDelayMilliseconds: Int
+        characterDelayMilliseconds: Int,
+        continuesPreviousDialogue: Bool
     ) async {
         var scope = 0
-        var textByScope: [Int: String] = [:]
-        var linksByScope: [Int: [BalloonTextLink]] = [:]
+        let previousContent = continuesPreviousDialogue
+            ? balloonWindowController.contentSnapshots(scopes: balloonWindowController.visibleScopes)
+            : [:]
+        var textByScope = previousContent.mapValues(\.text)
+        var linksByScope = previousContent.mapValues(\.links)
         var anchorsByScope: [Int: ActiveAnchor] = [:]
         var choicesByScope: [Int: ActiveAnchor] = [:]
         var textStyleByScope: [Int: BalloonTextStyle] = [:]
-        var styleRunsByScope: [Int: [BalloonTextStyleRun]] = [:]
-        var inlineImagesByScope: [Int: [NSRange: NSImage]] = [:]
+        var styleRunsByScope = previousContent.mapValues(\.styles)
+        var inlineImagesByScope = previousContent.mapValues(\.inlineImages)
         var balloonStyleByScope = defaultBalloonSurfaceIDs
-        var activatedScopes = Set<Int>()
+        var activatedScopes = continuesPreviousDialogue
+            ? Set(balloonWindowController.visibleScopes)
+            : Set<Int>()
         var talkingScopes = Set<Int>()
         var isQuickSection = false
         var synchronizedScopes: Set<Int>?
@@ -320,6 +364,7 @@ public final class SakuraScriptPlayer {
         var currentCharacterDelayMilliseconds = characterDelayMilliseconds
         var preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
         var isSerikoTalkEnabled = true
+        var pendingSameLineRightTabByScope: [Int: Int] = [:]
 
         func appendStyleRun(scope: Int, location: Int, length: Int) {
             guard length > 0 else { return }
@@ -451,6 +496,7 @@ public final class SakuraScriptPlayer {
         func activateIfNeeded(scope: Int) throws {
             let text = textByScope[scope, default: ""]
             guard text.contains(where: { !$0.isWhitespace }) else { return }
+            guard (balloonStyleByScope[scope] ?? 0) >= 0 else { return }
             guard activatedScopes.insert(scope).inserted else { return }
             onDialogueContent?()
             try activate(scope: scope, style: balloonStyleByScope[scope] ?? 0)
@@ -485,8 +531,13 @@ public final class SakuraScriptPlayer {
 
         do {
             var pendingTokens = tokens
-            while !pendingTokens.isEmpty {
+            while !pendingTokens.isEmpty || !pendingInterrupts.isEmpty {
                 guard !Task.isCancelled else { return }
+                if !pendingInterrupts.isEmpty {
+                    var interrupt = pendingInterrupts.removeFirst()
+                    interrupt.append(.scope(scope))
+                    pendingTokens.insert(contentsOf: interrupt, at: 0)
+                }
                 let token = pendingTokens.removeFirst()
                 switch token {
                 case let .text(text):
@@ -656,7 +707,11 @@ public final class SakuraScriptPlayer {
                     )
                 case let .balloonOffset(x, y):
                     balloonOffsetScopes.insert(scope)
-                    balloonWindowController.setOffset(x: x.value, y: y.value, scope: scope)
+                    balloonWindowController.setOffset(
+                        x: Int(x.value.rounded()),
+                        y: Int(y.value.rounded()),
+                        scope: scope
+                    )
                 case let .balloonAlignment(alignment):
                     let windowAlignment: BalloonWindowAlignment = switch alignment {
                     case .left: .left
@@ -744,6 +799,76 @@ public final class SakuraScriptPlayer {
                         )
                         updateContent(scope: targetScope)
                         textStyleByScope[targetScope, default: BalloonTextStyle()].alignment = nil
+                        textStyleByScope[targetScope, default: BalloonTextStyle()].paragraphIndent = nil
+                        textStyleByScope[targetScope, default: BalloonTextStyle()].paragraphSpacingBefore = nil
+                    }
+                case let .cursorMove(x, y):
+                    let targets = synchronizedScopes?.sorted() ?? [scope]
+                    for targetScope in targets {
+                        let currentPosition = balloonWindowController.textCursorPosition(scope: targetScope)
+                        let style = textStyleByScope[targetScope, default: BalloonTextStyle()]
+                        let em = style.fontHeight ?? Double(balloon.fontHeight)
+                        let font = (style.fontName ?? balloon.fontName).flatMap {
+                            NSFont(name: $0, size: CGFloat(em))
+                        } ?? NSFont.systemFont(ofSize: CGFloat(em))
+                        let lineHeight = Double(font.ascender - font.descender + font.leading)
+                        func coordinateValue(
+                            _ coordinate: SakuraScriptBalloonCoordinate,
+                            percentExtent: Double
+                        ) -> Double {
+                            switch coordinate.unit {
+                            case .pixel: coordinate.value
+                            case .em: coordinate.value * em
+                            case .lineHeight: coordinate.value * lineHeight
+                            case .percent: coordinate.value * percentExtent / 100
+                            }
+                        }
+                        let contentSize = balloonWindowController.textContentSize(scope: targetScope)
+                        let targetX = x.map {
+                            coordinateValue($0, percentExtent: contentSize.width)
+                                + ($0.isRelative ? currentPosition.x : 0)
+                        } ?? currentPosition.x
+                        let targetY = y.map {
+                            coordinateValue($0, percentExtent: contentSize.height)
+                                + ($0.isRelative ? currentPosition.y : 0)
+                        } ?? currentPosition.y
+                        let text = textByScope[targetScope, default: ""]
+                        let movesBackwardOnSameLine = x?.isRelative == false
+                            && y?.isRelative == false
+                            && abs(targetY - currentPosition.y) < 1
+                            && targetX < currentPosition.x
+                            && !text.hasSuffix("\n")
+                        if movesBackwardOnSameLine {
+                            let paragraphStart: Int = {
+                                let source = text as NSString
+                                let newline = source.range(of: "\n", options: .backwards)
+                                return newline.location == NSNotFound ? 0 : NSMaxRange(newline)
+                            }()
+                            let start = text.utf16.count
+                            textByScope[targetScope, default: ""].append("\t")
+                            pendingSameLineRightTabByScope[targetScope] = paragraphStart
+                            appendStyleRun(scope: targetScope, location: start, length: 1)
+                            try activateIfNeeded(scope: targetScope)
+                            updateContent(scope: targetScope)
+                            continue
+                        }
+                        if !text.isEmpty, !text.hasSuffix("\n") {
+                            let start = text.utf16.count
+                            textByScope[targetScope, default: ""].append("\n")
+                            var breakStyle = BalloonTextStyle()
+                            breakStyle.alignment = textStyleByScope[targetScope]?.alignment
+                            styleRunsByScope[targetScope, default: []].append(BalloonTextStyleRun(
+                                range: NSRange(location: start, length: 1),
+                                style: breakStyle
+                            ))
+                            try activateIfNeeded(scope: targetScope)
+                            updateContent(scope: targetScope)
+                        }
+                        let nextLinePosition = balloonWindowController.textCursorPosition(scope: targetScope)
+                        textStyleByScope[targetScope, default: BalloonTextStyle()].alignment = nil
+                        textStyleByScope[targetScope, default: BalloonTextStyle()].paragraphIndent = targetX
+                        textStyleByScope[targetScope, default: BalloonTextStyle()].paragraphSpacingBefore =
+                            targetY - nextLinePosition.y
                     }
                 case let .onlineMode(enabled):
                     balloonWindowController.setMarkerText(enabled ? "●" : "", scope: scope)
@@ -817,6 +942,8 @@ public final class SakuraScriptPlayer {
                     scope = 0
                     preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
                     if clearOnResume {
+                        balloonWindowController.hideAll()
+                        activatedScopes.removeAll()
                         textByScope.removeAll()
                         linksByScope.removeAll()
                         anchorsByScope.removeAll()
@@ -859,7 +986,6 @@ public final class SakuraScriptPlayer {
                             fontColor: choice.fontColor
                         )
                     )
-                    textByScope[scope, default: ""].append("\n")
                     updateContent(scope: scope, autoscroll: false)
                 case .choiceTimeout:
                     continue
@@ -924,7 +1050,17 @@ public final class SakuraScriptPlayer {
                         let length = text.length - lineStart
                         if length > 0 {
                             var alignmentStyle = BalloonTextStyle()
-                            alignmentStyle.alignment = alignment
+                            if alignment == .right,
+                               let tabLineStart = pendingSameLineRightTabByScope.removeValue(forKey: scope),
+                               tabLineStart == lineStart
+                            {
+                                alignmentStyle.rightTabStop = Double(
+                                    balloonWindowController.textContentSize(scope: scope).width
+                                )
+                                textStyleByScope[scope, default: BalloonTextStyle()].alignment = nil
+                            } else {
+                                alignmentStyle.alignment = alignment
+                            }
                             styleRunsByScope[scope, default: []].append(BalloonTextStyleRun(
                                 range: NSRange(location: lineStart, length: length),
                                 style: alignmentStyle
@@ -1005,8 +1141,8 @@ public final class SakuraScriptPlayer {
                     surfaceWindowController.setStickyWindows(scopes: scopes)
                 case .resetStickyWindows:
                     surfaceWindowController.resetStickyWindows()
-                case let .inlineImage(path, _, _):
-                    if let image = resolveInlineImage(path: path) {
+                case let .inlineImage(path, isOpaque, _):
+                    if let image = resolveInlineImage(path: path, isOpaque: isOpaque) {
                         let targetScope = scope
                         let currentLength = (textByScope[targetScope, default: ""] as NSString).length
                         textByScope[targetScope, default: ""].append("\u{FFFC}")
@@ -1222,7 +1358,7 @@ public final class SakuraScriptPlayer {
         }
     }
 
-    private func resolveInlineImage(path: String) -> NSImage? {
+    private func resolveInlineImage(path: String, isOpaque: Bool) -> NSImage? {
         if path.hasPrefix("data:image/") {
             if let commaIndex = path.firstIndex(of: ",") {
                 let base64String = String(path[path.index(after: commaIndex)...])
@@ -1235,7 +1371,10 @@ public final class SakuraScriptPlayer {
         let normalizedPath = path.replacingOccurrences(of: "\\", with: "/")
         let url = baseDirectory.appending(path: normalizedPath)
         if FileManager.default.fileExists(atPath: url.path) {
-            return NSImage(contentsOf: url)
+            if isOpaque {
+                return NSImage(contentsOf: url)
+            }
+            return try? imageLoader.loadUsingTopLeftTransparency(url)
         }
         return nil
     }

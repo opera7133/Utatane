@@ -109,8 +109,8 @@ UKADOC掲載イベント数: 290
 | [`OnChoiceEnter`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnChoiceEnter) | 🟡 | 通知経路のUKADOC照合 | 低 | 選択肢への出入りでラベル・ID・追加引数を通知し、外れた時はReferenceなし。実動未確認 |
 | [`OnChoiceTimeout`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnChoiceTimeout) | ✅ | 通知経路のUKADOC照合 | 低 | 選択肢タイムアウト時に対象スクリプト全文をReference0へ通知。Playerテストで確認 |
 | [`OnChoiceHover`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnChoiceHover) | 🟡 | 通知経路のUKADOC照合 | 低 | 選択肢上で1秒静止した時にラベル・ID・追加引数を通知。SSPの静止時間との完全一致は未確認 |
-| [`OnAnchorSelect`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorSelect) | 🟡 | 通知経路のUKADOC照合 | 低 | アンカーIDをReference0へ通知。OnAnchorSelectExの204応答を待つフォールバックではなく両方を発行 |
-| [`OnAnchorSelectEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorSelectEx) | 🟡 | 通知経路のUKADOC照合 | 低 | アンカーの表示ラベル・ID・追加引数をReference0以降へ通知。204応答時だけOnAnchorSelectへ進む制御は未対応 |
+| [`OnAnchorSelect`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorSelect) | 🟡 | Water Surfaceで再実動確認 | 低 | OnAnchorSelectExが空応答の時だけ、アンカーIDをReference0へフォールバック通知 |
+| [`OnAnchorSelectEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorSelectEx) | ✅ | — | — | アンカーの表示ラベル・ID・追加引数をReference0以降へ通知。非空応答ならOnAnchorSelectを重複発行しない。応答は割り込みスタックで実行し、先頭`\C`で表示を維持したまま応答終了後に元スクリプトのscopeと残りトークを再開。Water Surfaceの正規トークID・LIKE_ON引数をテストし、2026-08-27にキーワード・お気に入りを実アプリ確認 |
 | [`OnAnchorEnter`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorEnter) | 🟡 | 通知経路のUKADOC照合 | 低 | アンカーへの出入りでラベル・ID・追加引数を通知し、外れた時はReferenceなし。実動未確認 |
 | [`OnAnchorHover`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorHover) | 🟡 | 通知経路のUKADOC照合 | 低 | アンカー上で1秒静止した時にラベル・ID・追加引数を通知。SSPの静止時間との完全一致は未確認 |
 
@@ -119,7 +119,7 @@ UKADOC掲載イベント数: 290
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
 | [`OnSurfaceChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceChange) | 🟡 | 通知経路のUKADOC照合 | 低 | SakuraScript等でsurfaceが変わった時に本体側・相方側の現在IDをReference0〜1へ通知。NOTIFYメソッドの区別は未対応 |
-| [`OnSurfaceRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceRestore) | ✅ | 通知経路のUKADOC照合 | 低 | バルーン消去15秒後に、その時点の現在surfaceをReference0〜1へ通知。待機中に次の会話が始まった場合は通知を取り消す |
+| [`OnSurfaceRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceRestore) | ✅ | — | — | SSP同様、バルーン消去15秒後に、その時点の現在surfaceをReference0〜1へ通知。待機中に次の会話が始まった場合は通知を取り消す。Playerテスト済み。Emily/Phase4.5は標準イベントを意図的に無効化し、YAYA SHIORI/3フレームワーク側の独自タイミングで復帰する |
 | [`OnOtherSurfaceChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherSurfaceChange) | 🟡 | 通知経路のUKADOC照合 | 低 | 他の実行中ゴーストへ本体名・Sakura名・scope・新旧surface・矩形をReference0〜5で通知。othersurfacechange無効化設定は未対応 |
 
 ## マウスイベント

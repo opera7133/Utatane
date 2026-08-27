@@ -58,7 +58,61 @@ import UtataneShell
     controller.hideAll()
 }
 
+@MainActor
+@Test func `renders a surface stored with the APNG extension`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0.apng"))
+
+    let controller = SurfaceWindowController()
+    try controller.show(shell: ShellDefinition(directory: directory, surfaces: [:]), surfaceID: 0)
+    defer { controller.hideAll() }
+
+    #expect(controller.renderedImage() != nil)
+}
+
+@MainActor
+@Test func `renders the installed Umaumauma default APNG surfaces`() throws {
+    let repositoryRoot = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let root = repositoryRoot.appending(
+        path: "Content/Local/Ghosts/umaumauma/shell/master",
+        directoryHint: .isDirectory
+    )
+    guard FileManager.default.fileExists(atPath: root.path) else { return }
+
+    let shell = try ShellLoader().load(from: root)
+    #expect(shell.surfaces[2004]?.elements.map(\.filename) == ["tb1020.png", "tb1204.png"])
+    let controller = SurfaceWindowController()
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 0, 1: 10])
+    defer { controller.hideAll() }
+
+    let renderedHorse = try #require(controller.renderedImage(for: 0))
+    #expect(controller.renderedImage(for: 1) != nil)
+    #expect(renderedHorse.transparentPixelRatio > 0.5)
+    try controller.changeSurface(scope: 2, to: 999)
+    #expect(try #require(controller.renderedImage(for: 2)).transparentPixelRatio == 1)
+}
+
 private extension NSImage {
+    var transparentPixelRatio: Double {
+        guard let tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffRepresentation)
+        else { return 0 }
+        var transparentPixels = 0
+        for y in 0 ..< bitmap.pixelsHigh {
+            for x in 0 ..< bitmap.pixelsWide where bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 1 < 0.01 {
+                transparentPixels += 1
+            }
+        }
+        return Double(transparentPixels) / Double(bitmap.pixelsWide * bitmap.pixelsHigh)
+    }
+
     var hasVisiblePixels: Bool {
         guard let tiffRepresentation,
               let bitmap = NSBitmapImageRep(data: tiffRepresentation)
@@ -905,6 +959,41 @@ func `changes balloon surface before and during dialogue`() async throws {
 
 @Test
 @MainActor
+func `negative balloon surface keeps a not yet shown scope hidden`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0010.png"))
+    try makePNG(width: 120, height: 80).write(to: directory.appending(path: "balloons0.png"))
+    try makePNG(width: 120, height: 80).write(to: directory.appending(path: "balloonk0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        defaultSurfaceIDs: [0: 0, 1: 10]
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\1\b[-1]非表示\0表示\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(balloonController.visibleScopes == [0])
+}
+
+@Test
+@MainActor
 func `clears dialogue text in every active scope`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
@@ -936,6 +1025,49 @@ func `clears dialogue text in every active scope`() async throws {
 
     #expect(balloonController.textAndLinks(for: 0)?.0 == "後")
     #expect(balloonController.textAndLinks(for: 1)?.0 == "")
+}
+
+@Test
+@MainActor
+func `leading capital C continues the previous dialogue without hiding other scopes`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0001.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloonk0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    let shell = ShellDefinition(directory: directory, surfaces: [:])
+    try surfaceController.show(shell: shell, scope: 0, surfaceID: 0)
+    try surfaceController.show(shell: shell, scope: 1, surfaceID: 1)
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController,
+        postDialogueDismissalMilliseconds: 60000
+    )
+    let balloon = makeBalloon(directory: directory)
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\0元のセリフ\1元の相方\e"#),
+        balloon: balloon,
+        characterDelayMilliseconds: 0
+    )
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\C\1\cリンクの結果\e"#),
+        balloon: balloon,
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(balloonController.visibleScopes == [0, 1])
+    #expect(balloonController.textAndLinks(for: 0)?.0 == "元のセリフ")
+    #expect(balloonController.textAndLinks(for: 1)?.0 == "リンクの結果")
 }
 
 @Test
@@ -1100,11 +1232,200 @@ func `plain choice dispatches only the ordinary choice event`() async throws {
 
     #expect(ordinaryChoice == "talkinterval")
     #expect(extendedChoice == nil)
+    #expect(balloonController.visibleScopes == [0])
 }
 
 @Test
 @MainActor
-func `renders an extended choice and appends its automatic newline`() async throws {
+func `anchor response interrupts and then resumes the script that contains it`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 200, height: 120).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    let balloon = makeBalloon(directory: directory)
+    player.onAnchorSelectEx = { _, _, _ in
+        player.interrupt(
+            with: SakuraScript(rawValue: #"\C\1アンカー応答\e"#),
+            balloon: balloon,
+            characterDelayMilliseconds: 0
+        )
+    }
+
+    player.play(
+        SakuraScript(rawValue: #"\0\_a[keyword,keyword,KW]語\_a後続のセリフが最後まで流れる\e"#),
+        balloon: balloon,
+        characterDelayMilliseconds: 20
+    )
+    for _ in 0 ..< 100 where balloonController.textAndLinks(for: 0)?.1.isEmpty != false {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    let link = try #require(balloonController.textAndLinks(for: 0)?.1.first)
+    balloonController.onLinkActivate?(link, "語")
+    balloonController.onLinkClick?(link.id, link.arguments)
+    let expected = "語後続のセリフが最後まで流れる"
+    for _ in 0 ..< 100 where balloonController.textAndLinks(for: 0)?.0 != expected
+        || balloonController.textAndLinks(for: 1)?.0 != "アンカー応答"
+    {
+        try await Task.sleep(for: .milliseconds(20))
+    }
+
+    #expect(balloonController.textAndLinks(for: 0)?.0 == expected)
+    #expect(balloonController.textAndLinks(for: 1)?.0 == "アンカー応答")
+}
+
+@Test
+@MainActor
+func `numeric cursor moves separate compact ghost menu rows`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 240, height: 160).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"お気に入り\_l[0,0]\f[align,right]閉じる\_l[0,@12]罫線\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(balloonController.textAndLinks(for: 0)?.0 == "お気に入り\t閉じる\n罫線")
+    let rightAligned = try #require(
+        balloonController.textAttributes(at: 5, scope: 0)?[.paragraphStyle] as? NSParagraphStyle
+    )
+    #expect(rightAligned.tabStops.count == 1)
+    #expect(rightAligned.tabStops[0].alignment == .right)
+    #expect(rightAligned.firstLineHeadIndent == 0)
+    let relativeRow = try #require(
+        balloonController.textAttributes(at: 10, scope: 0)?[.paragraphStyle] as? NSParagraphStyle
+    )
+    #expect(relativeRow.firstLineHeadIndent == 0)
+    #expect(abs(relativeRow.paragraphSpacingBefore + 5) < 1)
+}
+
+@Test
+@MainActor
+func `cursor moves resolve em and percent units into balloon coordinates`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 300, height: 240).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"先頭\_l[1em,2em]A\_l[12em,]B\_l[,@+70%]C\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    let first = try #require(
+        balloonController.textAttributes(at: 3, scope: 0)?[.paragraphStyle] as? NSParagraphStyle
+    )
+    let second = try #require(
+        balloonController.textAttributes(at: 5, scope: 0)?[.paragraphStyle] as? NSParagraphStyle
+    )
+    let third = try #require(
+        balloonController.textAttributes(at: 7, scope: 0)?[.paragraphStyle] as? NSParagraphStyle
+    )
+    #expect(abs(first.firstLineHeadIndent - 14) < 0.5)
+    #expect(abs(second.firstLineHeadIndent - 168) < 0.5)
+    #expect(third.firstLineHeadIndent > second.firstLineHeadIndent)
+    #expect(third.paragraphSpacingBefore > 0)
+}
+
+@Test
+@MainActor
+func `clicking a terminal wait clears and closes the balloon`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+
+    player.play(
+        SakuraScript(rawValue: #"クリックして閉じる\x\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    for _ in 0 ..< 100 where balloonController.visibleScopes.isEmpty {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(balloonController.visibleScopes == [0])
+
+    player.advance()
+    for _ in 0 ..< 100 where !balloonController.visibleScopes.isEmpty {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(balloonController.visibleScopes.isEmpty)
+}
+
+@Test
+@MainActor
+func `renders adjacent extended choices without inserting a newline`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
     let directory = FileManager.default.temporaryDirectory
@@ -1134,7 +1455,7 @@ func `renders an extended choice and appends its automatic newline`() async thro
     )
 
     let content = try #require(balloonController.textAndLinks(for: 0))
-    #expect(content.0 == "選択肢\n次錨")
+    #expect(content.0 == "選択肢次錨")
     #expect(content.1 == [
         BalloonTextLink(
             range: NSRange(location: 0, length: 3),
@@ -1142,7 +1463,7 @@ func `renders an extended choice and appends its automatic newline`() async thro
             arguments: ["arg"]
         ),
         BalloonTextLink(
-            range: NSRange(location: 5, length: 1),
+            range: NSRange(location: 4, length: 1),
             id: "OnAnchor",
             arguments: [],
             kind: .anchor,
@@ -1150,7 +1471,7 @@ func `renders an extended choice and appends its automatic newline`() async thro
         )
     ])
     let anchorColor = try #require(
-        balloonController.textAttributes(at: 5, scope: 0)?[.foregroundColor] as? NSColor
+        balloonController.textAttributes(at: 4, scope: 0)?[.foregroundColor] as? NSColor
     )
     #expect(anchorColor.greenComponent > 0.9)
 }
@@ -1376,7 +1697,7 @@ func `long balloon text scrolls and follows its bottom`() throws {
 
 @Test
 @MainActor
-func `dismisses balloons without discarding dialogue surfaces`() async throws {
+func `dismisses balloons before requesting surface restore`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
     let directory = FileManager.default.temporaryDirectory
@@ -1430,13 +1751,12 @@ func `dismisses balloons without discarding dialogue surfaces`() async throws {
     for _ in 0 ..< 100 where surfaceController.surfaceID(for: 0) != 1 {
         try await Task.sleep(for: .milliseconds(10))
     }
+    #expect(surfaceController.surfaceID(for: 0) == 1)
+    #expect(surfaceController.surfaceID(for: 1) == 11)
     for _ in 0 ..< 100 where !balloonController.visibleScopes.isEmpty {
         try await Task.sleep(for: .milliseconds(20))
     }
-
     #expect(balloonController.visibleScopes.isEmpty)
-    #expect(surfaceController.surfaceID(for: 0) == 1)
-    #expect(surfaceController.surfaceID(for: 1) == 11)
     #expect(!didRequestSurfaceRestore)
     for _ in 0 ..< 100 where !didRequestSurfaceRestore {
         try await Task.sleep(for: .milliseconds(10))
@@ -1646,7 +1966,7 @@ func `renders inline balloon images`() async throws {
     defer { try? FileManager.default.removeItem(at: directory) }
     try makePNG(width: 100, height: 100).write(to: directory.appending(path: "surface0.png"))
     try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
-    try makePNG(width: 16, height: 16).write(to: directory.appending(path: "icon.png"))
+    try makeTopLeftKeyedPNG(width: 16, height: 16).write(to: directory.appending(path: "icon.png"))
 
     let surfaceController = SurfaceWindowController(positionStore: positionStore)
     try surfaceController.show(
@@ -1672,6 +1992,10 @@ func `renders inline balloon images`() async throws {
     let font = try #require(balloonController.textAttributes(at: 2, scope: 0)?[.font] as? NSFont)
     #expect(attachment.bounds.height == 16)
     #expect(attachment.bounds.origin.y == (font.capHeight - 16) / 2)
+    let image = try #require(attachment.image)
+    let representation = try #require(image.representations.compactMap { $0 as? NSBitmapImageRep }.first)
+    #expect((representation.colorAt(x: 0, y: 0)?.alphaComponent ?? 1) == 0)
+    #expect((representation.colorAt(x: 1, y: 0)?.alphaComponent ?? 0) > 0.9)
 }
 
 @Test
@@ -1733,6 +2057,29 @@ private func makePNG(
     for y in 0 ..< height {
         for x in 0 ..< width {
             bitmap.setColor(color, atX: x, y: y)
+        }
+    }
+    return try #require(bitmap.representation(using: .png, properties: [:]))
+}
+
+private func makeTopLeftKeyedPNG(width: Int, height: Int) throws -> Data {
+    let bitmap = try #require(NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: width,
+        pixelsHigh: height,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: width * 4,
+        bitsPerPixel: 32
+    ))
+    let key = NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1)
+    let content = NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    for y in 0 ..< height {
+        for x in 0 ..< width {
+            bitmap.setColor(x == 0 && y == 0 ? key : content, atX: x, y: y)
         }
     }
     return try #require(bitmap.representation(using: .png, properties: [:]))

@@ -3,15 +3,56 @@ import Testing
 @testable import UtataneContent
 
 @Test
-func `rejects traversal absolute and backslash archive entries`() throws {
+func `accepts Windows separators while rejecting unsafe archive entries`() throws {
     let installer = NarInstaller()
 
-    for entry in ["../outside", "/absolute", "folder\\file", "folder/./file"] {
+    for entry in ["../outside", "..\\outside", "/absolute", "C:\\absolute", "folder/./file"] {
         #expect(throws: NarInstallError.self) {
             try installer.validate(entries: [entry])
         }
     }
-    try installer.validate(entries: ["ghost/master/descript.txt", "shell/master/"])
+    try installer.validate(entries: ["ghost\\master\\descript.txt", "shell/master/"])
+    #expect(throws: NarInstallError.self) {
+        try installer.validate(entries: ["ghost/master/descript.txt", "ghost\\master\\descript.txt"])
+    }
+}
+
+@Test
+func `installs a NAR whose ZIP entries use Windows separators`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    try Data("type,ghost\nname,Windows Paths\ndirectory,windows-paths\n".utf8).write(
+        to: fixture.source.appending(path: "install.txt")
+    )
+    try Data("name,Windows Paths\n".utf8).write(
+        to: fixture.source.appending(path: "ghost\\master\\descript.txt")
+    )
+    let archive = try makeArchive(from: fixture.source, at: fixture.root)
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(result.items.map(\.name) == ["Windows Paths"])
+    #expect(FileManager.default.fileExists(
+        atPath: fixture.roots.ghostsDirectory
+            .appending(path: "windows-paths/ghost/master/descript.txt").path
+    ))
+}
+
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_NAR_SMOKE_PATH"] != nil))
+func `installs an externally supplied NAR for release smoke testing`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let archivePath = try #require(ProcessInfo.processInfo.environment["UTATANE_NAR_SMOKE_PATH"])
+
+    let result = try NarInstaller().install(
+        archiveURL: URL(filePath: archivePath),
+        roots: fixture.roots
+    )
+
+    #expect(!result.items.isEmpty)
+    for item in result.items {
+        #expect(FileManager.default.fileExists(atPath: item.url.path))
+    }
 }
 
 @Test

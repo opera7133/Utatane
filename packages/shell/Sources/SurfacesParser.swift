@@ -51,7 +51,9 @@ public struct SurfacesParser: Sendable {
         var tooltips: [Int: [String: String]] = [:]
 
         for rawLine in text.components(separatedBy: .newlines) {
-            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            let line = rawLine
+                .replacingOccurrences(of: #"\s+//.*$"#, with: "", options: .regularExpression)
+                .trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty, !line.hasPrefix("//") else { continue }
 
             if let block = parseBlockHeader(line) {

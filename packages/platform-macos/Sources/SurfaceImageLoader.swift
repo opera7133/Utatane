@@ -8,14 +8,13 @@ struct SurfaceImageLoader {
 
     func load(_ surface: SurfaceAsset, usesSelfAlpha: Bool = false) throws -> NSImage {
         guard let alphaMaskURL = surface.alphaMaskURL else {
-            if usesSelfAlpha {
-                guard let source = NSImage(contentsOf: surface.imageURL),
-                      let representation = source.representations
-                      .compactMap({ $0 as? NSBitmapImageRep })
-                      .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh })
-                else {
-                    throw SurfaceImageError.invalidImage(surface.imageURL)
-                }
+            if usesSelfAlpha,
+               let source = NSImage(contentsOf: surface.imageURL),
+               let representation = source.representations
+               .compactMap({ $0 as? NSBitmapImageRep })
+               .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }),
+               representation.hasAlpha
+            {
                 let pixelSize = NSSize(width: representation.pixelsWide, height: representation.pixelsHigh)
                 representation.size = pixelSize
                 let image = NSImage(size: pixelSize)
@@ -37,8 +36,14 @@ struct SurfaceImageLoader {
         overlay: NSImage,
         x: Int,
         y: Int,
-        operation: NSCompositingOperation = .sourceOver
+        operation: NSCompositingOperation = .sourceOver,
+        clipsToBaseAlpha: Bool = false
     ) -> NSImage {
+        if operation == .multiply, clipsToBaseAlpha,
+           let composited = compositeMultiplySourceAtop(base: base, overlay: overlay, x: x, y: y)
+        {
+            return composited
+        }
         if operation == .sourceAtop,
            let composited = compositeSourceAtop(base: base, overlay: overlay, x: x, y: y)
         {
@@ -62,6 +67,34 @@ struct SurfaceImageLoader {
         )
         result.unlockFocus()
         return result
+    }
+
+    private func compositeMultiplySourceAtop(
+        base: NSImage,
+        overlay: NSImage,
+        x: Int,
+        y: Int
+    ) -> NSImage? {
+        guard let baseImage = ciImage(from: base),
+              let overlayImage = ciImage(from: overlay)
+        else { return nil }
+
+        let translatedOverlay = overlayImage.transformed(by: CGAffineTransform(
+            translationX: CGFloat(x),
+            y: baseImage.extent.height - CGFloat(y) - overlayImage.extent.height
+        ))
+        let multiply = CIFilter.multiplyBlendMode()
+        multiply.inputImage = translatedOverlay
+        multiply.backgroundImage = baseImage
+        guard let multiplied = multiply.outputImage else { return nil }
+
+        let clip = CIFilter.sourceAtopCompositing()
+        clip.inputImage = multiplied
+        clip.backgroundImage = baseImage
+        guard let outputImage = clip.outputImage?.cropped(to: baseImage.extent),
+              let output = context.createCGImage(outputImage, from: baseImage.extent)
+        else { return nil }
+        return NSImage(cgImage: output, size: base.size)
     }
 
     func translated(_ image: NSImage, x: Int, y: Int) -> NSImage {

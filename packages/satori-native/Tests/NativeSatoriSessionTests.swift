@@ -6,6 +6,33 @@ import UtataneShiori
 
 @Suite(.serialized)
 struct NativeSatoriSessionTests {
+    @Test func `Water Surface favorite anchor accepts its extended arguments`() throws {
+        let source = repositoryRoot.appending(
+            path: "Content/Local/Ghosts/watersurface/ghost/master",
+            directoryHint: .isDirectory
+        )
+        guard hasLocalContent(source) else { return }
+        let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+            path: UUID().uuidString,
+            directoryHint: .isDirectory
+        )
+        let master = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+        try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: source, to: master)
+
+        let session = try NativeSatoriSession(masterDirectoryURL: master)
+        _ = try session.request(GhostEventShioriAdapter().request(for: .boot))
+        let talkID = "通常トーク－ゴースト－ゴーストの自己認識"
+        let response = try session.request(GhostEventShioriAdapter().request(for: .shiori(
+            id: "OnAnchorSelectEx",
+            references: [0: "♡", 1: talkID, 2: talkID, 3: "LIKE_ON"]
+        )))
+
+        #expect((200 ..< 300).contains(response.statusCode))
+        #expect(response.value?.contains("引数の個数が足りません") == false)
+    }
+
     @Test func `native SATORI accepts surface change for a single character`() throws {
         let temporaryRoot = FileManager.default.temporaryDirectory.appending(
             path: UUID().uuidString,

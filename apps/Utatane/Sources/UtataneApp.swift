@@ -615,7 +615,7 @@ private struct UtataneRootView: View {
         Task {
             do {
                 guard let response = try await session.response(for: event) else { return }
-                if let script = response.script {
+                if let script = response.script, !script.rawValue.isEmpty {
                     scriptPlayer.play(script, balloon: balloon)
                 }
                 forwardCommunication(from: currentGhost, response: response)
@@ -624,6 +624,46 @@ private struct UtataneRootView: View {
                     "SHIORIイベント処理エラー: \(error.localizedDescription)",
                     category: "SHIORI",
                     details: "Event: \(event)\nError: \(error)",
+                    ghostName: currentGhost?.name
+                )
+                showError(error.localizedDescription)
+            }
+        }
+    }
+
+    private func sendAnchorSelection(label: String, id: String, arguments: [String]) {
+        guard !isTransitioningGhost, let session, let balloon else { return }
+        Task {
+            do {
+                let extended = try await session.response(for: .shiori(
+                    id: "OnAnchorSelectEx",
+                    references: Dictionary(
+                        uniqueKeysWithValues: ([label, id] + arguments).enumerated().map {
+                            ($0.offset, $0.element)
+                        }
+                    )
+                ))
+                if let extended {
+                    forwardCommunication(from: currentGhost, response: extended)
+                    if let script = extended.script, !script.rawValue.isEmpty {
+                        scriptPlayer.interrupt(with: script, balloon: balloon)
+                        return
+                    }
+                }
+
+                guard let legacy = try await session.response(for: .shiori(
+                    id: "OnAnchorSelect",
+                    references: [0: id]
+                )) else { return }
+                if let script = legacy.script, !script.rawValue.isEmpty {
+                    scriptPlayer.interrupt(with: script, balloon: balloon)
+                }
+                forwardCommunication(from: currentGhost, response: legacy)
+            } catch {
+                AppLogStore.shared.error(
+                    "アンカー選択イベント処理エラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: "Anchor: \(id)\nError: \(error)",
                     ghostName: currentGhost?.name
                 )
                 showError(error.localizedDescription)
@@ -1240,7 +1280,7 @@ private struct UtataneRootView: View {
     ) async -> Result<Void, any Error> {
         AppLogStore.shared.info("「\(ghost.name)」の起動を開始しました", category: "Ghost", ghostName: ghost.name)
         scriptPlayer.cancel()
-        surfaceWindowController.hideAll()
+        surfaceWindowController.resetContent()
         surfaceWindowController.setPresentationHidden(true)
         session = nil
         balloon = nil
@@ -1374,13 +1414,9 @@ private struct UtataneRootView: View {
                 )))
             }
             scriptPlayer.onAnchorSelectEx = { label, id, arguments in
-                sendEvent(.shiori(id: "OnAnchorSelectEx", references: Dictionary(
-                    uniqueKeysWithValues: ([label, id] + arguments).enumerated().map { ($0.offset, $0.element) }
-                )))
+                sendAnchorSelection(label: label, id: id, arguments: arguments)
             }
-            scriptPlayer.onAnchorSelect = { id in
-                sendEvent(.shiori(id: "OnAnchorSelect", references: [0: id]))
-            }
+            scriptPlayer.onAnchorSelect = nil
             scriptPlayer.onChoiceEnter = { label, id, arguments in
                 sendEvent(.shiori(id: "OnChoiceEnter", references: linkEventReferences(label, id, arguments)))
             }
@@ -4942,7 +4978,13 @@ private final class DebugWindowReaderView: NSView {
 
 enum ContentRoot {
     static var contentDirectory: URL {
-        FileManager.default.urls(
+        if let override = ProcessInfo.processInfo.environment["UTATANE_CONTENT_ROOT"],
+           !override.isEmpty
+        {
+            return URL(filePath: override, directoryHint: .isDirectory)
+        }
+
+        return FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
         )[0].appending(path: "Utatane", directoryHint: .isDirectory)
@@ -4969,17 +5011,14 @@ enum ContentRoot {
         ) else { return }
         try BundledContentInstaller().install(
             from: bundledRoot,
-            ghostsDirectory: contentDirectory.appending(path: "Ghosts", directoryHint: .isDirectory),
-            balloonsDirectory: contentDirectory.appending(path: "Balloons", directoryHint: .isDirectory)
+            ghostsDirectory: ghostsDirectory,
+            balloonsDirectory: balloonsDirectory
         )
     }
 
     static func variableStoreURL(for ghost: InstalledGhost) -> URL {
-        FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        )[0]
-            .appending(path: "Utatane/State", directoryHint: .isDirectory)
+        contentDirectory
+            .appending(path: "State", directoryHint: .isDirectory)
             .appending(path: ghost.rootDirectory.lastPathComponent, directoryHint: .isDirectory)
             .appending(path: "variables.json", directoryHint: .notDirectory)
     }

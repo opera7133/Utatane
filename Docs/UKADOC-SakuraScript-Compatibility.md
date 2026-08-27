@@ -64,14 +64,14 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\bID`, `\b[ID]` | ✅ | scope別のバルーンsurface変更に対応。括弧なしは1桁、複数桁は括弧形式。`\b[-1]` によるバルーン非表示に対応 |
-| `\_b[ファイル,...]` 全形式 | 🟡 | `\_b[画像パス,inline]` および `\_b[画像パス,inline,opaque]` によるバルーン内インライン画像描画（相対パスおよび `data:image/...;base64,...` 画像）に対応。座標指定（x,y）描画は未実装 |
+| `\_b[ファイル,...]` 全形式 | 🟡 | `\_b[画像パス,inline]` および `\_b[画像パス,inline,opaque]` によるバルーン内インライン画像描画（相対パスおよび `data:image/...;base64,...` 画像）に対応。通常のinline画像は左上色を透過し、`opaque`は透過処理を行わない。座標指定（x,y）描画は未実装 |
 | `\n` | ✅ | 改行 |
 | `\n[half]`, `\n[百分率]` | ✅ | `half`と数値・`%`付き百分率を改行文字の行高へ反映 |
 | `\_n` | ✅ | 次の`\_n`まで現scopeの自動折返しを停止し、スクリプト終了時に復帰 |
 | `\c` | ✅ | 現scopeの本文とリンクを消去 |
 | `\c[char/line,...]` | ✅ | カーソル直前または0始まり開始位置から文字数・行数を消去。後続のリンク・文字装飾範囲も補正 |
-| `\_l[x,y]` | ❌ | 描画位置変更 |
-| `\C` | ✅ | 全scopeの本文・リンクを消去し、Playerテストで確認 |
+| `\_l[x,y]` | 🟡 | ピクセル・em・lh・%と`@`相対指定を解釈し、文字描画範囲左上を基準に配置。%は文字描画範囲の幅・高さを基準にする。同じ行の左へ戻って後続を右揃えする指定は右タブとして扱い、左右に分かれたメニューを同一行へ配置。縦書きでの座標配置は未検証 |
+| `\C` | ✅ | スクリプト先頭では直前の表示内容・リンク・装飾を維持してscope 0から追記。途中では全scopeを消去。Playerテストで確認 |
 | `\![set,autoscroll,...]` | ✅ | `disable` / `enable` をスコープ単位で反映 |
 | `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset（絶対・`@`相対構文）、left/center(top)/right/bottom/none配置、下部marker、受信数表示を実装。offset・marker・numはスクリプト終了時に解除、alignはゴースト終了まで保持。シェル・surfaces.txt固有offsetとの合成は未対応 |
 | `\![set,balloontimeout,...]` | ✅ | 表示完了後のバルーン消去時間を指定。0以下で無効、選択肢タイムアウトとの競合は早い方を採用 |
@@ -105,7 +105,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\w1`〜`\w9` | ✅ | 50ms単位 |
 | `\_w[時間]` | ✅ | ミリ秒待ち |
 | `\__w[時間]` | ✅ | 再生開始／クリック待ち／clearからの累計ミリ秒まで待機し、Parser・Player経路で確認 |
-| `\x`, `\x[noclear]` | ✅ | クリック待ちと消去有無 |
+| `\x`, `\x[noclear]` | ✅ | クリック待ちと消去有無。通常の`\x`はクリック時にバルーンを消し、`noclear`は表示を保持 |
 | `\t` | ✅ | 実行後からスクリプト終了・キャンセルまで、通常・呼び出しゴーストのサーフェスマウスイベントをSHIORIへ通知しない。Player状態と配送経路をテスト |
 | `\_q`, quicksection | ✅ | トグル形式と明示的なtrue/false・1/0に対応。文字ウェイトだけを省略し、明示ウェイトは実行 |
 | `\_s`, `\_s[ID...]` | ✅ | 無引数はscope 0・1、ID指定は列挙scopeへ、区間内の文字と改行を同時表示。scope別の文字装飾も保持しPlayerテストで確認 |
@@ -120,7 +120,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\q[タイトル,ID1,ID2...]` | 🟡 | 2番目をID、以降を引数として扱う。旧形式固有の意味とは未照合 |
 | `script:` 選択肢 | ✅ | 通常・範囲選択肢でクリック時に指定SakuraScriptを直接再生し、SHIORI選択イベントを発生させないことをPlayerテストで確認 |
 | `\q[ID][タイトル]`, `\q*[ID][タイトル]` | ✅ | 旧仕様の選択肢（`\q*[...]` はマーカー付き）を受理し、自動改行付きで標準選択肢へ正規化 |
-| `\__q[ID,...]...\__q` | ✅ | 範囲選択肢、引数、終了時の自動改行に対応 |
+| `\__q[ID,...]...\__q` | ✅ | 範囲選択肢と引数に対応。終了時には暗黙の改行を挿入せず、空白で区切った複数リンクを同一行へ配置可能 |
 | `\z` | ✅ | 旧仕様の選択肢付きスクリプト終端として `\e` と同じ再生終了処理へ接続。Parser・Playerの終了経路で確認 |
 | `\*`, `\![set,choicetimeout,時間]` | ✅ | 表示完了後から計時。省略時は設定値、0・-1・`\*`は無期限。期限時にバルーンを閉じ、通常・呼び出しゴーストへ`OnChoiceTimeout`を通知 |
 | `\_a[ID]...\_a` | ✅ | アンカー範囲と引数に対応 |
@@ -183,7 +183,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\![execute,http-get,URL,...]` | 🟡 | async/syncのID、param、主要header、timeout、no-cache、file/nofileを実装。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行って `Reference3` へ返す。非同期並行実行、multipart、streaming、progressは未対応 |
+| `\![execute,http-get,URL,...]` | 🟡 | `--async`はSakuraScriptを継続して完了イベントを後から通知し、`--sync`は完了まで再生を停止。param、主要header、timeout、no-cache、file/nofileも実装。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行って `Reference3` へ返す。同一URLの並行実行、multipart、streaming、progressは未対応 |
 | http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded bodyと主要共通オプションに対応。multipart、入力ファイル、証明書検証無効化は未対応 |
 | `\![execute,rss-get/rss-post,URL,...]` | 🟡 | RSS/Atomの取得・基本パースと完了/失敗通知に対応。日時形式・全オプション・SSL情報は未照合 |
 | websocket execute/send/close/cancel | 🟡 | URL単位のws/wss接続、HTTP 101確立後のOpen通知、header・subprotocol、テキスト/バイナリ送受信、close/cancelを実装。自動再接続とSSLInfoは未対応 |

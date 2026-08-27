@@ -347,6 +347,32 @@ func `parses automatic line break and partial clear commands`() {
 }
 
 @Test
+func `parses numeric balloon cursor moves`() {
+    #expect(SakuraScriptParser().parse(#"\_l[0,0]\_l[,@12]\_l[@-30,]\_l[1.5em,@+70%]\_l[2lh,]"#) == [
+        .cursorMove(
+            x: SakuraScriptBalloonCoordinate(value: 0, isRelative: false),
+            y: SakuraScriptBalloonCoordinate(value: 0, isRelative: false)
+        ),
+        .cursorMove(
+            x: nil,
+            y: SakuraScriptBalloonCoordinate(value: 12, isRelative: true)
+        ),
+        .cursorMove(
+            x: SakuraScriptBalloonCoordinate(value: -30, isRelative: true),
+            y: nil
+        ),
+        .cursorMove(
+            x: SakuraScriptBalloonCoordinate(value: 1.5, isRelative: false, unit: .em),
+            y: SakuraScriptBalloonCoordinate(value: 70, isRelative: true, unit: .percent)
+        ),
+        .cursorMove(
+            x: SakuraScriptBalloonCoordinate(value: 2, isRelative: false, unit: .lineHeight),
+            y: nil
+        )
+    ])
+}
+
+@Test
 func `parses balloon repaint and movement locks`() {
     #expect(SakuraScriptParser().parse(
         #"\![lock,balloonrepaint]\![lock,balloonrepaint,manual]\![unlock,balloonrepaint]\![lock,balloonmove]\![unlock,balloonmove]"#

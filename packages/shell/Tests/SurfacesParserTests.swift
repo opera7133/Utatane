@@ -100,7 +100,8 @@ func `parses ranges exclusions append definitions and aliases`() {
     let source = """
     surface0-3,!2
     {
-    collision0,0,0,10,10,Base
+    collision0,0,0,10,10,Base // inline comment
+    element0,base,base.png,0,0 // inline comment
     }
 
     surface.append0-4
@@ -125,6 +126,7 @@ func `parses ranges exclusions append definitions and aliases`() {
     #expect(document.surfaces.keys.sorted() == [0, 1, 3])
     #expect(document.surfaces[0]?.collisions.map(\.name) == ["Base", "Added"])
     #expect(document.surfaces[3]?.collisions.map(\.name) == ["Base", "Added"])
+    #expect(document.surfaces[0]?.elements.first?.filename == "base.png")
     #expect(document.aliases[0]?["smile"] == [1, 3])
     #expect(document.aliases[0]?["3"] == [1])
     #expect(document.aliases[1]?["normal"] == [10])

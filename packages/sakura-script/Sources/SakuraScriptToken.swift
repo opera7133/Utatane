@@ -27,6 +27,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case balloonSurface(Int)
     case bind(category: String, part: String, enabled: Bool?, notifiesEvents: Bool)
     case lineBreak(scale: Double?)
+    case cursorMove(x: SakuraScriptBalloonCoordinate?, y: SakuraScriptBalloonCoordinate?)
     case automaticLineBreak
     case partialClear(unit: SakuraScriptClearUnit, count: Int, start: Int?)
     case wait(milliseconds: Int)
@@ -209,12 +210,27 @@ public enum SakuraScriptHTTPOutput: Sendable, Equatable {
 }
 
 public struct SakuraScriptBalloonCoordinate: Sendable, Equatable {
-    public let value: Int
+    public enum Unit: Sendable, Equatable {
+        case pixel
+        case em
+        case lineHeight
+        case percent
+    }
+
+    public let value: Double
     public let isRelative: Bool
+    public let unit: Unit
 
     public init(value: Int, isRelative: Bool) {
+        self.value = Double(value)
+        self.isRelative = isRelative
+        unit = .pixel
+    }
+
+    public init(value: Double, isRelative: Bool, unit: Unit) {
         self.value = value
         self.isRelative = isRelative
+        self.unit = unit
     }
 }
 

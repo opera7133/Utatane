@@ -83,8 +83,10 @@ public struct ShellLoader: Sendable {
         let fileManager = FileManager.default
 
         for basename in candidates {
-            let imageURL = shellDirectory.appending(path: "\(basename).png", directoryHint: .notDirectory)
-            guard fileManager.fileExists(atPath: imageURL.path) else { continue }
+            guard let imageURL = ["png", "apng"]
+                .map({ shellDirectory.appending(path: "\(basename).\($0)", directoryHint: .notDirectory) })
+                .first(where: { fileManager.fileExists(atPath: $0.path) })
+            else { continue }
 
             let maskURL = shellDirectory.appending(path: "\(basename).pna", directoryHint: .notDirectory)
             return SurfaceAsset(
@@ -107,7 +109,7 @@ public struct ShellLoader: Sendable {
             .appending(path: normalizedFilename, directoryHint: .notDirectory)
             .standardizedFileURL
             .resolvingSymlinksInPath()
-        guard imageURL.pathExtension.lowercased() == "png",
+        guard ["png", "apng"].contains(imageURL.pathExtension.lowercased()),
               imageURL.path.hasPrefix(root.path + "/"),
               FileManager.default.fileExists(atPath: imageURL.path)
         else {
@@ -223,7 +225,9 @@ public struct ShellLoader: Sendable {
 
     private func surfaceID(fromImageFilename filename: String) -> Int? {
         let lowercased = filename.lowercased()
-        guard lowercased.hasPrefix("surface"), lowercased.hasSuffix(".png") else { return nil }
-        return Int(lowercased.dropFirst("surface".count).dropLast(".png".count))
+        guard lowercased.hasPrefix("surface") else { return nil }
+        let extensions = [".png", ".apng"]
+        guard let suffix = extensions.first(where: lowercased.hasSuffix) else { return nil }
+        return Int(lowercased.dropFirst("surface".count).dropLast(suffix.count))
     }
 }

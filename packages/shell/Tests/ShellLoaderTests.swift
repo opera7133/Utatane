@@ -3,6 +3,25 @@ import Testing
 @testable import UtataneShell
 
 @Test
+func `loads an APNG base surface`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: UUID().uuidString,
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let image = root.appending(path: "surface0.apng", directoryHint: .notDirectory)
+    try Data().write(to: image)
+    try Data("surface0 {}".utf8).write(to: root.appending(path: "surfaces.txt"))
+
+    let shell = try ShellLoader().load(from: root)
+    let asset = try ShellLoader().loadSurface(id: 0, from: root)
+
+    #expect(shell.surfaces[0] != nil)
+    #expect(asset.imageURL == image)
+}
+
+@Test
 func `loads an SSP element path containing backslashes`() throws {
     let root = FileManager.default.temporaryDirectory.appending(
         path: UUID().uuidString,

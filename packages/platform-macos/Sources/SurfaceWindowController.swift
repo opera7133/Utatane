@@ -454,6 +454,15 @@ public final class SurfaceWindowController {
         }
     }
 
+    public func resetContent() {
+        hideAll()
+        characters.removeAll()
+        shell = nil
+        defaultSurfaceIDs.removeAll()
+        enabledBindGroups.removeAll()
+        stickyGroups.removeAll()
+    }
+
     public func resetToDefaultSurfaces() {
         for (scope, surfaceID) in defaultSurfaceIDs {
             try? characters[scope]?.changeSurface(to: surfaceID)
@@ -971,7 +980,8 @@ private final class CharacterSurfaceController {
             image: overlay,
             x: pattern.x + offset.x,
             y: pattern.y + offset.y,
-            operation: operation
+            operation: operation,
+            clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(pattern.method)
         )
         let order = currentSurfaceDefinition?.animations.map(\.id) ?? []
         let result = order.reversed().reduce(surfaceBaseImage) { image, animationID in
@@ -981,7 +991,8 @@ private final class CharacterSurfaceController {
                 overlay: layer.image,
                 x: layer.x,
                 y: layer.y,
-                operation: layer.operation
+                operation: layer.operation,
+                clipsToBaseAlpha: layer.clipsToBaseAlpha
             )
         }
         baseImage = result
@@ -994,6 +1005,7 @@ private final class CharacterSurfaceController {
         let x: Int
         let y: Int
         let operation: NSCompositingOperation
+        let clipsToBaseAlpha: Bool
     }
 
     func hide() {
@@ -1269,7 +1281,8 @@ private final class CharacterSurfaceController {
                 overlay: overlay,
                 x: element.x,
                 y: element.y,
-                operation: operation
+                operation: operation,
+                clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(element.method)
             )
         }
         return result
@@ -1308,7 +1321,8 @@ private final class CharacterSurfaceController {
                     overlay: overlay,
                     x: pattern.x,
                     y: pattern.y,
-                    operation: operation
+                    operation: operation,
+                    clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(pattern.method)
                 )
             }
         }
@@ -1489,7 +1503,8 @@ private final class CharacterSurfaceController {
                         overlay: overlay,
                         x: pattern.x + offset.x,
                         y: pattern.y + offset.y,
-                        operation: operation
+                        operation: operation,
+                        clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(pattern.method)
                     ))
                 } catch {
                     continue
@@ -1591,6 +1606,11 @@ func surfaceCompositingOperation(for method: String) -> NSCompositingOperation? 
     default:
         nil
     }
+}
+
+func surfaceCompositingClipsToBaseAlpha(_ method: String) -> Bool {
+    let method = method.lowercased()
+    return method == "overlaymultiply" || method == "blend-multiply-fast"
 }
 
 private final class SurfaceImageView: NSImageView {
