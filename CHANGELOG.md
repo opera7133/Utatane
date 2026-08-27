@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.0-alpha.15] - 2026-08-27
+
+### 追加
+
+- SNTP時刻同期イベントに対応。SakuraScriptの`\7`・`\![executesntp]`でHTTP Dateによる時刻取得を開始し、`OnSNTPBegin`・`OnSNTPCompareEx`/`OnSNTPCompare`・`OnSNTPCorrectEx`/`OnSNTPCorrect`・`OnSNTPFailure`をゴーストへ送信するようにした。`\6`で補正要求を送信できるようにした
+- `SNTPEventCoordinator`・`SNTPClient`を新設し、HTTP `HEAD`リクエストで取得したサーバ時刻とローカル時刻の差分を計算できるようにした
+- デバッグウィンドウに「開発ツール」ペインを追加。当たり判定の表示切り替え・バルーンテスト表示・SakuraScript直接入力・サーフェステスト（スコープとサーフェスIDの選択・アニメーション再生・コリジョン確認）・SERIKO Inspectorを含む
+- `GhostSession`でSHIORIのリクエスト・レスポンス・エラーをデバッグウィンドウへ出力するようにした
+- 公式配布サイト（`website/`）のHTMLと画像を追加し、`main`へのプッシュで自動デプロイするGitHub Actionsワークフローを整備
+
+### 変更
+
+- 同梱ゴースト「りあ」に数日をかけて段階的に進む生活エピソード（課題・読書・プレイリスト）のトークと、外出先から帰宅した際の短いトークを追加
+- 同梱ゴースト「りあ」に短期記憶（3日間有効）を実装し、直近の外出を後の会話で想起するようにした
+
 ## [0.1.0-alpha.14] - 2026-08-26
 
 ### 追加
@@ -235,7 +250,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[0.1.0-alpha.14]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.13...HEAD
+[0.1.0-alpha.15]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.14...HEAD
+[0.1.0-alpha.14]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.13...v0.1.0-alpha.14
 [0.1.0-alpha.13]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.12...v0.1.0-alpha.13
 [0.1.0-alpha.12]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.11...v0.1.0-alpha.12
 [0.1.0-alpha.11]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.10...v0.1.0-alpha.11
