@@ -32,6 +32,7 @@ OnBoot
 	ria_outfit_change_timer = 0
 	ria_spoiling_until = 0
 	RiaSelectOutfit
+	RiaUpdateLifeEpisode
 	RiaUpdateTalkInterval
 	RiaBootTalk
 }
@@ -90,8 +91,7 @@ OnSecondChange
 	if TOINT(ria_away) && GETSECCOUNT() >= TOINT(ria_away_until) {
 		ria_away = 0
 		RiaSelectOutfit
-		_talks = RiaReturnTalks
-		_talks[RAND(ARRAYSIZE(_talks))]
+		RiaFinishOuting
 		return
 	}
 	if ria_outfit_mode_saved == 'auto' {
@@ -184,12 +184,15 @@ RiaSelectTalk
 	_talks ,= RiaMediaTalks
 	_talks ,= RiaTechTalks
 	_talks ,= RiaSiblingTalks
+	_talks ,= RiaPersonalTalks
+	_talks ,= RiaLifeEpisodeTalks
 	_talks ,= RiaStateTalk
 	_talks ,= RiaTimeTalk
 	_talks ,= RiaWeekdayTalk
 	_talks ,= RiaSeasonTalk
 	_talks ,= RiaDateTalk
 	_talks ,= RiaWeatherTalk
+	_talks ,= RiaRecentMemoryTalks
 	if ISFUNC('RiaLocalTalks') {
 		_talks ,= EVAL('RiaLocalTalks')
 	}

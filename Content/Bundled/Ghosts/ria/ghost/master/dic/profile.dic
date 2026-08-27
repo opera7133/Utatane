@@ -1,0 +1,113 @@
+// 「どこにもいそうな大学生」だけで終わらないための、りあ固有の好み。
+// 作品名などの流行しやすい固有名詞は固定せず、選び方と態度を揃える。
+
+RiaPersonalTalks : array
+{
+	'\0\s[313]今期はプログラミング演習と情報デザイン取ってる。\w5片方は課題が細かくて、片方は正解が分からない。\e'
+	'\0\s[104]アルゴリズムの講義、板書では分かった気がした。\w5自分で書くと急に分からない。\e'
+	'\0\s[7]情報系だけど、機械の部品自体より、人がどこで操作を間違えるかの方が気になる。\e'
+	'\0\s[103]数式は嫌いじゃない。\w5途中を三行飛ばす先生が嫌。\e'
+	'\0\s[314]課題の見た目は最後に整える。\w5最後が締切五分前になるのは別の問題。\e'
+	'\0\s[304]音楽は、歌詞を追うより音が重なっていくやつが好き。\w5作業中は特に。\e'
+	'\0\s[304]ベースの音がちゃんと聞こえる曲、いいよね。\w5イヤホンだとそこから聴く。\e'
+	'\0\s[103]いきなりサビから始まる曲より、前奏が少し長い方が好き。\w5待ってる時間も含めて。\e'
+	'\0\s[304]同じ曲をリピートする日と、一曲ごとに飛ばす日がある。\w5理由は私も分からない。\e'
+	'\0\s[7]ゲームは反射神経より、地図を埋めたり、仕組みを理解したりする方が好き。\e'
+	'\0\s[103]管理ゲーム、最初はきれいに並べる。\w5忙しくなると、増築で全部どうにかする。\e'
+	'\0\s[3]ホラーゲームは自分で操作したくない。\w5人がやってるのを横から見るのは好き。\e'
+	'\0\s[7]対戦は嫌いじゃないけど、負けた直後にもう一回やると大抵悪化する。\w5分かっててやる。\e'
+	'\0\s[103]本は短編集が好き。\w5一つ読めば区切れるし、次を読んでもいい。\e'
+	'\0\s[304]本屋では背表紙の題名から見る。\w5表紙は手に取ってから見るものでしょ。\e'
+	'\0\s[317]長い小説は寝る前に読む。\w5進まないけど、よく寝られる。\e'
+	'\0\s[300]甘いものは好きだけど、キャラメルソースは多いと疲れる。\w5プリンは固めがいい。\e'
+	'\0\s[105]紅茶はミルクよりレモン。\w5何も入れない日もあるけど。\e'
+	'\0\s[3]パクチーは無理。\w5少しなら分からないとか言うけど、分かる。\e'
+	'\0\s[103]ポテトは細いのより皮付きの太いやつ。\w5冷めてもまだおいしいから。\e'
+}
+
+RiaTodayKey
+{
+	GETTIME[0] * 10000 + GETTIME[1] * 100 + GETTIME[2]
+}
+
+RiaChooseLifeEpisode
+{
+	ria_life_episode_kind_saved = RAND(4)
+	ria_life_episode_step_saved = 0
+	ria_life_episode_day_saved = RiaTodayKey
+}
+
+RiaUpdateLifeEpisode
+{
+	_today = RiaTodayKey
+	if ISVAR('ria_life_episode_kind_saved') == 0 || ISVAR('ria_life_episode_day_saved') == 0 {
+		RiaChooseLifeEpisode
+		return
+	}
+	if TOINT(ria_life_episode_day_saved) == _today {
+		return
+	}
+	ria_life_episode_day_saved = _today
+	ria_life_episode_step_saved++
+	if TOINT(ria_life_episode_step_saved) >= 3 {
+		RiaChooseLifeEpisode
+	}
+}
+
+RiaLifeEpisodeTalks
+{
+	_talks = IARRAY
+	_kind = TOINT(ria_life_episode_kind_saved)
+	_step = TOINT(ria_life_episode_step_saved)
+	if _kind == 0 {
+		if _step == 0 {
+			_talks ,= '\0\s[104]プログラミング演習の課題出た。\w5締切は三日後。まだ三日ある。\e'
+		}
+		elseif _step == 1 {
+			_talks ,= '\0\s[313]昨日の課題、入力の読み込みまでは書いた。\w5本体は今から。\e'
+		}
+		else {
+			_talks ,= '\0\s[7]課題は出した。\w5テストも一個書いたから、たぶん大丈夫。\e'
+		}
+	}
+	elseif _kind == 1 {
+		if _step == 0 {
+			_talks ,= '\0\s[304]短編集一冊買った。\w5今日は表題作だけ読む。\e'
+		}
+		elseif _step == 1 {
+			_talks ,= '\0\s[103]この間の短編集、二つ目の話の方が好きかも。\w5最後が少し意地悪かった。\e'
+		}
+		else {
+			_talks ,= '\0\s[317]短編集、読み終わった。\w5好きな話だけもう一回読むかも。\e'
+		}
+	}
+	elseif _kind == 2 {
+		if _step == 0 {
+			_talks ,= '\0\s[304]新しいプレイリスト作り始めた。\w5最初の三曲だけは順番決めた。\e'
+		}
+		elseif _step == 1 {
+			_talks ,= '\0\s[304]プレイリスト、十二曲まで増えた。\w5ジャンルはばらばら。音の繋がり優先。\e'
+		}
+		else {
+			_talks ,= '\0\s[103]プレイリストできた。\w5二時間越えたから、作業用というより作業そのもの。\e'
+		}
+	}
+	else {
+		if _step == 0 {
+			_talks ,= '\0\s[105]固めのプリン買った。\w5冷蔵庫の奥に入れたから、勝手に食べないで。\e'
+		}
+		elseif _step == 1 {
+			_talks ,= '\0\s[9]プリンはまだある。\w5確認しただけ。お兄を疑ったわけじゃない。\e'
+		}
+		else {
+			_talks ,= '\0\s[300]プリン食べた。\w5固さはよかった。カラメルは少し甘かった。\e'
+		}
+	}
+	_talks
+}
+
+OnRiaChoiceLifeEpisode
+{
+	_talks = RiaLifeEpisodeTalks
+	_talks[RAND(ARRAYSIZE(_talks))]
+}

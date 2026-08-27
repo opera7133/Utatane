@@ -13,6 +13,25 @@ OnRiaChoiceTalk
 	RiaSelectTalk
 }
 
+RiaHandMenuChoices
+{
+	_txt = "\![*]\q[着替える,OnRiaChoiceOutfit]\n"
+	_txt += "\![*]\q[少し出かける,OnRiaChoiceGoOut]\n"
+	_txt += "\![*]\q[今の天気,OnRiaChoiceWeather]\n"
+	_txt += "\![*]\q[最近どう？,OnRiaChoiceRecentMemory]\n"
+	_txt += "\![*]\q[今どんな感じ？,OnRiaChoiceState]\n"
+	_txt += "\![*]\q[何か話して,OnRiaChoiceTalk]\n"
+	_txt += "\![*]\q[悪かった,OnRiaChoiceApology]\n"
+	_txt += "\![*]\q[開発用,OnRiaChoiceDeveloper]\n"
+	_txt += "\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e"
+	_txt
+}
+
+OnRiaChoiceDeveloper
+{
+	'\0\s[103]動作確認のやつ。\w5普通は触らなくていいけど。\n\n\![*]\q[時刻表示,OnRiaChoiceTime]\n\![*]\q[曜日表示,OnRiaChoiceWeekday]\n\![*]\q[内部の記録,OnRiaChoiceProfile]\n\![*]\q[単発の行動台詞,OnRiaChoiceActivity]\n\![*]\q[表示の実験,OnRiaChoiceScriptLab]\n\![*]\q[戻る,OnRiaChoiceCancel]\e'
+}
+
 OnRiaChoiceState
 {
 	_now = GETTICKCOUNT
@@ -139,7 +158,7 @@ OnRiaChoiceGoOut
 		'\0\s[4]今ここにいないことになってるんだけど。\w5変な呼び戻し方しないで。\e'
 		return
 	}
-	"\0\s[103]出かける？\w5短いやつなら。\n\n\![*]\q[少し散歩,OnRiaChoiceGoWalk]\n\![*]\q[コンビニ,OnRiaChoiceGoStore]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e"
+	"\0\s[103]出かける？\w5短いやつなら。\n\n\![*]\q[少し散歩,OnRiaChoiceGoWalk]\n\![*]\q[コンビニ,OnRiaChoiceGoStore]\n\![*]\q[本屋,OnRiaChoiceGoBookstore]\n\![*]\q[大学に忘れ物,OnRiaChoiceGoUniversity]\n\![*]\q[やっぱりいい,OnRiaChoiceCancel]\e"
 }
 
 OnRiaChoiceGoWalk
@@ -152,6 +171,18 @@ OnRiaChoiceGoStore
 {
 	RiaStartOuting(180,'store')
 	'\0\s[205]コンビニ行ってくる。\w5\s[2]何かいる？\w5\s[3]……今聞いても遅いか。\w9\s[-1]\e'
+}
+
+OnRiaChoiceGoBookstore
+{
+	RiaStartOuting(240,'bookstore')
+	'\0\s[105]本屋見てくる。\w5買うかは分からないけど。\w9\s[-1]\e'
+}
+
+OnRiaChoiceGoUniversity
+{
+	RiaStartOuting(300,'university')
+	'\0\s[104]大学に忘れ物した。\w5取ってくる。\w5何を忘れたかは聞かないで。\w9\s[-1]\e'
 }
 
 RiaStartOuting

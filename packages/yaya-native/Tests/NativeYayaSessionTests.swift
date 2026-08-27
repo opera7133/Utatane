@@ -98,6 +98,12 @@ import UtataneShiori
     try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
     let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
     try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+    let variableURL = masterURL.appending(path: "yaya_variable.cfg")
+    var variables = try String(contentsOf: variableURL, encoding: .utf8)
+    variables += "ria_recent_memory_kind_saved,\"bookstore\",\",\",\n"
+    variables += "ria_recent_memory_variant_saved,0,\",\",\n"
+    variables += "ria_recent_memory_at_saved,\(Int(Date().timeIntervalSince1970)),\",\",\n"
+    try variables.write(to: variableURL, atomically: true, encoding: .utf8)
 
     let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
     _ = try await engine.handle(event: .boot)
@@ -105,6 +111,10 @@ import UtataneShiori
     let script = try await engine.handle(event: .shiori(id: "OnSurfaceRestore", references: [:]))
     let state = try await engine.handle(event: .shiori(id: "OnRiaChoiceState", references: [:]))
     let activity = try await engine.handle(event: .shiori(id: "OnRiaChoiceActivity", references: [:]))
+    let recentMemory = try await engine.handle(event: .shiori(id: "OnRiaChoiceRecentMemory", references: [:]))
+    let lifeEpisode = try await engine.handle(event: .shiori(id: "OnRiaChoiceLifeEpisode", references: [:]))
+    let developerMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceDeveloper", references: [:]))
+    let outingMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceGoOut", references: [:]))
     let idleTalk = try await engine.handle(event: .shiori(
         id: "OnAITalkNewEvent",
         references: [4: "600"]
@@ -244,6 +254,13 @@ import UtataneShiori
     })
     #expect(state?.rawValue.isEmpty == false)
     #expect(activity?.rawValue.isEmpty == false)
+    #expect(recentMemory?.rawValue.contains("本") == true)
+    #expect(["課題", "短編集", "プレイリスト", "プリン"].contains {
+        lifeEpisode?.rawValue.contains($0) == true
+    })
+    #expect(developerMenu?.rawValue.contains("表示の実験") == true)
+    #expect(outingMenu?.rawValue.contains("本屋") == true)
+    #expect(outingMenu?.rawValue.contains("大学に忘れ物") == true)
     #expect(idleTalk?.rawValue.isEmpty == false)
     #expect(secretTalk?.rawValue.contains("隠し") == true)
     #expect(["\\s[9]", "\\s[10009]"].contains {

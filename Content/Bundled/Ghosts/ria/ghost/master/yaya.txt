@@ -12,6 +12,8 @@ dic, dic/talk_hobbies.dic, UTF-8
 dic, dic/talk_tech.dic, UTF-8
 dic, dic/mouse.dic, UTF-8
 dic, dic/menu.dic, UTF-8
+dic, dic/memory.dic, UTF-8
+dic, dic/profile.dic, UTF-8
 dic, dic/integration.dic, UTF-8
 dic, dic/system_events.dic, UTF-8
 dicif, dic/local.dic, UTF-8

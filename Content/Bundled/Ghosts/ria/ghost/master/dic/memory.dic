@@ -1,0 +1,114 @@
+// 数日だけ残る、りあ自身の短い生活記憶。
+// 永久なプロファイルではなく、直近の出来事を会話に戻すために使う。
+
+RiaFinishOuting
+{
+	_kind = ria_away_kind
+	_variant = RAND(3)
+	ria_recent_memory_kind_saved = _kind
+	ria_recent_memory_variant_saved = _variant
+	ria_recent_memory_at_saved = GETSECCOUNT()
+
+	if _kind == 'walk' {
+		_talks = RiaWalkReturnTalks
+	}
+	elseif _kind == 'store' {
+		_talks = RiaStoreReturnTalks
+	}
+	elseif _kind == 'bookstore' {
+		_talks = RiaBookstoreReturnTalks
+	}
+	elseif _kind == 'university' {
+		_talks = RiaUniversityReturnTalks
+	}
+	else {
+		_talks = RiaReturnTalks
+	}
+	_talks[_variant % ARRAYSIZE(_talks)]
+}
+
+RiaWalkReturnTalks : array
+{
+	'\0\s[105]ただいま。\w5\s[0]思ったより外の空気まともだった。\e'
+	'\0\s[103]戻った。\w5近所の猫に見られたけど、向こうが逃げた。\e'
+	'\0\s[304]ただいま。\w5一曲分だけ遠回りしてきた。\e'
+}
+
+RiaStoreReturnTalks : array
+{
+	'\0\s[205]戻った。\w5\s[300]見るだけのつもりだったのに、余計なお菓子買った。\e'
+	'\0\s[300]ただいま。\w5新商品と迷って、結局いつもの選んだ。\e'
+	'\0\s[103]戻った。\w5プリンは買ったけど、私のだからね。\e'
+}
+
+RiaBookstoreReturnTalks : array
+{
+	'\0\s[304]ただいま。\w5買わないつもりだったけど、一冊だけ。\e'
+	'\0\s[103]戻った。\w5本を見に行って、表紙ばっかり見てた。\e'
+	'\0\s[317]ただいま。\w5積んでるのがあるから、今回は買わなかった。えらい。\e'
+}
+
+RiaUniversityReturnTalks : array
+{
+	'\0\s[104]戻った。\w5USBメモリ、教室にそのままあった。\e'
+	'\0\s[7]ただいま。\w5資料は取ってきた。\w5ついでに課題も思い出したけど。\e'
+	'\0\s[103]戻った。\w5忘れ物は見つかった。何かは言わない。\e'
+}
+
+RiaRecentMemoryActive
+{
+	if ISVAR('ria_recent_memory_at_saved') == 0 {
+		0
+		return
+	}
+	_age = GETSECCOUNT() - TOINT(ria_recent_memory_at_saved)
+	(_age >= 0 && _age <= 259200)
+}
+
+RiaRecentMemoryTalks
+{
+	_talks = IARRAY
+	if RiaRecentMemoryActive == 0 {
+		_talks
+		return
+	}
+	_kind = ria_recent_memory_kind_saved
+	_variant = TOINT(ria_recent_memory_variant_saved)
+	if _kind == 'walk' {
+		_talks ,= '\0\s[304]この間歩いた道、もう一回行ってもいいかも。\w5今すぐとは言ってない。\e'
+	}
+	elseif _kind == 'store' {
+		if _variant == 2 {
+			_talks ,= '\0\s[9]この間買ったプリンなら、もうないよ。\w5お兄は食べてない。今回は。\e'
+		}
+		else {
+			_talks ,= '\0\s[300]この間コンビニで買ったお菓子、もうない。\w5早かった。\e'
+		}
+	}
+	elseif _kind == 'bookstore' {
+		if _variant == 0 {
+			_talks ,= '\0\s[103]この間買った本、まだ最初の方。\w5買っただけで進んだ気になってた。\e'
+		}
+		else {
+			_talks ,= '\0\s[304]この間本屋で見た本、やっぱり少し気になる。\e'
+		}
+	}
+	elseif _kind == 'university' {
+		_talks ,= '\0\s[104]この間大学まで取りに行ったやつ、また忘れないようにカバンに入れた。\e'
+	}
+	_talks
+}
+
+OnRiaChoiceRecentMemory
+{
+	_talks = RiaRecentMemoryTalks
+	if ARRAYSIZE(_talks) == 0 {
+		_talks = RiaLifeEpisodeTalks
+	}
+	if ARRAYSIZE(_talks) == 0 {
+		'\0\s[103]最近？\w5特に覚えておくほどのことはない。\w5普通。\e'
+	}
+	else {
+		_talks[RAND(ARRAYSIZE(_talks))]
+	}
+}
