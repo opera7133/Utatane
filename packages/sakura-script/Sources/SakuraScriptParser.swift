@@ -160,6 +160,10 @@ public struct SakuraScriptParser: Sendable {
                 tokens.append(.separateCharacters)
             case "5":
                 tokens.append(.approachCharacters)
+            case "6":
+                tokens.append(.sntpCorrect)
+            case "7":
+                tokens.append(.sntpStart)
             case "q":
                 // Older SakuraScript assigns a display slot directly after
                 // \q, as in \q0[id][label]. The slot does not change the
@@ -401,6 +405,10 @@ public struct SakuraScriptParser: Sendable {
                     let arguments = splitArguments(argument)
                     if argument == "*" {
                         tokens.append(.marker)
+                    } else if arguments.count == 1,
+                              arguments[0].lowercased() == "executesntp"
+                    {
+                        tokens.append(.sntpStart)
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "quicksection"
                     {

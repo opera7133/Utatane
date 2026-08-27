@@ -24,6 +24,25 @@ public enum SurfaceDesktopAlignment: Sendable, Equatable {
     case defaultValue
 }
 
+public struct SERIKOInspectorSnapshot: Identifiable, Sendable, Equatable {
+    public let scope: Int
+    public let surfaceID: Int
+    public let currentAnimationID: Int?
+    public let persistentAnimationIDs: [Int]
+    public let pausedAnimationIDs: [Int]
+    public let animationOffsets: [Int: SurfacePoint]
+    public let isAnimating: Bool
+    public let isRepaintLocked: Bool
+    public let isMovementLocked: Bool
+    public let alpha: Double
+    public let scaleX: Double
+    public let scaleY: Double
+
+    public var id: Int {
+        scope
+    }
+}
+
 @MainActor
 public final class SurfaceWindowController {
     private var characters: [Int: CharacterSurfaceController] = [:]
@@ -117,6 +136,10 @@ public final class SurfaceWindowController {
 
     public func surfaceID(for scope: Int) -> Int? {
         characters[scope]?.currentSurfaceID
+    }
+
+    public var serikoInspectorSnapshots: [SERIKOInspectorSnapshot] {
+        characters.keys.sorted().compactMap { characters[$0]?.serikoInspectorSnapshot }
     }
 
     public var windowNumbers: [Int] {
@@ -678,6 +701,24 @@ private final class CharacterSurfaceController {
 
     var renderedImage: NSImage? {
         imageView?.image
+    }
+
+    var serikoInspectorSnapshot: SERIKOInspectorSnapshot? {
+        guard let baseSurfaceID else { return nil }
+        return SERIKOInspectorSnapshot(
+            scope: scope,
+            surfaceID: baseSurfaceID,
+            currentAnimationID: currentAnimationID,
+            persistentAnimationIDs: persistentAnimationLayers.keys.sorted(),
+            pausedAnimationIDs: pausedAnimationIDs.sorted(),
+            animationOffsets: animationOffsets,
+            isAnimating: isAnimating,
+            isRepaintLocked: isRepaintLocked,
+            isMovementLocked: isMovementLocked,
+            alpha: Double(surfaceAlpha),
+            scaleX: Double(runtimeScaleX),
+            scaleY: Double(runtimeScaleY)
+        )
     }
 
     func setMovementLocked(_ locked: Bool) {
@@ -1607,23 +1648,26 @@ private final class SurfaceImageView: NSImageView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard collisionMode.enabled else { return }
-        NSColor.systemRed.withAlphaComponent(0.85).setStroke()
-        NSColor.systemRed.withAlphaComponent(0.14).setFill()
         for collision in collisions {
+            NSGraphicsContext.saveGraphicsState()
+            NSColor.systemRed.withAlphaComponent(0.85).setStroke()
+            NSColor.systemRed.withAlphaComponent(0.14).setFill()
             let path = collisionPath(collision)
             path.lineWidth = 1
             path.fill()
             path.stroke()
-            guard collisionMode.showsNames else { continue }
-            let origin = path.bounds.origin
-            collision.name.draw(
-                at: NSPoint(x: origin.x + 2, y: origin.y + 1),
-                withAttributes: [
-                    .font: NSFont.systemFont(ofSize: 10),
-                    .foregroundColor: NSColor.white,
-                    .backgroundColor: NSColor.systemRed.withAlphaComponent(0.8)
-                ]
-            )
+            if collisionMode.showsNames {
+                let origin = path.bounds.origin
+                collision.name.draw(
+                    at: NSPoint(x: origin.x + 2, y: origin.y + 1),
+                    withAttributes: [
+                        .font: NSFont.systemFont(ofSize: 10),
+                        .foregroundColor: NSColor.white,
+                        .backgroundColor: NSColor.systemRed.withAlphaComponent(0.8)
+                    ]
+                )
+            }
+            NSGraphicsContext.restoreGraphicsState()
         }
     }
 

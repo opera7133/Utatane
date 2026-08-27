@@ -42,6 +42,14 @@ func `parses initial playback command set`() {
     ])
 }
 
+@Test func `parses SNTP commands`() {
+    #expect(SakuraScriptParser().parse(#"\7\![executesntp]\6"#) == [
+        .sntpStart,
+        .sntpStart,
+        .sntpCorrect
+    ])
+}
+
 @Test
 func `parses all HTTP methods and common request options`() {
     #expect(SakuraScriptParser().parse(

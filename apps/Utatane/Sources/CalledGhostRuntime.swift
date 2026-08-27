@@ -25,6 +25,7 @@ final class CalledGhostRuntime {
     private let textInputWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
     private var weatherTask: Task<Void, Never>?
+    private var sntpCoordinator: SNTPEventCoordinator?
     private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
     private var teachHistory: [String] = []
     private var pendingHourTimeSignal = false
@@ -86,7 +87,9 @@ final class CalledGhostRuntime {
         )
         session = GhostSession(
             personalityEngine: personalityEngine,
-            variableStore: GhostVariableStore(fileURL: ContentRoot.variableStoreURL(for: ghost))
+            variableStore: GhostVariableStore(fileURL: ContentRoot.variableStoreURL(for: ghost)),
+            logStore: .shared,
+            ghostName: ghost.name
         )
         player.configurePlayback(
             characterDelayMilliseconds: characterDelayMilliseconds,
@@ -580,6 +583,19 @@ final class CalledGhostRuntime {
                 await self?.fetchWeatherAndPlay(eventID: eventID)
             }
             return nil
+        }
+        player.onSNTPStart = { [weak self] in
+            guard let self else { return nil }
+            if sntpCoordinator == nil {
+                sntpCoordinator = SNTPEventCoordinator { [weak self] id, references in
+                    guard let self else { return nil }
+                    return try? await session.handle(event: .shiori(id: id, references: references))
+                }
+            }
+            return await sntpCoordinator?.start()
+        }
+        player.onSNTPCorrect = { [weak self] in
+            await self?.sntpCoordinator?.correct()
         }
     }
 

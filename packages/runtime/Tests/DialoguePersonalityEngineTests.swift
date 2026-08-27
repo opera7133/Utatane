@@ -40,6 +40,25 @@ func `session can start with a ghost call event`() async throws {
     #expect(await engine.lastEvent == .shiori(id: "OnGhostCalled", references: [0: "caller"]))
 }
 
+@Test @MainActor
+func `session records normalized SHIORI requests and responses`() async throws {
+    let logStore = AppLogStore()
+    let engine = DialoguePersonalityEngine(catalog: DialogueCatalog(boot: [#"\0hello\e"#]))
+    let session = GhostSession(
+        personalityEngine: engine,
+        logStore: logStore,
+        ghostName: "Test Ghost"
+    )
+
+    _ = try await session.start()
+    await Task.yield()
+
+    #expect(logStore.entries.map(\.message) == ["SHIORI request: OnBoot", "SHIORI response: OnBoot"])
+    #expect(logStore.entries[0].details == "No Reference")
+    #expect(logStore.entries[1].details == #"Value: \0hello\e"#)
+    #expect(logStore.entries.allSatisfy { $0.category == "SHIORI" && $0.ghostName == "Test Ghost" })
+}
+
 private actor RecordingPersonalityEngine: PersonalityEngine {
     private(set) var lastEvent: GhostEvent?
 

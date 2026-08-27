@@ -59,6 +59,8 @@ public final class SakuraScriptPlayer {
     public var onNetworkDiagnostic: (@MainActor (SakuraScriptNetworkDiagnostic) async -> SakuraScript?)?
     public var onWebSocket: (@MainActor (SakuraScriptWebSocketCommand) async -> Void)?
     public var onWeatherGet: (@MainActor (String) async -> SakuraScript?)?
+    public var onSNTPStart: (@MainActor () async -> SakuraScript?)?
+    public var onSNTPCorrect: (@MainActor () async -> SakuraScript?)?
     public var onArchive: (@MainActor (SakuraScriptArchiveCommand) async -> SakuraScript?)?
     public var onPropertyValue: (@MainActor (String) async -> String?)?
     public var onGetProperties: (@MainActor (String, [String]) async -> SakuraScript?)?
@@ -1076,6 +1078,14 @@ public final class SakuraScriptPlayer {
                     await onWebSocket?(command)
                 case let .weatherGet(eventID):
                     if let response = await onWeatherGet?(eventID) {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                    }
+                case .sntpStart:
+                    if let response = await onSNTPStart?() {
+                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                    }
+                case .sntpCorrect:
+                    if let response = await onSNTPCorrect?() {
                         pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
                     }
                 case .clear:

@@ -136,7 +136,8 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\-` | ✅ | ゴーストの終了処理を実行（呼び出しゴーストはdismiss、メインゴーストはアプリ終了）。Player・App経路で確認 |
 | `\a` | ✅ | `OnAITalk` イベントを発生 |
 | update / updatebymyself / updateother | 🟡 | `updatebymyself`、`update,ghost`、`update,balloon`を既存更新機能へ接続。platform・updateother・全オプションは未対応 |
-| `\6`, `\7`, SNTP, biff, vanish | ❌ | 未実装 |
+| `\6`, `\7`, SNTP | 🟡 | `\7`／`\![executesntp]`によるHTTP Date時刻取得とSNTPイベント、`\6`の補正要求経路を実装。macOS通常権限でのシステム時刻補正は未接続 |
+| biff, vanish | ❌ | 未実装 |
 | `\![execute,headline,...]` | ✅ | 名前またはディレクトリ名で既存RSS／HEADLINEセンサーを実行 |
 | `\+`, `\_+`, change/call ghost | 🟡 | ランダム／順次切替と、名前・ディレクトリ名・`random`・`sequential`指定を接続。lastinstalledとraise-eventオプションは未対応 |
 | change shell / balloon | ✅ | 名前またはディレクトリ名で通常／呼び出しゴーストの既存切替処理へ接続 |

@@ -650,8 +650,8 @@ struct UtataneSettingsView: View {
                 description: "通常は変更する必要のない開発・診断用の設定。"
             ) {
                 Section("開発用") {
-                    Toggle("デバッグ画面を表示", isOn: $settings.showsDebugWindow)
-                    Text("エラーや警告などのログ、クリック判定、再生操作を表示する。通常の利用では非表示でよい。")
+                    Toggle("開発用パレットを表示", isOn: $settings.showsDebugWindow)
+                    Text("ログ、当たり判定、バルーンテスト、SakuraScript入力、再生操作を表示する。通常の利用では非表示でよい。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

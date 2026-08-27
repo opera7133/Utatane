@@ -2,7 +2,50 @@ import AppKit
 import SwiftUI
 import UtataneCore
 
+public struct DeveloperSurfaceTestItem: Identifiable, Sendable, Equatable {
+    public struct Animation: Identifiable, Sendable, Equatable {
+        public let id: Int
+        public let name: String?
+
+        public init(id: Int, name: String?) {
+            self.id = id
+            self.name = name
+        }
+    }
+
+    public struct Collision: Identifiable, Sendable, Equatable {
+        public let id: Int
+        public let name: String
+
+        public init(id: Int, name: String) {
+            self.id = id
+            self.name = name
+        }
+    }
+
+    public let id: Int
+    public let name: String?
+    public let animations: [Animation]
+    public let collisions: [Collision]
+
+    public init(id: Int, name: String?, animations: [Animation], collisions: [Collision]) {
+        self.id = id
+        self.name = name
+        self.animations = animations
+        self.collisions = collisions
+    }
+}
+
 public struct DebugConsoleView: View {
+    private enum Pane: String, CaseIterable, Identifiable {
+        case logs = "ログ"
+        case tools = "開発ツール"
+
+        var id: String {
+            rawValue
+        }
+    }
+
     public enum LevelFilter: String, CaseIterable, Identifiable {
         case all = "すべて"
         case errorOnly = "エラーのみ"
@@ -36,6 +79,13 @@ public struct DebugConsoleView: View {
     private let onReloadGhost: () -> Void
     private let onInstallNar: () -> Void
     private let onPlaySlowAnimation: () -> Void
+    private let onExecuteScript: (String) -> Void
+    private let onSetCollisionMode: (Bool, Bool) -> Void
+    private let onShowBalloonTest: () -> Void
+    private let surfaces: [DeveloperSurfaceTestItem]
+    private let onSelectSurface: (Int, Int) -> Void
+    private let onPlayAnimation: (Int, Int) -> Void
+    private let serikoInspectorSnapshots: @MainActor () -> [SERIKOInspectorSnapshot]
 
     @ObservedObject private var logStore: AppLogStore
     @State private var levelFilter: LevelFilter = .all
@@ -43,6 +93,12 @@ public struct DebugConsoleView: View {
     @State private var searchText = ""
     @State private var selectedEntryID: UUID?
     @State private var isCopiedNotification = false
+    @State private var pane: Pane = .logs
+    @State private var scriptInput = #"\0テスト\e"#
+    @State private var showsCollisions = false
+    @State private var showsCollisionNames = true
+    @State private var testScope = 0
+    @State private var selectedSurfaceID: Int?
 
     public init(
         model: GhostListModel,
@@ -56,6 +112,13 @@ public struct DebugConsoleView: View {
         onReloadGhost: @escaping () -> Void,
         onInstallNar: @escaping () -> Void,
         onPlaySlowAnimation: @escaping () -> Void,
+        onExecuteScript: @escaping (String) -> Void,
+        onSetCollisionMode: @escaping (Bool, Bool) -> Void,
+        onShowBalloonTest: @escaping () -> Void,
+        surfaces: [DeveloperSurfaceTestItem],
+        onSelectSurface: @escaping (Int, Int) -> Void,
+        onPlayAnimation: @escaping (Int, Int) -> Void,
+        serikoInspectorSnapshots: @escaping @MainActor () -> [SERIKOInspectorSnapshot],
         logStore: AppLogStore = .shared
     ) {
         self.model = model
@@ -69,6 +132,13 @@ public struct DebugConsoleView: View {
         self.onReloadGhost = onReloadGhost
         self.onInstallNar = onInstallNar
         self.onPlaySlowAnimation = onPlaySlowAnimation
+        self.onExecuteScript = onExecuteScript
+        self.onSetCollisionMode = onSetCollisionMode
+        self.onShowBalloonTest = onShowBalloonTest
+        self.surfaces = surfaces
+        self.onSelectSurface = onSelectSurface
+        self.onPlayAnimation = onPlayAnimation
+        self.serikoInspectorSnapshots = serikoInspectorSnapshots
         self.logStore = logStore
     }
 
@@ -114,11 +184,193 @@ public struct DebugConsoleView: View {
         VStack(spacing: 0) {
             headerControls
             Divider()
-            filterBar
+            Picker("表示", selection: $pane) {
+                ForEach(Pane.allCases) { pane in
+                    Text(pane.rawValue).tag(pane)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
             Divider()
-            logContentArea
+            if pane == .logs {
+                filterBar
+                Divider()
+                logContentArea
+            } else {
+                developerTools
+            }
         }
         .frame(minWidth: 760, minHeight: 500)
+    }
+
+    private var developerTools: some View {
+        Form {
+            Section("表示テスト") {
+                Toggle("当たり判定を表示", isOn: $showsCollisions)
+                    .onChange(of: showsCollisions) { _, value in
+                        onSetCollisionMode(value, showsCollisionNames)
+                    }
+                Toggle("当たり判定名を表示", isOn: $showsCollisionNames)
+                    .disabled(!showsCollisions)
+                    .onChange(of: showsCollisionNames) { _, value in
+                        onSetCollisionMode(showsCollisions, value)
+                    }
+                Button("バルーンテストを表示", action: onShowBalloonTest)
+                Text("両スコープへ行数・桁数、リンク、番号、SSTPマーカー、スクロール矢印を確認するための内容を表示する。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("SakuraScript入力") {
+                TextEditor(text: $scriptInput)
+                    .font(.body.monospaced())
+                    .frame(minHeight: 120)
+                HStack {
+                    Spacer()
+                    Button("実行") {
+                        onExecuteScript(scriptInput)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(scriptInput.isEmpty || !isSessionAvailable)
+                }
+                Text("SHIORI辞書の記法ではなく、実行するSakuraScriptを直接入力する。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("サーフィステスト") {
+                Picker("スコープ", selection: $testScope) {
+                    ForEach(0 ... 9, id: \.self) { scope in
+                        Text("\\p[\(scope)]").tag(scope)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: testScope) { _, scope in
+                    guard let selectedSurfaceID else { return }
+                    onSelectSurface(scope, selectedSurfaceID)
+                }
+
+                if surfaces.isEmpty {
+                    Text("読み込まれているサーフィスはありません。")
+                        .foregroundStyle(.secondary)
+                } else {
+                    HStack(alignment: .top, spacing: 12) {
+                        List(surfaces, selection: $selectedSurfaceID) { surface in
+                            Text(surface.name.map { "surface\(surface.id) — \($0)" } ?? "surface\(surface.id)")
+                                .tag(surface.id)
+                        }
+                        .frame(minWidth: 230, minHeight: 210)
+                        .onChange(of: selectedSurfaceID) { _, id in
+                            guard let id else { return }
+                            onSelectSurface(testScope, id)
+                        }
+
+                        if let selectedSurface {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text("Animation").font(.headline)
+                                if selectedSurface.animations.isEmpty {
+                                    Text("なし").foregroundStyle(.secondary)
+                                } else {
+                                    ForEach(selectedSurface.animations) { animation in
+                                        Button(animation.name.map { "\(animation.id): \($0)" } ?? String(animation.id)) {
+                                            onPlayAnimation(testScope, animation.id)
+                                        }
+                                        .buttonStyle(.link)
+                                    }
+                                }
+                                Divider()
+                                Text("Collision").font(.headline)
+                                if selectedSurface.collisions.isEmpty {
+                                    Text("なし").foregroundStyle(.secondary)
+                                } else {
+                                    ForEach(selectedSurface.collisions) { collision in
+                                        Text("\(collision.id): \(collision.name)")
+                                    }
+                                }
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
+                }
+            }
+
+            Section("SERIKO Inspector") {
+                TimelineView(.periodic(from: .now, by: 0.5)) { _ in
+                    let snapshots = serikoInspectorSnapshots()
+                    if snapshots.isEmpty {
+                        Text("表示中のサーフィスはありません。")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        ForEach(snapshots) { snapshot in
+                            serikoSnapshotView(snapshot)
+                        }
+                    }
+                }
+                Text("実行状態を0.5秒ごとに更新する読み取り専用Inspector。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("既存の開発操作") {
+                Text("ゴーストの再読み込み、低速アニメーション、再生の進行・停止、ログ確認は上部の操作とログ画面から利用できる。")
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var selectedSurface: DeveloperSurfaceTestItem? {
+        guard let selectedSurfaceID else { return nil }
+        return surfaces.first { $0.id == selectedSurfaceID }
+    }
+
+    private func serikoSnapshotView(_ snapshot: SERIKOInspectorSnapshot) -> some View {
+        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+            GridRow {
+                Text("\\p[\(snapshot.scope)] surface\(snapshot.surfaceID)")
+                    .font(.headline.monospaced())
+                Text(snapshot.isAnimating ? "実行中" : "待機中")
+                    .foregroundStyle(snapshot.isAnimating ? .primary : .secondary)
+            }
+            GridRow {
+                Text("Animation")
+                Text(snapshot.currentAnimationID.map(String.init) ?? "—")
+            }
+            GridRow {
+                Text("Persistent")
+                Text(idList(snapshot.persistentAnimationIDs))
+            }
+            GridRow {
+                Text("Paused")
+                Text(idList(snapshot.pausedAnimationIDs))
+            }
+            GridRow {
+                Text("Offset")
+                Text(nonemptyOrDash(snapshot.animationOffsets.keys.sorted().map { id in
+                    snapshot.animationOffsets[id].map { "\(id):(\($0.x),\($0.y))" } ?? "\(id):(0,0)"
+                }.joined(separator: ", ")))
+            }
+            GridRow {
+                Text("Lock")
+                Text(verbatim: "repaint=\(snapshot.isRepaintLocked), movement=\(snapshot.isMovementLocked)")
+            }
+            GridRow {
+                Text("Transform")
+                Text(String(format: "alpha=%.2f, scale=(%.2f, %.2f)", snapshot.alpha, snapshot.scaleX, snapshot.scaleY))
+            }
+        }
+        .font(.body.monospaced())
+        .padding(.vertical, 4)
+    }
+
+    private func idList(_ ids: [Int]) -> String {
+        nonemptyOrDash(ids.map(String.init).joined(separator: ", "))
+    }
+
+    private func nonemptyOrDash(_ value: String) -> String {
+        value.isEmpty ? "—" : value
     }
 
     // MARK: - Header Controls

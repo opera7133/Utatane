@@ -215,6 +215,7 @@ private struct UtataneRootView: View {
     @State private var selectedGhostID: URL?
     @State private var currentGhost: InstalledGhost?
     @State private var selectedShell: InstalledShell?
+    @State private var currentShellDefinition: ShellDefinition?
     @State private var installedBalloons: [BalloonDefinition] = []
     @State private var installedHeadlines: [InstalledHeadline] = []
     @State private var installedPlugins: [InstalledPlugin] = []
@@ -236,6 +237,7 @@ private struct UtataneRootView: View {
     @State private var isHiddenForFullScreenApp = false
     private let fullScreenAppDetector = FullScreenAppDetector()
     @State private var weatherTask: Task<Void, Never>?
+    @State private var sntpCoordinator: SNTPEventCoordinator?
     @State private var webSocketManager = WebSocketSessionManager()
     @State private var lastGhostName: String = ""
     @State private var lastObjectName: String = ""
@@ -284,6 +286,24 @@ private struct UtataneRootView: View {
                             id: 0,
                             minimumFrameDurationMilliseconds: 3000
                         )
+                    },
+                    onExecuteScript: { source in
+                        guard let balloon else { return }
+                        scriptPlayer.play(SakuraScript(rawValue: source), balloon: balloon)
+                    },
+                    onSetCollisionMode: { enabled, showsNames in
+                        surfaceWindowController.setCollisionMode(enabled, showsNames: showsNames)
+                    },
+                    onShowBalloonTest: showBalloonTest,
+                    surfaces: developerSurfaceTestItems,
+                    onSelectSurface: { scope, surfaceID in
+                        showDeveloperSurface(scope: scope, surfaceID: surfaceID)
+                    },
+                    onPlayAnimation: { scope, animationID in
+                        surfaceWindowController.playAnimation(id: animationID, scope: scope)
+                    },
+                    serikoInspectorSnapshots: {
+                        surfaceWindowController.serikoInspectorSnapshots
                     }
                 )
             }
@@ -1578,10 +1598,24 @@ private struct UtataneRootView: View {
                 }
                 return nil
             }
+            scriptPlayer.onSNTPStart = {
+                guard let activeSession = session else { return nil }
+                if sntpCoordinator == nil {
+                    sntpCoordinator = SNTPEventCoordinator { id, references in
+                        try? await activeSession.handle(event: .shiori(id: id, references: references))
+                    }
+                }
+                return await sntpCoordinator?.start()
+            }
+            scriptPlayer.onSNTPCorrect = {
+                await sntpCoordinator?.correct()
+            }
 
             let ghostSession = try GhostSession(
                 personalityEngine: personalityEngine(for: ghost),
-                variableStore: GhostVariableStore(fileURL: ContentRoot.variableStoreURL(for: ghost))
+                variableStore: GhostVariableStore(fileURL: ContentRoot.variableStoreURL(for: ghost)),
+                logStore: .shared,
+                ghostName: ghost.name
             )
             session = ghostSession
             configureContextMenu()
@@ -2214,6 +2248,7 @@ private struct UtataneRootView: View {
     private func show(shell installedShell: InstalledShell) throws {
         scriptPlayer.cancel()
         let shell = try shellLoader.load(from: installedShell.directory)
+        currentShellDefinition = shell
         let characters = currentGhost?.characters ?? []
         try surfaceWindowController.show(
             shell: shell,
@@ -2505,6 +2540,80 @@ private struct UtataneRootView: View {
         ) { id in
             guard let selectedBalloon = installedBalloons.first(where: { $0.directory == id }) else { return }
             select(balloon: selectedBalloon)
+        }
+    }
+
+    private func showBalloonTest() {
+        guard let balloon else { return }
+        let columns = "1234567890" + "1234567890" + "1234567890" + "1234567890"
+        let rows = (1 ... 24).map { String(format: "%02d  %@", $0, columns) }
+        let linkLabel = "リンク表示"
+        let text = ([
+            "バルーン表示テスト",
+            "横方向: \(columns)",
+            "リンク: \(linkLabel)",
+            "SSTPマーカー: \u{FFFC}",
+            "以下は縦方向とスクロール矢印の確認用"
+        ] + rows).joined(separator: "\n")
+        let linkRange = (text as NSString).range(of: linkLabel)
+        let links = [BalloonTextLink(range: linkRange, id: "OnBalloonTest", arguments: [])]
+
+        for scope in 0 ... 1 {
+            let fallbackFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 100, y: 100, width: 800, height: 600)
+            let surfaceFrame = surfaceWindowController.windowFrame(for: scope) ?? fallbackFrame
+            do {
+                try balloonWindowController.show(
+                    balloon: balloon,
+                    text: text,
+                    scope: scope,
+                    speaker: scope == 0 ? .sakura : .kero,
+                    near: surfaceFrame
+                )
+                balloonWindowController.updateContent(
+                    text: text,
+                    links: links,
+                    styles: [],
+                    autoscroll: false,
+                    scope: scope
+                )
+                balloonWindowController.setMarkerText("SSTP", scope: scope)
+                balloonWindowController.setNumber(file: "test", current: "50", maximum: "100", scope: scope)
+            } catch {
+                showError(error.localizedDescription)
+            }
+        }
+    }
+
+    private var developerSurfaceTestItems: [DeveloperSurfaceTestItem] {
+        currentShellDefinition?.surfaces.values.sorted { $0.id < $1.id }.map { surface in
+            DeveloperSurfaceTestItem(
+                id: surface.id,
+                name: surface.name,
+                animations: surface.animations.map {
+                    .init(id: $0.id, name: $0.name)
+                },
+                collisions: surface.collisions.map {
+                    .init(id: $0.id, name: $0.name)
+                }
+            )
+        } ?? []
+    }
+
+    private func showDeveloperSurface(scope: Int, surfaceID: Int) {
+        do {
+            if surfaceWindowController.windowFrame(for: scope) == nil,
+               let currentShellDefinition
+            {
+                try surfaceWindowController.show(
+                    shell: currentShellDefinition,
+                    scope: scope,
+                    surfaceID: surfaceID
+                )
+            } else {
+                try surfaceWindowController.changeSurface(scope: scope, to: surfaceID)
+            }
+        } catch {
+            showError(error.localizedDescription)
         }
     }
 
@@ -2917,7 +3026,7 @@ private struct UtataneRootView: View {
                     openSettings()
                 }),
                 .action(
-                    title: String(localized: "デバッグ画面を表示"),
+                    title: String(localized: "開発用パレットを表示"),
                     isSelected: networkSettings.showsDebugWindow,
                     handler: {
                         networkSettings.showsDebugWindow.toggle()

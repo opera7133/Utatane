@@ -249,12 +249,12 @@ UKADOC掲載イベント数: 290
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnSNTPBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPBegin) | ❌ | 時刻同期機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSNTPCompareEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPCompareEx) | ❌ | 時刻同期機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSNTPCompare`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPCompare) | ❌ | 時刻同期機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSNTPCorrectEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPCorrectEx) | ❌ | 時刻同期機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSNTPCorrect`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPCorrect) | ❌ | 時刻同期機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnSNTPFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPFailure) | ❌ | 時刻同期機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnSNTPBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPBegin) | 🟡 | 実サーバ経路の動作確認 | 低 | `\7`／`\![executesntp]`からHTTP Date時刻取得を開始し、接続先をReference0へ通知 |
+| [`OnSNTPCompareEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPCompareEx) | 🟡 | 実サーバ経路の動作確認 | 低 | 取得時刻・ローカル時刻・符号付き秒差／ミリ秒差をReference0〜4へ通知 |
+| [`OnSNTPCompare`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPCompare) | 🟡 | 実サーバ経路の動作確認 | 低 | CompareExが204の時に従来形式へフォールバックし、絶対値の秒差／ミリ秒差を通知 |
+| [`OnSNTPCorrectEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPCorrectEx) | 🟡 | macOS時刻補正手段 | 中 | `\6`と成功時の通知経路を実装。通常権限ではシステム時刻を変更できないため標準補正器は未接続 |
+| [`OnSNTPCorrect`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPCorrect) | 🟡 | macOS時刻補正手段 | 中 | CorrectExが204の時の従来形式フォールバックを実装。実補正成功時のみ通知する |
+| [`OnSNTPFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSNTPFailure) | 🟡 | 実サーバ経路の動作確認 | 低 | HTTP接続・応答・Date解析失敗時に接続先をReference0へ通知 |
 
 ## メールチェックイベント
 

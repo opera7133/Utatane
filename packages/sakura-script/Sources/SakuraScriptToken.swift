@@ -97,6 +97,8 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case networkDiagnostic(SakuraScriptNetworkDiagnostic)
     case webSocket(SakuraScriptWebSocketCommand)
     case weatherGet(eventID: String)
+    case sntpStart
+    case sntpCorrect
     case clear
     case clearAll
     case end
