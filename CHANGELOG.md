@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.0] - 2026-08-28
+
+### 追加
+
+- SakuraScriptの`\\_l[x,y]`（バルーン内カーソル移動）に対応。絶対・相対座標と、px・em・lh・%の単位指定をサポート
+- `\![execute,http-get,...]`の`--async`・`--sync`の動作を明確化。`--async`はSakuraScriptを継続して完了イベントを後から通知し、`--sync`は完了まで再生を停止する
+
+### 変更
+
+- バルーンアンカークリック時に`OnAnchorSelectEx`を優先し、スクリプトがなければ`OnAnchorSelect`へフォールバックする経路を実装した
+- `\__q`（範囲選択肢）の終端で暗黙の改行を挿入しないようにし、空白で区切った複数リンクを同一行へ配置できるようにした
+- surfaces.txtでインラインコメント（`//`以降）を除去するようにした
+- シェルのサーフェス画像として`.apng`拡張子のファイルを認識するようにした（表示は先頭フレームのPNG相当）
+
+### 修正
+
+- NARのZIPエントリ名にWindowsバックスラッシュ区切りが含まれる場合に、展開後のファイルツリーを安全に正規化してインストールできるようにした
+- SATORIの`OnAnchorSelectEx`で拡張引数を正しく処理できていなかった問題を修正
+- textcopy2 SAORIのテストでシステムのクリップボードを汚染していた問題を修正
+
 ## [0.1.0-alpha.15] - 2026-08-27
 
 ### 追加
@@ -250,7 +270,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[0.1.0-alpha.15]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.14...HEAD
+[0.1.0]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.15...HEAD
+[0.1.0-alpha.15]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.14...v0.1.0-alpha.15
 [0.1.0-alpha.14]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.13...v0.1.0-alpha.14
 [0.1.0-alpha.13]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.12...v0.1.0-alpha.13
 [0.1.0-alpha.12]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.11...v0.1.0-alpha.12
