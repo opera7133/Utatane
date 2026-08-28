@@ -41,7 +41,21 @@ public enum POSIXShioriError: LocalizedError, Equatable, Sendable {
 }
 
 public struct POSIXShioriModuleResolver: Sendable {
-    public init() {}
+    private let applicationSupportURL: URL
+    private let bundledResourcesURL: URL?
+
+    public init() {
+        self.init(
+            applicationSupportURL: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appending(path: "Utatane/NativeShiori", directoryHint: .isDirectory),
+            bundledResourcesURL: Bundle.main.resourceURL
+        )
+    }
+
+    init(applicationSupportURL: URL, bundledResourcesURL: URL?) {
+        self.applicationSupportURL = applicationSupportURL
+        self.bundledResourcesURL = bundledResourcesURL
+    }
 
     public func kind(for masterDirectoryURL: URL) -> POSIXShioriKind? {
         let fileManager = FileManager.default
@@ -85,12 +99,9 @@ public struct POSIXShioriModuleResolver: Sendable {
 
     private func candidateURLs(for kind: POSIXShioriKind, masterDirectoryURL: URL) -> [URL] {
         let names = ["lib\(kind.rawValue).dylib", "lib\(kind.rawValue).so", "lib\(kind.rawValue).bundle"]
-        let applicationSupport = FileManager.default.urls(
-            for: .applicationSupportDirectory,
-            in: .userDomainMask
-        )[0].appending(path: "Utatane/NativeShiori/\(kind.rawValue)", directoryHint: .isDirectory)
+        let applicationSupport = applicationSupportURL.appending(path: kind.rawValue, directoryHint: .isDirectory)
         var directories = [masterDirectoryURL, applicationSupport]
-        if let resources = Bundle.main.resourceURL {
+        if let resources = bundledResourcesURL {
             directories.append(resources.appending(path: "NativeShiori/\(kind.rawValue)", directoryHint: .isDirectory))
         }
         return directories.flatMap { directory in

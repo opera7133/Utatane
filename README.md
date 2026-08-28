@@ -138,6 +138,16 @@ Content/Local/
 
 Utatane本体は[MIT License](LICENSE)で公開しています。
 
-submoduleのYAYAはBSD 3-Clause License、SATORIはBSD 2-Clause License、KAWARIは修正BSD License、KAGARIはMIT Licenseです。ゴースト、シェル、バルーンは各配布元のルールに従ってください。
+submoduleのYAYAはBSD 3-Clause License、SATORIはBSD 2-Clause License、KAWARIは修正BSD Licenseです。ゴースト、シェル、バルーンは各配布元のルールに従ってください。
+
+kagariはアプリのビルド時にLuaとともにコンパイル・同梱します。使用するソースと著作権表示は次のとおりです。
+
+| ソフトウェア | 著作権表示 | ライセンス |
+| --- | --- | --- |
+| kagari（macOSフォーク） | Copyright (c) 2019 Tatakinov | [MIT](packages/kagari-native/Vendor/kagari/LICENSE) |
+| Lua 5.4.9 | Copyright (C) 1994-2026 Lua.org, PUC-Rio | [MIT](https://www.lua.org/license.html) |
+| sol2 3.5.0 | Copyright (c) 2013-2022 Rapptz, ThePhD, and contributors | [MIT](https://github.com/ThePhD/sol2/blob/v3.5.0/LICENSE.txt) |
+
+著作権表示とライセンス本文は、配布アプリの`Contents/Resources/NativeShiori/kagari/licenses/`にも収録します。Luaの表示・本文は配布ソースの`lua.h`をそのまま収録しています。ソースの取得先とSHA-256は[依存バージョン定義](tools/native-shiori/kagari-dependencies.json)を参照してください。
 
 同梱ゴースト「りあ」のシェルには、ボトル猫さんの「p016（寝不足）」を使用しています。専用バルーン「Ria」は、ろすえんさんの「[something like Template](https://github.com/lost-nd-xxx/something_like_balloon)」を元に制作しています。詳しい規約とクレジットは、それぞれの同梱READMEを参照してください。

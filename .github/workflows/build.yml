@@ -34,7 +34,9 @@ jobs:
           echo "UTATANE_BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
 
       - name: Test
-        run: swift test --package-path packages
+        run: |
+          python3 tools/native-shiori/test-bundle-kagari.py
+          swift test --package-path packages
 
       - name: Generate Xcode project
         run: xcodegen generate
@@ -54,6 +56,11 @@ jobs:
             MARKETING_VERSION="$UTATANE_VERSION" \
             CURRENT_PROJECT_VERSION="$UTATANE_BUILD_NUMBER" \
             build
+
+      - name: Verify bundled kagari
+        run: |
+          sh tools/native-shiori/test-bundled-kagari.sh \
+            build/Build/Products/Release/Utatane.app arm64 x86_64
 
       - name: Build Windows DLL host
         run: |

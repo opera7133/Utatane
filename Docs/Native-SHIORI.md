@@ -70,18 +70,26 @@ AYA設定で読み込んだ場合は、設定名に対応する`aya5_variable.cf
 
 `shiori,kagari.dll`を指定するゴースト、またはmasterに`kagari.dll`があるゴーストを、macOS用kagariへ接続します。`index.lua`だけでは判定しません。tkytkとは別の経路です。
 
-現段階は**利用者ビルドの外部ライブラリ**で、リリースアプリへの同梱はしていません。[kagariフォーク](https://github.com/opera7133/kagari_shiori/tree/utatane-macos)はsubmoduleです。Lua 5.4.4のソースとsol2 3.5.0のソースを用意して、リポジトリのルートで次を実行します。
+アプリのDebug／Releaseビルドに、[kagariフォーク](https://github.com/opera7133/kagari_shiori/tree/utatane-macos)とLua共有ライブラリを自動で組み込みます。利用者による追加ビルドは不要です。kagariはsubmoduleの固定コミットを使い、Lua 5.4.9とsol2 3.5.0は固定URLから取得してSHA-256を検証します。
+
+Xcodeのビルドフェーズから`tools/native-shiori/bundle-kagari.py`を実行するため、`mise run build`、Xcodeからのビルド、ローカルReleaseビルド、GitHub Actionsで同じ処理を使います。Debugは対象CPU、配布版はarm64／x86_64の両方をビルドします。初回はネットワーク接続が必要で、ソースのアーカイブとビルド結果は`.generated-native-shiori/`へキャッシュします。取得・検証・ビルドの失敗はアプリのビルド失敗として扱い、同梱を省略して続行しません。
+
+配置先は`Utatane.app/Contents/Resources/NativeShiori/kagari/`です。`libkagari.dylib`、`liblua5.4.dylib`と、kagari・Lua・sol2の著作権表示およびライセンス本文を同梱します。Luaは`@loader_path`基準で読み込むため、Homebrewや開発機の絶対パスには依存しません。
+
+自前のライブラリを優先したい場合は、従来の手動ビルドも利用できます。
 
 ```sh
 git submodule update --init --recursive
-sh tools/native-shiori/build-kagari-macos.sh /path/to/lua-5.4.4 /path/to/sol2-3.5.0
+sh tools/native-shiori/build-kagari-macos.sh /path/to/lua-5.4.9 /path/to/sol2-3.5.0
 ```
 
-`~/Library/Application Support/Utatane/NativeShiori/kagari/`に`libkagari.dylib`、`liblua5.4.dylib`、ライセンスを配置します。ビルドはホストのアーキテクチャ向けです。別の出力先は第3引数に指定できます。Utataneはmaster、上記Application Support、アプリ内``NativeShiori/kagari``を順に検索します。`UTATANE_KAGARI_MODULE`でライブラリの絶対パスを指定することもできます。
+手動ビルドでは`~/Library/Application Support/Utatane/NativeShiori/kagari/`へ配置します。既定ではホストのCPU向けにビルドし、`KAGARI_ARCHS="arm64 x86_64"`で両CPU向けにできます。別の出力先は第3引数に指定できます。Utataneはmaster、上記Application Support、アプリ内の順に検索します。`UTATANE_KAGARI_MODULE`でライブラリの絶対パスを最優先に指定することもできます。
 
 `index.lua`は`load`、`request`、`unload`を持つテーブルを返します。純Luaモジュールと、同じLua 5.4 ABI・CPU向けにビルドされたC拡張が必要です。Windows用C拡張DLLをそのまま使えるわけではありません。Lua共有ライブラリはkagariと同じフォルダに置いてください。
 
-Swiftからのロード・日本語応答・複数インスタンス・終了、およびロード失敗や不正な戻り値の処理を最小辞書で確認しています。配布ゴーストやkotori全体の動作は未確認です。Luaの`os`／`io`等は使用可能で、サンドボックスや強制タイムアウトはありません。信頼できるゴーストだけを使ってください。
+`mise run test-kagari`はReleaseアプリ内の両CPU対応、署名、依存パス、ライセンス収録を検査し、別ディレクトリへコピーしたライブラリでSwiftからのロード・日本語応答・複数インスタンス・終了と異常系をテストします。GitHub Actionsでも配布前に同じ検査を実行します。実ロードは実行ホストのCPUで行い、反対側のCPUでの実行まで保証するものではありません。
+
+配布ゴーストやkotori全体の動作は未確認です。Luaの`os`／`io`等は使用可能で、サンドボックスや強制タイムアウトはありません。信頼できるゴーストだけを使ってください。
 
 ## MISAKA
 

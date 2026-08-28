@@ -23,6 +23,14 @@ targets:
   Utatane:
     type: application
     platform: macOS
+    preBuildScripts:
+      - name: Build and embed kagari
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          python3 "$SRCROOT/tools/native-shiori/bundle-kagari.py" \
+            --output "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/NativeShiori/kagari" \
+            --archs $ARCHS
     sources:
       - path: apps/Utatane/Sources
       - path: apps/Utatane/Resources
@@ -88,6 +96,7 @@ targets:
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
         MARKETING_VERSION: 0.1.4
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
     dependencies:
       - package: Sparkle
         product: Sparkle

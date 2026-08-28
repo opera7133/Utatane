@@ -1,0 +1,16 @@
+{
+  "lua": {
+    "version": "5.4.9",
+    "url": "https://www.lua.org/ftp/lua-5.4.9.tar.gz",
+    "archive": "lua-5.4.9.tar.gz",
+    "directory": "lua-5.4.9",
+    "sha256": "2335b6c582a52654f94612bf10d2f4672805d05329aa6568b1d8cd9e5c6fb8e6"
+  },
+  "sol2": {
+    "version": "3.5.0",
+    "url": "https://codeload.github.com/ThePhD/sol2/tar.gz/refs/tags/v3.5.0",
+    "archive": "sol2-3.5.0.tar.gz",
+    "directory": "sol2-3.5.0",
+    "sha256": "86c0f6d2836b184a250fc2907091c076bf53c9603dd291eaebade36cc342e13c"
+  }
+}

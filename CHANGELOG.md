@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### 追加
+
+- kagariとLuaをアプリのビルド時に自動でコンパイル・同梱。配布版はApple Silicon／Intelの両CPUに対応し、kagari利用のための追加ビルドを不要にした。kagari・Lua・sol2の著作権表示とライセンス本文も同梱
+- 同梱kagariの構成・ライセンス確認と、別の場所へ移したライブラリのロード・応答・終了テストを配布前のCIに追加。Windows用Lua拡張DLLやSAORIの互換性は対象外
+
 ## [0.1.4] - 2026-08-28
 
 ### 追加
@@ -330,6 +337,7 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
+[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.1.4...HEAD
 [0.1.4]: https://github.com/opera7133/Utatane/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/opera7133/Utatane/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/opera7133/Utatane/compare/v0.1.1...v0.1.2

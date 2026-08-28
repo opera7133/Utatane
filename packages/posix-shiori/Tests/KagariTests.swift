@@ -5,6 +5,22 @@ import UtataneCore
 import UtataneShiori
 
 struct KagariResolverTests {
+    @Test func `bundled kagari is found without configuration and local overrides keep priority`() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let master = root.appending(path: "ghost/master")
+        let support = root.appending(path: "support/NativeShiori")
+        let resources = root.appending(path: "Utatane.app/Contents/Resources")
+        let resolver = POSIXShioriModuleResolver(applicationSupportURL: support, bundledResourcesURL: resources)
+        #expect(resolver.moduleURL(for: .kagari, masterDirectoryURL: master, environment: [:]) == nil)
+        for directory in [resources.appending(path: "NativeShiori/kagari"), support.appending(path: "kagari"), master] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let module = directory.appending(path: "libkagari.dylib")
+            try Data().write(to: module)
+            #expect(resolver.moduleURL(for: .kagari, masterDirectoryURL: master, environment: [:]) == module)
+        }
+    }
+
     @Test func `kagari detection does not claim every Lua ghost`() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

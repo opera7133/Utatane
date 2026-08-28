@@ -6,6 +6,7 @@
 - Xcode 26以降
 - [mise](https://mise.jdx.dev/)
 - [Zig](https://ziglang.org/)（Windows互換ホストのビルド用）
+- Python 3、curl（kagari依存ソースの取得・ビルド用。初回はネットワーク接続が必要）
 
 ## セットアップ
 
@@ -17,6 +18,8 @@ mise run build
 ```
 
 `Utatane.xcodeproj`は生成物です。直接直しても次の生成で消えます。ターゲットやビルド設定は`project.yml`を変更して、`mise run generate`してください。
+
+kagariとLuaはXcodeのビルドフェーズで自動同梱します。依存ソースのバージョン・SHA-256は`tools/native-shiori/kagari-dependencies.json`で固定し、`.generated-native-shiori/`にキャッシュします。ソース・ビルドスクリプト・CPU・Xcode/SDKが変わると再ビルドします。独自のXcodeビルドスクリプトがネットワークとキャッシュを利用するため、ターゲットのUser Script Sandboxingは無効です（ゴースト実行のサンドボックス設定ではありません）。
 
 ## 検証
 
@@ -46,6 +49,8 @@ mise run package
 ```
 
 生成物は `dist/Utatane-macOS.zip` に出力されます。
+
+Releaseビルド後に`mise run test-kagari`で、同梱されたkagariとLuaの構成・ライセンスと、移動後の実ロードを検証できます。
 
 タグから配布する手順とSparkle用appcastについては[リリース手順](Release.md)を参照してください。
 
@@ -77,7 +82,7 @@ packages/first-native/     利用者所有のfirst.dllを読む専用人格
 packages/posix-shiori/     macOS外部SHIORIのdylibローダー、SHIOLINK外部プロセス接続
 packages/windows-shiori/   Wine互換ホストとWindows DLLの通信
 packages/mcp-server/       Utatane操作用のstdio MCPサーバー
-packages/kagari-native/    kagariの上流ソース（外部dylibビルド用、SwiftPMターゲットではない）
+packages/kagari-native/    kagariの上流ソース（Xcodeビルド時にdylibを同梱、SwiftPMターゲットではない）
 ```
 
 `packages/`は[Package.swift](../packages/Package.swift)を持つ単一のSwift Packageです。機能ごとのディレクトリをTargetとして登録し、依存方向と公開Productをこのファイルで管理します。パーサーや本体処理は各モジュールへ置き、SwiftUIアプリ固有の結線は`apps/Utatane`、再利用するmacOS表示・再生処理は`platform-macos`へ分けます。YAYA、SATORI、KAWARIの上流コードとC/C++ブリッジも、それぞれの`*-native`ディレクトリ内で管理します。
