@@ -90,7 +90,7 @@ struct UtataneApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        Window("Utatane", id: "runtime") {
             UtataneRootView(
                 model: model,
                 shellLoader: shellLoader,
@@ -262,14 +262,15 @@ private struct UtataneRootView: View {
     )
 
     var body: some View {
-        Group {
+        // Only the presentation depends on visibility; runtime work belongs to the app.
+        ZStack {
             if showsOnboarding {
                 WelcomeView(
                     installNar: selectAndInstallNar,
                     importSSP: selectAndImportSSPDirectory,
                     showContentFolder: showContentFolder
                 )
-            } else {
+            } else if networkSettings.showsDebugWindow {
                 DebugConsoleView(
                     model: model,
                     selectedGhostID: $selectedGhostID,
@@ -306,9 +307,13 @@ private struct UtataneRootView: View {
                         surfaceWindowController.serikoInspectorSnapshots
                     }
                 )
+            } else {
+                // Retain the host window without constructing or observing the debug UI.
+                Color.clear
+                    .frame(minWidth: 760, minHeight: 500)
             }
         }
-        .task {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "startup") {
             applicationDelegate.onTerminationRequest = {
                 requestApplicationTermination()
             }
@@ -365,7 +370,7 @@ private struct UtataneRootView: View {
                 showError(error.localizedDescription)
             }
         }
-        .task(id: "\(networkSettings.characterDelayMilliseconds)-\(networkSettings.dialogueDismissalSeconds)") {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "playback-settings", id: "\(networkSettings.characterDelayMilliseconds)-\(networkSettings.dialogueDismissalSeconds)") {
             configurePlayback()
         }
         .onReceive(NotificationCenter.default.publisher(for: .showUtataneGhostPicker)) { _ in
@@ -377,13 +382,13 @@ private struct UtataneRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .restoreUtataneSurfaces)) { _ in
             surfaceWindowController.restoreSurfaces()
         }
-        .task(id: "\(networkSettings.shellScalePercent)-\(networkSettings.balloonScalePercent)-\(networkSettings.linksBalloonScale)-\(networkSettings.balloonTextScalePercent)-\(networkSettings.locksShellToDesktopBottom)-\(networkSettings.keepsShellOnScreen)") {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "display-settings", id: "\(networkSettings.shellScalePercent)-\(networkSettings.balloonScalePercent)-\(networkSettings.linksBalloonScale)-\(networkSettings.balloonTextScalePercent)-\(networkSettings.locksShellToDesktopBottom)-\(networkSettings.keepsShellOnScreen)") {
             configureDisplay()
         }
-        .task(id: networkSettings.appearance) {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "appearance", id: networkSettings.appearance) {
             applyAppearance()
         }
-        .task(id: networkSettings.randomTalkIntervalMinutes) {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "random-talk", id: networkSettings.randomTalkIntervalMinutes) {
             let interval = networkSettings.randomTalkIntervalMinutes
             guard interval > 0 else { return }
             while !Task.isCancelled {
@@ -392,24 +397,46 @@ private struct UtataneRootView: View {
                 sendEvent(.randomTalk)
             }
         }
-        .task {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "second-change") {
+            let taskID = UUID().uuidString
+            var tickCount = 0
+            var previousDispatchState: String?
+            AppLogStore.shared.info("Second-change timer started", category: "Runtime", details: taskID)
+            defer {
+                AppLogStore.shared.info(
+                    "Second-change timer ended",
+                    category: "Runtime",
+                    details: "id=\(taskID), ticks=\(tickCount), cancelled=\(Task.isCancelled)"
+                )
+            }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(1))
                 guard !Task.isCancelled else { return }
+                tickCount += 1
+                let dispatchState = isTransitioningGhost ? "transitioning" : (session == nil ? "no-session" : "ready")
+                if dispatchState != previousDispatchState {
+                    AppLogStore.shared.info(
+                        "Second-change dispatch state: \(dispatchState)",
+                        category: "Runtime",
+                        details: "id=\(taskID), tick=\(tickCount)",
+                        ghostName: currentGhost?.name
+                    )
+                    previousDispatchState = dispatchState
+                }
                 sendSecondChange()
                 sendPluginSecondChange()
                 sendClockEvents(at: Date())
                 dispatchWindowLayoutEvents()
             }
         }
-        .task {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "system-load") {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled, let sample = systemLoadSampler.sample() else { continue }
                 dispatchSystemLoadEvents(sample: sample)
             }
         }
-        .task {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "battery") {
             dispatchBatteryEvents(snapshot: batterySampler.sample())
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
@@ -417,7 +444,7 @@ private struct UtataneRootView: View {
                 dispatchBatteryEvents(snapshot: batterySampler.sample())
             }
         }
-        .task {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "recycle-bin") {
             while !Task.isCancelled {
                 if let snapshot = recycleBinSampler.sample(), snapshot != previousRecycleBinSnapshot {
                     broadcastEvent(.shiori(
@@ -429,13 +456,13 @@ private struct UtataneRootView: View {
                 try? await Task.sleep(for: .seconds(5))
             }
         }
-        .task(id: selectedGhostID) {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "ghost-selection", id: selectedGhostID) {
             guard let selectedGhostID,
                   let ghost = model.ghosts.first(where: { $0.id == selectedGhostID })
             else { return }
             await transition(to: ghost)
         }
-        .task(id: "\(selectedGhostID?.path ?? "")-\(balloon?.directory.path ?? "")-\(networkSettings.automaticContentUpdate)-\(networkSettings.contentUpdateIntervalDays)") {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "content-update", id: "\(selectedGhostID?.path ?? "")-\(balloon?.directory.path ?? "")-\(networkSettings.automaticContentUpdate)-\(networkSettings.contentUpdateIntervalDays)") {
             guard networkSettings.automaticContentUpdate else { return }
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
@@ -457,7 +484,7 @@ private struct UtataneRootView: View {
                 await updateCurrentBalloon(isAutomatic: true)
             }
         }
-        .task(id: "\(networkSettings.automaticHeadlineRefresh)-\(networkSettings.headlineRefreshIntervalMinutes)") {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "headline-refresh", id: "\(networkSettings.automaticHeadlineRefresh)-\(networkSettings.headlineRefreshIntervalMinutes)") {
             guard networkSettings.automaticHeadlineRefresh else { return }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(networkSettings.headlineRefreshIntervalMinutes * 60))
@@ -473,13 +500,14 @@ private struct UtataneRootView: View {
             }
         }
         .onDisappear {
-            scriptPlayer.cancel()
-            sstpServer.stop()
-            networkStatusMonitor.stop()
+            AppLogStore.shared.info("Runtime root disappeared", category: "Runtime")
         }
         .background {
             DebugWindowReader { window in
                 debugWindow = window
+                applicationDelegate.runtimeWindow.attach(to: window) {
+                    networkSettings.showsDebugWindow = false
+                }
                 updateDebugWindowVisibility()
             }
         }
@@ -4588,6 +4616,9 @@ private struct UtataneRootView: View {
     }
 
     private func requestApplicationTermination() {
+        applicationDelegate.runtimeTasks.stop()
+        sstpServer.stop()
+        networkStatusMonitor.stop()
         Task {
             let closeAll = GhostEvent.shiori(
                 id: "OnCloseAll", references: [0: "user", 1: "0", 2: "0"]
@@ -4829,6 +4860,8 @@ func linkEventReferences(_ label: String?, _ id: String?, _ arguments: [String])
 
 @MainActor
 private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate {
+    let runtimeTasks = ApplicationRuntimeTasks()
+    let runtimeWindow = RuntimeHostWindowLifetime()
     var onTerminationRequest: (() -> Void)?
     private var onOpenNar: (([URL]) -> Void)?
     private var pendingNarURLs: [URL] = []
@@ -4837,6 +4870,14 @@ private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate 
 
     private var isAwaitingTermination = false
     private var isTerminationApproved = false
+
+    func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
+        false
+    }
+
+    func applicationWillTerminate(_: Notification) {
+        runtimeTasks.stop()
+    }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminationApproved {

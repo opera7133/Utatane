@@ -52,31 +52,35 @@ mise run package
 ## コード構成
 
 ```text
-apps/Utatane/              SwiftUIアプリ、状態管理、各Packageの結線
-packages/core/             共有データ型、ゴーストイベント、プロパティ
-packages/runtime/          セッション、人格エンジン、再生キュー
+apps/Utatane/              SwiftUIアプリ、状態管理、設定・カレンダー・音声UI、各モジュールの結線
+packages/Package.swift     Swift Package「UtataneKit」のProduct・Target・依存定義
+packages/core/             共有データ型、ゴーストイベント、プロパティ、ログ保存
+packages/runtime/          ゴーストセッション、人格エンジン、会話カタログ、変数保存
 packages/ghost-kit/        ゴースト設定とdescript.txtの読み込み
 packages/content/          NAR、ZIP、SSPコンテンツの取り込み
 packages/sakura-script/    SakuraScriptの解析と再生モデル
 packages/shell/            Shell、surfaces.txt、SERIKOの解析
 packages/balloon/          Balloon設定の解析
-packages/platform-macos/   AppKitによるサーフェス、バルーン、入力UI
-packages/network/          更新、RSS、HEADLINE、SSTP、WebSocket
+packages/platform-macos/   サーフェス・バルーン描画、SakuraScript再生、デバッグUI、実行タスク管理
+packages/network/          更新、RSS、HEADLINE、SSTP、WebSocket、時刻取得・ネットワーク診断
 packages/ai/               プロバイダー非依存のAI人格エンジン
+packages/realtime/         Realtime APIのSDP接続要求、会話イベント・トランスクリプト処理
 packages/shiori/           SHIORIメッセージとイベント変換
+packages/plugin/           プラグイン検出、要求・イベント配送、dylib接続
 packages/native-saori/     ネイティブSHIORI共通のSAORIレジストリ
-packages/yaya-native/      YAYA本体とSwiftブリッジ
+packages/yaya-native/      YAYA本体とSwiftブリッジ、AYA互換の読み込み
 packages/satori-native/    SATORI本体とSwiftブリッジ
 packages/kawari-native/    KAWARI本体とSwiftブリッジ
 packages/misaka-native/    MISAKA辞書のSwift実装
 packages/akari-native/     灯のイベント資源、AZR、AMBのSwift実装
 packages/first-native/     利用者所有のfirst.dllを読む専用人格
-packages/posix-shiori/     AosoraなどmacOS外部SHIORIのローダー
+packages/posix-shiori/     macOS外部SHIORIのdylibローダー、SHIOLINK外部プロセス接続
 packages/windows-shiori/   Wine互換ホストとWindows DLLの通信
 packages/mcp-server/       Utatane操作用のstdio MCPサーバー
+packages/kagari-native/    kagariの上流ソース（外部dylibビルド用、SwiftPMターゲットではない）
 ```
 
-依存方向と公開Productは`packages/Package.swift`で管理します。パーサーや本体処理は各Packageへ置き、SwiftUIアプリ固有の結線は`apps/Utatane`、再利用するAppKit表示は`platform-macos`へ分けます。YAYA、SATORI、KAWARIの上流コードとC/C++ブリッジも、それぞれの`*-native` Package内で管理します。
+`packages/`は[Package.swift](../packages/Package.swift)を持つ単一のSwift Packageです。機能ごとのディレクトリをTargetとして登録し、依存方向と公開Productをこのファイルで管理します。パーサーや本体処理は各モジュールへ置き、SwiftUIアプリ固有の結線は`apps/Utatane`、再利用するmacOS表示・再生処理は`platform-macos`へ分けます。YAYA、SATORI、KAWARIの上流コードとC/C++ブリッジも、それぞれの`*-native`ディレクトリ内で管理します。
 
 周辺のビルド・調査用コードは次の場所にあります。
 
@@ -104,6 +108,8 @@ Debugビルドは`Bundled`を優先し、次のgit管理外ディレクトリを
 Content/Local/Ghosts/
 Content/Local/Balloons/
 Content/Local/Headline/
+Content/Local/Plugins/
+Content/Local/Skins/        カレンダースキン
 ```
 
 同梱対象でない実ゴーストや配布素材はコミットしないでください。利用条件を確認して、手元だけで使います。ネイティブSHIORIとSAORIは[Native-SHIORI.md](Native-SHIORI.md)に分けました。

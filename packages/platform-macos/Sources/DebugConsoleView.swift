@@ -202,6 +202,19 @@ public struct DebugConsoleView: View {
             }
         }
         .frame(minWidth: 760, minHeight: 500)
+        .task {
+            while !Task.isCancelled {
+                logStore.publishSnapshot()
+                do {
+                    try await Task.sleep(for: .milliseconds(100))
+                } catch {
+                    return
+                }
+            }
+        }
+        .onDisappear {
+            logStore.discardPublishedSnapshot()
+        }
     }
 
     private var developerTools: some View {
@@ -509,7 +522,10 @@ public struct DebugConsoleView: View {
             }
             .help("表示中のログをクリップボードにコピー")
 
-            Button(action: logStore.clear) {
+            Button {
+                logStore.clear()
+                logStore.publishSnapshot()
+            } label: {
                 Label("消去", systemImage: "trash")
             }
             .help("ログを消去")

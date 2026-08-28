@@ -70,14 +70,19 @@ public struct LogEntry: Identifiable, Sendable, Equatable {
 public final class AppLogStore: ObservableObject, @unchecked Sendable {
     public static let shared = AppLogStore()
 
+    /// UI snapshot, refreshed explicitly by a visible console rather than by each log call.
     @MainActor @Published public private(set) var entries: [LogEntry] = []
 
     private let lock = NSLock()
-    private var internalEntries: [LogEntry] = []
+    private var buffer: [LogEntry?]
+    private var oldestIndex = 0
+    private var entryCount = 0
+    private var needsPublication = false
     public let maxEntries: Int
 
     public init(maxEntries: Int = 2000) {
-        self.maxEntries = maxEntries
+        self.maxEntries = max(0, maxEntries)
+        buffer = Array(repeating: nil, count: max(0, maxEntries))
     }
 
     public func log(
@@ -95,19 +100,18 @@ public final class AppLogStore: ObservableObject, @unchecked Sendable {
             ghostName: ghostName
         )
 
-        lock.lock()
-        internalEntries.append(entry)
-        if internalEntries.count > maxEntries {
-            internalEntries.removeFirst(internalEntries.count - maxEntries)
+        lock.withLock {
+            guard maxEntries > 0 else { return }
+            buffer[(oldestIndex + entryCount) % maxEntries] = entry
+            if entryCount == maxEntries {
+                oldestIndex = (oldestIndex + 1) % maxEntries
+            } else {
+                entryCount += 1
+            }
+            needsPublication = true
         }
-        let snapshot = internalEntries
-        lock.unlock()
 
         emitOSLog(entry: entry)
-
-        Task { @MainActor in
-            self.entries = snapshot
-        }
     }
 
     public func debug(_ message: String, category: String = "App", details: String? = nil, ghostName: String? = nil) {
@@ -127,12 +131,44 @@ public final class AppLogStore: ObservableObject, @unchecked Sendable {
     }
 
     public func clear() {
-        lock.lock()
-        internalEntries.removeAll()
-        lock.unlock()
-        Task { @MainActor in
-            self.entries = []
+        lock.withLock {
+            buffer = Array(repeating: nil, count: maxEntries)
+            oldestIndex = 0
+            entryCount = 0
+            needsPublication = true
         }
+    }
+
+    /// Read the current history independently of whether the console is visible.
+    public func snapshot() -> [LogEntry] {
+        lock.withLock { orderedEntries() }
+    }
+
+    /// Coalesce all writes since the previous refresh into a single UI update.
+    @MainActor
+    public func publishSnapshot() {
+        let snapshot: [LogEntry]? = lock.withLock {
+            guard needsPublication else { return nil }
+            needsPublication = false
+            return orderedEntries()
+        }
+        if let snapshot {
+            entries = snapshot
+        }
+    }
+
+    /// Release the UI's retained history while keeping the actual log buffer intact.
+    @MainActor
+    public func discardPublishedSnapshot() {
+        lock.withLock { needsPublication = true }
+        if !entries.isEmpty {
+            entries = []
+        }
+    }
+
+    /// Must be called with lock held. The result never shares the ring's array storage.
+    private func orderedEntries() -> [LogEntry] {
+        (0 ..< entryCount).map { buffer[(oldestIndex + $0) % maxEntries]! }
     }
 
     public static func formatText(for entries: [LogEntry]) -> String {

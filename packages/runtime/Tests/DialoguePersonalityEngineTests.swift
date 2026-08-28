@@ -51,12 +51,12 @@ func `session records normalized SHIORI requests and responses`() async throws {
     )
 
     _ = try await session.start()
-    await Task.yield()
+    let entries = logStore.snapshot()
 
-    #expect(logStore.entries.map(\.message) == ["SHIORI request: OnBoot", "SHIORI response: OnBoot"])
-    #expect(logStore.entries[0].details == "No Reference")
-    #expect(logStore.entries[1].details == #"Value: \0hello\e"#)
-    #expect(logStore.entries.allSatisfy { $0.category == "SHIORI" && $0.ghostName == "Test Ghost" })
+    #expect(entries.map(\.message) == ["SHIORI request: OnBoot", "SHIORI response: OnBoot"])
+    #expect(entries[0].details == "No Reference")
+    #expect(entries[1].details == #"Value: \0hello\e"#)
+    #expect(entries.allSatisfy { $0.category == "SHIORI" && $0.ghostName == "Test Ghost" })
 }
 
 private actor RecordingPersonalityEngine: PersonalityEngine {
