@@ -263,11 +263,22 @@ public struct ContentNetworkUpdater: Sendable {
     }
 
     private func fetchManifest(homeURL: URL) async throws -> (URL, Data) {
+        var failure: ContentNetworkUpdateError?
         for name in ["updates2.dau", "updates.txt"] {
             let url = homeURL.appending(path: name)
-            if let data = try? await fetch(url) {
+            do {
+                let data = try await fetch(url)
                 return (url, data)
+            } catch NetworkFetchError.unsuccessfulStatus(404) {
+                continue
+            } catch {
+                if failure == nil {
+                    failure = .downloadFailed(path: name, underlyingError: error.localizedDescription)
+                }
             }
+        }
+        if let failure {
+            throw failure
         }
         throw ContentNetworkUpdateError.missingManifest
     }

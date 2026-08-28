@@ -51,6 +51,8 @@ public final class SurfaceWindowController {
     private var defaultSurfaceIDs: [Int: Int] = [:]
     private var enabledBindGroups: [Int: Set<Int>] = [:]
     private var presentationHidden = false
+    private var startupPresentationHidden = false
+
     private var displayScale: CGFloat = 1
     private var locksToDesktopBottom = true
     private var keepsOnScreen = true
@@ -94,8 +96,13 @@ public final class SurfaceWindowController {
     public func setPresentationHidden(_ hidden: Bool) {
         presentationHidden = hidden
         for character in characters.values {
-            character.setPresentationHidden(hidden)
+            character.setPresentationHidden(hidden || startupPresentationHidden)
         }
+    }
+
+    public func setStartupPresentationHidden(_ hidden: Bool) {
+        startupPresentationHidden = hidden
+        setPresentationHidden(presentationHidden)
     }
 
     public func setDisplayScale(_ scale: Double) {
@@ -158,18 +165,35 @@ public final class SurfaceWindowController {
         try show(shell: shell, scope: 0, surfaceID: surfaceID)
     }
 
-    public func show(shell: ShellDefinition, defaultSurfaceIDs: [Int: Int]) throws {
+    public struct ReloadPresentation {
+        fileprivate let surfaces: [Int: Int]
+        fileprivate let bindings: [Int: Set<Int>]
+    }
+
+    public func captureReloadPresentation() -> ReloadPresentation {
+        ReloadPresentation(
+            surfaces: characters.compactMapValues { $0.visibleWindowFrame == nil ? -1 : $0.currentSurfaceID },
+            bindings: enabledBindGroups
+        )
+    }
+
+    public func show(shell: ShellDefinition, defaultSurfaceIDs: [Int: Int], restoring presentation: ReloadPresentation? = nil) throws {
         hideAll()
         self.shell = shell
         self.defaultSurfaceIDs = defaultSurfaceIDs
-        enabledBindGroups = shell.defaultBindGroups
+        enabledBindGroups = presentation?.bindings ?? shell.defaultBindGroups
 
-        for (scope, surfaceID) in defaultSurfaceIDs.sorted(by: { $0.key < $1.key }) {
+        let surfaces = defaultSurfaceIDs.merging(presentation?.surfaces ?? [:]) { _, restored in restored }
+        for (scope, surfaceID) in surfaces.sorted(by: { $0.key < $1.key }) {
             do {
                 let character = characterController(for: scope)
+                character.setPresentationHidden(presentationHidden || startupPresentationHidden)
                 character.setBindGroups(enabledBindGroups[scope] ?? [], redraw: false)
-                try character.show(shell: shell, surfaceID: surfaceID)
-                character.setPresentationHidden(presentationHidden)
+                try character.show(shell: shell, surfaceID: surfaceID < 0 ? (defaultSurfaceIDs[scope] ?? 0) : surfaceID)
+                if surfaceID < 0 {
+                    try character.changeSurface(to: surfaceID)
+                }
+                character.setPresentationHidden(presentationHidden || startupPresentationHidden)
                 placeInitialWindow(for: scope)
             } catch where scope != 0 {
                 continue
@@ -472,6 +496,7 @@ public final class SurfaceWindowController {
     public func restoreSurfaces() {
         for character in characters.values {
             character.restore()
+            character.setPresentationHidden(presentationHidden || startupPresentationHidden)
         }
     }
 
@@ -544,6 +569,7 @@ public final class SurfaceWindowController {
             locksToDesktopBottom: locksToDesktopBottom,
             keepsOnScreen: keepsOnScreen
         )
+        character.setPresentationHidden(presentationHidden || startupPresentationHidden)
         character.onMouseClick = { [weak self] region in
             self?.onMouseClick?(scope, region)
         }
@@ -918,7 +944,6 @@ private final class CharacterSurfaceController {
         guard let animation = currentSurfaceDefinition?.animations.first(where: { $0.id == id }) else {
             return nil
         }
-        window?.makeKeyAndOrderFront(nil)
         animationTask?.cancel()
         currentAnimationID = id
         let task = Task<Void, Never> { [weak self] in
@@ -1459,13 +1484,15 @@ private final class CharacterSurfaceController {
                 ? pattern.surfaceID
                 : nil
         })
-        let animationBase = if stoppedAnimationIDs.isEmpty {
+        let isInitiallyComposited = (animation.interval ?? "").lowercased().split(separator: "+").contains("bind")
+        let excludedAnimationIDs = stoppedAnimationIDs.union([animation.id])
+        let animationBase = if stoppedAnimationIDs.isEmpty, !isInitiallyComposited {
             baseImage
         } else {
             (try? render(
                 surfaceID: baseSurfaceID,
                 shell: shell,
-                excludingInitialAnimations: stoppedAnimationIDs
+                excludingInitialAnimations: excludedAnimationIDs
             ).image) ?? baseImage
         }
         var frameBase = animationBase
@@ -1485,7 +1512,7 @@ private final class CharacterSurfaceController {
                     frameBase = try render(
                         surfaceID: pattern.surfaceID,
                         shell: shell,
-                        excludingInitialAnimations: stoppedAnimationIDs
+                        excludingInitialAnimations: excludedAnimationIDs
                     ).image
                     setAnimationImage(frameBase)
                 } catch {

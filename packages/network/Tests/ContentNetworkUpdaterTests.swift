@@ -138,3 +138,22 @@ private actor UpdateProgressRecorder {
         #expect(Bool(false), "Unexpected error: \(error)")
     }
 }
+
+@Test func `retains manifest transport failure when fallback is missing`() async throws {
+    let updater = ContentNetworkUpdater { url in
+        if url.lastPathComponent == "updates2.dau" {
+            throw URLError(.appTransportSecurityRequiresSecureConnection)
+        }
+        throw NetworkFetchError.unsuccessfulStatus(404)
+    }
+    do {
+        _ = try await updater.update(
+            rootDirectory: FileManager.default.temporaryDirectory,
+            homeURL: #require(URL(string: "http://example.test/ghost/"))
+        )
+        Issue.record("Expected manifest transport failure")
+    } catch let ContentNetworkUpdateError.downloadFailed(path, detail) {
+        #expect(path == "updates2.dau")
+        #expect(!detail.isEmpty)
+    }
+}

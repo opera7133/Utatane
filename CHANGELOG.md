@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.1] - 2026-08-28
+
+### 修正
+
+- ゴースト再読込時に、直前のサーフェス・着せ替え・非表示状態を保持するようにした
+- 起動準備中のサーフェス表示を抑制し、非表示のキャラクターがアニメーション開始だけで再表示される問題を修正
+- bindアニメーションの初期画像が再生中のフレームに重なり、まばたきで目が二重に見える問題を修正
+- HTTPのゴースト・バルーン更新先がmacOSの通信制限で拒否される問題に対応。HTTPSの証明書検証とアプリ更新のSparkle署名検証は維持
+- 更新一覧の取得失敗時に、元の通信エラーをログへ残すよう改善
+
+### 変更
+
+- 同梱ゴースト「りあ」のまばたきを`rarely`へ変更し、頻度を抑えた
+- GitHub Actionsから新規作成するReleaseをpre-releaseではなく通常Releaseに変更
+
 ## [0.1.0] - 2026-08-28
 
 ### 追加
@@ -270,7 +285,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[0.1.0]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.15...HEAD
+[0.1.1]: https://github.com/opera7133/Utatane/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.15...v0.1.0
 [0.1.0-alpha.15]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.14...v0.1.0-alpha.15
 [0.1.0-alpha.14]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.13...v0.1.0-alpha.14
 [0.1.0-alpha.13]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.12...v0.1.0-alpha.13

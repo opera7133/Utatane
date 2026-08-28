@@ -43,6 +43,17 @@ targets:
         NSLocationWhenInUseUsageDescription: "ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。"
         NSMicrophoneUsageDescription: "音声認識やゴーストとのリアルタイム音声会話に使用します。音声は選択したRealtime APIへ送信されます。"
         NSPrincipalClass: NSApplication
+        # Legacy ghosts declare arbitrary HTTP update sites. TLS certificate
+        # validation remains enabled; keep application update hosts under ATS.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+          NSExceptionDomains:
+            dl.wmsci.com:
+              NSIncludesSubdomains: true
+            github.com:
+              NSIncludesSubdomains: true
+            githubusercontent.com:
+              NSIncludesSubdomains: true
         SUFeedURL: https://dl.wmsci.com/utatane/appcast.xml
         SUEnableAutomaticChecks: true
         SUPublicEDKey: 4UTGPWrkBkZciJi6EbisveUBxtuuV2XKspMwtptZ2QA=
@@ -75,7 +86,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.1.0
+        MARKETING_VERSION: 0.1.1
     dependencies:
       - package: Sparkle
         product: Sparkle

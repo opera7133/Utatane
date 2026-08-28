@@ -23,7 +23,7 @@ surface.append10000-10009, 10100-10109, 10200-10202, 10205-10206, 10300-10322, 1
 
 surface.append10000
 {
-	animation0.interval,sometimes
+	animation0.interval,rarely
 	animation0.pattern0,base,10006,50,0,0
 	animation0.pattern1,base,10500,50,0,0
 	animation0.pattern2,base,-1,60,0,0
@@ -31,7 +31,7 @@ surface.append10000
 
 surface.append10100
 {
-	animation0.interval,sometimes
+	animation0.interval,rarely
 	animation0.pattern0,base,10206,50,0,0
 	animation0.pattern1,base,10501,50,0,0
 	animation0.pattern2,base,-1,60,0,0

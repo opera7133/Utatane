@@ -1,16 +1,20 @@
 # リリース手順
 
-Utataneのリリースは`v`で始まるgit tagを基準にします。たとえば`v0.1.0-alpha.3`をpushすると、GitHub Actionsは次の値で配布版を作ります。
+Utataneのリリースは`v`で始まるgit tagを基準にします。通常版を小刻みに公開し、alpha・beta・rcの段階を毎回必須にはしません。たとえば`v0.1.1`をpushすると、GitHub Actionsは次の値で配布版を作ります。
 
-- 表示バージョン（`CFBundleShortVersionString`）: `0.1.0-alpha.3`
+- 表示バージョン（`CFBundleShortVersionString`）: `0.1.1`
 - 更新比較用ビルド番号（`CFBundleVersion`）: GitHub Actionsのrun number
 
 ```sh
-git tag v0.1.0-alpha.3
-git push origin v0.1.0-alpha.3
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 ## Sparkle署名鍵
+
+現在のworkflowは新規Releaseを通常Releaseとして作成します。既存Releaseのpre-release指定は自動変更しません。プレビュー配布を再開する場合はCIとappcastの配信方針を別途変更してください。
+
+Apple Developer ID署名・公証はリリース条件にしません。未公証であることを配布時に明記し、Sparkle更新署名は維持します。
 
 公開鍵は`project.yml`の`SUPublicEDKey`にあります。秘密鍵はリポジトリへ追加せず、macOSのログインキーチェーンで管理します。
 

@@ -319,6 +319,18 @@ func `renders both installed twin characters with default bindings`() throws {
     #expect(controller.visibleScopes == [0, 1])
     #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 244, height: 450))
     #expect(controller.windowFrame(for: 1)?.size == NSSize(width: 244, height: 450))
+
+    let presentation = controller.captureReloadPresentation()
+    controller.resetContent()
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 0, 1: 10], restoring: presentation)
+    #expect(controller.surfaceID(for: 0) == 5)
+    #expect(controller.surfaceID(for: 1) == 10000)
+
+    // A different ghost must not inherit a reload snapshot implicitly.
+    controller.resetContent()
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 0, 1: 10])
+    #expect(controller.surfaceID(for: 0) == 0)
+    #expect(controller.surfaceID(for: 1) == 10)
 }
 
 @Test
@@ -354,6 +366,41 @@ func `renders a virtual surface from ordered elements`() throws {
 
     #expect(controller.surfaceID(for: 0) == 5)
     #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 40, height: 80))
+}
+
+@Test
+@MainActor
+func `bound blink replaces its initial eye layer instead of overlaying it`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 4, height: 4, color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)).write(to: directory.appending(path: "surface0.png"))
+    try makePNG(width: 4, height: 4, color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)).write(to: directory.appending(path: "surface1.png"))
+    try makePNG(width: 4, height: 4, color: NSColor(deviceRed: 0, green: 0, blue: 0, alpha: 0)).write(to: directory.appending(path: "surface2.png"))
+    let shell = ShellDefinition(directory: directory, surfaces: [0: SurfaceDefinition(
+        id: 0, collisions: [], animations: [SurfaceAnimation(
+            id: 101, interval: "bind", patterns: [
+                SurfaceAnimationPattern(order: 0, method: "stop", surfaceID: 100, waitMilliseconds: 0, x: 0, y: 0),
+                SurfaceAnimationPattern(order: 1, method: "overlay", surfaceID: 1, waitMilliseconds: 0, x: 0, y: 0),
+                SurfaceAnimationPattern(order: 2, method: "overlay", surfaceID: 2, waitMilliseconds: 2000, x: 0, y: 0)
+            ]
+        )]
+    )], usesSelfAlpha: true, defaultBindGroups: [0: [101]])
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    defer { controller.resetContent() }
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 0])
+    #expect(try #require(controller.renderedImage()?.colorAtCenter()).redComponent > 0.9)
+    controller.playAnimation(id: 101)
+    for _ in 0 ..< 100 {
+        if controller.renderedImage()?.colorAtCenter()?.blueComponent ?? 0 > 0.9 {
+            break
+        }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(try #require(controller.renderedImage()?.colorAtCenter()).blueComponent > 0.9)
+    controller.stopAnimation(id: 101)
 }
 
 @Test
@@ -598,6 +645,7 @@ func `embedded event can restore a hidden surface`() async throws {
     player.onEmbeddedEvent = { id, arguments in
         #expect(id == "OnCallSurface")
         #expect(arguments == ["5"])
+        #expect(surfaceController.visibleScopes.isEmpty)
         return SakuraScript(rawValue: "\\s[5]")
     }
     let balloon = BalloonDefinition(
@@ -611,14 +659,53 @@ func `embedded event can restore a hidden surface`() async throws {
         fontColor: BalloonColor(red: 0, green: 0, blue: 0)
     )
 
+    var presentationReadyCount = 0
     await player.playAndWait(
         SakuraScript(rawValue: "\\s[-1]\\![embed,OnCallSurface,5]\\e"),
         balloon: balloon,
-        characterDelayMilliseconds: 0
+        characterDelayMilliseconds: 0,
+        onPresentationReady: {
+            presentationReadyCount += 1
+            #expect(surfaceController.surfaceID(for: 0) == 5)
+        }
     )
+
+    #expect(presentationReadyCount == 1)
 
     #expect(surfaceController.visibleScopes == [0])
     #expect(surfaceController.surfaceID(for: 0) == 5)
+}
+
+@Test
+@MainActor
+func `startup visibility gate survives restore and animations do not reveal hidden surfaces`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0.png"))
+    let shell = ShellDefinition(directory: directory, surfaces: [0: SurfaceDefinition(
+        id: 0, collisions: [], animations: [SurfaceAnimation(
+            id: 1, interval: "never", patterns: [SurfaceAnimationPattern(
+                order: 0, method: "overlay", surfaceID: 0, waitMilliseconds: 20, x: 0, y: 0
+            )]
+        )]
+    )])
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    defer { controller.resetContent() }
+    controller.setStartupPresentationHidden(true)
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 0])
+    let number = try #require(controller.windowNumbers.first)
+    let window = try #require(NSApp.window(withWindowNumber: number))
+    controller.setPresentationHidden(false)
+    controller.restoreSurfaces()
+    #expect(window.alphaValue == 0)
+    controller.setStartupPresentationHidden(false)
+    #expect(window.alphaValue == 1)
+    try controller.changeSurface(to: -1)
+    controller.playAnimation(id: 1)
+    #expect(controller.visibleScopes.isEmpty)
 }
 
 @Test

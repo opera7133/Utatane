@@ -163,7 +163,8 @@ public final class SakuraScriptPlayer {
     public func play(
         _ script: SakuraScript,
         balloon: BalloonDefinition,
-        characterDelayMilliseconds: Int? = nil
+        characterDelayMilliseconds: Int? = nil,
+        onPresentationReady: (@MainActor () -> Void)? = nil
     ) {
         guard !(preventsUserBreak && playbackTask != nil) else { return }
         finishPlaybackWait()
@@ -193,7 +194,8 @@ public final class SakuraScriptPlayer {
                 tokens,
                 balloon: balloon,
                 characterDelayMilliseconds: effectiveCharacterDelay,
-                continuesPreviousDialogue: continuesPreviousDialogue
+                continuesPreviousDialogue: continuesPreviousDialogue,
+                onPresentationReady: onPresentationReady
             )
             guard !Task.isCancelled else { return }
             self?.playbackDidFinish()
@@ -203,14 +205,16 @@ public final class SakuraScriptPlayer {
     public func playAndWait(
         _ script: SakuraScript,
         balloon: BalloonDefinition,
-        characterDelayMilliseconds: Int? = nil
+        characterDelayMilliseconds: Int? = nil,
+        onPresentationReady: (@MainActor () -> Void)? = nil
     ) async {
         await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 play(
                     script,
                     balloon: balloon,
-                    characterDelayMilliseconds: characterDelayMilliseconds
+                    characterDelayMilliseconds: characterDelayMilliseconds,
+                    onPresentationReady: onPresentationReady
                 )
                 playbackContinuation = continuation
             }
@@ -331,8 +335,19 @@ public final class SakuraScriptPlayer {
         _ tokens: [SakuraScriptToken],
         balloon: BalloonDefinition,
         characterDelayMilliseconds: Int,
-        continuesPreviousDialogue: Bool
+        continuesPreviousDialogue: Bool,
+        onPresentationReady: (@MainActor () -> Void)? = nil
     ) async {
+        var presentationReady = onPresentationReady
+        func revealPresentation() {
+            presentationReady?()
+            presentationReady = nil
+        }
+        defer {
+            if !Task.isCancelled {
+                revealPresentation()
+            }
+        }
         var scope = 0
         let previousContent = continuesPreviousDialogue
             ? balloonWindowController.contentSnapshots(scopes: balloonWindowController.visibleScopes)
@@ -541,6 +556,9 @@ public final class SakuraScriptPlayer {
                 let token = pendingTokens.removeFirst()
                 switch token {
                 case let .text(text):
+                    if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        revealPresentation()
+                    }
                     for character in text {
                         guard !Task.isCancelled else { return }
                         let targetScopes = synchronizedScopes?.sorted() ?? [scope]
@@ -914,12 +932,14 @@ public final class SakuraScriptPlayer {
                         autoscroll: autoscrollByScope[scope] ?? true
                     )
                 case let .wait(milliseconds):
+                    revealPresentation()
                     if fastForwardRequested {
                         fastForwardRequested = false
                     } else {
                         try await sleep(milliseconds: milliseconds)
                     }
                 case let .waitUntil(milliseconds):
+                    revealPresentation()
                     if let milliseconds {
                         let elapsed = Int((ProcessInfo.processInfo.systemUptime - preciseWaitStartedAt) * 1000)
                         if elapsed < milliseconds {
@@ -929,6 +949,7 @@ public final class SakuraScriptPlayer {
                         preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
                     }
                 case let .waitForClick(clearOnResume):
+                    revealPresentation()
                     fastForwardRequested = false
                     advanceRequested = false
                     isWaitingForClick = true

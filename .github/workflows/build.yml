@@ -267,7 +267,7 @@ jobs:
             echo "- **Report:** [$vt_url]($vt_url)"
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Publish pre-release
+      - name: Publish release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
@@ -285,8 +285,7 @@ jobs:
               dist/Utatane-macOS.zip \
               dist/update-feed/appcast.xml \
               --title "$GITHUB_REF_NAME" \
-              --generate-notes \
-              --prerelease
+              --generate-notes
 
             existing_body=$(gh release view "$GITHUB_REF_NAME" --json body -q .body)
             clean_body=$(printf '%s\n' "$existing_body" | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')

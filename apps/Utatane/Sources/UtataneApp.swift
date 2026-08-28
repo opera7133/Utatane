@@ -1177,6 +1177,8 @@ private struct UtataneRootView: View {
     private func transition(to ghost: InstalledGhost, forceReload: Bool = false) async {
         guard forceReload || currentGhost?.id != ghost.id else { return }
         let previousGhost = currentGhost
+        let reloadPresentation = forceReload && previousGhost?.id == ghost.id
+            ? surfaceWindowController.captureReloadPresentation() : nil
         let statusToken = statusWindowController.show("「\(ghost.name)」を起動中…")
         defer { statusWindowController.hide(token: statusToken) }
         isTransitioningGhost = true
@@ -1196,7 +1198,7 @@ private struct UtataneRootView: View {
         } else {
             .boot
         }
-        switch await activate(ghost, startup: startup) {
+        switch await activate(ghost, startup: startup, reloadPresentation: reloadPresentation) {
         case .success:
             AppLogStore.shared.info("「\(ghost.name)」の起動が完了しました", category: "Ghost", ghostName: ghost.name)
             return
@@ -1276,12 +1278,13 @@ private struct UtataneRootView: View {
 
     private func activate(
         _ ghost: InstalledGhost,
-        startup: GhostStartup = .boot
+        startup: GhostStartup = .boot,
+        reloadPresentation: SurfaceWindowController.ReloadPresentation? = nil
     ) async -> Result<Void, any Error> {
         AppLogStore.shared.info("「\(ghost.name)」の起動を開始しました", category: "Ghost", ghostName: ghost.name)
         scriptPlayer.cancel()
         surfaceWindowController.resetContent()
-        surfaceWindowController.setPresentationHidden(true)
+        surfaceWindowController.setStartupPresentationHidden(true)
         session = nil
         balloon = nil
         currentGhost = ghost
@@ -1295,13 +1298,19 @@ private struct UtataneRootView: View {
         balloonWindowController.setPositionContentID(ghost.id)
         selectionStore.ghostDirectoryName = ghost.rootDirectory.lastPathComponent
 
-        defer { surfaceWindowController.setPresentationHidden(isHiddenForFullScreenApp) }
+        var awaitsPresentation = false
+        defer {
+            if !awaitsPresentation {
+                surfaceWindowController.setStartupPresentationHidden(false)
+                surfaceWindowController.setPresentationHidden(isHiddenForFullScreenApp)
+            }
+        }
         do {
             guard let shellChoice = selectionStore.resolveShell(for: ghost) else {
                 throw AppError.missingResource("shell")
             }
             selectedShell = shellChoice
-            try show(shell: shellChoice)
+            try show(shell: shellChoice, restoring: reloadPresentation)
             surfaceWindowController.onMouseClick = { scope, region in
                 lastClickedRegion = "scope \(scope): \(region ?? "範囲外")"
             }
@@ -1717,7 +1726,11 @@ private struct UtataneRootView: View {
             }
             markBooted(ghost)
             if let script = startupScript {
-                scriptPlayer.play(script, balloon: loadedBalloon)
+                awaitsPresentation = true
+                scriptPlayer.play(script, balloon: loadedBalloon, onPresentationReady: {
+                    surfaceWindowController.setPresentationHidden(isHiddenForFullScreenApp)
+                    surfaceWindowController.setStartupPresentationHidden(false)
+                })
             }
             return .success(())
         } catch {
@@ -2281,7 +2294,7 @@ private struct UtataneRootView: View {
         return SakuraScript(rawValue: "\\0\\s[6]\(fallback)\\e")
     }
 
-    private func show(shell installedShell: InstalledShell) throws {
+    private func show(shell installedShell: InstalledShell, restoring presentation: SurfaceWindowController.ReloadPresentation? = nil) throws {
         scriptPlayer.cancel()
         let shell = try shellLoader.load(from: installedShell.directory)
         currentShellDefinition = shell
@@ -2290,7 +2303,8 @@ private struct UtataneRootView: View {
             shell: shell,
             defaultSurfaceIDs: Dictionary(
                 uniqueKeysWithValues: characters.map { ($0.scope, $0.defaultSurfaceID) }
-            )
+            ),
+            restoring: presentation
         )
         scriptPlayer.configure(
             defaultBalloonSurfaceIDs: Dictionary(

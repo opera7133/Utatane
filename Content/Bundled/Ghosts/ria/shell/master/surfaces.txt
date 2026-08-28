@@ -60,7 +60,7 @@ surface.append1000-1009, 1100-1109, 1200-1202, 1205-1206, 1300-1322, 1500-1501
 
 surface.append0
 {
-animation0.interval,sometimes
+animation0.interval,rarely
 animation0.pattern0,base,6,50,0,0
 animation0.pattern1,base,500,50,0,0
 animation0.pattern2,base,-1,60,0,0
@@ -68,7 +68,7 @@ animation0.pattern2,base,-1,60,0,0
 
 surface.append100
 {
-animation0.interval,sometimes
+animation0.interval,rarely
 animation0.pattern0,base,206,50,0,0
 animation0.pattern1,base,501,50,0,0
 animation0.pattern2,base,-1,60,0,0
@@ -76,7 +76,7 @@ animation0.pattern2,base,-1,60,0,0
 
 surface.append1000
 {
-animation0.interval,sometimes
+animation0.interval,rarely
 animation0.pattern0,base,1006,50,0,0
 animation0.pattern1,base,1500,50,0,0
 animation0.pattern2,base,-1,60,0,0
@@ -84,7 +84,7 @@ animation0.pattern2,base,-1,60,0,0
 
 surface.append1100
 {
-animation0.interval,sometimes
+animation0.interval,rarely
 animation0.pattern0,base,1206,50,0,0
 animation0.pattern1,base,1501,50,0,0
 animation0.pattern2,base,-1,60,0,0
