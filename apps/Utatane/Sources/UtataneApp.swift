@@ -1771,6 +1771,9 @@ private struct UtataneRootView: View {
                 client: AIProviderClientFactory.make(configuration: configuration)
             )
         }
+        if ShiolinkPersonalityEngine.supports(shioriFilename: ghost.shioriFilename) {
+            return try ShiolinkPersonalityEngine(masterDirectoryURL: masterDirectory)
+        }
         if NativeYayaPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try NativeYayaPersonalityEngine(
                 masterDirectoryURL: ContentRoot.writableYayaMasterDirectory(

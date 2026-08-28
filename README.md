@@ -31,7 +31,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 
 ### 人格とかネットワークとか
 
-- YAYA / 里々 / 華和梨 / 美坂 / 灯をSHIORIとして使うゴーストのネイティブ実行 (蒼空については"実験的な機能"を参照)
+- YAYA(文) / KAGARI / SHIOLINK(MiyoJS等) / 里々 / 華和梨 / 美坂 / 灯をSHIORIとして使うゴーストのネイティブ実行 (蒼空については"実験的な機能"を参照)
 - SSU、`saori_cpuid`、`kenonoke`、`textcopy2`、`mciaudior`、`wmove`のネイティブSAORI互換
 - ゴーストとバルーンの手動ネットワーク更新と、設定した日数ごとの自動更新
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
@@ -137,6 +137,6 @@ Content/Local/
 
 Utatane本体は[MIT License](LICENSE)で公開しています。
 
-submoduleのYAYAはBSD 3-Clause License、SATORIはBSD 2-Clause License、KAWARIは修正BSD Licenseです。ゴースト、シェル、バルーンは各配布元のルールに従ってください。
+submoduleのYAYAはBSD 3-Clause License、SATORIはBSD 2-Clause License、KAWARIは修正BSD License、KAGARIはMIT Licenseです。ゴースト、シェル、バルーンは各配布元のルールに従ってください。
 
 同梱ゴースト「りあ」のシェルには、ボトル猫さんの「p016（寝不足）」を使用しています。専用バルーン「Ria」は、ろすえんさんの「[something like Template](https://github.com/lost-nd-xxx/something_like_balloon)」を元に制作しています。詳しい規約とクレジットは、それぞれの同梱READMEを参照してください。

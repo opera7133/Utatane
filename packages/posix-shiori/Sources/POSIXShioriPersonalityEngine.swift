@@ -35,6 +35,10 @@ public actor POSIXShioriPersonalityEngine: PersonalityEngine {
         try await response(for: event).script
     }
 
+    public func shutdown() async {
+        session.close()
+    }
+
     public func response(for event: GhostEvent) async throws -> PersonalityResponse {
         var context = ShioriEventContext(charset: charset)
         if case let .mouseClick(scope, _) = event {

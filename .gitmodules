@@ -10,3 +10,7 @@
 	path = packages/kawari-native/Sources/CKawariNative/Vendor/KAWARI
 	url = https://github.com/opera7133/kawari.git
 	branch = utatane-macos
+[submodule "packages/kagari-native/Vendor/kagari"]
+	path = packages/kagari-native/Vendor/kagari
+	url = https://github.com/opera7133/kagari_shiori.git
+	branch = utatane-macos

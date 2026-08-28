@@ -24,6 +24,65 @@ SSUはSATORIに同梱された既存実装を使います。`saori_cpuid.dll`と
 
 この経路は一般的なSHIORI/3.0とSAORI/1.0の電文、および標準エントリポイントを扱うものです。Windows固有の補助DLL、レジストリ、COM、別プロセスなどへ依存するモジュールまで動作を保証するものではありません。
 
+## SHIOLINK（外部プロセス）
+
+`descript.txt`の`shiori,shiolink.dll`を検出すると、Windows DLLではなく、設定したmacOSのコマンドへ標準入出力で接続します。DLL本体は不要です。Node.jsやRuby、栞本体は利用者が別途インストールします。Utataneはnpmを自動実行せず、ランタイムも同梱しません。
+
+ゴーストの`ghost/master/SHIOLINK.INI`に設定します。Windows用の設定を残す場合は、優先して読み込む`SHIOLINK.utatane.ini`を同じ場所に置けます。
+
+```ini
+[SHIOLINK]
+commandline = "/absolute/path/to/node" "./node_modules/miyojs/bin/miyo-shiolink.js" "./dic"
+charmode = UTF-8
+```
+
+実行ファイルは実在する**絶対パス**に置き換えてください。作業ディレクトリは`ghost/master`です。引数内の相対パスもここを基準に解釈されます。空白を含むパスは引用符で囲みます。シェルは使わず、`~`、`$HOME`、パイプ等は展開しません。`charmode`は`UTF-8`、`ANSI`または`Shift_JIS`を指定します。省略時は元実装と同じ`ANSI`で、日本語Windows相当のShift_JISとして扱います。Node.jsでは`UTF-8`を明示してください。INIはUTF-8またはShift_JISで読み込みます。`LOGGING`や`viewconsole`、DLLの改名に応じたINI名などは再現していません。
+
+### miyojsでの確認
+
+[miyojs](https://github.com/Narazaka/miyojs/blob/master/Readme.ja.md) 2.0.3のCLIと、最小のYAML辞書による日本語の連続応答を確認しています。配布されている各Miyoゴーストの画面操作は未確認です。
+
+検証時は`js-yaml`の新しい版で`jsyaml.safeLoad is not a function`という起動エラーが発生しました。miyojs 2.0.3が古いAPIを利用しているためです。新規の検証用ディレクトリでは、次の組み合わせで動作しました。
+
+```sh
+npm install --ignore-scripts miyojs@2.0.3 js-yaml@3
+```
+
+既存ゴーストには固有の依存関係やlockfileがある場合があります。このコマンドで一律に上書きせず、ゴーストの導入手順を優先してください。古い依存ライブラリを利用する構成であり、安全性や他のNode.jsバージョンとの互換を保証するものではありません。
+
+### 通信と制限
+
+[ShiolinkJS](https://github.com/Narazaka/shiolinkjs/blob/master/lib/shiolink.ts)の`*L:`、`*S:`、`*U:`プロトコルでload・SHIORI/3.0要求／応答・unloadを行います。通信はUIとは別の専用キューで直列処理します。応答待ちは要求ごとに最大10秒、電文は約8 MiBまでです。異常やタイムアウトで接続を閉じ、同期が崩れたプロセスを再利用しません。再度使うにはゴーストを再読み込みします。
+
+ゴースト終了時はunloadを送って最大1秒待ち、終了しない子プロセスを停止します。標準出力にはプロトコル以外を出せません。診断出力は標準エラーを使います。外部栞のSAORIやWindows固有機能を自動でmacOS対応にする機能ではありません。
+
+**外部プロセスを制限するサンドボックスではありません。** 栞は利用者の権限でファイル操作等を実行できます。保存先も栞側の実装に従います。信頼できるゴースト・コマンドのみ指定し、動作確認にはコピーを使ってください。
+
+## AYA（文）をYAYAで実行
+
+`ghost/master`に`aya5.txt`または`aya.txt`があれば、内蔵YAYAで読み込みます。設定や辞書を`yaya.txt`へ変換する必要はありません。WindowsのAYA DLLは実行しません。YAYA設定が存在する場合はそちらを優先します。
+
+AYA設定で読み込んだ場合は、設定名に対応する`aya5_variable.cfg`または`aya_variable.cfg`を読み書きします。手動ランダムトークではまず`OnAITalk`を送り、成功応答に台詞がなかった場合だけ`OnAiTalk`を試します。通常のYAYA設定ではこの再試行をしません。
+
+作者配布の文5.8「紺野あやめ」で、辞書無改変の起動・トーク・メニュー・終了応答を確認しました。設定名ごとの保存と再読込もテストしていますが、旧AYA全版や全ゴースト、既存の保存ファイル形式すべてとの互換を保証するものではありません。画面操作や外部SAORIの互換性は別途確認が必要です。
+
+## kagari（Lua、実験的）
+
+`shiori,kagari.dll`を指定するゴースト、またはmasterに`kagari.dll`があるゴーストを、macOS用kagariへ接続します。`index.lua`だけでは判定しません。tkytkとは別の経路です。
+
+現段階は**利用者ビルドの外部ライブラリ**で、リリースアプリへの同梱はしていません。[kagariフォーク](https://github.com/opera7133/kagari_shiori/tree/utatane-macos)はsubmoduleです。Lua 5.4.4のソースとsol2 3.5.0のソースを用意して、リポジトリのルートで次を実行します。
+
+```sh
+git submodule update --init --recursive
+sh tools/native-shiori/build-kagari-macos.sh /path/to/lua-5.4.4 /path/to/sol2-3.5.0
+```
+
+`~/Library/Application Support/Utatane/NativeShiori/kagari/`に`libkagari.dylib`、`liblua5.4.dylib`、ライセンスを配置します。ビルドはホストのアーキテクチャ向けです。別の出力先は第3引数に指定できます。Utataneはmaster、上記Application Support、アプリ内``NativeShiori/kagari``を順に検索します。`UTATANE_KAGARI_MODULE`でライブラリの絶対パスを指定することもできます。
+
+`index.lua`は`load`、`request`、`unload`を持つテーブルを返します。純Luaモジュールと、同じLua 5.4 ABI・CPU向けにビルドされたC拡張が必要です。Windows用C拡張DLLをそのまま使えるわけではありません。Lua共有ライブラリはkagariと同じフォルダに置いてください。
+
+Swiftからのロード・日本語応答・複数インスタンス・終了、およびロード失敗や不正な戻り値の処理を最小辞書で確認しています。配布ゴーストやkotori全体の動作は未確認です。Luaの`os`／`io`等は使用可能で、サンドボックスや強制タイムアウトはありません。信頼できるゴーストだけを使ってください。
+
 ## MISAKA
 
 MISAKAは`misaka.dll`をロードせず、Shift_JIS辞書をSwift実装で解釈します。配列、採用条件、`#_Common`、`nonoverlap`、`sequential`、整数演算、変数の自動保存、`$_talkinterval`による自発会話、プロパティハンドラ、主要システム変数を実装しています。

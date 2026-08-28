@@ -63,7 +63,14 @@ public actor GhostSession {
                 0: name ?? "", 1: mode, 2: ghostName, 3: path
             ])
         }
-        return try await handleLogged(event: event)
+        do {
+            let script = try await handleLogged(event: event)
+            await personalityEngine.shutdown()
+            return script
+        } catch {
+            await personalityEngine.shutdown()
+            throw error
+        }
     }
 
     public func variable(forKey key: String) async throws -> String? {

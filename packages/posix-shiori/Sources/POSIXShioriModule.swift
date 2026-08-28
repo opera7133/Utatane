@@ -4,6 +4,7 @@ import UtataneShiori
 
 public enum POSIXShioriKind: String, Sendable {
     case aosora
+    case kagari
 
     public var charset: String {
         "UTF-8"
@@ -44,6 +45,16 @@ public struct POSIXShioriModuleResolver: Sendable {
 
     public func kind(for masterDirectoryURL: URL) -> POSIXShioriKind? {
         let fileManager = FileManager.default
+        // Do not classify index.lua alone: tkytk and other engines also use it.
+        let descriptor = (try? String(contentsOf: masterDirectoryURL.appending(path: "descript.txt"), encoding: .utf8))
+            ?? (try? String(contentsOf: masterDirectoryURL.appending(path: "descript.txt"), encoding: .shiftJIS)) ?? ""
+        let declaresKagari = descriptor.components(separatedBy: .newlines).contains { line in
+            let pair = line.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+            return pair.count == 2 && pair[0] == "shiori" && ["kagari.dll", "libkagari.dylib", "libkagari.so"].contains(pair[1])
+        }
+        if declaresKagari || fileManager.fileExists(atPath: masterDirectoryURL.appending(path: "kagari.dll").path) {
+            return .kagari
+        }
         if fileManager.fileExists(atPath: masterDirectoryURL.appending(path: "aosora.dll").path)
             || fileManager.fileExists(atPath: masterDirectoryURL.appending(path: "ghost.asproj").path)
         {
@@ -57,7 +68,7 @@ public struct POSIXShioriModuleResolver: Sendable {
         masterDirectoryURL: URL,
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> URL? {
-        if let path = environment["UTATANE_AOSORA_MODULE"], !path.isEmpty {
+        if let path = environment["UTATANE_\(kind.rawValue.uppercased())_MODULE"], !path.isEmpty {
             let url = URL(filePath: path, directoryHint: .notDirectory)
             if FileManager.default.fileExists(atPath: url.path) {
                 return url
@@ -73,7 +84,7 @@ public struct POSIXShioriModuleResolver: Sendable {
     }
 
     private func candidateURLs(for kind: POSIXShioriKind, masterDirectoryURL: URL) -> [URL] {
-        let names = ["libaosora.dylib", "libaosora.so", "libaosora.bundle"]
+        let names = ["lib\(kind.rawValue).dylib", "lib\(kind.rawValue).so", "lib\(kind.rawValue).bundle"]
         let applicationSupport = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -100,10 +111,15 @@ public final class POSIXShioriSession: @unchecked Sendable {
     private static let globalLock = NSLock()
     private let moduleHandle: UnsafeMutableRawPointer
     private let instanceID: Int
-    private let unload: InstanceUnload
-    private let requestFunction: InstanceRequest
+    private let unload: (Int) -> Int32
+    private let requestFunction: (Int, UnsafeMutablePointer<CChar>?, UnsafeMutablePointer<Int>?) -> UnsafeMutablePointer<CChar>?
+    private var closed = false
 
-    public init(masterDirectoryURL: URL, moduleURL: URL, kind _: POSIXShioriKind) throws {
+    private typealias KagariLoad = @convention(c) (UnsafeMutablePointer<CChar>?, Int) -> Int32
+    private typealias KagariUnload = @convention(c) (Int32) -> Int32
+    private typealias KagariRequest = @convention(c) (Int32, UnsafeMutablePointer<CChar>?, UnsafeMutablePointer<Int>?) -> UnsafeMutablePointer<CChar>?
+
+    public init(masterDirectoryURL: URL, moduleURL: URL, kind: POSIXShioriKind) throws {
         guard let handle = dlopen(moduleURL.path, RTLD_NOW | RTLD_LOCAL) else {
             let reason = dlerror().map { String(cString: $0) } ?? "unknown error"
             throw POSIXShioriError.moduleLoadFailed(moduleURL, reason)
@@ -112,14 +128,30 @@ public final class POSIXShioriSession: @unchecked Sendable {
 
         do {
             let symbols = try Self.globalLock.withLock {
-                let load: InstanceLoad = try Self.symbol("aosora_load", in: handle)
-                let unload: InstanceUnload = try Self.symbol("aosora_unload", in: handle)
-                let request: InstanceRequest = try Self.symbol("aosora_request", in: handle)
+                let load: (UnsafeMutablePointer<CChar>?, Int) -> Int
+                let unload: (Int) -> Int32
+                let request: (Int, UnsafeMutablePointer<CChar>?, UnsafeMutablePointer<Int>?) -> UnsafeMutablePointer<CChar>?
+                switch kind {
+                case .aosora:
+                    let loader: InstanceLoad = try Self.symbol("aosora_load", in: handle)
+                    let unloader: InstanceUnload = try Self.symbol("aosora_unload", in: handle)
+                    let requester: InstanceRequest = try Self.symbol("aosora_request", in: handle)
+                    load = { loader($0, $1) }
+                    unload = { unloader($0) }
+                    request = { requester($0, $1, $2) }
+                case .kagari:
+                    let loader: KagariLoad = try Self.symbol("kagari_load", in: handle)
+                    let unloader: KagariUnload = try Self.symbol("kagari_unload", in: handle)
+                    let requester: KagariRequest = try Self.symbol("kagari_request", in: handle)
+                    load = { Int(loader($0, $1)) }
+                    unload = { unloader(Int32($0)) }
+                    request = { requester(Int32($0), $1, $2) }
+                }
                 let path = masterDirectoryURL.standardizedFileURL.path + "/"
                 let instanceID = try Self.withOwnedCString(path) { pointer, length in
                     load(pointer, length)
                 }
-                guard instanceID > 0 else { throw POSIXShioriError.shioriLoadFailed }
+                guard kind == .kagari ? instanceID >= 0 : instanceID > 0 else { throw POSIXShioriError.shioriLoadFailed }
                 return (instanceID, unload, request)
             }
             instanceID = symbols.0
@@ -133,8 +165,18 @@ public final class POSIXShioriSession: @unchecked Sendable {
 
     deinit {
         Self.globalLock.withLock {
-            _ = unload(instanceID)
+            if !closed {
+                _ = unload(instanceID)
+            }
             dlclose(moduleHandle)
+        }
+    }
+
+    public func close() {
+        Self.globalLock.withLock {
+            guard !closed else { return }
+            closed = true
+            _ = unload(instanceID)
         }
     }
 
@@ -144,6 +186,7 @@ public final class POSIXShioriSession: @unchecked Sendable {
 
     public func request(_ request: String) throws -> String {
         try Self.globalLock.withLock {
+            guard !closed else { throw POSIXShioriError.requestFailed }
             var responseLength = 0
             let responseBuffer = try Self.withOwnedCString(request) { pointer, length in
                 responseLength = length
@@ -151,6 +194,7 @@ public final class POSIXShioriSession: @unchecked Sendable {
             }
             guard let responseBuffer else { throw POSIXShioriError.requestFailed }
             defer { free(responseBuffer) }
+            guard responseLength >= 0, responseLength <= 8 * 1024 * 1024 else { throw POSIXShioriError.requestFailed }
             let data = Data(bytes: responseBuffer, count: responseLength)
             guard let response = String(data: data, encoding: .utf8) else {
                 throw POSIXShioriError.undecodableResponse
