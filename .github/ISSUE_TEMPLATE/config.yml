@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 対応状況 / Compatibility notes
+    url: https://github.com/opera7133/Utatane/blob/main/Docs/Compatibility.md
+    about: ゴーストと各機能の対応状況 / Current ghost and feature support

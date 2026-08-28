@@ -1,0 +1,74 @@
+name: 不具合報告 / Bug report
+description: アプリのクラッシュ・操作・表示などの問題 / App crashes, UI, and other problems
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        日本語・English・简体中文・繁體中文・한국어のいずれでも記入できます。
+        Reports in Japanese, English, Simplified Chinese, Traditional Chinese, or Korean are welcome.
+        可以用中文填写。可以用中文填寫。한국어로 작성해도 괜찮아요.
+
+        既存のIssueを確認してください。特定のゴーストだけの問題は「ゴースト互換性」フォームがおすすめです。
+        Please check existing issues first. For a problem specific to one ghost, use the Ghost compatibility form.
+
+        **Issueは公開されます。APIキー、個人情報、会話履歴、再配布できないゴーストのデータを載せないでください。**
+        **Issues are public. Do not include API keys, personal information, private conversations, or ghost files you cannot redistribute.**
+  - type: input
+    id: version
+    attributes:
+      label: Utataneのバージョン / Utatane version
+      description: 使用したリリースのタグ、またはソースビルドのコミット / Release tag or source-build commit
+      placeholder: v0.1.1
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOSのバージョン / macOS version
+      placeholder: macOS 15.6
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Macの種類 / Mac architecture
+      options:
+        - Apple Silicon
+        - Intel
+        - 不明 / Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 起きたこと / What happened
+      description: エラー表示があれば、その内容も / Include any error message
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順 / Steps to reproduce
+      description: 再現できない場合は、直前にしていた操作を / If it is intermittent, describe what you were doing
+      placeholder: |
+        1. …
+        2. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期待した動作 / Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: ログ・スクリーンショット / Logs and screenshots
+      description: 任意。秘密情報・ユーザー名・パスなどを確認して伏せてください / Optional. Redact secrets, usernames, and personal paths before attaching.
+  - type: textarea
+    id: context
+    attributes:
+      label: 補足 / Additional context
+      description: ゴースト名、関連する設定、以前動いたバージョンなど / Ghost name, relevant settings, or the last working version

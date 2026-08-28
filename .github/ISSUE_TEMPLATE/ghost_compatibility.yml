@@ -1,0 +1,90 @@
+name: ゴースト互換性 / Ghost compatibility
+description: 特定のゴースト・シェル・バルーンが動かない / A ghost, shell, or balloon behaves incorrectly
+title: "[Compatibility] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        日本語・English・简体中文・繁體中文・한국어のいずれでも記入できます。
+        Reports in Japanese, English, Simplified Chinese, Traditional Chinese, or Korean are welcome.
+        可以用中文填写。可以用中文填寫。한국어로 작성해도 괜찮아요.
+
+        [対応状況](https://github.com/opera7133/Utatane/blob/main/Docs/Compatibility.md)と既存のIssueも確認してください。
+        Please check the compatibility notes and existing issues. Testing in SSP is helpful but not required.
+
+        **Issueは公開されます。ゴースト本体や辞書は添付せず、作者の配布ページを教えてください。ログにAPIキーや個人情報がないか確認してください。**
+        **Issues are public. Link to the author's distribution page instead of attaching ghost files or dictionaries. Remove API keys and private information from logs.**
+  - type: input
+    id: ghost
+    attributes:
+      label: ゴースト・シェル・バルーン名 / Ghost, shell, or balloon name
+      description: 分かれば作者名・バージョン・更新日も / Include author, version, or update date if known
+    validations:
+      required: true
+  - type: input
+    id: distribution
+    attributes:
+      label: 作者の配布ページ / Author's distribution page
+      description: 公開URLのみ。配布終了なら空欄で構いません / Public URL only; leave blank if unavailable
+  - type: input
+    id: version
+    attributes:
+      label: Utataneのバージョン / Utatane version
+      placeholder: v0.1.1
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOSのバージョン / macOS version
+      placeholder: macOS 15.6
+    validations:
+      required: true
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Macの種類 / Mac architecture
+      options:
+        - Apple Silicon
+        - Intel
+        - 不明 / Not sure
+    validations:
+      required: true
+  - type: input
+    id: engine
+    attributes:
+      label: SHIORI・SAORI / Engines and modules
+      description: 分かる範囲で。調べなくても構いません / Optional; only if you know
+      placeholder: YAYA / 里々 / 華和梨 / 美坂 / 灯 / …
+  - type: dropdown
+    id: wine
+    attributes:
+      label: Wineの利用 / Wine usage
+      options:
+        - 利用していない / Not using Wine
+        - 利用している / Using Wine
+        - 不明 / Not sure
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 実際の動作と期待した動作 / Actual and expected behavior
+      description: 表示、会話、着せ替え、音声など、何が違うか / Describe what differs in rendering, dialogue, outfits, audio, etc.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 再現手順 / Steps to reproduce
+      description: 導入方法や、どの操作・会話で発生するか / How it was installed and which action or dialogue triggers the issue
+    validations:
+      required: true
+  - type: textarea
+    id: comparison
+    attributes:
+      label: 他の本体での動作 / Behavior in other baseware
+      description: 任意。SSP等で確認済みならバージョンと結果を。追加検証は不要です / Optional. If already tested in SSP or other baseware, include its version and result. No extra testing required.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: ログ・スクリーンショット / Logs and screenshots
+      description: 任意。個人情報や再配布不可のデータを含めないでください / Optional. Do not include private information or data you cannot redistribute.

@@ -1,4 +1,4 @@
-# Utatane
+# Utatane / 転寝
 
 Utataneは、伺かをmacOSで動かすための本体アプリです。
 
