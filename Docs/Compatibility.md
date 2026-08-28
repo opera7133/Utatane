@@ -15,6 +15,7 @@
 | Aosora demo | Aosora | 外部macOSモジュールで実際に起動確認済み | 上流変更への追従、配布方法 |
 | 伺かWizまゆら | KAWARI(Legacy) | 起動、会話、部位別反応を実アプリで確認 | 確認範囲では問題報告なし |
 | さくら | Materia first | 対応版`first.dll`をWineなしで起動。会話、クリック、眠気・睡眠・入浴、主要メニューと状態保存を確認 | Materia固有のニュース、メール、Windows終了・再起動など |
+| もす | KAGARI | KAGARI部分は動作可能 | Lua C拡張やSAORIはmacOS版を作成できた場合のみ利用可 |
 
 ## コンテンツのネットワーク更新
 

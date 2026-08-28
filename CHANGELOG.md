@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.2] - 2026-08-28
+
+### 追加
+
+- SHIOLINKに対応。MiyoJSなどの外部SHIORIをmacOSのプロセスとして起動し、標準入出力で接続できるようにした（Node.js等のランタイムと栞は別途用意が必要）
+- AYA（文）の`aya5.txt`／`aya.txt`を検出し、内蔵YAYAで実行する経路を追加。設定名に対応した状態保存と、`OnAITalk`に台詞がない場合の`OnAiTalk`へのフォールバックに対応
+- kagari（Lua）のmacOSネイティブ接続とビルド手順を追加。現時点では利用者ビルドの外部ライブラリを使用し、ゴースト固有のLua C拡張やSAORIは同梱しない
+
+### 変更
+
+- ゴースト終了時にSHIORIの終了処理を明示的に呼び、外部プロセスやネイティブ栞を解放するようにした
+- ゴースト互換表とWebサイトの対応SHIORI表記を更新。別デザインの紹介ページと、不具合・ゴースト互換性の報告用Issueテンプレートを追加
+
 ## [0.1.1] - 2026-08-28
 
 ### 修正
@@ -285,7 +298,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[0.1.1]: https://github.com/opera7133/Utatane/compare/v0.1.0...HEAD
+[0.1.2]: https://github.com/opera7133/Utatane/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/opera7133/Utatane/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.15...v0.1.0
 [0.1.0-alpha.15]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.14...v0.1.0-alpha.15
 [0.1.0-alpha.14]: https://github.com/opera7133/Utatane/compare/v0.1.0-alpha.13...v0.1.0-alpha.14
