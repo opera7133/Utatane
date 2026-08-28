@@ -18,16 +18,19 @@ struct NativeKawariSessionTests {
 
     @Test
     @MainActor
-    func `native textcopy2 SAORI writes the macOS pasteboard`() {
+    func `native textcopy2 SAORI writes an isolated pasteboard`() {
+        let pasteboard = NSPasteboard.withUniqueName()
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.setString("previous contents", forType: .string)
         let marker = "Utatane textcopy2 \(UUID().uuidString)"
         let request = "EXECUTE SAORI/1.0\r\n"
             + "Charset: Shift_JIS\r\n"
             + "Argument0: \(marker)\r\n"
             + "Argument1: 1\r\n\r\n"
-        let response = nativeTextCopySaoriResponse(for: request)
+        let response = nativeTextCopySaoriResponse(for: request, pasteboardName: pasteboard.name.rawValue)
 
         #expect(response.contains("Result: \(marker)"))
-        #expect(NSPasteboard.general.string(forType: .string) == marker)
+        #expect(pasteboard.string(forType: .string) == marker)
     }
 
     @Test func `native KAWARI loads COLORS beta and answers OnBoot`() throws {

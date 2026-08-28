@@ -35,6 +35,7 @@ public protocol NativeSaoriWindowControlling: Sendable {
 public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable {
     private let lock = NSLock()
     private let baseDirectoryURL: URL
+    private let textCopyPasteboardName: String?
     private let windowController: (any NativeSaoriWindowControlling)?
     private let externalModuleFactory: (@Sendable (URL) -> (any ExternalSaoriModule)?)?
     private var modules: [String: any NativeSaoriModule] = [:]
@@ -42,10 +43,12 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
 
     public init(
         baseDirectoryURL: URL,
+        textCopyPasteboardName: String? = nil,
         windowController: (any NativeSaoriWindowControlling)? = nil,
         externalModuleFactory: (@Sendable (URL) -> (any ExternalSaoriModule)?)? = nil
     ) {
         self.baseDirectoryURL = baseDirectoryURL
+        self.textCopyPasteboardName = textCopyPasteboardName
         self.windowController = windowController
         self.externalModuleFactory = externalModuleFactory
     }
@@ -62,7 +65,7 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
         case "kenonoke.dll": modules[key] = NativeKeyword(moduleURL: resolvedModuleURL(path))
         case "mciaudior.dll": modules[key] = NativeMciAudioR(baseDirectoryURL: baseDirectoryURL)
         case "wmove.dll": modules[key] = NativeWmove(windowController: windowController)
-        case "textcopy2.dll": modules[key] = NativeTextCopy()
+        case "textcopy2.dll": modules[key] = NativeTextCopy(pasteboardName: textCopyPasteboardName)
         default:
             if let moduleURL = safeExternalModuleURL(path),
                let module = externalModuleFactory?(moduleURL)
@@ -231,11 +234,19 @@ private final class NativeKeyword: NativeSaoriModule {
 }
 
 private final class NativeTextCopy: NativeSaoriModule {
+    private let pasteboardName: String?
+
+    init(pasteboardName: String?) {
+        self.pasteboardName = pasteboardName
+    }
+
     func call(_ arguments: [String]) -> String {
         guard let text = arguments.first else { return "" }
+        let pasteboardName = pasteboardName
         let operation = { @MainActor in
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
+            let pasteboard = pasteboardName.map { NSPasteboard(name: .init($0)) } ?? .general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
         }
         if Thread.isMainThread {
             MainActor.assumeIsolated(operation)

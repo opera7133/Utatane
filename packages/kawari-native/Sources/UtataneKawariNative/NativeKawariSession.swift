@@ -539,8 +539,8 @@ private func utataneKawariSaoriRequest(
     return allocation.assumingMemoryBound(to: CChar.self)
 }
 
-func nativeTextCopySaoriResponse(for message: String) -> String {
-    let registry = NativeSaoriRegistry(baseDirectoryURL: URL(filePath: "/"))
+func nativeTextCopySaoriResponse(for message: String, pasteboardName: String? = nil) -> String {
+    let registry = NativeSaoriRegistry(baseDirectoryURL: URL(filePath: "/"), textCopyPasteboardName: pasteboardName)
     registry.load("textcopy2.dll")
     return registry.response(path: "textcopy2.dll", request: message)
 }
