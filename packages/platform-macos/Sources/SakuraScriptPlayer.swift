@@ -96,6 +96,9 @@ public final class SakuraScriptPlayer {
     ) {
         self.surfaceWindowController = surfaceWindowController
         self.balloonWindowController = balloonWindowController
+        surfaceWindowController.onWindowMove = { [weak balloonWindowController] scope, delta in
+            balloonWindowController?.moveWithSurface(by: delta, scope: scope)
+        }
         self.postDialogueDismissalMilliseconds = postDialogueDismissalMilliseconds
         self.surfaceRestoreDelayMilliseconds = max(0, surfaceRestoreDelayMilliseconds)
         soundPlayer.onStop = { [weak self] file, reason in self?.onSoundStop?(file, reason) }

@@ -21,22 +21,28 @@
   </style>
 </head>
 <body>
-  <h1>リアルタイム音声会話</h1>
-  <p>マイク音声は設定中のRealtime APIへ送信される。APIキーはこの画面には渡されない。</p>
+  <h1 data-i18n="リアルタイム音声会話">リアルタイム音声会話</h1>
+  <p data-i18n="マイク音声は設定中のRealtime APIへ送信される。APIキーはこの画面には渡されない。">マイク音声は設定中のRealtime APIへ送信される。APIキーはこの画面には渡されない。</p>
   <div class="buttons">
-    <button id="start">会話を開始</button>
-    <button id="stop" class="secondary" disabled>終了</button>
+    <button id="start" data-i18n="会話を開始">会話を開始</button>
+    <button id="stop" class="secondary" disabled data-i18n="終了">終了</button>
   </div>
-  <div id="status">未接続</div>
+  <div id="status" data-i18n="未接続">未接続</div>
   <div class="metrics">
-    <label for="inputLevel">入力</label><meter id="inputLevel" min="-60" max="0" low="-40" high="-25" optimum="-18" value="-60"></meter><span id="inputDb">−∞ dBFS（小さい）</span>
-    <label for="outputGain">出力</label><input id="outputGain" type="range" min="50" max="500" step="10" value="250"><span id="outputGainValue">250%</span>
+    <label for="inputLevel" data-i18n="入力">入力</label><meter id="inputLevel" min="-60" max="0" low="-40" high="-25" optimum="-18" value="-60"></meter><span id="inputDb">−∞ dBFS（小さい）</span>
+    <label for="outputGain" data-i18n="出力">出力</label><input id="outputGain" type="range" min="50" max="500" step="10" value="250"><span id="outputGainValue">250%</span>
     <span id="latency">応答遅延: — / WebRTC RTT: —</span>
   </div>
   <audio id="audio" autoplay muted></audio>
   <pre id="events"></pre>
 
   <script>
+    const localization = window.utataneRealtimeLocalization;
+    const t = (key) => localization?.strings?.[key] ?? key;
+    document.documentElement.lang = localization?.language ?? 'ja';
+    document.querySelectorAll('[data-i18n]').forEach((element) => {
+      element.textContent = t(element.dataset.i18n);
+    });
     const bridge = window.webkit.messageHandlers.realtime;
     const startButton = document.querySelector('#start');
     const stopButton = document.querySelector('#stop');
@@ -71,7 +77,7 @@
     function waitForICE(pc) {
       if (pc.iceGatheringState === 'complete') return Promise.resolve();
       return new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => reject(new Error('ICE gathering timed out')), 10000);
+        const timeout = setTimeout(() => reject(new Error(t('ICE候補の収集がタイムアウトした'))), 10000);
         pc.addEventListener('icegatheringstatechange', function changed() {
           if (pc.iceGatheringState !== 'complete') return;
           pc.removeEventListener('icegatheringstatechange', changed);
@@ -83,7 +89,7 @@
     function updateLatency() {
       const response = responseLatency == null ? '—' : `${Math.round(responseLatency)} ms`;
       const rtt = roundTripTime == null ? '—' : `${Math.round(roundTripTime * 1000)} ms`;
-      latencyView.textContent = `応答遅延: ${response} / WebRTC RTT: ${rtt}`;
+      latencyView.textContent = `${t('応答遅延')}: ${response} / WebRTC RTT: ${rtt}`;
     }
     function startInputMeter(stream) {
       const source = audioContext.createMediaStreamSource(stream);
@@ -101,8 +107,8 @@
         const detected = db >= inputDetectionThresholdDb;
         inputLevelView.value = Number.isFinite(db) ? Math.max(-60, db) : -60;
         inputDbView.textContent = Number.isFinite(db)
-          ? `${db.toFixed(1)} dBFS（${detected ? '入力あり' : '小さい'}）`
-          : '−∞ dBFS（小さい）';
+          ? `${db.toFixed(1)} dBFS (${t(detected ? '入力あり' : '小さい')})`
+          : `−∞ dBFS (${t('小さい')})`;
         meterFrame = requestAnimationFrame(draw);
       };
       draw();
@@ -121,7 +127,7 @@
       stopButton.disabled = false;
       eventsView.textContent = '';
       try {
-        status('マイクを準備中');
+        status(t('マイクを準備中'));
         microphone = await navigator.mediaDevices.getUserMedia({
           audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
           video: false,
@@ -144,7 +150,7 @@
           }
         });
         pc.addEventListener('connectionstatechange', () => {
-          status(`WebRTC: ${pc.connectionState}`);
+          status(`WebRTC: ${t({ new: '未接続', connecting: 'WebRTC接続を確立中', connected: '接続済み', disconnected: '切断済み', failed: '接続失敗', closed: '接続終了' }[pc.connectionState] ?? pc.connectionState)}`);
           log('connection', pc.connectionState);
         });
         pc.addEventListener('iceconnectionstatechange', () => log('ICE', pc.iceConnectionState));
@@ -174,7 +180,7 @@
 
         await pc.setLocalDescription(await pc.createOffer());
         await waitForICE(pc);
-        status('SDP answerを待機中');
+        status(t('SDP answerを待機中'));
         post({ type: 'offer', sdp: pc.localDescription.sdp });
       } catch (error) {
         receiveError({ message: String(error) });
@@ -189,7 +195,7 @@
       cancelAnimationFrame(meterFrame);
       clearInterval(statsTimer);
       inputLevelView.value = -60;
-      inputDbView.textContent = '−∞ dBFS（小さい）';
+      inputDbView.textContent = `−∞ dBFS (${t('小さい')})`;
       smoothedInputRms = 0;
       if (audioContext) audioContext.close();
       audioContext = null;
@@ -199,16 +205,16 @@
       audioView.srcObject = null;
       startButton.disabled = false;
       stopButton.disabled = true;
-      status('切断済み');
+      status(t('切断済み'));
       if (endingCallID) post({ type: 'hangup', callID: endingCallID });
     }
 
     async function receiveAnswer(payload) {
       try {
-        if (!peerConnection) throw new Error('PeerConnection is already closed');
+        if (!peerConnection) throw new Error(t('接続はすでに閉じられている'));
         callID = payload.callID || callID;
         await peerConnection.setRemoteDescription({ type: 'answer', sdp: payload.sdp });
-        status('WebRTC接続を確立中');
+        status(t('WebRTC接続を確立中'));
       } catch (error) {
         receiveError({ message: String(error) });
       }
@@ -220,6 +226,8 @@
       stop();
     }
 
+    inputDbView.textContent = `−∞ dBFS (${t('小さい')})`;
+    updateLatency();
     window.utataneRealtime = { receiveAnswer, receiveError, stop };
     outputGainView.addEventListener('input', () => {
       outputGainValue.textContent = `${outputGainView.value}%`;

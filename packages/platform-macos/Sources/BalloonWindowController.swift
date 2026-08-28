@@ -455,6 +455,14 @@ public final class BalloonWindowController {
         presentations[scope]?.window.orderOut(nil)
     }
 
+    public func moveWithSurface(by delta: NSPoint, scope: Int) {
+        guard let presentation = presentations[scope] else { return }
+        presentation.surfaceFrame.origin.x += delta.x
+        presentation.surfaceFrame.origin.y += delta.y
+        let origin = presentation.window.frame.origin
+        presentation.window.setFrameOrigin(NSPoint(x: origin.x + delta.x, y: origin.y + delta.y))
+    }
+
     public func hideAll() {
         for presentation in presentations.values {
             presentation.window.orderOut(nil)
@@ -576,7 +584,7 @@ private final class BalloonPresentation {
     let balloon: BalloonDefinition
     let speaker: BalloonSpeaker
     let style: Int
-    let surfaceFrame: NSRect
+    var surfaceFrame: NSRect
     var text: String
     var links: [BalloonTextLink] = []
     var styles: [BalloonTextStyleRun] = []

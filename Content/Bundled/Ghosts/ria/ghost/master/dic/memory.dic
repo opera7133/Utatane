@@ -9,6 +9,8 @@ RiaFinishOuting
 	ria_recent_memory_variant_saved = _variant
 	ria_recent_memory_at_saved = GETSECCOUNT()
 
+	// 分岐内で初めて作ると、そのブロックを抜けた時に消える。
+	_talks = IARRAY
 	if _kind == 'walk' {
 		_talks = RiaWalkReturnTalks
 	}

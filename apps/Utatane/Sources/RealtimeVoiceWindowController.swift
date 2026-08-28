@@ -24,6 +24,38 @@ final class RealtimeVoiceWindowController: NSWindowController, NSWindowDelegate,
         let webConfiguration = WKWebViewConfiguration()
         webConfiguration.mediaTypesRequiringUserActionForPlayback = []
         webConfiguration.userContentController.add(scriptMessageHandler, name: "realtime")
+        let translations: [String: String] = [
+            "リアルタイム音声会話": String(localized: "リアルタイム音声会話"),
+            "マイク音声は設定中のRealtime APIへ送信される。APIキーはこの画面には渡されない。": String(localized: "マイク音声は設定中のRealtime APIへ送信される。APIキーはこの画面には渡されない。"),
+            "会話を開始": String(localized: "会話を開始"),
+            "終了": String(localized: "終了"),
+            "未接続": String(localized: "未接続"),
+            "入力": String(localized: "入力"),
+            "出力": String(localized: "出力"),
+            "入力あり": String(localized: "入力あり"),
+            "小さい": String(localized: "小さい"),
+            "応答遅延": String(localized: "応答遅延"),
+            "マイクを準備中": String(localized: "マイクを準備中"),
+            "SDP answerを待機中": String(localized: "SDP answerを待機中"),
+            "切断済み": String(localized: "切断済み"),
+            "WebRTC接続を確立中": String(localized: "WebRTC接続を確立中"),
+            "接続済み": String(localized: "接続済み"),
+            "接続失敗": String(localized: "接続失敗"),
+            "接続終了": String(localized: "接続終了"),
+            "ICE候補の収集がタイムアウトした": String(localized: "ICE候補の収集がタイムアウトした"),
+            "接続はすでに閉じられている": String(localized: "接続はすでに閉じられている"),
+            "Realtime音声会話の画面を読み込めなかった。": String(localized: "Realtime音声会話の画面を読み込めなかった。")
+        ]
+        if let data = try? JSONSerialization.data(withJSONObject: [
+            "language": Bundle.main.preferredLocalizations.first ?? "ja",
+            "strings": translations
+        ]), let json = String(data: data, encoding: .utf8) {
+            webConfiguration.userContentController.addUserScript(WKUserScript(
+                source: "window.utataneRealtimeLocalization = \(json);",
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            ))
+        }
         let webView = WKWebView(frame: .zero, configuration: webConfiguration)
         webView.navigationDelegate = self
         webView.uiDelegate = self
@@ -115,7 +147,7 @@ final class RealtimeVoiceWindowController: NSWindowController, NSWindowDelegate,
 
     private func loadPage() {
         guard let pageURL = Bundle.main.url(forResource: "RealtimeVoice", withExtension: "html") else {
-            onError?("Realtime音声会話の画面を読み込めなかった。")
+            onError?(String(localized: "Realtime音声会話の画面を読み込めなかった。"))
             return
         }
         self.pageURL = pageURL

@@ -1,13 +1,13 @@
 # リリース手順
 
-Utataneのリリースは`v`で始まるgit tagを基準にします。通常版を小刻みに公開し、alpha・beta・rcの段階を毎回必須にはしません。たとえば`v0.1.1`をpushすると、GitHub Actionsは次の値で配布版を作ります。
+Utataneのリリースは`v`で始まるgit tagを基準にします。通常版を小刻みに公開し、alpha・beta・rcの段階を毎回必須にはしません。たとえば`v0.1.4`をpushすると、GitHub Actionsは次の値で配布版を作ります。タグ以外のビルドは`project.yml`の`MARKETING_VERSION`を使います。
 
-- 表示バージョン（`CFBundleShortVersionString`）: `0.1.1`
+- 表示バージョン（`CFBundleShortVersionString`）: `0.1.4`
 - 更新比較用ビルド番号（`CFBundleVersion`）: GitHub Actionsのrun number
 
 ```sh
-git tag v0.1.1
-git push origin v0.1.1
+git tag v0.1.4
+git push origin v0.1.4
 ```
 
 ## Sparkle署名鍵

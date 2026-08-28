@@ -1,3 +1,8 @@
+OnFirstBoot
+{
+	OnBoot
+}
+
 OnBoot
 {
 	if ISVAR('ria_boot_count_saved') == 0 {
@@ -82,6 +87,10 @@ OnSurfaceRestore
 
 OnSecondChange
 {
+	// 喋れない間の応答はベースウェアに破棄されるので、帰宅を確定しない。
+	if TOINT(reference3) == 0 {
+		return
+	}
 	if TOINT(ria_spoiling_until) > 0 && TOINT(ria_spoiling_until) <= GETSECCOUNT() {
 		ria_spoiling_until = 0
 		_talks = RiaSpoilingRecoveryTalks
@@ -92,6 +101,9 @@ OnSecondChange
 		ria_away = 0
 		RiaSelectOutfit
 		RiaFinishOuting
+		return
+	}
+	if TOINT(ria_away) {
 		return
 	}
 	if ria_outfit_mode_saved == 'auto' {

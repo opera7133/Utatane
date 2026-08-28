@@ -585,3 +585,79 @@ import UtataneShiori
     #expect(resume?.rawValue.isEmpty == false)
     #expect(resume?.rawValue.hasSuffix("\\e") == true)
 }
+
+@Test func `ria first boot initializes her state and speaks`() throws {
+    let master = try makeRiaLifecycleFixture()
+    defer { try? FileManager.default.removeItem(at: master) }
+    let session = try NativeYayaSession(masterDirectoryURL: master)
+    let response = try riaLifecycleRequest(session, id: "OnFirstBoot", references: [0: "0"])
+    #expect(response.value?.contains("りあ。お兄の妹。") == true)
+    let state = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestState")
+    #expect(state.value == "1,0")
+}
+
+@Test(arguments: [("Walk", 120), ("Store", 180), ("Bookstore", 240), ("University", 300)])
+func `ria waits for a talkable tick before returning from an outing`(choice: String, duration: Int) throws {
+    let master = try makeRiaLifecycleFixture()
+    defer { try? FileManager.default.removeItem(at: master) }
+    let session = try NativeYayaSession(masterDirectoryURL: master)
+    _ = try riaLifecycleRequest(session, id: "OnBoot")
+    let departure = try riaLifecycleRequest(session, id: "OnRiaChoiceGo\(choice)")
+    #expect(departure.value?.contains(#"\s[-1]"#) == true)
+    let remaining = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestRemaining")
+    #expect((duration - 2 ... duration).contains(Int(remaining.value ?? "") ?? -1))
+    let early = try riaLifecycleRequest(session, id: "OnSecondChange", references: [3: "1"])
+    #expect(early.value == nil)
+    _ = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestExpire")
+    let busy = try riaLifecycleRequest(session, id: "OnSecondChange", references: [3: "0"])
+    #expect(busy.value == nil)
+    let pending = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestState")
+    #expect(pending.value == "1,1")
+    let returned = try riaLifecycleRequest(session, id: "OnSecondChange", references: [3: "1"])
+    #expect(returned.value?.contains("ただいま") == true || returned.value?.contains("戻った") == true, "Return response: \(String(describing: returned.value))")
+    let home = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestState")
+    #expect(home.value == "1,0")
+    let repeated = try riaLifecycleRequest(session, id: "OnSecondChange", references: [3: "1"])
+    #expect(repeated.value == nil)
+}
+
+private func riaLifecycleRequest(
+    _ session: NativeYayaSession, id: String, references: [Int: String] = [:]
+) throws -> ShioriResponse {
+    let headers = references.sorted { $0.key < $1.key }.map { "Reference\($0.key): \($0.value)\r\n" }.joined()
+    return try ShioriMessageParser.parseResponse(session.request(
+        "GET SHIORI/3.0\r\nCharset: UTF-8\r\nSender: Utatane\r\nID: \(id)\r\n\(headers)\r\n"
+    ))
+}
+
+private func makeRiaLifecycleFixture() throws -> URL {
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let master = FileManager.default.temporaryDirectory.appending(path: "utatane-ria-lifecycle-\(UUID().uuidString)")
+    try FileManager.default.copyItem(at: root.appending(path: "Content/Bundled/Ghosts/ria/ghost/master"), to: master)
+    // Only remove state and private extensions from the temporary copy.
+    for file in ["yaya_variable.cfg", "dic/local.dic"] {
+        let url = master.appending(path: file)
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+    let lifecycle = master.appending(path: "dic/lifecycle.dic")
+    let fixture = #"""
+
+    OnRiaLifecycleTestState
+    {
+        "%(TOINT(ria_boot_count_saved)),%(TOINT(ria_away))"
+    }
+    OnRiaLifecycleTestRemaining
+    {
+        "%(TOINT(ria_away_until) - GETSECCOUNT())"
+    }
+    OnRiaLifecycleTestExpire
+    {
+        ria_away_until = GETSECCOUNT() - 1
+    }
+    """#
+    try (String(contentsOf: lifecycle, encoding: .utf8) + fixture).write(to: lifecycle, atomically: true, encoding: .utf8)
+    return master
+}

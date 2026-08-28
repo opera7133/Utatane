@@ -25,7 +25,8 @@ jobs:
       - name: Prepare version
         shell: bash
         run: |
-          version="0.1.0"
+          version=$(awk '$1 == "MARKETING_VERSION:" { print $2; exit }' project.yml)
+          test -n "$version"
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             version="${GITHUB_REF_NAME#v}"
           fi

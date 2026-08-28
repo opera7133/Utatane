@@ -4,6 +4,7 @@ import SwiftUI
 import UtataneAI
 import UtataneBalloon
 import UtataneNetwork
+import UtatanePlatformMacOS
 import UtataneRealtime
 
 @MainActor
@@ -413,12 +414,14 @@ final class UtataneSettingsStore: ObservableObject {
 
 struct UtataneSettingsView: View {
     @ObservedObject var settings: UtataneSettingsStore
+    @ObservedObject private var relauncher = ApplicationRelauncher.shared
     let headlinesDirectory: URL
     let balloonsDirectory: URL
     let appUpdater: SPUUpdater
     @State private var headlines: [InstalledHeadline] = []
     @State private var balloons: [BalloonDefinition] = []
     @State private var loadError: String?
+    @State private var restartError: String?
 
     var body: some View {
         TabView(selection: $settings.selectedPane) {
@@ -456,6 +459,7 @@ struct UtataneSettingsView: View {
                         Button("今すぐ再起動") {
                             restartApplication()
                         }
+                        .disabled(relauncher.isRestarting)
                     }
                 }
                 Section("既定のバルーン") {
@@ -668,6 +672,21 @@ struct UtataneSettingsView: View {
         }
         .frame(width: 560, height: 520)
         .task { reload() }
+        .alert("再起動できなかった", isPresented: Binding(
+            get: { restartError != nil },
+            set: {
+                if !$0 {
+                    restartError = nil
+                }
+            }
+        )) {
+            Button("OK", role: .cancel) { restartError = nil }
+        } message: {
+            Text("Utataneを終了して、もう一度開いてね。")
+            if let restartError {
+                Text(verbatim: restartError)
+            }
+        }
     }
 
     private func reload() {
@@ -689,16 +708,10 @@ struct UtataneSettingsView: View {
     }
 
     private func restartApplication() {
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(
-            at: Bundle.main.bundleURL,
-            configuration: configuration
-        ) { _, error in
-            guard error == nil else { return }
-            Task { @MainActor in
-                NSApplication.shared.terminate(nil)
-            }
+        do {
+            try relauncher.restart()
+        } catch {
+            restartError = error.localizedDescription
         }
     }
 

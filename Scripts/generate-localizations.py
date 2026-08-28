@@ -17,6 +17,29 @@ SOURCE_LANGUAGE = "ja"
 REFERENCE_LANGUAGE = "en"
 PLACEHOLDER = re.compile(r"%(?:(\d+)\$)?([A-Za-z@]+)")
 LANGUAGE_CODE = re.compile(r"[A-Za-z]{2,3}(?:-[A-Za-z0-9]+)*")
+STATIC_UI_STRING = re.compile(
+    r'(?:String\(localized:\s*|(?:Text|Button|Label|Section|Toggle|Picker|TextField|SecureField|LocalizedStringKey)\()'
+    r'"((?:\\.|[^"\\])*)"'
+)
+
+
+def check_static_ui_strings(keys: set[str]) -> None:
+    """Catch untranslated literal UI strings; interpolated Swift strings need review."""
+    errors: list[str] = []
+    for source_root in ("apps/Utatane/Sources", "packages/platform-macos/Sources"):
+        for path in sorted((ROOT / source_root).glob("*.swift")):
+            for match in STATIC_UI_STRING.finditer(path.read_text(encoding="utf-8")):
+                raw = match.group(1)
+                if r"\(" in raw or not re.search(r"[\u3040-\u30ff\u4e00-\u9fff]", raw):
+                    continue
+                try:
+                    key = json.loads('"' + raw + '"')
+                except ValueError:
+                    continue
+                if key not in keys:
+                    errors.append(f"{path.relative_to(ROOT)}: missing UI translation for {key!r}")
+    if errors:
+        raise ValueError("\n".join(errors))
 
 
 def placeholders(value: str) -> list[tuple[int, str]]:
@@ -85,7 +108,9 @@ def build_catalog(translations: dict[str, dict[str, str]]) -> dict[str, object]:
 
 
 def serialized_catalog() -> str:
-    catalog = build_catalog(read_translations())
+    translations = read_translations()
+    check_static_ui_strings(set(translations[REFERENCE_LANGUAGE]))
+    catalog = build_catalog(translations)
     return json.dumps(
         catalog, ensure_ascii=False, indent=2, sort_keys=True, separators=(",", " : ")
     ) + "\n"

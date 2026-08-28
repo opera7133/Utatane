@@ -72,6 +72,7 @@ enum FloatingWindowKind: String {
 }
 
 final class FloatingContentWindow: NSWindow, NSWindowDelegate {
+    var onCancel: (() -> Void)?
     private let onMove: (NSPoint) -> Void
     private var placementPolicy: FloatingWindowPlacementPolicy
     private var isApplyingConstraint = false
@@ -100,6 +101,14 @@ final class FloatingContentWindow: NSWindow, NSWindowDelegate {
 
     override var canBecomeMain: Bool {
         false
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        if let onCancel {
+            onCancel()
+        } else {
+            super.cancelOperation(sender)
+        }
     }
 
     func setPlacementPolicy(_ placementPolicy: FloatingWindowPlacementPolicy) {

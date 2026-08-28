@@ -63,6 +63,7 @@ public final class SurfaceWindowController {
     public var onMouseClick: (@MainActor (Int, String?) -> Void)?
     public var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
     public var onSurfaceChange: (@MainActor (Int, Int?, Int) -> Void)?
+    public var onWindowMove: (@MainActor (Int, NSPoint) -> Void)?
     public var onNarDrop: (@MainActor (Int, [URL]) -> Void)?
     public var onFileDropping: (@MainActor (Int, [URL]) -> Void)?
     public var onFileDrop: (@MainActor (Int, [URL]) -> Void)?
@@ -308,6 +309,10 @@ public final class SurfaceWindowController {
 
     func alpha(for scope: Int) -> Double? {
         characters[scope].map { Double($0.surfaceAlpha) }
+    }
+
+    func dragPosition(for scope: Int) -> SurfaceDragPosition? {
+        characters[scope]?.dragFeedback.position
     }
 
     public func setRuntimeScale(
@@ -591,6 +596,9 @@ public final class SurfaceWindowController {
         character.onWindowDragDelta = { [weak self] delta in
             self?.handleWindowDragDelta(scope: scope, delta: delta)
         }
+        character.onWindowMove = { [weak self] delta in
+            self?.onWindowMove?(scope, delta)
+        }
         character.contextMenuItems = { [weak self] in
             self?.contextMenuItems?() ?? []
         }
@@ -684,6 +692,8 @@ private final class CharacterSurfaceController {
     private var keepsOnScreen: Bool
     private var stayOnTop = true
     private var desktopAlignment: SurfaceDesktopAlignment = .defaultValue
+    let dragFeedback = SurfaceDragFeedback()
+    private var isDragging = false
     private(set) var isMovementLocked = false
     private var collisionMode = (enabled: false, showsNames: true)
 
@@ -1034,6 +1044,8 @@ private final class CharacterSurfaceController {
     }
 
     func hide() {
+        imageView?.cancelDrag()
+        dragFeedback.hide()
         animationTask?.cancel()
         schedulerTask?.cancel()
         window?.orderOut(nil)
@@ -1046,6 +1058,9 @@ private final class CharacterSurfaceController {
 
     func setPresentationHidden(_ hidden: Bool) {
         presentationHidden = hidden
+        if hidden {
+            imageView?.cancelDrag()
+        }
         window?.alphaValue = presentationAlpha
     }
 
@@ -1068,12 +1083,14 @@ private final class CharacterSurfaceController {
                 continuation.resume()
             }
         }
+        // Dragging or hiding may have changed while the animation was running.
+        window.alphaValue = presentationAlpha
     }
 
     private var presentationHidden = false
 
     private var presentationAlpha: CGFloat {
-        presentationHidden ? 0 : surfaceAlpha
+        presentationHidden ? 0 : surfaceAlpha * (isDragging ? 0.5 : 1)
     }
 
     func setDisplayScale(_ scale: CGFloat) {
@@ -1165,6 +1182,7 @@ private final class CharacterSurfaceController {
     }
 
     var onWindowDragDelta: ((_ delta: NSPoint) -> Void)?
+    var onWindowMove: ((NSPoint) -> Void)?
 
     var windowNumber: Int? {
         window?.windowNumber
@@ -1284,6 +1302,19 @@ private final class CharacterSurfaceController {
         imageView.onWindowDragDelta = { [weak self] delta in
             self?.onWindowDragDelta?(delta)
         }
+        imageView.onDragUpdate = { [weak self] startOrigin, pointer in
+            guard let self else { return }
+            isDragging = startOrigin != nil
+            window?.alphaValue = presentationAlpha
+            if let startOrigin, let pointer, let frame = window?.frame, !presentationHidden {
+                dragFeedback.show(SurfaceDragPosition(
+                    frame: frame, startOrigin: startOrigin,
+                    desktopTop: NSScreen.screens.first?.frame.maxY ?? 0
+                ), near: pointer)
+            } else {
+                dragFeedback.hide()
+            }
+        }
         return (boundImage, imageView)
     }
 
@@ -1374,18 +1405,25 @@ private final class CharacterSurfaceController {
     }
 
     private func makeWindow() -> NSWindow {
+        var previousOrigin: NSPoint?
         let window = FloatingContentWindow(
             title: "Ghost Surface \(scope)",
             placementPolicy: .init(
                 edge: effectiveDesktopEdge,
                 keepsOnScreen: keepsOnScreen
             )
-        ) { [positionStore, scope] origin in
+        ) { [weak self, positionStore, scope] origin in
             positionStore.save(origin, for: .surface, scope: scope)
+            let oldOrigin = previousOrigin
+            previousOrigin = origin
+            if let oldOrigin, oldOrigin != origin {
+                self?.onWindowMove?(NSPoint(x: origin.x - oldOrigin.x, y: origin.y - oldOrigin.y))
+            }
         }
         window.backgroundColor = .clear
         window.isOpaque = false
         window.hasShadow = false
+        window.onCancel = { [weak self] in self?.imageView?.cancelDrag() }
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         window.level = stayOnTop ? .floating : .normal
@@ -1659,22 +1697,63 @@ private final class SurfaceImageView: NSImageView {
     var onURLDrop: ((URL) -> Void)?
     var onTextDrop: ((String) -> Void)?
     var onWindowDragDelta: ((NSPoint) -> Void)?
+    var onDragUpdate: ((NSPoint?, NSPoint?) -> Void)?
     var locksVerticalMovement = true
     var locksHorizontalMovement = false
-    var isMovementLocked = false
+    var isMovementLocked = false {
+        didSet {
+            if isMovementLocked {
+                cancelDrag()
+            }
+        }
+    }
+
     private var collisionMode = (enabled: false, showsNames: true)
     private var hoveredRegion: String?
     private var lastStrokePoint: NSPoint?
     private var lastStrokeRegion: String?
     private var dragStartMouseLocation: NSPoint?
     private var dragStartWindowOrigin: NSPoint?
+    private var lastDragEvent: NSEvent?
     private var didDrag = false
+    private var suppressDragClick = false
     private var hoverWorkItem: DispatchWorkItem?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
         registerForDraggedTypes([.fileURL, .URL, .string])
+        NotificationCenter.default.addObserver(
+            self, selector: #selector(cancelDrag), name: NSApplication.didResignActiveNotification, object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    override func viewWillMove(toWindow newWindow: NSWindow?) {
+        if newWindow == nil {
+            cancelDrag()
+        }
+        super.viewWillMove(toWindow: newWindow)
+    }
+
+    @objc func cancelDrag() {
+        let endingEvent = didDrag ? lastDragEvent : nil
+        suppressDragClick = suppressDragClick || didDrag
+        dragStartMouseLocation = nil
+        dragStartWindowOrigin = nil
+        didDrag = false
+        lastDragEvent = nil
+        onDragUpdate?(nil, nil)
+        if let endingEvent {
+            sendMouseEvent(.dragEnd, event: endingEvent)
+        }
+    }
+
+    override func cancelOperation(_ sender: Any?) {
+        cancelDrag()
     }
 
     override func layout() {
@@ -1755,6 +1834,8 @@ private final class SurfaceImageView: NSImageView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        cancelDrag()
+        suppressDragClick = false
         sendMouseEvent(.down, event: event)
         cancelHoverEvent()
         setCursor(.mouseDown, for: hitTest(event).region)
@@ -1762,13 +1843,13 @@ private final class SurfaceImageView: NSImageView {
             super.mouseDown(with: event)
             return
         }
-        dragStartMouseLocation = NSEvent.mouseLocation
+        dragStartMouseLocation = window.convertPoint(toScreen: event.locationInWindow)
         dragStartWindowOrigin = window.frame.origin
         didDrag = false
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard !isMovementLocked else { return }
+        guard !isMovementLocked, !suppressDragClick else { return }
         guard let window,
               let startMouseLocation = dragStartMouseLocation,
               let startWindowOrigin = dragStartWindowOrigin
@@ -1776,18 +1857,21 @@ private final class SurfaceImageView: NSImageView {
             super.mouseDragged(with: event)
             return
         }
-        let currentMouseLocation = NSEvent.mouseLocation
+        let currentMouseLocation = window.convertPoint(toScreen: event.locationInWindow)
         let deltaX = currentMouseLocation.x - startMouseLocation.x
         let deltaY = currentMouseLocation.y - startMouseLocation.y
+        lastDragEvent = event
         if !didDrag, hypot(deltaX, deltaY) >= 2 {
             didDrag = true
             sendMouseEvent(.dragStart, event: event)
         }
+        guard didDrag else { return }
         let currentOrigin = window.frame.origin
         let newX = locksHorizontalMovement ? startWindowOrigin.x : startWindowOrigin.x + deltaX
         let newY = locksVerticalMovement ? startWindowOrigin.y : startWindowOrigin.y + deltaY
-        let moveDelta = NSPoint(x: newX - currentOrigin.x, y: newY - currentOrigin.y)
         window.setFrameOrigin(NSPoint(x: newX, y: newY))
+        let moveDelta = NSPoint(x: window.frame.minX - currentOrigin.x, y: window.frame.minY - currentOrigin.y)
+        onDragUpdate?(startWindowOrigin, currentMouseLocation)
         if moveDelta.x != 0 || moveDelta.y != 0 {
             onWindowDragDelta?(moveDelta)
         }
@@ -1841,16 +1925,19 @@ private final class SurfaceImageView: NSImageView {
 
     override func mouseUp(with event: NSEvent) {
         let wasDragging = dragStartMouseLocation != nil && didDrag
-        dragStartMouseLocation = nil
-        dragStartWindowOrigin = nil
-        didDrag = false
         sendMouseEvent(.up, event: event)
+        if wasDragging {
+            lastDragEvent = event
+        }
+        cancelDrag()
+        let suppressClick = suppressDragClick
+        suppressDragClick = false
         setCursor(.mouseUp, for: hitTest(event).region)
         if wasDragging {
-            sendMouseEvent(.dragEnd, event: event)
             scheduleHoverEvent(for: hitTest(event), event: event)
             return
         }
+        guard !suppressClick else { return }
         let hit = hitTest(event)
         if event.clickCount >= 3 {
             onMouseEvent?(.multipleClick(count: event.clickCount), hit.region, hit.x, hit.y, buttonNumber(event))

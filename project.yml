@@ -63,7 +63,7 @@ targets:
         CFBundleDocumentTypes:
           - CFBundleTypeName: NAR Archive
             CFBundleTypeRole: Editor
-            LSHandlerRank: Alternate
+            LSHandlerRank: Default
             LSItemContentTypes:
               - dev.utatane.nar
         CFBundleURLTypes:
@@ -74,6 +74,7 @@ targets:
           - UTTypeIdentifier: dev.utatane.nar
             UTTypeDescription: NAR Archive
             UTTypeConformsTo:
+              - public.data
               - public.archive
             UTTypeTagSpecification:
               public.filename-extension:
@@ -86,7 +87,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.1.1
+        MARKETING_VERSION: 0.1.4
     dependencies:
       - package: Sparkle
         product: Sparkle

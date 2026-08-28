@@ -3041,15 +3041,15 @@ private struct UtataneRootView: View {
             ? RealtimeAPIConfiguration.defaultBaseURL(for: networkSettings.realtimeProvider)
             : URL(string: configuredBaseURL)
         guard let baseURL else {
-            showError("Realtime APIのBase URLを設定して。")
+            showError(String(localized: "Realtime APIのBase URLを設定して。"))
             return
         }
         guard !networkSettings.realtimeModel.isEmpty, !networkSettings.realtimeVoice.isEmpty else {
-            showError("Realtime APIのモデルとVoiceを設定して。")
+            showError(String(localized: "Realtime APIのモデルとVoiceを設定して。"))
             return
         }
         guard !networkSettings.realtimeAPIKey.isEmpty else {
-            showError("Realtime APIキーを設定して。")
+            showError(String(localized: "Realtime APIキーを設定して。"))
             return
         }
         let configuration = RealtimeAPIConfiguration(
@@ -4932,6 +4932,17 @@ private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate 
     }
 
     func application(_: NSApplication, open urls: [URL]) {
+        // AppKit prefers this delegate method over openFiles when both exist.
+        let archives = urls.filter {
+            $0.isFileURL && $0.pathExtension.caseInsensitiveCompare("nar") == .orderedSame
+        }
+        if !archives.isEmpty {
+            if let onOpenNar {
+                onOpenNar(archives)
+            } else {
+                pendingNarURLs.append(contentsOf: archives)
+            }
+        }
         let links = urls.filter { $0.scheme?.caseInsensitiveCompare("x-ukagaka-link") == .orderedSame }
         guard !links.isEmpty else { return }
         if let onOpenURL {
