@@ -47,6 +47,12 @@ public struct ParticleMakotoTranslator: SakuraScriptTranslator {
     }
 
     private static let markers: [(String, @Sendable (Bool) -> String)] = [
+        ("[은;는]", { $0 ? "은" : "는" }),
+        ("[을;를]", { $0 ? "을" : "를" }),
+        ("[이;가]", { $0 ? "이" : "가" }),
+        ("[와;과]", { $0 ? "과" : "와" }),
+        ("[으;로]", { $0 ? "으로" : "로" }),
+        ("[이;]", { $0 ? "이" : "" }),
         ("[은]/는", { $0 ? "은" : "는" }),
         ("[을]/를", { $0 ? "을" : "를" }),
         ("[이]/가", { $0 ? "이" : "가" }),

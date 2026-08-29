@@ -8,10 +8,16 @@ public enum Shiori2Compatibility {
         else { return nil }
 
         var headers = ShioriHeaders()
-        for header in request.headers.entries where header.name.caseInsensitiveCompare("ID") != .orderedSame {
+        for header in request.headers.entries
+            where header.name.caseInsensitiveCompare("ID") != .orderedSame
+            && !(header.name.lowercased().hasPrefix("reference") && header.value.isEmpty)
+        {
             headers.append(name: header.name, value: header.value)
         }
-        headers.append(name: "Event", value: id)
+        let legacyEvent = id.caseInsensitiveCompare("OnAITalk") == .orderedSame
+            ? "OnRandomTalk"
+            : id
+        headers.append(name: "Event", value: legacyEvent)
         return ShioriRequest(method: "GET Sentence", version: "SHIORI/2.6", headers: headers)
     }
 

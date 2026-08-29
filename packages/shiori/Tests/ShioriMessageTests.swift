@@ -44,6 +44,25 @@ func `converts SHIORI 3 event request to SHIORI 2 event request`() {
 }
 
 @Test
+func `uses the legacy random talk event for SHIORI 2`() {
+    let request = ShioriRequest(method: "GET", headers: ShioriHeaders([
+        ShioriHeader(name: "Charset", value: "EUC-KR"),
+        ShioriHeader(name: "ID", value: "OnAITalk"),
+        ShioriHeader(name: "Reference0", value: "SetUsername"),
+        ShioriHeader(name: "Reference1", value: "테스트"),
+        ShioriHeader(name: "Reference2", value: "")
+    ]))
+
+    let converted = Shiori2Compatibility.eventRequest(from: request)
+
+    #expect(converted?.method == "GET Sentence")
+    #expect(converted?.headers["Event"] == "OnRandomTalk")
+    #expect(converted?.reference(0) == "SetUsername")
+    #expect(converted?.reference(1) == "테스트")
+    #expect(converted?.headers["Reference2"] == nil)
+}
+
+@Test
 func `reads legacy SHIORI 2 sentence as script`() throws {
     let response = try ShioriMessageParser.parseResponse(
         "SHIORI/2.0 200 OK\r\nSentence: \\0hello\\e\r\nCharset: EUC-KR\r\n\r\n"

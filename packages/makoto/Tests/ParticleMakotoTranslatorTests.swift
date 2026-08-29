@@ -16,6 +16,15 @@ func `selects Korean particles like ParticleMakoto 2_3`() {
 }
 
 @Test
+func `supports ParticleMakoto 1 compatible semicolon markers`() {
+    let translator = ParticleMakotoTranslator()
+
+    #expect(translator.translate("사과[은;는] 밥[을;를] 먹는다") == "사과는 밥을 먹는다")
+    #expect(translator.translate("사과[이;가] 밥[와;과] 있다") == "사과가 밥과 있다")
+    #expect(translator.translate("학교[으;로] 가고 밥[이;]다") == "학교로 가고 밥이다")
+}
+
+@Test
 func `matches ParticleMakoto digit and Latin suffix handling`() {
     let translator = ParticleMakotoTranslator()
 

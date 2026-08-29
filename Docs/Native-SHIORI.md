@@ -20,7 +20,7 @@ SSUはSATORIに同梱された既存実装を使います。`saori_cpuid.dll`と
 
 ## ネイティブMAKOTO
 
-`ghost/master`に`makoto.dll`があり、`makoto.ini`に`[ParticleMakoto]`セクションがある場合は、DLLをロードせずSwift実装を使います。SHIORIが返したSakuraScriptへ、韓国語の語末にパッチムがあるかを判定して`[은]/는`、`[을]/를`、`[이]/가`、`[와]/과`、`[으]로`、`[이]`を変換します。数字・英字の判定もParticleMakoto 2.3の実DLL応答と照合しています。
+`ghost/master`に`makoto.dll`があり、`makoto.ini`に`[ParticleMakoto]`セクションがある場合は、DLLをロードせずSwift実装を使います。SHIORIが返したSakuraScriptへ、韓国語の語末にパッチムがあるかを判定して`[은]/는`、`[을]/를`、`[이]/가`、`[와]/과`、`[으]로`、`[이]`を変換します。`Makoto1Compatible`で使われる`[은;는]`、`[이;가]`などの旧記法、数字・英字の判定もParticleMakoto 2.3の実DLL応答と照合しています。
 
 現時点ではこのゴースト側ParticleMakotoだけが対象です。任意のMAKOTO DLL、シェル側MAKOTO、`OnTranslate`との組み合わせは未対応です。
 

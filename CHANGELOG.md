@@ -5,10 +5,11 @@
 ### 追加
 
 - `.nar`に加えて`.zip`のインストールに対応。`install.txt`を持つ通常の配布物のほか、ゴースト・シェル・バルーンやSSPフォルダ構成を直接ZIP化したものも内容を判定して配置
-- 韓国語の語末に応じて助詞を選ぶ`ParticleMakoto`をネイティブ実装。`ghost/master`の`makoto.dll`と`makoto.ini`を検出し、Wineを使わずSHIORIの応答を表示前に変換
+- 韓国語の語末に応じて助詞を選ぶ`ParticleMakoto`をネイティブ実装。`ghost/master`の`makoto.dll`と`makoto.ini`を検出し、Wineを使わずSHIORIの応答を表示前に変換。`Makoto1Compatible`の旧式助詞記法にも対応
 
 ### 修正
 
+- SHIORI/2.x専用の古い人格エンジンでは、定期会話イベントを旧名の`OnRandomTalk`として通知し、空のReferenceヘッダで後続の入力値が壊れないよう修正
 - `charset`指定を反映してEUC-KR・EUC-JP・中国語系などのレガシー文字コードを読み込めるようにし、行ごとに文字コードが混在する古いゴーストにも対応
 - SHIORI/3.0に対応していない古いWindows用SHIORIへSHIORI/2.6形式で再要求し、`Sentence`応答を台詞として再生する互換処理を追加
 
