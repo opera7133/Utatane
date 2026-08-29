@@ -1,0 +1,45 @@
+name: 機能要望 / Feature request
+description: 新しい機能や使い勝手の改善を提案する / Suggest a feature or usability improvement
+title: "[Feature] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        日本語・English・简体中文・繁體中文・한국어のいずれでも記入できます。
+        Requests in Japanese, English, Simplified Chinese, Traditional Chinese, or Korean are welcome.
+        可以用中文填写。可以用中文填寫。한국어로 작성해도 괜찮아요.
+
+        既存のIssueと[対応状況](https://github.com/opera7133/Utatane/blob/main/Docs/Compatibility.md)も確認してください。
+        Please check existing issues and the compatibility notes first.
+
+        **Issueは公開されます。APIキー、個人情報、会話履歴、再配布できないゴーストのデータを載せないでください。**
+        **Issues are public. Do not include API keys, personal information, private conversations, or ghost files you cannot redistribute.**
+  - type: textarea
+    id: request
+    attributes:
+      label: ほしい機能・改善 / Requested feature or improvement
+      description: 完成した仕様でなくても構いません / A rough idea is fine; it does not need to be a complete specification.
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 利用場面・困っていること / Use case or problem
+      description: いつ、どのように役立つかを教えてください / Describe when and how this would help.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 具体案 / Suggested behavior
+      description: 任意。画面や操作の流れなど、希望があれば / Optional. Describe the UI, workflow, or behavior you have in mind.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 現在の代替手段 / Current workaround
+      description: 任意。今は別の方法で対応している場合のみ / Optional. Include this only if you currently use another approach.
+  - type: textarea
+    id: context
+    attributes:
+      label: 補足 / Additional context
+      description: 任意。参考リンク、画像、関連するゴーストや他の本体での例など / Optional. Add links, images, related ghosts, or examples from other baseware.
