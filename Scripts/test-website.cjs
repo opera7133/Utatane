@@ -19,7 +19,7 @@ async function run(data, options={}) {
     return el;
   });
   const languages = element();
-  assert.equal(translated.length, 67, 'All translated content should be exercised');
+  assert.equal(translated.length, 69, 'All translated content should be exercised');
   let saved = options.saved;
   const document = {documentElement:{lang:'ja'},getElementById:id=>ids[id],querySelector:()=>languages,querySelectorAll:q=>q==='[data-language]'?buttons:q==='[data-ja][data-en]'?translated:[]};
   let abort;
@@ -56,8 +56,8 @@ async function run(data, options={}) {
   assert.equal(r.ids['download-label'].textContent,'配布ページを開く');
   console.log('PASS: missing macOS asset links to release, never arbitrary ZIP');
   r=await run([release('x','bad date',{assets:[{name:'Utatane-macOS.zip',browser_download_url:'javascript:alert(1)'}],prerelease:false})],{saved:'en',storageError:true,language:'en-US'});
-  assert.equal(r.document.documentElement.lang,'en'); assert.equal(r.ids['download-link'].href,base+'/tag/x'); assert.equal(r.ids['release-kind'].textContent,' / Stable'); r.buttons[0].click();
-  console.log('PASS: unsafe asset, invalid date, stable label, unavailable storage');
+  assert.equal(r.document.documentElement.lang,'en'); assert.equal(r.ids['download-link'].href,base+'/tag/x'); assert.equal(r.ids['release-kind'].textContent,' / Regular release'); r.buttons[0].click();
+  console.log('PASS: unsafe asset, invalid date, regular release label, unavailable storage');
   r=await run([],{saved:'en'}); assert.equal(r.document.documentElement.lang,'en');
   console.log('PASS: saved language overrides browser language');
   const idsInHTML=[...html.matchAll(/\bid="([^"]+)"/g)].map(m=>m[1]); assert.equal(new Set(idsInHTML).size,idsInHTML.length);
@@ -94,10 +94,14 @@ async function run(data, options={}) {
   const legacy=fs.readFileSync(path.join(__dirname,'../website/utatane.html'),'utf8');
   const deploy=fs.readFileSync(path.join(__dirname,'../.github/workflows/deploy-website.yml'),'utf8');
   assert.ok(legacy.includes('./utatane-modern.html'));
+  assert.ok(legacy.includes('安定性を保証する区分ではありません'));
+  assert.ok(!legacy.includes('最新のpre-release'));
   for (const name of ['utatane.html','utatane-modern.html']) {
     assert.ok(deploy.includes('"website/'+name+'"'));
     assert.ok(deploy.includes('put -O "$WEBSITE_DEPLOY_PATH" website/'+name));
   }
-  console.log('PASS: reduced-motion rule, stable heading label, public metadata, links and deploy entries');
+  for (const label of [' / Stable',' / 安定版',' / 稳定版',' / 穩定版',' / 안정 버전']) assert.ok(!html.includes(label));
+  assert.ok(html.includes('通常リリースを小刻みに公開します'));
+  console.log('PASS: reduced-motion rule, release label, public metadata, links and deploy entries');
 
 })();

@@ -64,6 +64,7 @@
       <p>
         <strong>まだ開発中です。</strong
         >既存ゴーストとの互換性を地道に増やしています。SSP全部入りではありません。
+        通常リリースを小刻みに公開していますが、安定性を保証する区分ではありません。
       </p>
 
       <p>
@@ -230,7 +231,7 @@
       <h2>使い方</h2>
       <ol>
         <li>
-          Releasesから最新のpre-releaseにある
+          Releasesから最新リリースの
           <code>Utatane-macOS.zip</code> をダウンロード
         </li>
         <li>
@@ -242,7 +243,7 @@
 
       <h2>初回起動でmacOSに止められた場合</h2>
       <p>
-        現在のpre-releaseは未署名です。一度起動を試してから、「システム設定」→「プライバシーとセキュリティ」で起動を許可してください。
+        現在の配布版は未署名です。一度起動を試してから、「システム設定」→「プライバシーとセキュリティ」で起動を許可してください。
       </p>
       <p>
         もしくは、アプリケーションフォルダで
@@ -355,7 +356,7 @@
           console.warn("最新バージョンの取得に失敗しました:", error);
           if (versionInfoEl) {
             versionInfoEl.innerHTML =
-              "（最新のpre-releaseにある <code>Utatane-macOS.zip</code>）";
+              "（最新リリースの <code>Utatane-macOS.zip</code>）";
           }
         }
       })();

@@ -1,13 +1,13 @@
 # リリース手順
 
-Utataneのリリースは`v`で始まるgit tagを基準にします。通常版を小刻みに公開し、alpha・beta・rcの段階を毎回必須にはしません。たとえば`v0.1.4`をpushすると、GitHub Actionsは次の値で配布版を作ります。タグ以外のビルドは`project.yml`の`MARKETING_VERSION`を使います。
+Utataneのリリースは`v`で始まるgit tagを基準にします。通常版を小刻みに公開し、alpha・beta・rcの段階を毎回必須にはしません。通常Releaseは安定性を保証する区分ではなく、ローリングリリースに近い頻度で互換性を更新します。たとえば`v0.1.5`をpushすると、GitHub Actionsは次の値で配布版を作ります。タグ以外のビルドは`project.yml`の`MARKETING_VERSION`を使います。
 
-- 表示バージョン（`CFBundleShortVersionString`）: `0.1.4`
+- 表示バージョン（`CFBundleShortVersionString`）: `0.1.5`
 - 更新比較用ビルド番号（`CFBundleVersion`）: GitHub Actionsのrun number
 
 ```sh
-git tag v0.1.4
-git push origin v0.1.4
+git tag v0.1.5
+git push origin v0.1.5
 ```
 
 ## Sparkle署名鍵
@@ -56,13 +56,13 @@ FTPS接続には次のGitHub Actions Secretsを使用します。コアサーバ
 - `DEPLOY_PASSWORD`
 - `DEPLOY_PATH`（例: `/public_html/utatane`）
 
-配布サイトの `utatane.html` と画像は、`main` に該当ファイルをpushすると
-`Deploy website` workflowが別にアップロードします。上記4つに加えて、リポジトリへ
+配布サイトの `utatane.html`、`utatane-modern.html` と画像は、`main` に該当ファイルをpushすると
+`Deploy website` workflowが5言語表示・リリース取得・リンクを検査してから別にアップロードします。上記4つに加えて、リポジトリへ
 次のGitHub Actions Secretを設定します。
 
 - `WEBSITE_DEPLOY_PATH`（例: `/public_html`）
 
-サイト更新ではアプリのビルドを行わず、`utatane.html` と2枚の画像だけをExplicit
+サイト更新ではアプリのビルドを行わず、2つのHTMLと2枚の画像だけをExplicit
 FTPSで上書きします。`index.html`など、同じ公開ルートにある他のファイルは変更しません。
 
 以前の設定が`/public_html/utatane/appcast.xml`なら、ファイル名を外した`/public_html/utatane`へ変更してください。公開先では次の構成になります。
