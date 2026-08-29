@@ -63,7 +63,12 @@ struct EseDictionary: Sendable {
                 continue
             }
             if let entry {
-                entries[entry, default: []].append(line)
+                if line.first?.isWhitespace == true, var previous = entries[entry]?.popLast() {
+                    previous.append(line)
+                    entries[entry, default: []].append(previous)
+                } else {
+                    entries[entry, default: []].append(line)
+                }
             } else if let ruleIndex {
                 rules[ruleIndex].values.append(line)
             }

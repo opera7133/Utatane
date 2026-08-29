@@ -14,6 +14,11 @@ struct EseEvaluator: Sendable {
         self.request = request
         guard let requestedID = request.id else { return "" }
         let id = requestedID.caseInsensitiveCompare("OnAITalk") == .orderedSame ? "OnRandomTalk" : requestedID
+        if id.caseInsensitiveCompare("OnChoiceSelect") == .orderedSame,
+           let target = request.reference(0), target.hasPrefix("#")
+        {
+            return expand("%" + target.dropFirst())
+        }
         let kind: EseRule.Kind = id == "OnCommunicate" ? .response : (id == "version" ? .resource : .event)
         let matchingRules = dictionary.rules.filter { $0.kind == kind && matches($0, id: id) }
         let specificity = matchingRules.map(\.conditions.count).max()
@@ -118,7 +123,6 @@ struct EseEvaluator: Sendable {
     }
 
     private mutating func callFunction(_ rawName: String, _ rawArguments: [String]) -> String {
-        let suppressed = rawName.hasPrefix("_")
         let name = rawName.trimmingCharacters(in: CharacterSet(charactersIn: "_")).uppercased()
         let args = rawArguments.map { unquote(evaluateExpression(expand($0)).trimmingCharacters(in: .whitespaces)) }
         var value = ""
@@ -127,20 +131,24 @@ struct EseEvaluator: Sendable {
             if args.count > 1, let index = Int(args[1]) {
                 storage[index] = args[0]
             }
+            if args.count > 2, args[2] == "1" {
+                value = args[0]
+            }
         case "POP", "POPSTR", "POPNUM": value = args.first.flatMap(Int.init).flatMap { storage[$0] } ?? ""
         case "RAND":
             let upper = max(Int(args.first ?? "0") ?? 0, 1), offset = args.dropFirst().first.flatMap(Int.init) ?? 0
             value = String(Int.random(in: 0 ..< upper) + offset)
         case "GETSENTRES":
             let begin = args.first ?? "", end = args.dropFirst().first ?? "[13][10]"
-            let requestText = requestLines
+            let requestText = requestLines + contextText
             let headerName = begin.trimmingCharacters(in: .whitespaces).hasSuffix(":")
                 ? String(begin.trimmingCharacters(in: .whitespaces).dropLast()) : nil
+            let output = args.count < 3 || Int(args[2]) == nil || args.last == "1"
             if let headerName, let found = request?.headers[headerName] {
                 if args.count > 2, let index = Int(args[2]) {
                     storage[index] = found
                 }
-                value = found
+                value = output ? found : ""
             } else if let range = requestText.range(of: begin, options: .caseInsensitive) {
                 let tail = requestText[range.upperBound...]
                 let terminator = end.replacingOccurrences(of: "[13]", with: "\r").replacingOccurrences(of: "[10]", with: "\n")
@@ -148,7 +156,7 @@ struct EseEvaluator: Sendable {
                 if args.count > 2, let index = Int(args[2]) {
                     storage[index] = found
                 }
-                value = found
+                value = output ? found : ""
             }
         case "GETENTRY":
             let sought = args.first ?? ""
@@ -156,7 +164,7 @@ struct EseEvaluator: Sendable {
             if args.count > 1, let index = Int(args[1]) {
                 storage[index] = key
             }
-            value = key
+            value = args.last == "1" || args.count < 2 ? key : ""
         case "SETENTRY":
             if args.count > 1, !args[0].isEmpty {
                 dictionary.entries[args[0], default: []].append(args[1])
@@ -178,6 +186,9 @@ struct EseEvaluator: Sendable {
         case "GETPOP":
             if let index = args.first.flatMap(Int.init) {
                 value = (args.count > 1 ? args[1] : "") + (storage[index] ?? "") + (args.count > 2 ? args[2] : "")
+                if args.last != "1" {
+                    value = ""
+                }
             }
         case "TALK_INTERVAL": talkInterval = args.first.flatMap(Int.init)
         case "MODE": value = "0"
@@ -200,7 +211,7 @@ struct EseEvaluator: Sendable {
         case "WRITEFILE": break
         default: break
         }
-        return suppressed ? value : value
+        return value
     }
 
     private mutating func expandVariables(_ source: String) -> String {
@@ -281,7 +292,7 @@ struct EseEvaluator: Sendable {
             if index < text.endIndex, text[index] == "%" {
                 index = text.index(after: index); continue
             }
-            if index < text.endIndex, text[index] == "!" {
+            if index < text.endIndex, text[index] == "!" || text[index] == "#" {
                 index = text.index(after: index)
             }
             let nameStart = index

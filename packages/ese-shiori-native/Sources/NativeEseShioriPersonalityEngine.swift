@@ -68,7 +68,9 @@ public actor NativeEseShioriPersonalityEngine: PersonalityEngine {
         {
             evaluator.variables["username"] = text
         }
-        let value = evaluator.response(for: request)
+        let value = LegacyMateriaScriptNormalizer.normalizeKeroSurfaces(
+            in: evaluator.response(for: request)
+        )
         if case .close = event {
             try save()
         }

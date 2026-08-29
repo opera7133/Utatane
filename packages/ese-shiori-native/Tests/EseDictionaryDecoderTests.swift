@@ -22,11 +22,21 @@ import UtataneEseShioriNative
     let boot = try await engine.handle(event: .boot)
     #expect(boot?.rawValue.isEmpty == false)
     #expect(boot?.rawValue.contains("$") == false)
+    #expect(boot?.rawValue.contains("%") == false)
+    #expect(boot?.rawValue.contains(#"\1\s[10]"#) == true)
     let talk = try await engine.handle(event: .randomTalk)
     #expect(talk?.rawValue.isEmpty == false)
     #expect(talk?.rawValue.contains("$") == false)
     let firstBoot = try await engine.handle(event: .shiori(id: "OnFirstBoot", references: [:]))
     #expect(firstBoot?.rawValue.contains("inputbox") == true)
+    let nameInput = try await engine.handle(event: .shiori(
+        id: "OnUserInput",
+        references: [0: "SetUsername", 1: "테스트"]
+    ))
+    #expect((nameInput?.rawValue.components(separatedBy: #"\q["#).count ?? 0) > 2)
+    let nameChoice = try await engine.handle(event: .choice(id: "#emz41", arguments: []))
+    #expect(nameChoice?.rawValue.contains("알았어") == true)
+    #expect(nameChoice?.rawValue.contains("$") == false)
     let menu = try await engine.handle(event: .mouse(.init(
         kind: .doubleClick,
         scope: 0,
@@ -35,6 +45,9 @@ import UtataneEseShioriNative
         y: 0
     )))
     #expect(menu?.rawValue.isEmpty == false)
+    #expect((menu?.rawValue.components(separatedBy: #"\q["#).count ?? 0) > 2)
+    let menuChoice = try await engine.handle(event: .choice(id: "#emz01", arguments: []))
+    #expect(menuChoice?.rawValue.contains(#"\q["#) == true)
 }
 
 @Test func `teaches and persists a word in the configured ese ghost`() async throws {
