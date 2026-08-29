@@ -358,6 +358,7 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
+[0.1.6]: https://github.com/opera7133/Utatane/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/opera7133/Utatane/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/opera7133/Utatane/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/opera7133/Utatane/compare/v0.1.2...v0.1.3
