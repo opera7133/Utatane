@@ -4,7 +4,29 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    paths-ignore:
+      - "**/README.md"
+      - "CHANGELOG.md"
+      - "LICENSE"
+      - "Design/**"
+      - "Docs/**"
+      - "Internal-Docs/**"
+      - "References/**"
+      - "website/**"
+      - "Scripts/test-website.cjs"
+      - ".vscode/**"
   pull_request:
+    paths-ignore:
+      - "**/README.md"
+      - "CHANGELOG.md"
+      - "LICENSE"
+      - "Design/**"
+      - "Docs/**"
+      - "Internal-Docs/**"
+      - "References/**"
+      - "website/**"
+      - "Scripts/test-website.cjs"
+      - ".vscode/**"
   workflow_dispatch:
 
 permissions:
