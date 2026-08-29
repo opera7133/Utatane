@@ -6,6 +6,8 @@ on:
     paths:
       - "website/utatane.html"
       - "website/utatane-modern.html"
+      - "website/utatane-modern.css"
+      - "website/utatane-modern.js"
       - "website/assets/utatane-icon.png"
       - "website/assets/utatane-screenshot.png"
       - "Scripts/test-website.cjs"
@@ -51,6 +53,8 @@ jobs:
           set net:timeout 20
           put -O "$WEBSITE_DEPLOY_PATH" website/utatane.html
           put -O "$WEBSITE_DEPLOY_PATH" website/utatane-modern.html
+          put -O "$WEBSITE_DEPLOY_PATH" website/utatane-modern.css
+          put -O "$WEBSITE_DEPLOY_PATH" website/utatane-modern.js
           put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/utatane-icon.png
           put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/utatane-screenshot.png
           bye

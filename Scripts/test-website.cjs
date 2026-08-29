@@ -5,7 +5,8 @@ const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync(path.join(__dirname, '../website/utatane-modern.html'), 'utf8');
-const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const css = fs.readFileSync(path.join(__dirname, '../website/utatane-modern.css'), 'utf8');
+const script = fs.readFileSync(path.join(__dirname, '../website/utatane-modern.js'), 'utf8');
 const base = 'https://github.com/opera7133/Utatane/releases';
 const release = (tag, date, extra = {}) => ({tag_name:tag, published_at:date, html_url:base+'/tag/'+tag, prerelease:true, assets:[{name:'Utatane-macOS.zip', browser_download_url:base+'/download/'+tag+'/Utatane-macOS.zip', size:10485760}], ...extra});
 function element(dataset={}) { return {dataset, textContent:'', attrs:{}, hidden:true, classList:{values:new Set(),add(v){this.values.add(v);},toggle(v,on){on?this.values.add(v):this.values.delete(v);},contains(v){return this.values.has(v);}}, getAttribute(k){return this.attrs[k.toLowerCase()];}, setAttribute(k,v){this.attrs[k]=v;}, removeAttribute(k){delete this.attrs[k];}, addEventListener(k,v){this[k]=v;}}; }
@@ -19,7 +20,7 @@ async function run(data, options={}) {
     return el;
   });
   const languages = element();
-  assert.equal(translated.length, 69, 'All translated content should be exercised');
+  assert.equal(translated.length, 75, 'All translated content should be exercised');
   let saved = options.saved;
   const document = {documentElement:{lang:'ja'},getElementById:id=>ids[id],querySelector:()=>languages,querySelectorAll:q=>q==='[data-language]'?buttons:q==='[data-ja][data-en]'?translated:[]};
   let abort;
@@ -86,7 +87,7 @@ async function run(data, options={}) {
   }
   r=await run([],{languages:['fr','ko-KR','en']}); assert.equal(r.document.documentElement.lang,'ko');
   console.log('PASS: regional Chinese variants, explicit script priority, browser preference order');
-  assert.match(html,/@media\(prefers-reduced-motion:reduce\)[^\n]+animation:none/);
+  assert.match(css,/@media\(prefers-reduced-motion:reduce\)[^\n]+animation:none/);
   assert.match(html,/aria-label="Utatane \/ 転寝"/);
   assert.ok(!html.includes('noindex'));
   assert.ok(!html.includes('Design preview'));
@@ -96,10 +97,14 @@ async function run(data, options={}) {
   assert.ok(legacy.includes('./utatane-modern.html'));
   assert.ok(legacy.includes('安定性を保証する区分ではありません'));
   assert.ok(!legacy.includes('最新のpre-release'));
-  for (const name of ['utatane.html','utatane-modern.html']) {
+  for (const name of ['utatane.html','utatane-modern.html','utatane-modern.css','utatane-modern.js']) {
     assert.ok(deploy.includes('"website/'+name+'"'));
     assert.ok(deploy.includes('put -O "$WEBSITE_DEPLOY_PATH" website/'+name));
   }
+  assert.ok(html.includes('href="./utatane-modern.css"'));
+  assert.ok(html.includes('src="./utatane-modern.js"'));
+  assert.ok(html.includes('そもそも伺かって何？'));
+  assert.ok(html.includes('Utataneだけで動く'));
   for (const label of [' / Stable',' / 安定版',' / 稳定版',' / 穩定版',' / 안정 버전']) assert.ok(!html.includes(label));
   assert.ok(html.includes('通常リリースを小刻みに公開します'));
   console.log('PASS: reduced-motion rule, release label, public metadata, links and deploy entries');

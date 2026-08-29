@@ -13,126 +13,7 @@
 <meta property="og:image" content="https://dl.wmsci.com/assets/utatane-icon.png">
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="./assets/utatane-icon.png">
-<style>
-:root{color-scheme:light;--paper:#f8f8f3;--ink:#262923;--muted:#63675d;--line:#d4d7ca;--accent:#97462e;--wash:#e9ece1}
-*{box-sizing:border-box}
-html{scroll-behavior:smooth;scroll-padding-top:28px}
-body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.85 -apple-system,BlinkMacSystemFont,"Helvetica Neue","Hiragino Kaku Gothic ProN",Meiryo,sans-serif}
-a{color:inherit;text-decoration-color:#9a9f90;text-underline-offset:5px}
-a:hover{color:var(--accent)}
-button,select{font:inherit}
-a:focus-visible,button:focus-visible,summary:focus-visible{outline:2px solid var(--accent);outline-offset:5px}
-button{cursor:pointer}
-.wrap{max-width:1200px;margin:auto;padding:0 52px}
-.topbar{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:24px 0;border-bottom:1px solid var(--ink)}
-.brand{display:flex;align-items:center;gap:10px;font-weight:600;text-decoration:none}
-.brand img{width:30px;height:30px}
-.topbar nav{display:flex;align-items:center;gap:26px;font-size:12px}
-.languages{display:flex;gap:10px;border-left:1px solid var(--line);padding-left:24px}
-.languages[hidden]{display:none}
-.languages button{border:0;background:none;padding:2px;color:var(--muted);font-size:12px}
-.languages button[aria-pressed="true"]{color:var(--ink);text-decoration:underline;text-underline-offset:5px}
-.hero{display:grid;grid-template-columns:1fr 1.04fr;align-items:center;gap:40px;padding:72px 0 58px}
-.eyebrow{font-size:10px;font-weight:600;letter-spacing:.16em;color:var(--accent);margin:0 0 22px}
-/* Both names share a grid cell, reserving the wider name without layout shifts. */
-.title-block{margin-bottom:24px}
-.title-block h1{display:grid;width:max-content;max-width:100%;margin-bottom:10px;line-height:1.25}
-.title-word{grid-area:1/1;display:block}
-.title-kanji{opacity:0;font-family:"Hiragino Mincho ProN","Yu Mincho",serif;letter-spacing:.1em;font-weight:400}
-#motion-toggle{font-size:10px;border:0;background:none;color:var(--muted);padding:4px 0;text-decoration:underline;text-underline-offset:4px}
-.is-animated .title-latin{animation:title-latin 12s infinite}
-.is-animated .title-kanji{animation:title-kanji 12s infinite}
-.is-paused .title-word{animation-play-state:paused}
-@keyframes title-latin{0%,42%,100%{opacity:1;transform:translateY(0)}48%,92%{opacity:0;transform:translateY(-.12em)}96%{opacity:0;transform:translateY(.12em)}}
-@keyframes title-kanji{0%,42%,100%{opacity:0;transform:translateY(.12em)}50%,90%{opacity:1;transform:translateY(0)}96%{opacity:0;transform:translateY(-.12em)}}
-h1{font-size:clamp(72px,8vw,112px);line-height:1;letter-spacing:-.065em;font-weight:500;margin:0 0 30px}
-.lead{font-size:clamp(23px,2.4vw,30px);line-height:1.65;letter-spacing:.015em;max-width:440px;margin:0 0 18px;font-weight:500}
-.intro{color:var(--muted);max-width:370px;font-size:14px}
-.lead{text-wrap:balance;white-space:pre-line}
-html[lang="ja"] .lead{text-wrap:initial}
-.button{display:inline-flex;align-items:center;justify-content:space-between;gap:32px;padding:13px 22px;background:var(--ink);color:white;text-decoration:none;font-size:14px}
-.button:hover{background:var(--accent);color:white}
-.hero .button{margin-top:20px}
-.small{font-size:12px;color:var(--muted)}
-.hero .small{margin:12px 0 0}
-figure{margin:0;min-width:0}
-.hero img{width:100%;height:auto;display:block}
-figcaption{display:flex;justify-content:space-between;gap:16px;color:var(--muted);font-size:10px;margin-top:12px}
-.factline{display:grid;grid-template-columns:repeat(3,1fr);padding:22px 0;border-block:1px solid var(--line);gap:24px}
-.factline p{margin:0;font-size:12px;color:var(--muted)}
-.factline strong{display:block;font-size:14px;color:var(--ink);font-weight:500;margin-bottom:3px}
-.section{padding:78px 0;border-bottom:1px solid var(--line)}
-.section-head{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:end;margin-bottom:40px}
-h2{font-weight:500;font-size:32px;letter-spacing:-.035em;line-height:1.5;margin:0;max-width:540px}
-.section-head>p{color:var(--muted);font-size:14px;margin:0;max-width:420px}
-p{margin:0 0 16px}
-.feature-list{margin-left:22%;border-top:1px solid var(--ink)}
-.feature{display:grid;grid-template-columns:40px 1fr 1.25fr;gap:24px;padding:28px 0;border-bottom:1px solid var(--line);align-items:baseline}
-.number{font-size:11px;color:var(--accent);font-variant-numeric:tabular-nums}
-h3{margin:0;font-size:20px;font-weight:500;line-height:1.6}
-.feature p{font-size:14px;color:var(--muted);margin:0}
-.engine-note{margin-top:24px;display:flex;justify-content:space-between;gap:24px;font-size:12px;color:var(--muted)}
-.compatibility{background:var(--wash);margin-top:64px;padding:40px}
-.compatibility .eyebrow{margin-bottom:12px}
-.compatibility h2{font-size:29px}
-.compat-intro{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-bottom:30px}
-.compat-intro p{font-size:14px;color:var(--muted);margin:0}
-.status-list{border-top:1px solid #b8bfae;margin:0}
-.status-row{display:grid;grid-template-columns:130px 1fr;gap:30px;padding:18px 0;border-bottom:1px solid #cbd0c1;font-size:14px}
-dt{font-weight:500}dd{margin:0;color:var(--muted)}
-.status-row:last-child dt{color:var(--accent)}
-.compat-links{display:flex;flex-wrap:wrap;gap:14px 26px;margin:25px 0 0;font-size:12px}
-.install{margin-top:74px;background:var(--ink);color:#f8f8f3;padding:50px}
-.install .eyebrow{color:#c9cebd}
-.install .section-head{grid-template-columns:1.25fr 1fr;align-items:start}
-.release-meta{font-size:13px;color:#d5dacd}
-.release-meta p{margin:0 0 5px}
-.install .button{background:var(--paper);color:var(--ink);margin-top:20px}
-.install .button:hover{background:#d9ddcc}
-.install a:not(.button):hover{color:white}
-.release-status{font-size:12px;color:#c9cebd;min-height:1.8em}
-.steps{list-style:none;counter-reset:step;display:grid;grid-template-columns:repeat(3,1fr);gap:30px;padding:28px 0 0;margin:34px 0 0;border-top:1px solid #606657}
-.steps li{counter-increment:step}
-.steps li::before{content:"0" counter(step);display:block;font-size:12px;color:#c9cebd;margin-bottom:15px}
-.steps h3{font-size:17px;margin-bottom:8px}
-.steps p{font-size:13px;color:#d5dacd;margin:0}
-.security{margin-top:30px;border-top:1px solid #606657;padding-top:20px;font-size:13px}
-summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between;gap:22px;align-items:baseline}
-summary::-webkit-details-marker{display:none}
-summary::after{content:"+";font-size:20px;font-weight:400;flex-shrink:0}
-details[open]>summary::after{content:"−"}
-.security p{margin:16px 0 0;color:#d5dacd;max-width:800px}
-.security pre{padding:14px 16px;border:1px solid #606657;white-space:pre-wrap;overflow-wrap:anywhere}
-.faq{display:grid;grid-template-columns:.85fr 1.4fr;gap:70px}
-.questions details{padding:19px 0;border-top:1px solid var(--line)}
-.questions details:last-child{border-bottom:1px solid var(--line)}
-.questions summary{font-size:15px;font-weight:500}
-.questions p{font-size:14px;color:var(--muted);margin:15px 0 0}
-.experiments{display:flex;gap:36px;justify-content:space-between;align-items:baseline;margin-top:28px;font-size:12px;color:var(--muted)}
-.experiments p{margin:0;max-width:750px}
-footer{padding:40px 0 28px}
-.footer-top{display:flex;justify-content:space-between;align-items:baseline;gap:30px;margin-bottom:30px}
-.footer-top strong{font-size:26px;font-weight:500;letter-spacing:-.045em}
-.footer-top nav{display:flex;flex-wrap:wrap;gap:24px;font-size:12px}
-.credits{font-size:11px;color:var(--muted);max-width:900px}
-.bottom{display:flex;justify-content:space-between;gap:24px;border-top:1px solid var(--line);padding-top:20px;margin-top:25px;font-size:10px;color:var(--muted)}
-code{font-size:.95em;overflow-wrap:anywhere}
-[hidden]{display:none!important}
-@media(max-width:800px){
-.wrap{padding:0 24px}.topbar{gap:16px;flex-wrap:wrap}.topbar nav{gap:14px;flex-wrap:wrap}.languages{flex-wrap:wrap}.languages{padding-left:16px}.nav-feature{display:none}
-.hero{grid-template-columns:1fr;padding:46px 0 35px;gap:34px}.hero figure{max-width:540px;width:100%;margin:auto}h1{font-size:82px}.lead{font-size:26px}
-.factline{gap:15px}.factline strong{font-size:12px}.factline p{font-size:11px}
-.section{padding:48px 0}.section-head{grid-template-columns:1fr;gap:20px;margin-bottom:28px}h2{font-size:28px}
-.feature-list{margin:0}.feature{grid-template-columns:25px 1fr;gap:10px 16px}.feature p{grid-column:2}h3{font-size:19px}
-.engine-note{flex-direction:column;gap:8px}
-.compatibility{margin-top:42px;padding:25px}.compat-intro{grid-template-columns:1fr;gap:18px}.status-row{grid-template-columns:1fr;gap:6px}
-.install{margin-top:42px;padding:28px 24px}.install .section-head{grid-template-columns:1fr;gap:26px}.steps{grid-template-columns:1fr;gap:25px;margin-top:24px}.steps li{position:relative;padding-left:35px}.steps li::before{position:absolute;left:0;top:2px}.steps h3{margin-bottom:5px}
-.faq{grid-template-columns:1fr;gap:28px}.experiments{flex-direction:column;gap:12px}
-.footer-top{align-items:start;flex-direction:column;gap:15px}.footer-top nav{gap:16px}
-}
-@media(max-width:380px){.wrap{padding:0 18px}.topbar nav{gap:12px}.brand{font-size:14px}.languages{padding-left:10px;gap:7px}h1{font-size:72px}.factline{grid-template-columns:1fr}.factline strong{display:inline;margin-right:10px}.compatibility{padding:20px}}
-@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.is-animated .title-word{animation:none}.title-latin{opacity:1;transform:none}.title-kanji{opacity:0;transform:none}#motion-toggle{display:none}}
-</style>
+<link rel="stylesheet" href="./utatane-modern.css">
 </head>
 <body>
 <div class="wrap">
@@ -174,7 +55,13 @@ code{font-size:.95em;overflow-wrap:anywhere}
 <article class="feature"><span class="number">02</span><h3 data-ja="好みの姿にする" data-en="Make room for your style" data-zh-hans="换成喜欢的样子" data-zh-hant="換成喜歡的樣子" data-ko="원하는 모습으로">好みの姿にする</h3><p data-ja="シェルやバルーンを切り替えて、表示サイズも調整。対応するゴーストなら、アニメーションや着せ替えも。" data-en="Switch shells and balloons, and adjust their size. Supported ghosts also offer animations and different outfits." data-zh-hans="切换外壳和对话框，调整显示大小。支持这些功能的人格还可以播放动画、切换服装。" data-zh-hant="切換外殼和對話框，調整顯示大小。支援這些功能的人格還可以播放動畫、切換服裝。" data-ko="셸과 말풍선을 바꾸고 표시 크기도 조절할 수 있어요. 지원하는 고스트라면 애니메이션과 옷 갈아입기도 가능해요.">シェルやバルーンを切り替えて、表示サイズも調整。対応するゴーストなら、アニメーションや着せ替えも。</p></article>
 <article class="feature"><span class="number">03</span><h3 data-ja="次の相手を迎える" data-en="Meet someone new" data-zh-hans="迎接新的伙伴" data-zh-hant="迎接新的夥伴" data-ko="새로운 친구를 맞이해요">次の相手を迎える</h3><p data-ja="配布されているNARファイルを追加。展開済みのSSPフォルダから、ゴーストとバルーンを取り込むこともできます。" data-en="Install a distributed NAR file, or import ghosts and balloons from an extracted SSP folder." data-zh-hans="安装作者发布的 NAR 文件，也可以从已解压的 SSP 文件夹导入人格与对话框。" data-zh-hant="安裝作者發布的 NAR 檔案，也可以從已解壓縮的 SSP 資料夾匯入人格與對話框。" data-ko="배포된 NAR 파일을 설치하거나, 압축을 푼 SSP 폴더에서 고스트와 말풍선을 가져올 수 있어요.">配布されているNARファイルを追加。展開済みのSSPフォルダから、ゴーストとバルーンを取り込むこともできます。</p></article>
 </div>
-<div class="engine-note"><span data-ja="対応SHIORIのネイティブ実行" data-en="Native execution for supported SHIORI engines" data-zh-hans="原生运行受支持的 SHIORI" data-zh-hant="原生執行支援的 SHIORI" data-ko="지원 SHIORI의 네이티브 실행">対応SHIORIのネイティブ実行</span><span>YAYA(文) / KAGARI / SHIOLINK(MiyoJS等) / 里々 / 華和梨 / 美坂 / 灯</span></div>
+<aside class="engine-support" aria-labelledby="engine-support-title">
+<p class="engine-title" id="engine-support-title" data-ja="会話エンジンの動かし方" data-en="How dialogue engines run" data-zh-hans="对话引擎的运行方式" data-zh-hant="對話引擎的執行方式" data-ko="대화 엔진 실행 방식">会話エンジンの動かし方</p>
+<dl>
+<div><dt data-ja="Utataneだけで動く" data-en="Runs in Utatane" data-zh-hans="仅用 Utatane 即可运行" data-zh-hant="只用 Utatane 即可執行" data-ko="Utatane만으로 실행">Utataneだけで動く</dt><dd><strong>YAYA(文) / KAGARI / SHIOLINK (MiyoJS等) / 里々 / 華和梨 / 美坂 / 灯</strong><span data-ja="対応する版をmacOS上でネイティブ実行します。Wineの準備は不要です。" data-en="Supported versions run natively on macOS, with no Wine setup required." data-zh-hans="受支持的版本可在 macOS 上原生运行，无需配置 Wine。" data-zh-hant="支援的版本可在 macOS 上原生執行，不需要設定 Wine。" data-ko="지원하는 버전은 macOS에서 네이티브로 실행되며 Wine 설정이 필요 없어요.">対応する版をmacOS上でネイティブ実行します。Wineの準備は不要です。</span></dd></div>
+<div><dt data-ja="追加部品によってはWine" data-en="Wine for some add-ons" data-zh-hans="部分附加组件需要 Wine" data-zh-hant="部分附加元件需要 Wine" data-ko="일부 추가 구성 요소는 Wine 필요">追加部品によってはWine</dt><dd data-ja="ゴーストが別のWindows向けDLL・SAORI・実行ファイルへ依存する場合は、Wineが必要になることがあります。" data-en="Wine may still be needed when a ghost depends on separate Windows DLLs, SAORI modules, or executables." data-zh-hans="如果人格依赖其他 Windows DLL、SAORI 模块或可执行文件，可能仍需要 Wine。" data-zh-hant="如果人格依賴其他 Windows DLL、SAORI 模組或執行檔，可能仍需要 Wine。" data-ko="고스트가 별도의 Windows DLL, SAORI 모듈, 실행 파일에 의존하면 Wine이 필요할 수 있어요.">ゴーストが別のWindows向けDLL・SAORI・実行ファイルへ依存する場合は、Wineが必要になることがあります。</dd></div>
+</dl>
+</aside>
 </section>
 <section class="compatibility" id="compatibility">
 <p class="eyebrow">02 / BEFORE YOU BRING YOUR GHOST</p>
@@ -210,6 +97,7 @@ code{font-size:.95em;overflow-wrap:anywhere}
 <section class="section faq" id="questions">
 <div><p class="eyebrow">04 / A FEW MORE THINGS</p><h2 data-ja="気になるところ。" data-en="A few things to know." data-zh-hans="你可能想知道。" data-zh-hant="你可能想知道。" data-ko="궁금한 점이 있나요?">気になるところ。</h2></div>
 <div class="questions">
+<details><summary><span data-ja="そもそも伺かって何？" data-en="What is Ukagaka?" data-zh-hans="伺か是什么？" data-zh-hant="伺か是什麼？" data-ko="우카가카가 뭔가요?">そもそも伺かって何？</span></summary><p data-ja="デスクトップにキャラクターを立たせ、会話や反応を楽しむ仕組みと文化です。本体アプリを「ベースウェア」、キャラクターと会話データを「ゴースト」、見た目を「シェル」、吹き出しを「バルーン」と呼びます。UtataneはmacOS向けのベースウェアです。" data-en="Ukagaka is a system and culture for keeping characters on your desktop and enjoying their dialogue and reactions. The host app is called baseware; a character and its dialogue form a ghost; its appearance is a shell; and its speech window is a balloon. Utatane is baseware for macOS." data-zh-hans="伺か是一种让角色常驻桌面，并欣赏其对话与反应的系统和文化。本体应用称为「baseware」，角色及对话数据称为「ghost」，外观称为「shell」，对话窗口称为「balloon」。Utatane 是面向 macOS 的 baseware。" data-zh-hant="伺か是一種讓角色常駐桌面，並欣賞其對話與反應的系統與文化。本體應用程式稱為「baseware」，角色與對話資料稱為「ghost」，外觀稱為「shell」，對話視窗稱為「balloon」。Utatane 是面向 macOS 的 baseware。" data-ko="우카가카는 데스크톱에 캐릭터를 두고 대화와 반응을 즐기는 시스템이자 문화예요. 본체 앱을 ‘베이스웨어’, 캐릭터와 대화 데이터를 ‘고스트’, 겉모습을 ‘셸’, 대화 창을 ‘벌룬’이라고 불러요. Utatane는 macOS용 베이스웨어예요.">デスクトップにキャラクターを立たせ、会話や反応を楽しむ仕組みと文化です。本体アプリを「ベースウェア」、キャラクターと会話データを「ゴースト」、見た目を「シェル」、吹き出しを「バルーン」と呼びます。UtataneはmacOS向けのベースウェアです。</p></details>
 <details><summary><span data-ja="Wineは必要？" data-en="Do I need Wine?" data-zh-hans="需要 Wine 吗？" data-zh-hant="需要 Wine 嗎？" data-ko="Wine이 필요한가요?">Wineは必要？</span></summary><p data-ja="対応するYAYA(文)・KAGARI・SHIOLINK(MiyoJS等)・里々・華和梨・美坂・灯はネイティブで実行します。ただし、ゴーストが別のWindows DLLなどに依存する場合は、Wineが必要になることがあります。" data-en="Supported YAYA (AYA), KAGARI, SHIOLINK (MiyoJS, etc.), SATORI, KAWARI, MISAKA, and AKARI run natively. Ghosts that depend on additional Windows DLLs may still need Wine." data-zh-hans="受支持的 YAYA(文)、KAGARI、SHIOLINK(MiyoJS等)、里々、華和梨、美坂和灯可以原生运行。不过，如果人格依赖其他 Windows DLL 等组件，仍可能需要 Wine。" data-zh-hant="支援的 YAYA(文)、KAGARI、SHIOLINK(MiyoJS等)、里々、華和梨、美坂和灯可以原生執行。不過，如果人格依賴其他 Windows DLL 等元件，仍可能需要 Wine。" data-ko="지원하는 YAYA(文), KAGARI, SHIOLINK(MiyoJS 등), 里々, 華和梨, 美坂, 灯은 네이티브로 실행돼요. 다만 고스트가 별도의 Windows DLL 등에 의존한다면 Wine이 필요할 수 있어요.">対応するYAYA(文)・KAGARI・SHIOLINK(MiyoJS等)・里々・華和梨・美坂・灯はネイティブで実行します。ただし、ゴーストが別のWindows DLLなどに依存する場合は、Wineが必要になることがあります。</p></details>
 <details><summary><span data-ja="さくらとうにゅうも動く？" data-en="Can I run Sakura and Unyuu?" data-zh-hans="可以运行さくら和うにゅう吗？" data-zh-hant="可以執行さくら和うにゅう嗎？" data-ko="사쿠라와 우뉴도 실행되나요?">さくらとうにゅうも動く？</span></summary><p data-ja="Materia付属のfirstは、対応版の会話データを読み取る専用の仕組みでWineなしに動作します。ファイルは同梱していないので、正規に入手したものを自分で用意してください。一般のWindows DLLを実行する機能ではありません。" data-en="The supported version of Materia’s first can run without Wine through a dedicated dialogue-data reader. It is not bundled; you need your own legitimately obtained files. This is not general-purpose Windows DLL execution." data-zh-hans="Materia 附带的 first 通过专用机制读取受支持版本的对话数据，无需 Wine。Utatane 不附带这些文件，请自行通过正规渠道获取。这不是通用的 Windows DLL 执行功能。" data-zh-hant="Materia 附帶的 first 透過專用機制讀取支援版本的對話資料，無需 Wine。Utatane 不附帶這些檔案，請自行透過正規管道取得。這不是通用的 Windows DLL 執行功能。" data-ko="Materia에 포함된 first는 지원 버전의 대화 데이터를 읽는 전용 방식으로 Wine 없이 작동해요. 파일은 포함되어 있지 않으니 정당하게 입수한 파일을 직접 준비해 주세요. 일반적인 Windows DLL 실행 기능은 아니에요.">Materia付属のfirstは、対応版の会話データを読み取る専用の仕組みでWineなしに動作します。ファイルは同梱していないので、正規に入手したものを自分で用意してください。一般のWindows DLLを実行する機能ではありません。</p></details>
 <details><summary><span data-ja="日本語以外でも使える？" data-en="Does it support other languages?" data-zh-hans="支持日语以外的语言吗？" data-zh-hant="支援日語以外的語言嗎？" data-ko="일본어 외의 언어도 지원하나요?">日本語以外でも使える？</span></summary><p data-ja="アプリとこのページは日本語・英語・簡体字中国語・繁体字中国語・韓国語に対応しています。ゴーストの会話は作者の用意した言語のままで、自動翻訳はされません。" data-en="The app and this page support Japanese, English, Simplified Chinese, Traditional Chinese, and Korean. Ghost dialogue stays in the author’s language and is not automatically translated." data-zh-hans="应用界面与本页面支持日语、英语、简体中文、繁体中文和韩语。人格对话仍使用作者提供的语言，不会自动翻译。" data-zh-hant="應用程式介面與本頁面支援日語、英語、簡體中文、繁體中文和韓語。人格對話仍使用作者提供的語言，不會自動翻譯。" data-ko="앱 화면과 이 페이지는 일본어, 영어, 중국어 간체·번체, 한국어를 지원해요. 고스트의 대화는 제작자가 제공한 언어 그대로이며 자동 번역되지 않아요.">アプリとこのページは日本語・英語・簡体字中国語・繁体字中国語・韓国語に対応しています。ゴーストの会話は作者の用意した言語のままで、自動翻訳はされません。</p></details>
@@ -228,186 +116,6 @@ code{font-size:.95em;overflow-wrap:anywhere}
 <div class="bottom"><span>© 2026 wamo.</span><a href="./utatane.html"><span data-ja="シンプルな案内ページ" data-en="Simple information page" data-zh-hans="简洁版介绍页面" data-zh-hant="簡潔版介紹頁面" data-ko="간단한 안내 페이지">シンプルな案内ページ</span> <span aria-hidden="true">↗</span></a></div>
 </footer>
 </div>
-<script>
-"use strict";
-(() => {
-  const RELEASES = "https://github.com/opera7133/Utatane/releases";
-  const API = "https://api.github.com/repos/opera7133/Utatane/releases?per_page=100";
-  const STORAGE_KEY = "utatane-language";
-  const LANGUAGES = ["ja", "en", "zh-Hans", "zh-Hant", "ko"];
-  let language = "ja";
-  let releaseState = { kind: "loading" };
-  const words = {
-    ja: { loading:"最新リリースを確認中…", fallback:"取得できませんでした。GitHub Releasesからダウンロードできます。", all:"リリース一覧", page:"配布ページを開く", download:"macOS版をダウンロード", prerelease:" / 開発版", stable:" / 通常リリース", published:"公開", noAsset:"このリリースの配布ファイルを確認してください。" },
-    en: { loading:"Checking the latest release…", fallback:"Couldn’t load the latest release. Downloads are available on GitHub Releases.", all:"All releases", page:"View downloads", download:"Download for macOS", prerelease:" / Pre-release", stable:" / Regular release", published:"Published", noAsset:"Check this release for available downloads." }
-  };
-  const localizedWords = {
-  "ja": {
-    "title": "Utatane — macOSで伺かを",
-    "pause": "動きを止める",
-    "resume": "動かす"
-  },
-  "en": {
-    "title": "Utatane — Ukagaka for macOS",
-    "pause": "Pause animation",
-    "resume": "Play animation"
-  },
-  "zh-Hans": {
-    "title": "Utatane — 在 macOS 上使用伺か",
-    "pause": "暂停动画",
-    "resume": "播放动画",
-    "loading": "正在获取最新版本…",
-    "fallback": "无法获取最新版本。可前往 GitHub Releases 下载。",
-    "all": "版本列表",
-    "page": "前往下载页面",
-    "download": "下载 macOS 版",
-    "prerelease": " / 开发版",
-    "stable": " / 常规发布",
-    "published": "发布于",
-    "noAsset": "请在此版本页面查看可下载的文件。"
-  },
-  "zh-Hant": {
-    "title": "Utatane — 在 macOS 上使用伺か",
-    "pause": "暫停動畫",
-    "resume": "播放動畫",
-    "loading": "正在取得最新版本…",
-    "fallback": "無法取得最新版本。可前往 GitHub Releases 下載。",
-    "all": "版本列表",
-    "page": "前往下載頁面",
-    "download": "下載 macOS 版",
-    "prerelease": " / 開發版",
-    "stable": " / 一般發行版",
-    "published": "發布於",
-    "noAsset": "請在此版本頁面查看可下載的檔案。"
-  },
-  "ko": {
-    "title": "Utatane — macOS에서 우카가카를",
-    "pause": "애니메이션 일시 정지",
-    "resume": "애니메이션 재생",
-    "loading": "최신 릴리스 확인 중…",
-    "fallback": "최신 버전을 불러오지 못했어요. GitHub Releases에서 다운로드할 수 있어요.",
-    "all": "릴리스 목록",
-    "page": "다운로드 페이지 열기",
-    "download": "macOS 버전 다운로드",
-    "prerelease": " / 개발 버전",
-    "stable": " / 일반 릴리스",
-    "published": "출시일",
-    "noAsset": "이 릴리스의 다운로드 파일을 확인해 주세요."
-  }
-};
-  for (const code of LANGUAGES) words[code] = { ...words[code], ...localizedWords[code] };
-  const motionToggle = document.getElementById("motion-toggle");
-  const title = document.getElementById("title");
-  let paused = false;
-  function renderMotion() {
-    motionToggle.textContent = paused ? words[language].resume : words[language].pause;
-    motionToggle.setAttribute("aria-pressed", String(paused));
-  }
-  motionToggle.hidden = false;
-  title.classList.add("is-animated");
-  motionToggle.addEventListener("click", () => {
-    paused = !paused;
-    title.classList.toggle("is-paused", paused);
-    renderMotion();
-  });
-  const status = document.getElementById("release-status");
-  const releaseLink = document.getElementById("release-link");
-  const downloadLink = document.getElementById("download-link");
-  const downloadLabel = document.getElementById("download-label");
-  const releaseKind = document.getElementById("release-kind");
-
-  function safeGitHubURL(value, pathPrefix) {
-    try {
-      const url = new URL(value);
-      return url.origin === "https://github.com" && !url.username && !url.password &&
-        url.pathname.startsWith(pathPrefix) ? url.href : null;
-    } catch { return null; }
-  }
-
-  function renderRelease() {
-    const w = words[language];
-    releaseLink.href = RELEASES;
-    releaseLink.textContent = w.all;
-    downloadLink.href = RELEASES;
-    downloadLabel.textContent = w.page;
-    releaseKind.textContent = "";
-    downloadLink.removeAttribute("download");
-    if (releaseState.kind !== "ready") {
-      status.textContent = releaseState.kind === "loading" ? w.loading : w.fallback;
-      return;
-    }
-    const r = releaseState.release;
-    releaseLink.href = r.url;
-    releaseLink.textContent = r.name;
-    releaseKind.textContent = r.prerelease ? w.prerelease : w.stable;
-    downloadLink.href = r.assetURL || r.url;
-    downloadLabel.textContent = r.assetURL ? w.download : w.page;
-    const bits = [];
-    if (r.date) bits.push(w.published + " " + new Intl.DateTimeFormat(language, { year:"numeric", month:"short", day:"numeric", timeZone:"Asia/Tokyo" }).format(r.date));
-    if (r.size) bits.push(new Intl.NumberFormat(language, { maximumFractionDigits:1 }).format(r.size / 1048576) + " MB");
-    if (!r.assetURL) bits.push(w.noAsset);
-    status.textContent = bits.join(" · ");
-  }
-
-  function setLanguage(next, persist = false) {
-    language = LANGUAGES.includes(next) ? next : "ja";
-    document.documentElement.lang = language;
-    document.title = words[language].title;
-    document.querySelectorAll("[data-ja][data-en]").forEach(el => { el.textContent = el.getAttribute("data-" + language.toLowerCase()) || el.dataset.ja; });
-    document.querySelectorAll("[data-alt-ja]").forEach(el => { el.alt = el.getAttribute("data-alt-" + language); });
-    document.querySelectorAll("[data-language]").forEach(el => { el.setAttribute("aria-pressed", String(el.dataset.language === language)); });
-    if (persist) { try { localStorage.setItem(STORAGE_KEY, language); } catch {} }
-    renderRelease();
-    renderMotion();
-  }
-
-  async function fetchLatestVersion() {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-    try {
-      const response = await fetch(API, { signal:controller.signal, headers:{ Accept:"application/vnd.github+json" } });
-      if (!response.ok) throw new Error("Release request failed");
-      const data = await response.json();
-      if (!Array.isArray(data)) throw new Error("Invalid release list");
-      const releases = data.filter(r => r && !r.draft && typeof r.tag_name === "string" &&
-        safeGitHubURL(r.html_url, "/opera7133/Utatane/releases/tag/"));
-      releases.sort((a,b) => (Date.parse(b.published_at) || 0) - (Date.parse(a.published_at) || 0));
-      const latest = releases[0];
-      if (!latest) throw new Error("No published releases");
-      const assets = Array.isArray(latest.assets) ? latest.assets : [];
-      const asset = assets.find(a => a && a.name === "Utatane-macOS.zip" &&
-        safeGitHubURL(a.browser_download_url, "/opera7133/Utatane/releases/download/"));
-      const date = new Date(latest.published_at || NaN);
-      releaseState = { kind:"ready", release:{
-        name:latest.tag_name, url:safeGitHubURL(latest.html_url, "/opera7133/Utatane/releases/tag/"),
-        prerelease:latest.prerelease === true, date:Number.isNaN(date.getTime()) ? null : date,
-        assetURL:asset ? safeGitHubURL(asset.browser_download_url, "/opera7133/Utatane/releases/download/") : null,
-        size:asset && Number.isFinite(asset.size) && asset.size > 0 ? asset.size : null
-      }};
-    } catch { releaseState = { kind:"error" }; }
-    finally { clearTimeout(timeout); }
-    renderRelease();
-  }
-
-  function matchLanguage(value) {
-    const tag = value.toLowerCase();
-    if (tag === "zh" || tag.startsWith("zh-")) {
-      if (tag.includes("-hant")) return "zh-Hant";
-      if (tag.includes("-hans")) return "zh-Hans";
-      return /-(tw|hk|mo)(-|$)/.test(tag) ? "zh-Hant" : "zh-Hans";
-    }
-    return ["ja", "en", "ko"].find(code => tag === code || tag.startsWith(code + "-"));
-  }
-  const requested = navigator.languages?.length ? navigator.languages : [navigator.language || "ja"];
-  let preferred = requested.map(matchLanguage).find(Boolean) || "ja";
-  try { const saved = localStorage.getItem(STORAGE_KEY); if (LANGUAGES.includes(saved)) preferred = saved; } catch {}
-  document.querySelectorAll("[data-language]").forEach(button => {
-    button.addEventListener("click", () => setLanguage(button.dataset.language, true));
-  });
-  document.querySelector(".languages").hidden = false;
-  setLanguage(preferred);
-  fetchLatestVersion();
-})();
-</script>
+<script src="./utatane-modern.js"></script>
 </body>
 </html>

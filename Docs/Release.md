@@ -56,7 +56,7 @@ FTPS接続には次のGitHub Actions Secretsを使用します。コアサーバ
 - `DEPLOY_PASSWORD`
 - `DEPLOY_PATH`（例: `/public_html/utatane`）
 
-配布サイトの `utatane.html`、`utatane-modern.html` と画像は、`main` に該当ファイルをpushすると
+配布サイトの `utatane.html`、`utatane-modern.html`、modern版のCSS・JavaScriptと画像は、`main` に該当ファイルをpushすると
 `Deploy website` workflowが5言語表示・リリース取得・リンクを検査してから別にアップロードします。上記4つに加えて、リポジトリへ
 次のGitHub Actions Secretを設定します。
 
