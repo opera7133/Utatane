@@ -1,10 +1,24 @@
 import AppKit
+import CoreText
 import Testing
 import UtataneBalloon
 import UtataneCore
 @testable import UtatanePlatformMacOS
 import UtataneSakuraScript
 import UtataneShell
+
+@Test func `default ghost dialogue font prefers Japanese glyphs`() {
+    let font = ghostDialogueFont(named: nil, size: 14)
+    let resolved = CTFontCreateForString(
+        font as CTFont,
+        "漢" as CFString,
+        CFRange(location: 0, length: 1)
+    )
+    #expect((CTFontCopyPostScriptName(resolved) as String).contains("Hiragino"))
+
+    let explicit = ghostDialogueFont(named: "Menlo", size: 14)
+    #expect(explicit.fontName.contains("Menlo"))
+}
 
 @Test func `automatic animation probabilities match SERIKO intervals`() {
     #expect(automaticAnimationRandomDenominator(components: ["sometimes"], parameter: nil) == 2)

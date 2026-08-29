@@ -759,8 +759,7 @@ private final class BalloonContentView: NSView {
         arrowView = arrowImage.map(NSImageView.init(image:))
         self.markerImage = markerImage
         let fontSize = CGFloat(balloon.fontHeight) * displayScale * textScale
-        let namedFont = balloon.fontName.flatMap { NSFont(name: $0, size: fontSize) }
-            ?? NSFont.systemFont(ofSize: fontSize)
+        let namedFont = ghostDialogueFont(named: balloon.fontName, size: fontSize)
         textFont = decoratedFont(namedFont, bold: balloon.fontBold, italic: balloon.fontItalic)
         var defaultTextStyle = BalloonTextStyle()
         defaultTextStyle.fontName = balloon.fontName
@@ -1081,8 +1080,7 @@ private extension BalloonContentView {
         let defaultUnscaledSize = textFont.pointSize / displayScale
         let size = style.fontHeight.map { CGFloat($0) * displayScale * textScale }
             ?? defaultUnscaledSize * displayScale
-        let baseFont = style.fontName.flatMap { NSFont(name: $0, size: size) }
-            ?? NSFont.systemFont(ofSize: size)
+        let baseFont = ghostDialogueFont(named: style.fontName, size: size)
         let font = decoratedFont(baseFont, bold: style.bold, italic: style.italic)
         var result: [NSAttributedString.Key: Any] = [:]
         if style.fontName != nil || style.fontHeight != nil || style.bold || style.italic {
@@ -1160,6 +1158,21 @@ private extension BalloonContentView {
         let coordinate = CGFloat(value) * displayScale
         return coordinate < 0 ? extent + coordinate : coordinate
     }
+}
+
+func ghostDialogueFont(named name: String?, size: CGFloat) -> NSFont {
+    if let name, let font = NSFont(name: name, size: size) {
+        return font
+    }
+
+    let systemFont = NSFont.systemFont(ofSize: size)
+    guard let japaneseFont = NSFont(name: "Hiragino Sans", size: size) else {
+        return systemFont
+    }
+    let descriptor = systemFont.fontDescriptor.addingAttributes([
+        .cascadeList: [japaneseFont.fontDescriptor]
+    ])
+    return NSFont(descriptor: descriptor, size: size) ?? systemFont
 }
 
 private func decoratedFont(_ base: NSFont, bold: Bool, italic: Bool) -> NSFont {

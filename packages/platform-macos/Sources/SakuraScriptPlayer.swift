@@ -803,9 +803,10 @@ public final class SakuraScriptPlayer {
                         let currentPosition = balloonWindowController.textCursorPosition(scope: targetScope)
                         let style = textStyleByScope[targetScope, default: BalloonTextStyle()]
                         let em = style.fontHeight ?? Double(balloon.fontHeight)
-                        let font = (style.fontName ?? balloon.fontName).flatMap {
-                            NSFont(name: $0, size: CGFloat(em))
-                        } ?? NSFont.systemFont(ofSize: CGFloat(em))
+                        let font = ghostDialogueFont(
+                            named: style.fontName ?? balloon.fontName,
+                            size: CGFloat(em)
+                        )
                         let lineHeight = Double(font.ascender - font.descender + font.leading)
                         func coordinateValue(
                             _ coordinate: SakuraScriptBalloonCoordinate,
