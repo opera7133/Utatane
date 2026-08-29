@@ -79,6 +79,7 @@ packages/satori-native/    SATORI本体とSwiftブリッジ
 packages/kawari-native/    KAWARI本体とSwiftブリッジ
 packages/misaka-native/    MISAKA辞書のSwift実装
 packages/akari-native/     灯のイベント資源、AZR、AMBのSwift実装
+packages/ese-shiori-native/ ese-shiori 3.03辞書の復号とSwift実装
 packages/first-native/     利用者所有のfirst.dllを読む専用人格
 packages/posix-shiori/     macOS外部SHIORIのdylibローダー、SHIOLINK外部プロセス接続
 packages/windows-shiori/   Wine互換ホストとWindows DLLの通信

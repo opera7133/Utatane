@@ -552,6 +552,21 @@ import UtataneShiori
     #expect(silent == nil)
 }
 
+@Test func `ria produces a scheduled random talk on a talkable second change`() throws {
+    let master = try makeRiaLifecycleFixture()
+    defer { try? FileManager.default.removeItem(at: master) }
+    let session = try NativeYayaSession(masterDirectoryURL: master)
+    _ = try riaLifecycleRequest(session, id: "OnBoot")
+    _ = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestAITalkDue")
+
+    let talk = try riaLifecycleRequest(session, id: "OnSecondChange", references: [
+        0: "0", 1: "0", 2: "0", 3: "1", 4: "600"
+    ])
+    #expect(talk.value?.isEmpty == false)
+    #expect(talk.value?.contains(#"\0"#) == true)
+    #expect(talk.value?.hasSuffix(#"\e"#) == true)
+}
+
 @Test func `installed ria responds to OnSysSuspend and OnSysResume`() async throws {
     let repositoryRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
@@ -656,6 +671,14 @@ private func makeRiaLifecycleFixture() throws -> URL {
     OnRiaLifecycleTestExpire
     {
         ria_away_until = GETSECCOUNT() - 1
+    }
+    OnRiaLifecycleTestAITalkDue
+    {
+        aitalkinterval = 1
+        SHIORI3FW.LastAITalkTime = GETSECCOUNT() - 2
+        SHIORI3FW.LastTalkTime = GETSECCOUNT() - 10
+        SHIORI3FW.TalkEndTime = GETSECCOUNT() - 10
+        SHIORI3FW.IsAITalkComplete = 0
     }
     """#
     try (String(contentsOf: lifecycle, encoding: .utf8) + fixture).write(to: lifecycle, atomically: true, encoding: .utf8)

@@ -95,7 +95,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.1.6
+        MARKETING_VERSION: 0.1.7
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     dependencies:
       - package: Sparkle
