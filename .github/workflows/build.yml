@@ -234,7 +234,12 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [test, build]
     runs-on: macos-26
+    env:
+      GH_REPO: ${{ github.repository }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
       - name: Install release tools
         run: brew install lftp
 
