@@ -55,6 +55,7 @@ private struct RuntimeProbeView: View {
 }
 
 @MainActor
+@Suite(.serialized)
 struct ApplicationRuntimeTasksTests {
     @Test func `registration cancellation does not stop runtime and unchanged revision does not restart it`() async throws {
         let tasks = ApplicationRuntimeTasks()
