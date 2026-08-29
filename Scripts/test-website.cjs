@@ -103,6 +103,12 @@ async function run(data, options={}) {
   }
   assert.ok(html.includes('href="./utatane-modern.css"'));
   assert.ok(html.includes('src="./utatane-modern.js"'));
+  for (const name of ['utatane-icon.webp','utatane-screenshot.webp']) {
+    assert.ok(html.includes('srcset="./assets/'+name+'"'));
+    assert.ok(deploy.includes('"website/assets/'+name+'"'));
+    assert.ok(deploy.includes('put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/'+name));
+  }
+  assert.match(html,/utatane-screenshot\.png" width="700" height="447"[^>]+fetchpriority="high"/);
   assert.ok(html.includes('そもそも伺かって何？'));
   assert.ok(html.includes('Utataneだけで動く'));
   for (const label of [' / Stable',' / 安定版',' / 稳定版',' / 穩定版',' / 안정 버전']) assert.ok(!html.includes(label));

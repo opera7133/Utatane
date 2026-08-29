@@ -10,7 +10,7 @@ button{cursor:pointer}
 .wrap{max-width:1200px;margin:auto;padding:0 52px}
 .topbar{display:flex;justify-content:space-between;align-items:center;gap:24px;padding:24px 0;border-bottom:1px solid var(--ink)}
 .brand{display:flex;align-items:center;gap:10px;font-weight:600;text-decoration:none}
-.brand img{width:30px;height:30px}
+.brand picture,.brand img{display:block}.brand img{width:30px;height:30px}
 .topbar nav{display:flex;align-items:center;gap:26px;font-size:12px}
 .languages{display:flex;gap:10px;border-left:1px solid var(--line);padding-left:24px}
 .languages[hidden]{display:none}
@@ -40,7 +40,7 @@ html[lang="ja"] .lead{text-wrap:initial}
 .small{font-size:12px;color:var(--muted)}
 .hero .small{margin:12px 0 0}
 figure{margin:0;min-width:0}
-.hero img{width:100%;height:auto;display:block}
+.hero picture,.hero img{width:100%;display:block}.hero img{height:auto}
 figcaption{display:flex;justify-content:space-between;gap:16px;color:var(--muted);font-size:10px;margin-top:12px}
 .factline{display:grid;grid-template-columns:repeat(3,1fr);padding:22px 0;border-block:1px solid var(--line);gap:24px}
 .factline p{margin:0;font-size:12px;color:var(--muted)}
