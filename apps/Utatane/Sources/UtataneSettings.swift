@@ -510,14 +510,14 @@ struct UtataneSettingsView: View {
                 }
                 Section("表示倍率") {
                     Picker("シェル", selection: $settings.shellScalePercent) {
-                        ForEach([50, 75, 100, 125, 150, 200], id: \.self) { value in
+                        ForEach([25, 50, 75, 100, 125, 150, 200], id: \.self) { value in
                             Text("\(value)%").tag(value)
                         }
                     }
                     Toggle("大きいシェルを画面に合わせて縮小", isOn: $settings.automaticallyFitsLargeSurfaces)
                     Toggle("バルーンをシェル倍率に連動", isOn: $settings.linksBalloonScale)
                     Picker("バルーン", selection: $settings.balloonScalePercent) {
-                        ForEach([50, 75, 100, 125, 150, 200], id: \.self) { value in
+                        ForEach([25, 50, 75, 100, 125, 150, 200], id: \.self) { value in
                             Text("\(value)%").tag(value)
                         }
                     }
