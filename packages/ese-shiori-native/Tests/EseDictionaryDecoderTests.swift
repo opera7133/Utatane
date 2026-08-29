@@ -36,3 +36,22 @@ import UtataneEseShioriNative
     )))
     #expect(menu?.rawValue.isEmpty == false)
 }
+
+@Test func `teaches and persists a word in the configured ese ghost`() async throws {
+    guard let path = ProcessInfo.processInfo.environment["UTATANE_ESE_SMOKE_PATH"] else { return }
+    let state = FileManager.default.temporaryDirectory
+        .appending(path: "utatane-ese-\(UUID().uuidString).json")
+    defer { try? FileManager.default.removeItem(at: state) }
+    let master = URL(filePath: path, directoryHint: .isDirectory)
+    let engine = try NativeEseShioriPersonalityEngine(masterDirectoryURL: master, stateStoreURL: state)
+
+    let start = try await engine.handle(event: .shiori(id: "OnTeachEventStart", references: [0: "고양이"]))
+    #expect(start?.rawValue.contains("inputbox,OnTeachEventInputed") == true)
+    let learned = try await engine.handle(event: .shiori(id: "OnTeachEventInputed", references: [0: "사람"]))
+    #expect(learned?.rawValue.contains("알았어") == true)
+    _ = try await engine.handle(event: .close)
+
+    let restored = try NativeEseShioriPersonalityEngine(masterDirectoryURL: master, stateStoreURL: state)
+    let known = try await restored.handle(event: .shiori(id: "OnTeachEventStart", references: [0: "고양이"]))
+    #expect(known?.rawValue.contains("알고 있어") == true)
+}

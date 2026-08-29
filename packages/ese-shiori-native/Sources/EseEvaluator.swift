@@ -2,9 +2,10 @@ import Foundation
 import UtataneShiori
 
 struct EseEvaluator: Sendable {
-    let dictionary: EseDictionary
+    var dictionary: EseDictionary
     var storage: [Int: String] = [:]
     var variables: [String: String] = [:]
+    var learnedEntries: [String: [String]] = [:]
     var request: ShioriRequest?
     var recursionDepth = 0
     var talkInterval: Int?
@@ -14,9 +15,11 @@ struct EseEvaluator: Sendable {
         guard let requestedID = request.id else { return "" }
         let id = requestedID.caseInsensitiveCompare("OnAITalk") == .orderedSame ? "OnRandomTalk" : requestedID
         let kind: EseRule.Kind = id == "OnCommunicate" ? .response : (id == "version" ? .resource : .event)
-        let rules = dictionary.rules.filter { $0.kind == kind && matches($0, id: id) }
-        guard let rule = rules.randomElement(), let value = selectWeighted(rule.values) else { return "" }
-        return expand(value)
+        let matchingRules = dictionary.rules.filter { $0.kind == kind && matches($0, id: id) }
+        let specificity = matchingRules.map(\.conditions.count).max()
+        let rules = matchingRules.filter { $0.conditions.count == specificity }
+        guard let rule = rules.randomElement() else { return "" }
+        return expand(rule.values.joined())
     }
 
     private func matches(_ rule: EseRule, id: String) -> Bool {
@@ -36,7 +39,14 @@ struct EseEvaluator: Sendable {
         guard let colon = condition.firstIndex(of: ":") else { return contextText.contains(condition) }
         let name = String(condition[..<colon]).trimmingCharacters(in: .whitespaces)
         let expected = String(condition[condition.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
-        return request?.headers[name] == expected
+        let actual = request?.headers[name] ?? ""
+        if expected.hasPrefix("%") {
+            let marker = expected.dropFirst().prefix { $0.isLetter || $0.isNumber || "._@".contains($0) }
+            if !marker.isEmpty, let values = dictionary.entries[String(marker)] {
+                return values.contains { Self.weightedValue($0) == actual }
+            }
+        }
+        return actual == expected
     }
 
     private var contextText: String {
@@ -64,11 +74,18 @@ struct EseEvaluator: Sendable {
             frames.last?.active ?? true
         }
         while cursor < source.endIndex {
-            guard source[cursor] == "$", let call = functionCall(in: source, at: cursor), ["IF", "_IF", "ELSEIF", "ELSE", "ENDIF", "_ENDIF"].contains(call.name) else {
+            guard source[cursor] == "$", let call = functionCall(in: source, at: cursor) else {
                 if active() {
                     output.append(source[cursor])
                 }
                 cursor = source.index(after: cursor); continue
+            }
+            guard ["IF", "_IF", "ELSEIF", "ELSE", "ENDIF", "_ENDIF"].contains(call.name) else {
+                if active() {
+                    output.append(callFunction(call.name, call.arguments))
+                }
+                cursor = call.end
+                continue
             }
             switch call.name {
             case "IF", "_IF":
@@ -103,7 +120,7 @@ struct EseEvaluator: Sendable {
     private mutating func callFunction(_ rawName: String, _ rawArguments: [String]) -> String {
         let suppressed = rawName.hasPrefix("_")
         let name = rawName.trimmingCharacters(in: CharacterSet(charactersIn: "_")).uppercased()
-        let args = rawArguments.map { unquote(expand($0).trimmingCharacters(in: .whitespaces)) }
+        let args = rawArguments.map { unquote(evaluateExpression(expand($0)).trimmingCharacters(in: .whitespaces)) }
         var value = ""
         switch name {
         case "PUSH":
@@ -115,10 +132,19 @@ struct EseEvaluator: Sendable {
             let upper = max(Int(args.first ?? "0") ?? 0, 1), offset = args.dropFirst().first.flatMap(Int.init) ?? 0
             value = String(Int.random(in: 0 ..< upper) + offset)
         case "GETSENTRES":
-            let begin = args.first ?? "", end = args.dropFirst().first ?? ","
-            if let range = contextText.range(of: begin) {
-                let tail = contextText[range.upperBound...]
-                let found = tail.range(of: end).map { String(tail[..<$0.lowerBound]) } ?? String(tail)
+            let begin = args.first ?? "", end = args.dropFirst().first ?? "[13][10]"
+            let requestText = requestLines
+            let headerName = begin.trimmingCharacters(in: .whitespaces).hasSuffix(":")
+                ? String(begin.trimmingCharacters(in: .whitespaces).dropLast()) : nil
+            if let headerName, let found = request?.headers[headerName] {
+                if args.count > 2, let index = Int(args[2]) {
+                    storage[index] = found
+                }
+                value = found
+            } else if let range = requestText.range(of: begin, options: .caseInsensitive) {
+                let tail = requestText[range.upperBound...]
+                let terminator = end.replacingOccurrences(of: "[13]", with: "\r").replacingOccurrences(of: "[10]", with: "\n")
+                let found = terminator.isEmpty ? String(tail) : (tail.range(of: terminator).map { String(tail[..<$0.lowerBound]) } ?? String(tail))
                 if args.count > 2, let index = Int(args[2]) {
                     storage[index] = found
                 }
@@ -132,12 +158,22 @@ struct EseEvaluator: Sendable {
             }
             value = key
         case "SETENTRY":
-            if args.count > 1, let index = Int(args[1]) {
-                storage[index] = args[0]
+            if args.count > 1, !args[0].isEmpty {
+                dictionary.entries[args[0], default: []].append(args[1])
+                learnedEntries[args[0], default: []].append(args[1])
             }
         case "DELENTRY":
-            if let index = args.dropFirst().first.flatMap(Int.init) {
-                storage[index] = nil
+            if args.count > 1 {
+                let key = args[0], sought = args[1]
+                if key.isEmpty {
+                    for entry in Array(dictionary.entries.keys) {
+                        dictionary.entries[entry]?.removeAll { Self.weightedValue($0) == sought }
+                        learnedEntries[entry]?.removeAll { Self.weightedValue($0) == sought }
+                    }
+                } else {
+                    dictionary.entries[key]?.removeAll { Self.weightedValue($0) == sought }
+                    learnedEntries[key]?.removeAll { Self.weightedValue($0) == sought }
+                }
             }
         case "GETPOP":
             if let index = args.first.flatMap(Int.init) {
@@ -182,6 +218,9 @@ struct EseEvaluator: Sendable {
             result = result.replacingOccurrences(of: "%%\(key)", with: value)
             result = result.replacingOccurrences(of: "%\(key)", with: value)
         }
+        for index in 0 ... 7 {
+            result = result.replacingOccurrences(of: "%$ref\(index)", with: request?.reference(index) ?? "", options: .caseInsensitive)
+        }
         return result
     }
 
@@ -199,7 +238,7 @@ struct EseEvaluator: Sendable {
                 candidates = dictionary.entries[lookup] ?? []
             }
             let replacement: String = if let candidate = selectWeighted(candidates) {
-                expand(weightedValue(candidate))
+                expand(Self.weightedValue(candidate))
             } else {
                 ""
             }
@@ -209,7 +248,7 @@ struct EseEvaluator: Sendable {
         return result
     }
 
-    private func weightedValue(_ value: String) -> String {
+    private static func weightedValue(_ value: String) -> String {
         guard let comma = value.firstIndex(of: ","), Int(value[..<comma].trimmingCharacters(in: .whitespaces)) != nil else { return value }
         return String(value[value.index(after: comma)...])
     }
@@ -318,16 +357,51 @@ struct EseEvaluator: Sendable {
     }
 
     private mutating func evaluateCondition(_ raw: String) -> Bool {
-        let text = expand(raw).trimmingCharacters(in: .whitespaces)
-        for op in ["><", ">=", "<=", "=", ">", "<"] where text.contains(op) {
+        let text = evaluateExpression(raw).trimmingCharacters(in: .whitespaces)
+        for op in ["><", "<>", ">=", "=>", "<=", "=<", "=", ">", "<"] where text.contains(op) {
             let parts = text.components(separatedBy: op); guard parts.count >= 2 else { continue }
             let lhs = unquote(parts[0].trimmingCharacters(in: .whitespaces)), rhs = unquote(parts[1].trimmingCharacters(in: .whitespaces))
             if let l = Double(lhs), let r = Double(rhs) {
-                switch op { case "><": return l != r; case ">=": return l >= r; case "<=": return l <= r; case "=": return l == r; case ">": return l > r; default: return l < r }
+                switch op { case "><", "<>": return l != r; case ">=", "=>": return l >= r; case "<=", "=<": return l <= r; case "=": return l == r; case ">": return l > r; default: return l < r }
             }
-            return op == "><" ? lhs != rhs : op == "=" && lhs == rhs
+            return ["><", "<>"].contains(op) ? lhs != rhs : op == "=" && lhs == rhs
         }
         return !text.isEmpty && text != "0"
+    }
+
+    private var requestLines: String {
+        guard let request else { return contextText }
+        return request.headers.entries.map { "\($0.name): \($0.value)\r\n" }.joined()
+    }
+
+    private mutating func evaluateExpression(_ source: String) -> String {
+        var result = expandVariables(source)
+        for name in ["POPSTR", "POPNUM", "POP"] {
+            let pattern = #"\b"# + name + #"\s*\(\s*(-?\d+)\s*\)"#
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { continue }
+            while let match = regex.firstMatch(in: result, range: NSRange(result.startIndex..., in: result)),
+                  let range = Range(match.range, in: result), let indexRange = Range(match.range(at: 1), in: result)
+            {
+                result.replaceSubrange(range, with: storage[Int(result[indexRange]) ?? 0] ?? "")
+            }
+        }
+        let pieces = splitConcatenation(result)
+        return pieces.count > 1 ? pieces.map { unquote($0.trimmingCharacters(in: .whitespaces)) }.joined() : result
+    }
+
+    private func splitConcatenation(_ text: String) -> [String] {
+        var result: [String] = [], current = "", quoted = false
+        for character in text {
+            if character == "\"" {
+                quoted.toggle(); current.append(character)
+            } else if character == "~", !quoted {
+                result.append(current); current = ""
+            } else {
+                current.append(character)
+            }
+        }
+        result.append(current)
+        return result
     }
 
     private func unquote(_ text: String) -> String {

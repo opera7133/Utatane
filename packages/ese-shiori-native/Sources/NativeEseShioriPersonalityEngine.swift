@@ -17,6 +17,7 @@ public actor NativeEseShioriPersonalityEngine: PersonalityEngine {
     private struct PersistedState: Codable {
         var variables: [String: String]
         var storage: [Int: String]
+        var learnedEntries: [String: [String]]?
     }
 
     private var evaluator: EseEvaluator
@@ -34,8 +35,12 @@ public actor NativeEseShioriPersonalityEngine: PersonalityEngine {
         evaluator = EseEvaluator(
             dictionary: dictionary,
             storage: saved?.storage ?? [:],
-            variables: saved?.variables ?? [:]
+            variables: saved?.variables ?? [:],
+            learnedEntries: saved?.learnedEntries ?? [:]
         )
+        for (name, values) in evaluator.learnedEntries {
+            evaluator.dictionary.entries[name, default: []].append(contentsOf: values)
+        }
         evaluator.variables["selfname"] = Self.descriptValue("name", at: masterDirectoryURL) ?? ""
         evaluator.variables["keroname"] = Self.descriptValue("name2", at: masterDirectoryURL) ?? ""
     }
@@ -74,8 +79,13 @@ public actor NativeEseShioriPersonalityEngine: PersonalityEngine {
         try FileManager.default.createDirectory(at: stateStoreURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try JSONEncoder().encode(PersistedState(
             variables: evaluator.variables,
-            storage: evaluator.storage
+            storage: evaluator.storage,
+            learnedEntries: evaluator.learnedEntries
         )).write(to: stateStoreURL, options: .atomic)
+    }
+
+    public func shutdown() async {
+        try? save()
     }
 
     private static func value(named name: String, in text: String) -> String? {
