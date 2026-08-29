@@ -208,6 +208,17 @@ struct SurfaceImageLoader {
         let width = representation.pixelsWide
         let height = representation.pixelsHigh
         let bytesPerRow = representation.bytesPerRow
+        let hasEmbeddedTransparency = (0 ..< height).contains { row in
+            (0 ..< width).contains { column in
+                pixels[row * bytesPerRow + column * 4 + 3] < 255
+            }
+        }
+        if hasEmbeddedTransparency {
+            representation.size = pixelSize
+            let image = NSImage(size: pixelSize)
+            image.addRepresentation(representation)
+            return image
+        }
         // NSBitmapImageRep uses y == 0 for the image's top row. The previous
         // implementation sampled the bottom-left pixel, which left YAYA's
         // bright-green marker visible for one animation frame.

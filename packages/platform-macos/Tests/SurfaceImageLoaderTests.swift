@@ -45,6 +45,33 @@ func `uses top left pixel as transparency key without PNA`() throws {
 }
 
 @Test
+@MainActor
+func `preserves embedded alpha instead of keying opaque pixels with the same decoded color`() throws {
+    let source = try #require(NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: 2,
+        pixelsHigh: 1,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 8,
+        bitsPerPixel: 32
+    ))
+    source.setColor(NSColor(deviceRed: 0.8, green: 0.8, blue: 0.8, alpha: 0), atX: 0, y: 0)
+    source.setColor(NSColor(deviceRed: 0, green: 0, blue: 0, alpha: 1), atX: 1, y: 0)
+    let sourceImage = NSImage(size: NSSize(width: 2, height: 1))
+    sourceImage.addRepresentation(source)
+
+    let image = try SurfaceImageLoader().applyingTopLeftTransparency(to: sourceImage)
+    let tiff = try #require(image.tiffRepresentation)
+    let output = try #require(NSBitmapImageRep(data: tiff))
+    #expect((output.colorAt(x: 0, y: 0)?.alphaComponent ?? 1) == 0)
+    #expect((output.colorAt(x: 1, y: 0)?.alphaComponent ?? 0) > 0.9)
+}
+
+@Test
 func `maps both SERIKO overlay fast spellings to source atop`() {
     #expect(surfaceCompositingOperation(for: "overlay") == .sourceOver)
     #expect(surfaceCompositingOperation(for: "overlay-fast") == .sourceAtop)
