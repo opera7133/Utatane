@@ -33,6 +33,20 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: Test bundled kagari inputs
+        run: python3 tools/native-shiori/test-bundle-kagari.py
+
+      - name: Test Swift packages
+        run: swift test --package-path packages
+
   build:
     runs-on: macos-26
     steps:
@@ -42,7 +56,7 @@ jobs:
           submodules: recursive
 
       - name: Install build tools
-        run: brew install lftp xcodegen zig
+        run: brew install xcodegen zig
 
       - name: Prepare version
         shell: bash
@@ -55,15 +69,27 @@ jobs:
           echo "UTATANE_VERSION=$version" >> "$GITHUB_ENV"
           echo "UTATANE_BUILD_NUMBER=$GITHUB_RUN_NUMBER" >> "$GITHUB_ENV"
 
-      - name: Test
-        run: |
-          python3 tools/native-shiori/test-bundle-kagari.py
-          swift test --package-path packages
-
       - name: Generate Xcode project
         run: xcodegen generate
 
+      - name: Build debug app
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          xcodebuild \
+            -project Utatane.xcodeproj \
+            -scheme Utatane \
+            -configuration Debug \
+            -destination 'platform=macOS' \
+            -derivedDataPath build \
+            -clonedSourcePackagesDirPath build/SourcePackages \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION="$UTATANE_VERSION" \
+            CURRENT_PROJECT_VERSION="$UTATANE_BUILD_NUMBER" \
+            build
+
       - name: Build universal app
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           xcodebuild \
             -project Utatane.xcodeproj \
@@ -80,16 +106,19 @@ jobs:
             build
 
       - name: Verify bundled kagari
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           sh tools/native-shiori/test-bundled-kagari.sh \
             build/Build/Products/Release/Utatane.app arm64 x86_64
 
       - name: Build Windows DLL host
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           Scripts/build-windows-dll-host.sh \
             build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe
 
       - name: Build universal MCP server
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           swift build \
             --package-path packages \
@@ -99,6 +128,7 @@ jobs:
             --product utatane-mcp
 
       - name: Verify Windows DLL host
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           host=build/Build/Products/Release/Utatane.app/Contents/Resources/utatane-dll-host.exe
           comparison_host="$RUNNER_TEMP/utatane-dll-host.exe"
@@ -111,6 +141,7 @@ jobs:
           cmp "$host" "$comparison_host"
 
       - name: Embed MCP server
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           mkdir -p build/Build/Products/Release/Utatane.app/Contents/Helpers
           cp \
@@ -122,6 +153,7 @@ jobs:
             -verify_arch arm64 x86_64
 
       - name: Package
+        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           mkdir -p dist
           codesign --force --sign - --identifier dev.utatane.mcp \
@@ -135,6 +167,7 @@ jobs:
             dist/Utatane-macOS.zip
 
       - name: Upload build artifact
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: Utatane-macOS
@@ -197,8 +230,33 @@ jobs:
           path: dist/content
           retention-days: 14
 
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, build]
+    runs-on: macos-26
+    steps:
+      - name: Install release tools
+        run: brew install lftp
+
+      - name: Download app artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: Utatane-macOS
+          path: dist
+
+      - name: Download update feed artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: Utatane-update-feed
+          path: dist/update-feed
+
+      - name: Download content update artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: Utatane-bundled-content-updates
+          path: dist/content
+
       - name: Scan with VirusTotal
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
         run: |
@@ -298,7 +356,6 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -334,7 +391,6 @@ jobs:
           gh release edit "$GITHUB_REF_NAME" --notes-file release_notes.md
 
       - name: Publish updates to dl.wmsci.com
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
