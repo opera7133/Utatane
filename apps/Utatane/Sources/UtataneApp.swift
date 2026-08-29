@@ -1726,8 +1726,16 @@ private struct UtataneRootView: View {
             }
             let bootEvent = GhostEvent.shiori(id: "OnBoot", references: [0: shellChoice.name])
             let startupScript: SakuraScript?
-            switch startup {
-            case .boot where !hasBooted(ghost):
+            let arrivedByGhostChange = if case .changed = startup {
+                true
+            } else {
+                false
+            }
+            switch ghostStartupEventKind(
+                hasBooted: hasBooted(ghost),
+                arrivedByGhostChange: arrivedByGhostChange
+            ) {
+            case .firstBoot:
                 let firstBootScript = try await ghostSession.handle(event: .shiori(
                     id: "OnFirstBoot", references: [0: "0"]
                 ))
@@ -1738,7 +1746,11 @@ private struct UtataneRootView: View {
                 }
             case .boot:
                 startupScript = try await ghostSession.handle(event: bootEvent)
-            case let .changed(previous, changeScript):
+            case .ghostChanged:
+                guard case let .changed(previous, changeScript) = startup else {
+                    startupScript = try await ghostSession.handle(event: bootEvent)
+                    break
+                }
                 let changedScript = try await ghostSession.handle(event: .shiori(id: "OnGhostChanged", references: [
                     0: previous.characters.first(where: { $0.scope == 0 })?.name ?? previous.name,
                     1: changeScript,
@@ -4406,21 +4418,23 @@ private struct UtataneRootView: View {
                     }
                 }
                 await model.load()
+                let activeGhostID = currentGhost?.id
                 if let bootGhostDirectory = bootGhostDirectories.last,
                    let bootGhost = model.ghosts.first(where: {
                        $0.rootDirectory.lastPathComponent.caseInsensitiveCompare(bootGhostDirectory) == .orderedSame
                    })
                 {
                     selectedGhostID = bootGhost.id
-                    currentGhost = bootGhost
                 } else if selectedGhostID == nil {
                     selectedGhostID = model.ghosts.first?.id
                 }
                 showsOnboarding = model.ghosts.isEmpty
                 updateDebugWindowVisibility()
-                if let refreshedGhost = model.ghosts.first(where: {
-                    $0.id.standardizedFileURL == selectedGhostID?.standardizedFileURL
-                }) {
+                if let activeGhostID,
+                   let refreshedGhost = model.ghosts.first(where: {
+                       $0.id.standardizedFileURL == activeGhostID.standardizedFileURL
+                   })
+                {
                     currentGhost = refreshedGhost
                 }
                 installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonReadDirectories)
