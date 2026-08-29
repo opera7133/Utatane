@@ -7,6 +7,7 @@ import UtataneAkariNative
 import UtataneBalloon
 import UtataneContent
 import UtataneCore
+import UtataneEseShioriNative
 import UtataneFirstNative
 import UtataneGhostKit
 import UtataneKawariNative
@@ -1866,6 +1867,14 @@ private struct UtataneRootView: View {
                 masterDirectoryURL: masterDirectory,
                 variableStoreURL: ContentRoot.akariVariableStoreURL(for: ghost),
                 saoriCaller: nativeSaoriRegistry(for: masterDirectory)
+            )
+        }
+        if NativeEseShioriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
+            return try NativeEseShioriPersonalityEngine(
+                masterDirectoryURL: masterDirectory,
+                stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
+                    .deletingLastPathComponent()
+                    .appending(path: "ese-shiori-state.json", directoryHint: .notDirectory)
             )
         }
         if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),

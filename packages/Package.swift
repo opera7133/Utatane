@@ -28,6 +28,7 @@ let package = Package(
         .library(name: "UtataneNativeSaori", targets: ["UtataneNativeSaori"]),
         .library(name: "UtataneMisakaNative", targets: ["UtataneMisakaNative"]),
         .library(name: "UtataneAkariNative", targets: ["UtataneAkariNative"]),
+        .library(name: "UtataneEseShioriNative", targets: ["UtataneEseShioriNative"]),
         .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"]),
         .executable(name: "utatane-mcp", targets: ["UtataneMCP"])
     ],
@@ -326,6 +327,11 @@ let package = Package(
             dependencies: ["UtataneCore", "UtataneNativeSaori", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
             path: "akari-native/Sources"
         ),
+        .target(
+            name: "UtataneEseShioriNative",
+            dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
+            path: "ese-shiori-native/Sources"
+        ),
         .testTarget(
             name: "UtataneBalloonTests",
             dependencies: ["UtataneBalloon"],
@@ -445,6 +451,11 @@ let package = Package(
             name: "UtataneAkariNativeTests",
             dependencies: ["UtataneAkariNative", "UtataneCore", "UtataneNativeSaori"],
             path: "akari-native/Tests"
+        ),
+        .testTarget(
+            name: "UtataneEseShioriNativeTests",
+            dependencies: ["UtataneCore", "UtataneEseShioriNative", "UtataneShiori"],
+            path: "ese-shiori-native/Tests"
         )
     ],
     swiftLanguageModes: [.v6],

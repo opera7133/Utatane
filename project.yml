@@ -141,6 +141,8 @@ targets:
       - package: UtataneKit
         product: UtataneAkariNative
       - package: UtataneKit
+        product: UtataneEseShioriNative
+      - package: UtataneKit
         product: UtataneNativeSaori
       - package: UtataneKit
         product: UtataneWindowsShiori

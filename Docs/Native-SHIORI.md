@@ -24,6 +24,12 @@ SSUはSATORIに同梱された既存実装を使います。`saori_cpuid.dll`と
 
 現時点ではこのゴースト側ParticleMakotoだけが対象です。任意のMAKOTO DLL、シェル側MAKOTO、`OnTranslate`との組み合わせは未対応です。
 
+## ネイティブese-shiori
+
+`ghost/master`に`eseai.ini`がある場合は、Windows DLLより`UtataneEseShioriNative`を優先します。`ESESHIORI`ヘッダを持つ難読化辞書と平文辞書を読み込み、`##EVNT`、`##RESP`、`##GETS`、ラベル・ワイルドカード参照、条件分岐、変数・スタック操作など、ese-shiori 3.03で使われる言語をSwiftで評価します。辞書文字コードは`DIC_CHAR_SET`に従います。
+
+状態は配布物の`ghost/master`へ書かず、Utataneのゴースト別データ領域へJSONで保存します。偽さくら Rebirth 2.008を使ったテストでは、起動、定期会話、OnFirstBootの名前入力、ダブルクリックメニューまでWineなしで確認しています。ニュース取得、元DLLのNeuron・Synapses学習グラフ、未使用命令を含む任意のese-shioriゴーストとの完全互換は未確認です。
+
 ## 外部SHIORI
 
 ネイティブ対応に該当しないSHIORIも、macOS用の`.dylib`、`.so`、`.bundle`なら標準ABIで読み込みます。Windowsの`.dll`は`UTATANE_WINE_EXECUTABLE`、`UTATANE_WINE_PREFIX`、`UTATANE_WINDOWS_DLL_HOST`（Debug版では`Content/Local/WindowsDLLBridge/utatane-dll-host.exe`も可）が揃う場合にWineへ渡します。

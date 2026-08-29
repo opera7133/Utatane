@@ -14,7 +14,7 @@
 | COLORSβ | KAWARI | 起動、シェル、クリップボードをテスト済み | COLORS専用SAORIは後回し |
 | Aosora demo | Aosora | 外部macOSモジュールで実際に起動確認済み | 上流変更への追従、配布方法 |
 | 伺かWizまゆら | KAWARI(Legacy) | 起動、会話、部位別反応を実アプリで確認 | 確認範囲では問題報告なし |
-| 偽さくら Rebirth 2.008 | ese-shiori + ParticleMakoto | EUC-KRのメタデータを読み込み、ParticleMakotoの韓国語助詞変換をネイティブ実装 | ese-shiori本体はWine経由。実アプリでの長時間動作は未確認 |
+| 偽さくら Rebirth 2.008 | ese-shiori + ParticleMakoto | 独自辞書の復号とese-shioriの主要な評価処理、ParticleMakotoをネイティブ実装。起動、定期会話、初回名前入力、ダブルクリックメニューをテスト済み | ニュース取得、学習グラフ、長時間の状態変化は未確認 |
 | さくら | Materia first | 対応版`first.dll`をWineなしで起動。会話、クリック、眠気・睡眠・入浴、主要メニューと状態保存を確認 | Materia固有のニュース、メール、Windows終了・再起動など |
 | もす | KAGARI | KAGARI部分は動作可能 | Lua C拡張やSAORIはmacOS版を作成できた場合のみ利用可 |
 
