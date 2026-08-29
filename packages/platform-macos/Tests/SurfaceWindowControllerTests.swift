@@ -264,16 +264,18 @@ private extension NSImage {
     #expect(SurfaceStrokeEventPolicy.minimumDistance(for: "Hair") == 4)
 }
 
-@Test func `accepts only NAR files dropped on a surface`() {
+@Test func `accepts NAR and ZIP files dropped on a surface`() {
     let urls = [
         URL(filePath: "/tmp/ghost.nar"),
         URL(filePath: "/tmp/SHELL.NAR"),
+        URL(filePath: "/tmp/old_ghost.zip"),
+        URL(filePath: "/tmp/BALLOON.ZIP"),
         URL(filePath: "/tmp/readme.txt"),
         URL(filePath: "/tmp/not-a-nar")
     ]
 
     #expect(SurfaceDropPayload.narURLs(from: urls).map(\.lastPathComponent) == [
-        "ghost.nar", "SHELL.NAR"
+        "ghost.nar", "SHELL.NAR", "old_ghost.zip", "BALLOON.ZIP"
     ])
 }
 

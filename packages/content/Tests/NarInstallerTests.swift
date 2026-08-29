@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import UtataneContent
+import UtataneCore
 
 @Test
 func `accepts Windows separators while rejecting unsafe archive entries`() throws {
@@ -35,6 +36,61 @@ func `installs a NAR whose ZIP entries use Windows separators`() throws {
     #expect(FileManager.default.fileExists(
         atPath: fixture.roots.ghostsDirectory
             .appending(path: "windows-paths/ghost/master/descript.txt").path
+    ))
+}
+
+@Test func `installs a ghost whose metadata declares EUC-KR`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let package = fixture.source.appending(path: "korean-ghost", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(
+        at: package.appending(path: "ghost/master", directoryHint: .isDirectory),
+        withIntermediateDirectories: true
+    )
+    let encoding = try #require(LegacyTextDecoder.encoding(named: "EUC-KR"))
+    let metadata = try #require(
+        "charset,EUC-KR\ntype,ghost\nname,니세사쿠라\ndirectory,korean-ghost\n".data(using: encoding)
+    )
+    try metadata.write(to: package.appending(path: "install.txt"))
+    let archive = try makeArchive(from: fixture.source, at: fixture.root)
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(result.items.first?.name == "니세사쿠라")
+    #expect(FileManager.default.fileExists(
+        atPath: fixture.roots.ghostsDirectory.appending(path: "korean-ghost/ghost/master").path
+    ))
+}
+
+@Test func `installs the archived Korean ghost and preserves its metadata`() throws {
+    let repositoryRoot = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let source = repositoryRoot.appending(
+        path: "Content/Local/Ghosts/nisesakura_rebirth2_008",
+        directoryHint: .isDirectory
+    )
+    guard FileManager.default.fileExists(atPath: source.path) else { return }
+
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let archive = fixture.root.appending(path: "nisesakura_rebirth2_008.zip")
+    let process = Process()
+    process.executableURL = URL(filePath: "/usr/bin/ditto")
+    process.arguments = ["-c", "-k", "--norsrc", source.path, archive.path]
+    try process.run()
+    process.waitUntilExit()
+    #expect(process.terminationStatus == 0)
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(result.primaryType == .ghost)
+    #expect(result.items.first?.name == "니세사쿠라 \"Rebirth\"2")
+    #expect(FileManager.default.fileExists(
+        atPath: fixture.roots.ghostsDirectory
+            .appending(path: "nisesakura_r2/ghost/master/ese-shiori.dll").path
     ))
 }
 
@@ -314,6 +370,155 @@ func `rejects a NAR containing a symbolic link before extraction`() throws {
     }
 }
 
+@Test
+func `installs a ZIP ghost without install.txt at the archive root`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let ghostMaster = fixture.source.appending(path: "ghost/master", directoryHint: .isDirectory)
+    let shellMaster = fixture.source.appending(path: "shell/master", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: ghostMaster, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: shellMaster, withIntermediateDirectories: true)
+    try Data("name,Old Root Ghost\n".utf8).write(
+        to: ghostMaster.appending(path: "descript.txt")
+    )
+    try Data("name,master\n".utf8).write(
+        to: shellMaster.appending(path: "descript.txt")
+    )
+    let archive = try makeArchive(from: fixture.source, at: fixture.root, filename: "old_ghost.zip")
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(result.primaryType == .ghost)
+    #expect(result.items.first?.name == "Old Root Ghost")
+    #expect(FileManager.default.fileExists(
+        atPath: fixture.roots.ghostsDirectory.appending(path: "Old Root Ghost/ghost/master/descript.txt").path
+    ))
+}
+
+@Test
+func `does not infer missing install metadata for a NAR`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let ghostMaster = fixture.source.appending(path: "ghost/master", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: ghostMaster, withIntermediateDirectories: true)
+    try Data("name,Not a valid NAR\n".utf8).write(to: ghostMaster.appending(path: "descript.txt"))
+    let archive = try makeArchive(from: fixture.source, at: fixture.root)
+
+    #expect(throws: NarInstallError.missingInstallFile) {
+        try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+    }
+}
+
+@Test
+func `installs a ZIP ghost without install.txt in a nested subfolder`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let ghostDir = fixture.source.appending(path: "my_ghost", directoryHint: .isDirectory)
+    let ghostMaster = ghostDir.appending(path: "ghost/master", directoryHint: .isDirectory)
+    let shellMaster = ghostDir.appending(path: "shell/master", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: ghostMaster, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: shellMaster, withIntermediateDirectories: true)
+    try Data("name,Nested Ghost\n".utf8).write(
+        to: ghostMaster.appending(path: "descript.txt")
+    )
+    try Data("name,master\n".utf8).write(
+        to: shellMaster.appending(path: "descript.txt")
+    )
+    let archive = try makeArchive(from: fixture.source, at: fixture.root, filename: "nested_ghost.zip")
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(result.primaryType == .ghost)
+    #expect(result.items.first?.name == "Nested Ghost")
+    #expect(FileManager.default.fileExists(
+        atPath: fixture.roots.ghostsDirectory.appending(path: "my_ghost/ghost/master/descript.txt").path
+    ))
+}
+
+@Test
+func `installs a standalone balloon ZIP without install.txt`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let balloonDir = fixture.source.appending(path: "custom_balloon", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: balloonDir, withIntermediateDirectories: true)
+    try Data("type,balloon\nname,Custom Balloon\n".utf8).write(
+        to: balloonDir.appending(path: "descript.txt")
+    )
+    try Data("origin".utf8).write(to: balloonDir.appending(path: "origin.txt"))
+    let archive = try makeArchive(from: fixture.source, at: fixture.root, filename: "balloon.zip")
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(result.primaryType == .balloon)
+    #expect(result.items.first?.name == "Custom Balloon")
+    #expect(FileManager.default.fileExists(
+        atPath: fixture.roots.balloonsDirectory.appending(path: "custom_balloon/origin.txt").path
+    ))
+}
+
+@Test
+func `installs a standalone shell ZIP without install.txt to selected ghost`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let shellDir = fixture.source.appending(path: "extra_shell", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: shellDir, withIntermediateDirectories: true)
+    try Data("type,shell\nname,Extra Shell\n".utf8).write(
+        to: shellDir.appending(path: "descript.txt")
+    )
+    let archive = try makeArchive(from: fixture.source, at: fixture.root, filename: "shell.zip")
+
+    let targetGhost = fixture.roots.ghostsDirectory.appending(path: "target_ghost", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: targetGhost.appending(path: "ghost/master"), withIntermediateDirectories: true)
+
+    let result = try NarInstaller().install(
+        archiveURL: archive,
+        roots: fixture.roots,
+        selectedGhostDirectory: targetGhost
+    )
+
+    #expect(result.primaryType == .shell)
+    #expect(result.items.first?.name == "Extra Shell")
+    #expect(FileManager.default.fileExists(
+        atPath: targetGhost.appending(path: "shell/extra_shell/descript.txt").path
+    ))
+}
+
+@Test
+func `installs an SSP folder structured ZIP containing multiple contents`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let ghostDir = fixture.source.appending(path: "ghost/ssp_ghost/ghost/master", directoryHint: .isDirectory)
+    let balloonDir = fixture.source.appending(path: "balloon/ssp_balloon", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: ghostDir, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: balloonDir, withIntermediateDirectories: true)
+    try Data("name,SSP Ghost\n".utf8).write(to: ghostDir.appending(path: "descript.txt"))
+    try Data("type,balloon\nname,SSP Balloon\n".utf8).write(to: balloonDir.appending(path: "descript.txt"))
+    let archive = try makeArchive(from: fixture.source, at: fixture.root, filename: "ssp_bundle.zip")
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(result.primaryType == .package)
+    #expect(result.items.count == 2)
+    #expect(FileManager.default.fileExists(
+        atPath: fixture.roots.ghostsDirectory.appending(path: "ssp_ghost/ghost/master/descript.txt").path
+    ))
+    #expect(FileManager.default.fileExists(
+        atPath: fixture.roots.balloonsDirectory.appending(path: "ssp_balloon/descript.txt").path
+    ))
+}
+
+@Test
+func `rejects an arbitrary zip file without supported ghost or balloon content`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    try Data("random contents".utf8).write(to: fixture.source.appending(path: "hello.txt"))
+    let archive = try makeArchive(from: fixture.source, at: fixture.root, filename: "arbitrary.zip")
+
+    #expect(throws: NarInstallError.missingInstallFile) {
+        try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+    }
+}
+
 private struct Fixture {
     let root: URL
     let source: URL
@@ -339,9 +544,10 @@ private func makeFixture() throws -> Fixture {
 private func makeArchive(
     from source: URL,
     at root: URL,
+    filename: String = "fixture.nar",
     storesSymbolicLinks: Bool = false
 ) throws -> URL {
-    let archive = root.appending(path: "fixture.nar", directoryHint: .notDirectory)
+    let archive = root.appending(path: filename, directoryHint: .notDirectory)
     let process = Process()
     process.executableURL = URL(filePath: "/usr/bin/zip")
     process.arguments = ["-q", "-r"] + (storesSymbolicLinks ? ["-y"] : []) + [archive.path, "."]

@@ -78,6 +78,11 @@ public struct ShioriResponse: Equatable, Sendable {
         headers["Value"]
     }
 
+    /// Script returned by either SHIORI/3.x (`Value`) or legacy SHIORI/2.x (`Sentence`).
+    public var scriptValue: String? {
+        value ?? headers["Sentence"]
+    }
+
     public var referenceValues: [Int: String] {
         Dictionary(uniqueKeysWithValues: headers.entries.compactMap { header in
             guard header.name.count > 9,

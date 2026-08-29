@@ -33,7 +33,7 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
         var charset: String {
             switch self {
             case .dynamicLibrary: "UTF-8"
-            case .windowsDLL: "Shift_JIS"
+            case let .windowsDLL(session): session.charset
             }
         }
     }
@@ -60,11 +60,16 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
             context.mouseButton = mouseEvent.button
         }
         let request = adapter.request(for: event, context: context)
-        let response = try ShioriMessageParser.parseResponse(backend.request(request.serialized()))
+        var response = try ShioriMessageParser.parseResponse(backend.request(request.serialized()))
+        if Shiori2Compatibility.shouldRetry(response),
+           let legacyRequest = Shiori2Compatibility.eventRequest(from: request)
+        {
+            response = try ShioriMessageParser.parseResponse(backend.request(legacyRequest.serialized()))
+        }
         guard (200 ..< 300).contains(response.statusCode) else {
             throw ExternalModuleRuntimeError.requestFailed(response.statusCode)
         }
-        let script = response.value.flatMap { $0.isEmpty ? nil : SakuraScript(rawValue: $0) }
+        let script = response.scriptValue.flatMap { $0.isEmpty ? nil : SakuraScript(rawValue: $0) }
         return PersonalityResponse(script: script, references: response.referenceValues)
     }
 }

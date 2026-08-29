@@ -33,6 +33,18 @@ import Testing
     ])
 }
 
+@Test func `generic Windows DLL configuration keeps the ghosts charset`() {
+    let configuration = WindowsDLLModuleProcessConfiguration(
+        wineExecutableURL: URL(filePath: "/Applications/Wine.app/Contents/Resources/wine/bin/wine64"),
+        winePrefixURL: URL(filePath: "/tmp/utatane-wine", directoryHint: .isDirectory),
+        hostExecutableURL: URL(filePath: "/tmp/utatane-dll-host.exe"),
+        dllURL: URL(filePath: "/Users/test/Ghosts/korean/ese-shiori.dll"),
+        charset: "EUC-KR"
+    )
+
+    #expect(configuration.charset == "EUC-KR")
+}
+
 @Test func `maps Materia kero local surfaces to shell surface IDs`() {
     let script = #"\0\s0さくら\1\s0うにゅう\s[3]\0\s4さくら"#
     #expect(

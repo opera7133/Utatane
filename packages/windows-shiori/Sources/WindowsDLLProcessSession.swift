@@ -1,10 +1,12 @@
 import Foundation
+import UtataneCore
 
 public struct WindowsDLLModuleProcessConfiguration: Sendable, Equatable {
     public let wineExecutableURL: URL
     public let winePrefixURL: URL
     public let hostExecutableURL: URL
     public let dllURL: URL
+    public let charset: String
     public var environment: [String: String]
 
     public init(
@@ -12,12 +14,14 @@ public struct WindowsDLLModuleProcessConfiguration: Sendable, Equatable {
         winePrefixURL: URL,
         hostExecutableURL: URL,
         dllURL: URL,
+        charset: String = "Shift_JIS",
         environment: [String: String] = [:]
     ) {
         self.wineExecutableURL = wineExecutableURL
         self.winePrefixURL = winePrefixURL
         self.hostExecutableURL = hostExecutableURL
         self.dllURL = dllURL
+        self.charset = charset
         self.environment = environment
     }
 }
@@ -29,6 +33,7 @@ public final class WindowsDLLModuleProcessSession: @unchecked Sendable {
     private let input: FileHandle
     private let output: FileHandle
     private var isClosed = false
+    public let charset: String
 
     public init(configuration: WindowsDLLModuleProcessConfiguration) throws {
         for url in [
@@ -78,6 +83,7 @@ public final class WindowsDLLModuleProcessSession: @unchecked Sendable {
         self.process = process
         self.input = input
         self.output = output
+        charset = configuration.charset
     }
 
     deinit {
@@ -99,7 +105,7 @@ public final class WindowsDLLModuleProcessSession: @unchecked Sendable {
     public func request(_ request: String) throws -> String {
         try lock.withLock {
             guard !isClosed else { throw WindowsShioriProcessError.processEnded }
-            guard let payload = request.data(using: .shiftJIS) else {
+            guard let payload = LegacyTextDecoder.encode(request, charset: charset) else {
                 throw WindowsShioriProcessError.requestEncodingFailed
             }
             try input.write(contentsOf: WindowsShioriFrameCodec.encode(payload))
@@ -107,10 +113,7 @@ public final class WindowsDLLModuleProcessSession: @unchecked Sendable {
                 Self.readExact(count: MemoryLayout<UInt32>.size, from: output)
             )
             let response = try Self.readExact(count: length, from: output)
-            if let text = String(data: response, encoding: .shiftJIS) {
-                return text
-            }
-            if let text = String(data: response, encoding: .utf8) {
+            if let text = LegacyTextDecoder.decode(response, preferredCharset: charset) {
                 return text
             }
             throw WindowsShioriProcessError.responseDecodingFailed

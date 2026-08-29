@@ -17,6 +17,7 @@ func `loads and names every installed shell with master as default`() throws {
     }
     try Data("""
     name,Test Ghost
+    charset,EUC-KR
     shiori,first.dll
     balloon,test-balloon
     sakura.name,Emily
@@ -43,6 +44,7 @@ func `loads and names every installed shell with master as default`() throws {
     #expect(ghost.defaultShellDirectory.standardizedFileURL == master.standardizedFileURL)
     #expect(ghost.shells.map(\.name) == ["Default Shell", "Alternate Shell"])
     #expect(ghost.shioriFilename == "first.dll")
+    #expect(ghost.charset == "EUC-KR")
     #expect(ghost.defaultBalloonDirectoryName == "test-balloon")
     #expect(ghost.characters == [
         InstalledGhostCharacter(
@@ -59,4 +61,26 @@ func `loads and names every installed shell with master as default`() throws {
             defaultBalloonSurfaceID: 3
         )
     ])
+}
+
+@Test func `loads the installed mixed encoding Korean ghost`() throws {
+    let repositoryRoot = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let root = repositoryRoot.appending(
+        path: "Content/Local/Ghosts/nisesakura_rebirth2_008",
+        directoryHint: .isDirectory
+    )
+    guard FileManager.default.fileExists(atPath: root.path) else { return }
+
+    let ghost = try GhostPackageLoader().loadGhost(at: root)
+
+    #expect(ghost.name == "Nisesakura Rebirth2")
+    #expect(ghost.charset == "EUC-KR")
+    #expect(ghost.shioriFilename == "ese-shiori.dll")
+    #expect(ghost.characters[0].name == "さくら")
+    #expect(ghost.characters[1].name == "우뉴")
+    #expect(ghost.shells.map(\.name).contains("사쿠라100%"))
 }

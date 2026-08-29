@@ -126,9 +126,7 @@ public struct ShellLoader: Sendable {
 
     private func readText(from url: URL) throws -> String {
         let data = try Data(contentsOf: url)
-        guard let text = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .shiftJIS)
-        else {
+        guard let text = LegacyTextDecoder.decode(data) else {
             throw ShellError.unsupportedTextEncoding(url)
         }
         return text

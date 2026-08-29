@@ -1869,7 +1869,10 @@ private struct UtataneRootView: View {
                     DynamicLibraryModuleSession(directoryURL: masterDirectory, moduleURL: moduleURL)
                 ))
             case "dll":
-                guard let configuration = ContentRoot.windowsDLLConfiguration(for: moduleURL) else {
+                guard let configuration = ContentRoot.windowsDLLConfiguration(
+                    for: moduleURL,
+                    charset: ghost.charset ?? "Shift_JIS"
+                ) else {
                     throw AppError.windowsShioriUnavailable
                 }
                 return try ExternalSHIORIPersonalityEngine(backend: .windowsDLL(
@@ -3921,7 +3924,7 @@ private struct UtataneRootView: View {
 
     private func selectAndInstallNar() {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [UTType(filenameExtension: "nar") ?? .data]
+        panel.allowedContentTypes = [UTType(filenameExtension: "nar") ?? .data, .zip]
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = false
         panel.canChooseFiles = true
@@ -5255,7 +5258,10 @@ enum ContentRoot {
         return windowsDLLConfiguration(for: dllURL)
     }
 
-    static func windowsDLLConfiguration(for dllURL: URL) -> WindowsDLLModuleProcessConfiguration? {
+    static func windowsDLLConfiguration(
+        for dllURL: URL,
+        charset: String = "Shift_JIS"
+    ) -> WindowsDLLModuleProcessConfiguration? {
         let environment = ProcessInfo.processInfo.environment
         let defaults = UserDefaults.standard
         let fileManager = FileManager.default
@@ -5285,7 +5291,8 @@ enum ContentRoot {
             wineExecutableURL: wineURL,
             winePrefixURL: prefixURL,
             hostExecutableURL: hostURL,
-            dllURL: dllURL
+            dllURL: dllURL,
+            charset: charset
         )
     }
 

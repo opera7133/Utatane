@@ -2286,7 +2286,14 @@ enum SurfaceStrokeEventPolicy {
 
 enum SurfaceDropPayload {
     static func narURLs(from urls: [URL]) -> [URL] {
-        urls.filter { $0.pathExtension.caseInsensitiveCompare("nar") == .orderedSame }
+        archiveURLs(from: urls)
+    }
+
+    static func archiveURLs(from urls: [URL]) -> [URL] {
+        urls.filter {
+            let ext = $0.pathExtension.lowercased()
+            return ext == "nar" || ext == "zip"
+        }
     }
 }
 

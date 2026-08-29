@@ -1,4 +1,5 @@
 import Foundation
+import UtataneCore
 
 public enum NarContentType: String, Sendable, Equatable {
     case ghost
@@ -101,23 +102,23 @@ public enum NarInstallError: LocalizedError, Equatable {
 
     public var errorDescription: String? {
         switch self {
-        case let .missingArchive(url): "NARが見つからない: \(url.path)"
-        case .archiveTooLarge: "NARの圧縮サイズが上限を超えている"
-        case .unreadableArchive: "NARの内容を読み取れない"
+        case let .missingArchive(url): "NAR/ZIPが見つからない: \(url.path)"
+        case .archiveTooLarge: "アーカイブの圧縮サイズが上限を超えている"
+        case .unreadableArchive: "アーカイブの内容を読み取れない"
         case let .unsafeEntry(name): "安全でないアーカイブ内パス: \(name)"
-        case .tooManyEntries: "NAR内のファイル数が上限を超えている"
+        case .tooManyEntries: "アーカイブ内のファイル数が上限を超えている"
         case .extractedContentTooLarge: "展開後のサイズが上限を超えている"
         case let .symbolicLink(url): "シンボリックリンクはインストールできない: \(url.path)"
-        case .missingInstallFile: "install.txtが見つからない"
+        case .missingInstallFile: "install.txtまたは適合するコンテンツ構造が見つからない"
         case .ambiguousInstallFile: "インストール元を一意に決められない"
         case let .unsupportedTextEncoding(url): "文字コードを判定できない: \(url.path)"
-        case let .unsupportedType(type): "未対応のNAR種別: \(type)"
+        case let .unsupportedType(type): "未対応のコンテンツ種別: \(type)"
         case let .invalidDirectoryName(name): "不正なインストール先ディレクトリ名: \(name)"
         case let .missingSourceDirectory(name): "同梱コンテンツが見つからない: \(name)"
         case .shellRequiresGhost: "Shellのインストール先ゴーストが選択されていない"
         case let .destinationExists(url): "同名のコンテンツが既にある: \(url.path)"
-        case let .refused(accept, _, _): "このNARは起動中の「\(accept)」用に指定されている"
-        case let .commandFailed(message): "NARの展開に失敗した: \(message)"
+        case let .refused(accept, _, _): "このアーカイブは起動中の「\(accept)」用に指定されている"
+        case let .commandFailed(message): "アーカイブの展開に失敗した: \(message)"
         }
     }
 }
@@ -180,43 +181,71 @@ public struct NarInstaller: Sendable {
         try normalizeWindowsSeparatedPaths(at: extractionRoot)
         try validateExtractedTree(at: extractionRoot)
 
-        let installURL = try primaryInstallFile(in: extractionRoot)
-        let metadata = try readInstallMetadata(from: installURL)
-        guard let rawType = metadata["type"], let contentType = contentType(rawType) else {
-            throw NarInstallError.unsupportedType(metadata["type"] ?? "")
-        }
-        let sourceRoot = installURL.deletingLastPathComponent()
         var operations: [InstallOperation] = []
+        var primaryType: NarContentType = .ghost
         var acceptedGhostName: String?
         var bootGhostDirectory: String?
-        if contentType == .package {
-            if let bootGhost = metadata["bootghost"] {
-                bootGhostDirectory = try validatedDirectoryName(bootGhost)
+
+        let installURL: URL?
+        do {
+            installURL = try primaryInstallFile(in: extractionRoot)
+        } catch NarInstallError.missingInstallFile {
+            installURL = nil
+        } catch {
+            throw error
+        }
+
+        if let installURL {
+            let metadata = try readInstallMetadata(from: installURL)
+            guard let rawType = metadata["type"], let contentType = contentType(rawType) else {
+                throw NarInstallError.unsupportedType(metadata["type"] ?? "")
             }
-            let childInstallFiles = try installFiles(in: sourceRoot).filter { $0 != installURL }
-            guard !childInstallFiles.isEmpty else { throw NarInstallError.missingInstallFile }
-            for childInstallURL in childInstallFiles.sorted(by: { $0.path < $1.path }) {
-                let childMetadata = try readInstallMetadata(from: childInstallURL)
-                let child = try installationOperations(
-                    metadata: childMetadata,
-                    sourceRoot: childInstallURL.deletingLastPathComponent(),
+            primaryType = contentType
+            let sourceRoot = installURL.deletingLastPathComponent()
+            if contentType == .package {
+                if let bootGhost = metadata["bootghost"] {
+                    bootGhostDirectory = try validatedDirectoryName(bootGhost)
+                }
+                let childInstallFiles = try installFiles(in: sourceRoot).filter { $0 != installURL }
+                guard !childInstallFiles.isEmpty else { throw NarInstallError.missingInstallFile }
+                for childInstallURL in childInstallFiles.sorted(by: { $0.path < $1.path }) {
+                    let childMetadata = try readInstallMetadata(from: childInstallURL)
+                    let child = try installationOperations(
+                        metadata: childMetadata,
+                        sourceRoot: childInstallURL.deletingLastPathComponent(),
+                        roots: roots,
+                        selectedGhostDirectory: selectedGhostDirectory,
+                        activeGhostDirectories: activeGhostDirectories
+                    )
+                    operations.append(contentsOf: child.operations)
+                    acceptedGhostName = acceptedGhostName ?? child.acceptedGhostName
+                }
+            } else {
+                let primary = try installationOperations(
+                    metadata: metadata,
+                    sourceRoot: sourceRoot,
                     roots: roots,
                     selectedGhostDirectory: selectedGhostDirectory,
                     activeGhostDirectories: activeGhostDirectories
                 )
-                operations.append(contentsOf: child.operations)
-                acceptedGhostName = acceptedGhostName ?? child.acceptedGhostName
+                operations = primary.operations
+                acceptedGhostName = primary.acceptedGhostName
             }
         } else {
-            let primary = try installationOperations(
-                metadata: metadata,
-                sourceRoot: sourceRoot,
+            guard archiveURL.pathExtension.caseInsensitiveCompare("zip") == .orderedSame else {
+                throw NarInstallError.missingInstallFile
+            }
+            let inferred = try inferInstallationOperations(
+                in: extractionRoot,
+                archiveBaseName: archiveURL.deletingPathExtension().lastPathComponent,
                 roots: roots,
                 selectedGhostDirectory: selectedGhostDirectory,
                 activeGhostDirectories: activeGhostDirectories
             )
-            operations = primary.operations
-            acceptedGhostName = primary.acceptedGhostName
+            operations = inferred.operations
+            primaryType = inferred.primaryType
+            acceptedGhostName = inferred.acceptedGhostName
+            bootGhostDirectory = inferred.bootGhostDirectory
         }
 
         for operation in operations
@@ -252,7 +281,7 @@ public struct NarInstaller: Sendable {
             throw error
         }
         return NarInstallResult(
-            primaryType: contentType,
+            primaryType: primaryType,
             items: zip(operations, installedURLs).map { operation, url in
                 NarInstalledItem(type: operation.type, name: operation.name, url: url)
             },
@@ -407,9 +436,9 @@ public struct NarInstaller: Sendable {
 
     public func readInstallMetadata(from url: URL) throws -> [String: String] {
         let data = try Data(contentsOf: url)
-        guard let text = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .shiftJIS)
-        else { throw NarInstallError.unsupportedTextEncoding(url) }
+        guard let text = LegacyTextDecoder.decode(data) else {
+            throw NarInstallError.unsupportedTextEncoding(url)
+        }
         var values: [String: String] = [:]
         for rawLine in text.components(separatedBy: .newlines) {
             let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -640,5 +669,432 @@ public struct NarInstaller: Sendable {
             throw NarInstallError.commandFailed("\(URL(filePath: executable).lastPathComponent) exited \(process.terminationStatus)")
         }
         return data
+    }
+
+    private func inferInstallationOperations(
+        in root: URL,
+        archiveBaseName: String,
+        roots: NarInstallationRoots,
+        selectedGhostDirectory: URL?,
+        activeGhostDirectories: [String: URL]
+    ) throws -> (
+        operations: [InstallOperation],
+        primaryType: NarContentType,
+        acceptedGhostName: String?,
+        bootGhostDirectory: String?
+    ) {
+        // 1. SSP root pattern (ghost/ and/or balloon/ containing sub-packages)
+        if let sspResult = try inferSSPRootOperations(in: root, roots: roots) {
+            return (
+                operations: sspResult.operations,
+                primaryType: .package,
+                acceptedGhostName: nil,
+                bootGhostDirectory: sspResult.bootGhostDirectory
+            )
+        }
+
+        // 2. Ghost pattern (ghost/master/descript.txt or ghost/master directory)
+        if let ghostRoot = findGhostRoot(in: root) {
+            let descriptURL = ghostRoot.appending(path: "ghost/master/descript.txt", directoryHint: .notDirectory)
+            let metadata = (try? readInstallMetadata(from: descriptURL)) ?? [:]
+            let ghostName = metadata["name"] ?? (ghostRoot.resolvingSymlinksInPath() == root.resolvingSymlinksInPath() ? archiveBaseName : ghostRoot.lastPathComponent)
+            let rawDir = metadata["directory"]
+            let directoryName = (rawDir != nil ? try? validatedDirectoryName(rawDir!) : nil)
+                ?? (ghostRoot.resolvingSymlinksInPath() != root.resolvingSymlinksInPath() ? (try? validatedDirectoryName(ghostRoot.lastPathComponent)) : nil)
+                ?? sanitizeDirectoryName(ghostName.isEmpty ? archiveBaseName : ghostName)
+
+            var operations: [InstallOperation] = [
+                InstallOperation(
+                    source: ghostRoot,
+                    destination: roots.ghostsDirectory.appending(path: directoryName, directoryHint: .isDirectory),
+                    type: .ghost,
+                    name: ghostName,
+                    refreshes: false,
+                    undeleteMask: []
+                )
+            ]
+
+            let containerDir = ghostRoot.resolvingSymlinksInPath() == root.resolvingSymlinksInPath() ? root : ghostRoot.deletingLastPathComponent()
+            let bundledOps = try findBundledOperations(
+                in: containerDir,
+                excluding: ghostRoot,
+                roots: roots
+            )
+            operations.append(contentsOf: bundledOps)
+
+            return (
+                operations: operations,
+                primaryType: .ghost,
+                acceptedGhostName: nil,
+                bootGhostDirectory: directoryName
+            )
+        }
+
+        // 3. Standalone content pattern (Balloon, Shell, Plugin, Headline, Calendar Skin)
+        if let standalone = try inferStandaloneContentOperations(
+            in: root,
+            archiveBaseName: archiveBaseName,
+            roots: roots,
+            selectedGhostDirectory: selectedGhostDirectory,
+            activeGhostDirectories: activeGhostDirectories
+        ) {
+            return (
+                operations: standalone.operations,
+                primaryType: standalone.primaryType,
+                acceptedGhostName: standalone.acceptedGhostName,
+                bootGhostDirectory: nil
+            )
+        }
+
+        throw NarInstallError.missingInstallFile
+    }
+
+    private func findGhostRoot(in root: URL) -> URL? {
+        if isGhostDirectory(root) {
+            return root
+        }
+
+        guard let enumerator = FileManager.default.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+
+        var candidates: [URL] = []
+        for case let url as URL in enumerator {
+            if isIgnoredDirectory(url) {
+                enumerator.skipDescendants()
+                continue
+            }
+            if (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                if isGhostDirectory(url) {
+                    candidates.append(url)
+                    enumerator.skipDescendants()
+                }
+            }
+        }
+
+        return candidates.sorted { $0.pathComponents.count < $1.pathComponents.count }.first
+    }
+
+    private func isGhostDirectory(_ directory: URL) -> Bool {
+        let masterDescript = directory.appending(path: "ghost/master/descript.txt", directoryHint: .notDirectory)
+        if FileManager.default.fileExists(atPath: masterDescript.path) {
+            return true
+        }
+        let masterDir = directory.appending(path: "ghost/master", directoryHint: .isDirectory)
+        var isDir: ObjCBool = false
+        return FileManager.default.fileExists(atPath: masterDir.path, isDirectory: &isDir) && isDir.boolValue
+    }
+
+    private func inferSSPRootOperations(
+        in root: URL,
+        roots: NarInstallationRoots
+    ) throws -> (operations: [InstallOperation], bootGhostDirectory: String?)? {
+        let fileManager = FileManager.default
+
+        func findCandidateRoot(_ dir: URL) -> URL {
+            let ghostDir = dir.appending(path: "ghost", directoryHint: .isDirectory)
+            let balloonDir = dir.appending(path: "balloon", directoryHint: .isDirectory)
+            if fileManager.fileExists(atPath: ghostDir.path) || fileManager.fileExists(atPath: balloonDir.path) {
+                return dir
+            }
+            if let children = try? fileManager.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]),
+               children.count == 1,
+               let onlyChild = children.first,
+               (try? onlyChild.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
+               !isIgnoredDirectory(onlyChild)
+            {
+                let g = onlyChild.appending(path: "ghost", directoryHint: .isDirectory)
+                let b = onlyChild.appending(path: "balloon", directoryHint: .isDirectory)
+                if fileManager.fileExists(atPath: g.path) || fileManager.fileExists(atPath: b.path) {
+                    return onlyChild
+                }
+            }
+            return dir
+        }
+
+        let sspRoot = findCandidateRoot(root)
+        let ghostDir = sspRoot.appending(path: "ghost", directoryHint: .isDirectory)
+        let balloonDir = sspRoot.appending(path: "balloon", directoryHint: .isDirectory)
+
+        var operations: [InstallOperation] = []
+        var bootGhostDirectory: String?
+
+        if fileManager.fileExists(atPath: ghostDir.path) {
+            if let ghostChildren = try? fileManager.contentsOfDirectory(at: ghostDir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
+                for child in ghostChildren where !isIgnoredDirectory(child) && (try? child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                    if isGhostDirectory(child) {
+                        let descriptURL = child.appending(path: "ghost/master/descript.txt", directoryHint: .notDirectory)
+                        let metadata = (try? readInstallMetadata(from: descriptURL)) ?? [:]
+                        let name = metadata["name"] ?? child.lastPathComponent
+                        let dirName = metadata["directory"].flatMap { try? validatedDirectoryName($0) } ?? sanitizeDirectoryName(child.lastPathComponent)
+                        if bootGhostDirectory == nil {
+                            bootGhostDirectory = dirName
+                        }
+                        operations.append(InstallOperation(
+                            source: child,
+                            destination: roots.ghostsDirectory.appending(path: dirName, directoryHint: .isDirectory),
+                            type: .ghost,
+                            name: name,
+                            refreshes: false,
+                            undeleteMask: []
+                        ))
+                    }
+                }
+            }
+        }
+
+        if fileManager.fileExists(atPath: balloonDir.path) {
+            if let balloonChildren = try? fileManager.contentsOfDirectory(at: balloonDir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) {
+                for child in balloonChildren where !isIgnoredDirectory(child) && (try? child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true {
+                    let descriptURL = child.appending(path: "descript.txt", directoryHint: .notDirectory)
+                    let metadata = (try? readInstallMetadata(from: descriptURL)) ?? [:]
+                    let name = metadata["name"] ?? child.lastPathComponent
+                    let dirName = metadata["directory"].flatMap { try? validatedDirectoryName($0) } ?? sanitizeDirectoryName(child.lastPathComponent)
+                    operations.append(InstallOperation(
+                        source: child,
+                        destination: roots.balloonsDirectory.appending(path: dirName, directoryHint: .isDirectory),
+                        type: .balloon,
+                        name: name,
+                        refreshes: false,
+                        undeleteMask: []
+                    ))
+                }
+            }
+        }
+
+        guard !operations.isEmpty else { return nil }
+        return (operations, bootGhostDirectory)
+    }
+
+    private func inferStandaloneContentOperations(
+        in root: URL,
+        archiveBaseName: String,
+        roots: NarInstallationRoots,
+        selectedGhostDirectory: URL?,
+        activeGhostDirectories: [String: URL]
+    ) throws -> (
+        operations: [InstallOperation],
+        primaryType: NarContentType,
+        acceptedGhostName: String?
+    )? {
+        let fileManager = FileManager.default
+        var candidates: [(directory: URL, descriptURL: URL)] = []
+        if fileManager.fileExists(atPath: root.appending(path: "descript.txt").path) {
+            candidates.append((root, root.appending(path: "descript.txt")))
+        }
+
+        if let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) {
+            for case let url as URL in enumerator {
+                if isIgnoredDirectory(url) {
+                    enumerator.skipDescendants()
+                    continue
+                }
+                if url.lastPathComponent.caseInsensitiveCompare("descript.txt") == .orderedSame {
+                    let dir = url.deletingLastPathComponent()
+                    if !candidates.contains(where: { $0.directory.resolvingSymlinksInPath() == dir.resolvingSymlinksInPath() }) {
+                        candidates.append((dir, url))
+                    }
+                }
+            }
+        }
+
+        candidates.sort { $0.directory.pathComponents.count < $1.directory.pathComponents.count }
+
+        for (dir, descriptURL) in candidates {
+            guard let metadata = try? readInstallMetadata(from: descriptURL) else { continue }
+            let rawType = metadata["type"]
+            let detectedType = rawType.flatMap(contentType)
+            let name = metadata["name"] ?? (dir.resolvingSymlinksInPath() == root.resolvingSymlinksInPath() ? archiveBaseName : dir.lastPathComponent)
+            let dirName = metadata["directory"].flatMap { try? validatedDirectoryName($0) }
+                ?? (dir.resolvingSymlinksInPath() != root.resolvingSymlinksInPath() ? (try? validatedDirectoryName(dir.lastPathComponent)) : nil)
+                ?? sanitizeDirectoryName(name.isEmpty ? archiveBaseName : name)
+
+            if detectedType == .balloon || isBalloonDirectory(dir) {
+                let op = InstallOperation(
+                    source: dir,
+                    destination: roots.balloonsDirectory.appending(path: dirName, directoryHint: .isDirectory),
+                    type: .balloon,
+                    name: name,
+                    refreshes: false,
+                    undeleteMask: []
+                )
+                return ([op], .balloon, nil)
+            }
+
+            if detectedType == .shell || isShellDirectory(dir) {
+                let acceptedGhost = metadata["accept"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+                let targetGhost = acceptedGhost.flatMap { acc in
+                    activeGhostDirectories.first { $0.key.caseInsensitiveCompare(acc) == .orderedSame }?.value
+                } ?? selectedGhostDirectory
+
+                guard let targetGhost else {
+                    if let acceptedGhost, !acceptedGhost.isEmpty {
+                        throw NarInstallError.refused(accept: acceptedGhost, type: "shell", name: name)
+                    }
+                    throw NarInstallError.shellRequiresGhost
+                }
+
+                let op = InstallOperation(
+                    source: dir,
+                    destination: targetGhost.appending(path: "shell/\(dirName)", directoryHint: .isDirectory),
+                    type: .shell,
+                    name: name,
+                    refreshes: false,
+                    undeleteMask: []
+                )
+                return ([op], .shell, acceptedGhost)
+            }
+
+            if let detectedType, detectedType != .ghost, detectedType != .package {
+                let destRoot = destinationRoot(for: detectedType, roots: roots)
+                let op = InstallOperation(
+                    source: dir,
+                    destination: destRoot.appending(path: dirName, directoryHint: .isDirectory),
+                    type: detectedType,
+                    name: name,
+                    refreshes: false,
+                    undeleteMask: []
+                )
+                return ([op], detectedType, nil)
+            }
+        }
+
+        // Also check if surfaces.txt exists without descript.txt (old shell)
+        if let shellCandidate = findDirectoryWithFile(named: "surfaces.txt", in: root) {
+            let name = shellCandidate.resolvingSymlinksInPath() == root.resolvingSymlinksInPath() ? archiveBaseName : shellCandidate.lastPathComponent
+            let dirName = sanitizeDirectoryName(name)
+            guard let targetGhost = selectedGhostDirectory ?? activeGhostDirectories.values.first else {
+                throw NarInstallError.shellRequiresGhost
+            }
+            let op = InstallOperation(
+                source: shellCandidate,
+                destination: targetGhost.appending(path: "shell/\(dirName)", directoryHint: .isDirectory),
+                type: .shell,
+                name: name,
+                refreshes: false,
+                undeleteMask: []
+            )
+            return ([op], .shell, nil)
+        }
+
+        return nil
+    }
+
+    private func findBundledOperations(
+        in container: URL,
+        excluding ghostRoot: URL,
+        roots: NarInstallationRoots
+    ) throws -> [InstallOperation] {
+        let fileManager = FileManager.default
+        guard let items = try? fileManager.contentsOfDirectory(
+            at: container,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var operations: [InstallOperation] = []
+        for item in items where item.resolvingSymlinksInPath() != ghostRoot.resolvingSymlinksInPath() && !isIgnoredDirectory(item) {
+            guard (try? item.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
+            let lower = item.lastPathComponent.lowercased()
+            let descriptURL = item.appending(path: "descript.txt", directoryHint: .notDirectory)
+            let metadata = (try? readInstallMetadata(from: descriptURL)) ?? [:]
+            let name = metadata["name"] ?? item.lastPathComponent
+            let dirName = metadata["directory"].flatMap { try? validatedDirectoryName($0) } ?? sanitizeDirectoryName(item.lastPathComponent)
+
+            if lower.hasPrefix("balloon") || isBalloonDirectory(item) {
+                operations.append(InstallOperation(
+                    source: item,
+                    destination: roots.balloonsDirectory.appending(path: dirName, directoryHint: .isDirectory),
+                    type: .balloon,
+                    name: name,
+                    refreshes: false,
+                    undeleteMask: []
+                ))
+            } else if lower.hasPrefix("headline") || metadata["type"]?.lowercased() == "headline" {
+                operations.append(InstallOperation(
+                    source: item,
+                    destination: roots.headlinesDirectory.appending(path: dirName, directoryHint: .isDirectory),
+                    type: .headline,
+                    name: name,
+                    refreshes: false,
+                    undeleteMask: []
+                ))
+            } else if lower.hasPrefix("plugin") || metadata["type"]?.lowercased() == "plugin" {
+                operations.append(InstallOperation(
+                    source: item,
+                    destination: roots.pluginsDirectory.appending(path: dirName, directoryHint: .isDirectory),
+                    type: .plugin,
+                    name: name,
+                    refreshes: false,
+                    undeleteMask: []
+                ))
+            }
+        }
+        return operations
+    }
+
+    private func isIgnoredDirectory(_ url: URL) -> Bool {
+        let name = url.lastPathComponent
+        return name.hasPrefix(".") || name.caseInsensitiveCompare("__MACOSX") == .orderedSame
+    }
+
+    private func isBalloonDirectory(_ directory: URL) -> Bool {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: directory.appending(path: "origin.txt").path)
+            || fileManager.fileExists(atPath: directory.appending(path: "balloona0.png").path)
+            || fileManager.fileExists(atPath: directory.appending(path: "balloonk0.png").path)
+        {
+            return true
+        }
+        return false
+    }
+
+    private func isShellDirectory(_ directory: URL) -> Bool {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: directory.appending(path: "surfaces.txt").path)
+            || fileManager.fileExists(atPath: directory.appending(path: "surface0.png").path)
+        {
+            return true
+        }
+        return false
+    }
+
+    private func findDirectoryWithFile(named fileName: String, in root: URL) -> URL? {
+        let fileManager = FileManager.default
+        if fileManager.fileExists(atPath: root.appending(path: fileName).path) {
+            return root
+        }
+        guard let enumerator = fileManager.enumerator(
+            at: root,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else { return nil }
+
+        for case let url as URL in enumerator {
+            if isIgnoredDirectory(url) {
+                enumerator.skipDescendants()
+                continue
+            }
+            if url.lastPathComponent.caseInsensitiveCompare(fileName) == .orderedSame {
+                return url.deletingLastPathComponent()
+            }
+        }
+        return nil
+    }
+
+    private func sanitizeDirectoryName(_ name: String) -> String {
+        let invalidCharacters = CharacterSet(charactersIn: "/\\:*?\"<>|\0\r\n\t")
+        let cleaned = name.components(separatedBy: invalidCharacters).joined(separator: "_")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if cleaned.isEmpty || cleaned == "." || cleaned == ".." {
+            return "installed_content"
+        }
+        return cleaned
     }
 }

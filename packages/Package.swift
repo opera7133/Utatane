@@ -37,6 +37,7 @@ let package = Package(
         ),
         .target(
             name: "UtataneBalloon",
+            dependencies: ["UtataneCore"],
             path: "balloon/Sources"
         ),
         .target(
@@ -64,6 +65,7 @@ let package = Package(
         ),
         .target(
             name: "UtataneContent",
+            dependencies: ["UtataneCore"],
             path: "content/Sources"
         ),
         .target(
@@ -350,7 +352,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UtataneContentTests",
-            dependencies: ["UtataneContent"],
+            dependencies: ["UtataneContent", "UtataneCore"],
             path: "content/Tests"
         ),
         .testTarget(

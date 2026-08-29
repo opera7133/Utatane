@@ -1,4 +1,5 @@
 import Foundation
+import UtataneCore
 
 public struct DescriptParser: Sendable {
     public init() {}
@@ -21,9 +22,7 @@ public struct DescriptParser: Sendable {
 
     public func parse(contentsOf url: URL) throws -> [String: String] {
         let data = try Data(contentsOf: url)
-        guard let text = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .shiftJIS)
-        else {
+        guard let text = LegacyTextDecoder.decode(data) else {
             throw GhostPackageError.unsupportedTextEncoding(url)
         }
         return parse(text)

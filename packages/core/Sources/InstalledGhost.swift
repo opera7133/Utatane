@@ -41,6 +41,7 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
     public let shells: [InstalledShell]
     public let characters: [InstalledGhostCharacter]
     public let shioriFilename: String?
+    public let charset: String?
     public let defaultBalloonDirectoryName: String?
 
     public var id: URL {
@@ -54,6 +55,7 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
         shells: [InstalledShell]? = nil,
         characters: [InstalledGhostCharacter]? = nil,
         shioriFilename: String? = nil,
+        charset: String? = nil,
         defaultBalloonDirectoryName: String? = nil
     ) {
         self.name = name
@@ -67,6 +69,7 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
             InstalledGhostCharacter(scope: 1, defaultSurfaceID: 10)
         ]
         self.shioriFilename = shioriFilename
+        self.charset = charset
         self.defaultBalloonDirectoryName = defaultBalloonDirectoryName
     }
 }

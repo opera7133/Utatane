@@ -1,4 +1,5 @@
 import Foundation
+import UtataneCore
 
 public enum BalloonError: LocalizedError, Equatable {
     case missingFile(URL)
@@ -61,9 +62,7 @@ public struct BalloonLoader: Sendable {
         }
 
         let data = try Data(contentsOf: descriptURL)
-        guard let text = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .shiftJIS)
-        else {
+        guard let text = LegacyTextDecoder.decode(data) else {
             throw BalloonError.unsupportedTextEncoding(descriptURL)
         }
         let values = parser.parse(text)
