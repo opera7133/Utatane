@@ -33,6 +33,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 ### 人格とかネットワークとか
 
 - YAYA(文) / KAGARI / SHIOLINK(MiyoJS等) / 里々 / 華和梨 / 美坂 / 灯をSHIORIとして使うゴーストのネイティブ実行 (蒼空については"実験的な機能"を参照)
+- 韓国語助詞トランスレータ`ParticleMakoto`のネイティブ実行
 - SSU、`saori_cpuid`、`kenonoke`、`textcopy2`、`mciaudior`、`wmove`のネイティブSAORI互換
 - ゴーストとバルーンの手動ネットワーク更新と、設定した日数ごとの自動更新
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0

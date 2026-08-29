@@ -26,7 +26,7 @@
 | GIVE | ✅ | DocumentをOnCommunicate、SongをOnMusicPlayへ変換 |
 | EXECUTE | ✅ | 下記portable commandを実行。未知commandは501 |
 
-SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを選択できる。`IfGhost`と直後の`Script`の組を出現順に評価し、該当しなければdefault Scriptを使う。`Option: nobreak`は現在の再生完了後へキューイングする。`nodescript`はUtataneに専用SSTPマーカーがないため結果に差がなく、`notranslate`はMAKOTO／OnTranslate経路自体がないため常に同等の扱いになる。
+SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを選択できる。`IfGhost`と直後の`Script`の組を出現順に評価し、該当しなければdefault Scriptを使う。`Option: nobreak`は現在の再生完了後へキューイングする。`nodescript`はUtataneに専用SSTPマーカーがないため結果に差がない。`notranslate`は、SSTPで受け取ったScriptを現在のMAKOTO経路へ渡していないため、指定の有無で差がない。
 
 ## EXECUTE command
 

@@ -5,6 +5,7 @@
 ### 追加
 
 - `.nar`に加えて`.zip`のインストールに対応。`install.txt`を持つ通常の配布物のほか、ゴースト・シェル・バルーンやSSPフォルダ構成を直接ZIP化したものも内容を判定して配置
+- 韓国語の語末に応じて助詞を選ぶ`ParticleMakoto`をネイティブ実装。`ghost/master`の`makoto.dll`と`makoto.ini`を検出し、Wineを使わずSHIORIの応答を表示前に変換
 
 ### 修正
 

@@ -71,6 +71,7 @@ packages/network/          更新、RSS、HEADLINE、SSTP、WebSocket、時刻�
 packages/ai/               プロバイダー非依存のAI人格エンジン
 packages/realtime/         Realtime APIのSDP接続要求、会話イベント・トランスクリプト処理
 packages/shiori/           SHIORIメッセージとイベント変換
+packages/makoto/           MAKOTOトランスレータと人格応答への変換処理
 packages/plugin/           プラグイン検出、要求・イベント配送、dylib接続
 packages/native-saori/     ネイティブSHIORI共通のSAORIレジストリ
 packages/yaya-native/      YAYA本体とSwiftブリッジ、AYA互換の読み込み

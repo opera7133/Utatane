@@ -10,6 +10,7 @@ import UtataneCore
 import UtataneFirstNative
 import UtataneGhostKit
 import UtataneKawariNative
+import UtataneMakoto
 import UtataneMisakaNative
 import UtataneNativeSaori
 import UtataneNetwork
@@ -1793,6 +1794,18 @@ private struct UtataneRootView: View {
     }
 
     private func personalityEngine(for ghost: InstalledGhost) throws -> any PersonalityEngine {
+        let base = try basePersonalityEngine(for: ghost)
+        let masterDirectory = ghost.rootDirectory.appending(
+            path: "ghost/master",
+            directoryHint: .isDirectory
+        )
+        guard ParticleMakotoTranslator.supports(masterDirectoryURL: masterDirectory) else {
+            return base
+        }
+        return TranslatingPersonalityEngine(base: base, translators: [ParticleMakotoTranslator()])
+    }
+
+    private func basePersonalityEngine(for ghost: InstalledGhost) throws -> any PersonalityEngine {
         let masterDirectory = ghost.rootDirectory.appending(
             path: "ghost/master",
             directoryHint: .isDirectory

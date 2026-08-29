@@ -129,6 +129,8 @@ targets:
       - package: UtataneKit
         product: UtataneKawariNative
       - package: UtataneKit
+        product: UtataneMakoto
+      - package: UtataneKit
         product: UtataneYayaNative
       - package: UtataneKit
         product: UtataneSatoriNative
