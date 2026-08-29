@@ -755,34 +755,8 @@ public final class SakuraScriptPlayer {
                         part: part,
                         enabled: enabled
                     )
-                    if notifiesEvents, !changes.isEmpty {
-                        for change in changes {
-                            _ = await onEmbeddedEvent?(
-                                "OnDressupChanged",
-                                [
-                                    String(change.scope),
-                                    change.group.part,
-                                    change.enabled ? "1" : "0",
-                                    change.group.category,
-                                    "script"
-                                ]
-                            )
-                        }
-                        let dressupReferences = surfaceWindowController.dressupInfo().map { info in
-                            let options = [
-                                info.options.mustSelect ? "mustselect" : nil,
-                                info.options.multiple ? "multiple" : nil
-                            ].compactMap(\.self).joined(separator: ",")
-                            return [
-                                String(info.scope),
-                                info.group.category,
-                                info.group.part,
-                                options,
-                                info.enabled ? "1" : "0",
-                                info.group.thumbnail
-                            ].joined(separator: "\u{1}")
-                        }
-                        _ = await onEmbeddedEvent?("OnNotifyDressupInfo", dressupReferences)
+                    if notifiesEvents {
+                        await notifyDressupChanges(changes)
                     }
                 case let .balloonSurface(style):
                     balloonStyleByScope[scope] = style
@@ -1290,6 +1264,37 @@ public final class SakuraScriptPlayer {
         } catch {
             onError?(error)
         }
+    }
+
+    public func notifyDressupChanges(_ changes: [DressupChange], source: String = "script") async {
+        guard !changes.isEmpty else { return }
+        for change in changes {
+            _ = await onEmbeddedEvent?(
+                "OnDressupChanged",
+                [
+                    String(change.scope),
+                    change.group.part,
+                    change.enabled ? "1" : "0",
+                    change.group.category,
+                    source
+                ]
+            )
+        }
+        let dressupReferences = surfaceWindowController.dressupInfo().map { info in
+            let options = [
+                info.options.mustSelect ? "mustselect" : nil,
+                info.options.multiple ? "multiple" : nil
+            ].compactMap(\.self).joined(separator: ",")
+            return [
+                String(info.scope),
+                info.group.category,
+                info.group.part,
+                options,
+                info.enabled ? "1" : "0",
+                info.group.thumbnail
+            ].joined(separator: "\u{1}")
+        }
+        _ = await onEmbeddedEvent?("OnNotifyDressupInfo", dressupReferences)
     }
 
     private func scheduleEventTimer(

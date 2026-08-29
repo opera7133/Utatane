@@ -382,7 +382,7 @@ private struct UtataneRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .restoreUtataneSurfaces)) { _ in
             surfaceWindowController.restoreSurfaces()
         }
-        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "display-settings", id: "\(networkSettings.shellScalePercent)-\(networkSettings.balloonScalePercent)-\(networkSettings.linksBalloonScale)-\(networkSettings.balloonTextScalePercent)-\(networkSettings.locksShellToDesktopBottom)-\(networkSettings.keepsShellOnScreen)") {
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "display-settings", id: "\(networkSettings.shellScalePercent)-\(networkSettings.automaticallyFitsLargeSurfaces)-\(networkSettings.balloonScalePercent)-\(networkSettings.linksBalloonScale)-\(networkSettings.balloonTextScalePercent)-\(networkSettings.locksShellToDesktopBottom)-\(networkSettings.keepsShellOnScreen)") {
             configureDisplay()
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "appearance", id: networkSettings.appearance) {
@@ -2833,6 +2833,9 @@ private struct UtataneRootView: View {
     }
 
     private func configureContextMenu() {
+        surfaceWindowController.onUserDressupChange = { changes in
+            Task { await scriptPlayer.notifyDressupChanges(changes, source: "user") }
+        }
         surfaceWindowController.contextMenuItems = {
             [
                 networkUpdateMenu(),
@@ -2842,7 +2845,10 @@ private struct UtataneRootView: View {
                 ),
                 headlineMenu(),
                 pluginMenu(),
-                functionMenu(),
+                functionMenu()
+            ] + (surfaceWindowController.dressupContextMenuItem(
+                title: String(localized: "着せ替え")
+            ).map { [$0] } ?? []) + [
                 settingsMenu(),
                 .separator,
                 .submenu(
@@ -3169,7 +3175,10 @@ private struct UtataneRootView: View {
                         }
                     )
                 }
-            ),
+            )
+        ] + (runtime.surfaceController.dressupContextMenuItem(
+            title: String(localized: "着せ替え")
+        ).map { [$0] } ?? []) + [
             .submenu(
                 title: String(localized: "バルーン"),
                 items: installedBalloons.map { balloon in
@@ -3355,6 +3364,7 @@ private struct UtataneRootView: View {
         configuredShellScalePercent = shellPercent
         configuredBalloonScalePercent = balloonScalePercent
         surfaceWindowController.setDisplayScale(shellScale)
+        surfaceWindowController.setAutomaticallyFitsLargeSurfaces(networkSettings.automaticallyFitsLargeSurfaces)
         surfaceWindowController.setPlacement(
             locksToDesktopBottom: networkSettings.locksShellToDesktopBottom,
             keepsOnScreen: networkSettings.keepsShellOnScreen
@@ -3366,6 +3376,7 @@ private struct UtataneRootView: View {
         for runtime in calledGhosts.values {
             runtime.configureDisplay(
                 shellPercent: shellPercent,
+                automaticallyFitsLargeSurfaces: networkSettings.automaticallyFitsLargeSurfaces,
                 balloonPercent: balloonScalePercent,
                 textPercent: networkSettings.balloonTextScalePercent
             )

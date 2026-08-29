@@ -73,6 +73,7 @@ final class UtataneSettingsStore: ObservableObject {
         static let randomTalkIntervalMinutes = "talk.randomTalkIntervalMinutes"
         static let dialogueDismissalSeconds = "balloon.dialogueDismissalSeconds"
         static let shellScalePercent = "display.shellScalePercent"
+        static let automaticallyFitsLargeSurfaces = "display.automaticallyFitsLargeSurfaces"
         static let balloonScalePercent = "display.balloonScalePercent"
         static let linksBalloonScale = "display.linksBalloonScale"
         static let balloonTextScalePercent = "display.balloonTextScalePercent"
@@ -152,6 +153,10 @@ final class UtataneSettingsStore: ObservableObject {
 
     @Published var shellScalePercent: Int {
         didSet { saveGhostValue(shellScalePercent, kind: Key.shellScalePercent) }
+    }
+
+    @Published var automaticallyFitsLargeSurfaces: Bool {
+        didSet { saveGhostValue(automaticallyFitsLargeSurfaces, kind: Key.automaticallyFitsLargeSurfaces) }
     }
 
     @Published var balloonScalePercent: Int {
@@ -262,6 +267,7 @@ final class UtataneSettingsStore: ObservableObject {
             fallback: 10
         )
         shellScalePercent = 100
+        automaticallyFitsLargeSurfaces = true
         balloonScalePercent = 100
         linksBalloonScale = true
         balloonTextScalePercent = 100
@@ -310,6 +316,11 @@ final class UtataneSettingsStore: ObservableObject {
             directoryName: directoryName,
             kind: Key.shellScalePercent,
             fallback: 100
+        )
+        automaticallyFitsLargeSurfaces = ghostBoolValue(
+            directoryName: directoryName,
+            kind: Key.automaticallyFitsLargeSurfaces,
+            fallback: true
         )
         balloonScalePercent = ghostIntegerValue(
             directoryName: directoryName,
@@ -503,6 +514,7 @@ struct UtataneSettingsView: View {
                             Text("\(value)%").tag(value)
                         }
                     }
+                    Toggle("大きいシェルを画面に合わせて縮小", isOn: $settings.automaticallyFitsLargeSurfaces)
                     Toggle("バルーンをシェル倍率に連動", isOn: $settings.linksBalloonScale)
                     Picker("バルーン", selection: $settings.balloonScalePercent) {
                         ForEach([50, 75, 100, 125, 150, 200], id: \.self) { value in

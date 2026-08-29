@@ -106,6 +106,9 @@ final class CalledGhostRuntime {
             "keroname": ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
         ])
         configureCallbacks()
+        surfaceController.onUserDressupChange = { [weak player] changes in
+            Task { await player?.notifyDressupChanges(changes, source: "user") }
+        }
     }
 
     func start(caller: InstalledGhost) async throws -> String? {
@@ -295,8 +298,14 @@ final class CalledGhostRuntime {
         )
     }
 
-    func configureDisplay(shellPercent: Int, balloonPercent: Int, textPercent: Int) {
+    func configureDisplay(
+        shellPercent: Int,
+        automaticallyFitsLargeSurfaces: Bool,
+        balloonPercent: Int,
+        textPercent: Int
+    ) {
         surfaceController.setDisplayScale(Double(shellPercent) / 100)
+        surfaceController.setAutomaticallyFitsLargeSurfaces(automaticallyFitsLargeSurfaces)
         balloonController.setDisplayScale(Double(balloonPercent) / 100, textScale: Double(textPercent) / 100)
     }
 

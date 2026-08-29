@@ -4,6 +4,7 @@ import UtataneNativeSaori
 import UtataneShiori
 
 private let activeYayaSaori = YayaSaoriSlot()
+private let yayaRuntimeLock = NSLock()
 
 private final class YayaSaoriSlot: @unchecked Sendable {
     var registry: NativeSaoriRegistry?
@@ -30,22 +31,23 @@ public enum NativeYayaError: LocalizedError, Equatable, Sendable {
 ///
 /// Access is serialized because the original VM keeps some process-global state.
 public final class NativeYayaSession: @unchecked Sendable {
-    private let lock = NSLock()
     private var instanceID: Int
     private let saoriRegistry: NativeSaoriRegistry
 
     public init(masterDirectoryURL: URL, saoriRegistry: NativeSaoriRegistry? = nil) throws {
         self.saoriRegistry = saoriRegistry ?? NativeSaoriRegistry(baseDirectoryURL: masterDirectoryURL)
-        utatane_yaya_set_saori_request_callback(utataneYayaSaoriRequest)
         let path = masterDirectoryURL.standardizedFileURL.path
-        instanceID = path.withCString { utatane_yaya_create_utf8($0) }
+        instanceID = yayaRuntimeLock.withLock {
+            utatane_yaya_set_saori_request_callback(utataneYayaSaoriRequest)
+            return path.withCString { utatane_yaya_create_utf8($0) }
+        }
         guard instanceID > 0 else {
             throw NativeYayaError.loadFailed(masterDirectoryURL)
         }
     }
 
     deinit {
-        lock.withLock {
+        yayaRuntimeLock.withLock {
             if instanceID > 0 {
                 _ = utatane_yaya_destroy(instanceID)
                 instanceID = 0
@@ -59,7 +61,7 @@ public final class NativeYayaSession: @unchecked Sendable {
     }
 
     public func request(_ request: String) throws -> String {
-        try lock.withLock {
+        try yayaRuntimeLock.withLock {
             activeYayaSaori.registry = saoriRegistry
             defer { activeYayaSaori.registry = nil }
             var responseLength = 0

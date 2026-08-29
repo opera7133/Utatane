@@ -2,6 +2,30 @@ import AppKit
 import UtataneCore
 import UtataneShell
 
+func automaticSurfaceFitScale(imageSize: NSSize, visibleSize: NSSize?) -> CGFloat {
+    guard let visibleSize, imageSize.width > 0, imageSize.height > 0,
+          visibleSize.width > 0, visibleSize.height > 0
+    else { return 1 }
+    return min(
+        1,
+        visibleSize.width * 0.9 / imageSize.width,
+        visibleSize.height * 0.75 / imageSize.height
+    )
+}
+
+func automaticAnimationRandomDenominator(components: Set<String>, parameter: Int?) -> Int? {
+    if components.contains("sometimes") {
+        return 2
+    }
+    if components.contains("rarely") {
+        return 4
+    }
+    if components.contains("random") {
+        return max(parameter ?? 1, 1)
+    }
+    return nil
+}
+
 public struct DressupChange: Sendable, Equatable {
     public let scope: Int
     public let group: ShellBindGroup
@@ -54,6 +78,7 @@ public final class SurfaceWindowController {
     private var startupPresentationHidden = false
 
     private var displayScale: CGFloat = 1
+    private var automaticallyFitsLargeSurfaces = true
     private var locksToDesktopBottom = true
     private var keepsOnScreen = true
     private var stayOnTop = true
@@ -71,6 +96,7 @@ public final class SurfaceWindowController {
     public var onURLDrop: (@MainActor (Int, URL) -> Void)?
     public var onTextDrop: (@MainActor (Int, String) -> Void)?
     public var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
+    public var onUserDressupChange: (@MainActor ([DressupChange]) -> Void)?
 
     public init(positionStore: WindowPositionStore = WindowPositionStore()) {
         self.positionStore = positionStore
@@ -111,6 +137,47 @@ public final class SurfaceWindowController {
         for character in characters.values {
             character.setDisplayScale(displayScale)
         }
+    }
+
+    public func setAutomaticallyFitsLargeSurfaces(_ enabled: Bool) {
+        automaticallyFitsLargeSurfaces = enabled
+        for character in characters.values {
+            character.setAutomaticallyFitsLargeSurfaces(enabled)
+        }
+    }
+
+    public func dressupContextMenuItem(title: String) -> SurfaceContextMenuItem? {
+        let infos = dressupInfo()
+        guard !infos.isEmpty else { return nil }
+        let grouped = Dictionary(grouping: infos) { "\($0.scope)\u{0}\($0.group.category)" }
+        let categories = grouped.values.sorted {
+            ($0.first?.scope ?? 0, $0.first?.group.category ?? "")
+                < ($1.first?.scope ?? 0, $1.first?.group.category ?? "")
+        }.map { categoryInfos in
+            let category = categoryInfos.first?.group.category ?? ""
+            let items = categoryInfos.sorted { $0.group.id < $1.group.id }.map { info in
+                let selectedCount = categoryInfos.count(where: \.enabled)
+                return SurfaceContextMenuItem.action(
+                    title: info.group.part,
+                    isSelected: info.enabled,
+                    isEnabled: !(info.enabled && info.options.mustSelect && selectedCount == 1),
+                    handler: { [weak self] in
+                        guard let self else { return }
+                        let changes = changeBind(
+                            scope: info.scope,
+                            category: info.group.category,
+                            part: info.group.part,
+                            enabled: nil
+                        )
+                        if !changes.isEmpty {
+                            onUserDressupChange?(changes)
+                        }
+                    }
+                )
+            }
+            return SurfaceContextMenuItem.submenu(title: category, items: items)
+        }
+        return .submenu(title: title, items: categories)
     }
 
     public func setPlacement(locksToDesktopBottom: Bool, keepsOnScreen: Bool) {
@@ -571,6 +638,7 @@ public final class SurfaceWindowController {
             scope: scope,
             positionStore: positionStore,
             displayScale: displayScale,
+            automaticallyFitsLargeSurfaces: automaticallyFitsLargeSurfaces,
             locksToDesktopBottom: locksToDesktopBottom,
             keepsOnScreen: keepsOnScreen
         )
@@ -685,6 +753,8 @@ private final class CharacterSurfaceController {
     private var talkCharacterCount = 0
     private var isAnimating = false
     private var displayScale: CGFloat
+    private var automaticallyFitsLargeSurfaces: Bool
+    private var automaticFitScale: CGFloat = 1
     private(set) var surfaceAlpha: CGFloat = 1
     private(set) var runtimeScaleX: CGFloat = 1
     private(set) var runtimeScaleY: CGFloat = 1
@@ -721,12 +791,14 @@ private final class CharacterSurfaceController {
         scope: Int,
         positionStore: WindowPositionStore,
         displayScale: CGFloat,
+        automaticallyFitsLargeSurfaces: Bool,
         locksToDesktopBottom: Bool,
         keepsOnScreen: Bool
     ) {
         self.scope = scope
         self.positionStore = positionStore
         self.displayScale = displayScale
+        self.automaticallyFitsLargeSurfaces = automaticallyFitsLargeSurfaces
         self.locksToDesktopBottom = locksToDesktopBottom
         self.keepsOnScreen = keepsOnScreen
     }
@@ -784,6 +856,11 @@ private final class CharacterSurfaceController {
         pendingAnimationImage = nil
 
         let rendered = try render(surfaceID: surfaceID, shell: shell)
+        automaticFitScale = automaticallyFitsLargeSurfaces
+            ? automaticSurfaceFitScale(imageSize: rendered.image.size, visibleSize: NSScreen.main?.visibleFrame.size)
+            : 1
+        imageView = rendered.view
+        updateImageViewCoordinateScale()
         let window = window ?? makeWindow()
         window.contentView = rendered.view
         window.setContentSize(displaySize(for: rendered.image))
@@ -1107,6 +1184,17 @@ private final class CharacterSurfaceController {
         scheduleAutomaticAnimations()
     }
 
+    func setAutomaticallyFitsLargeSurfaces(_ enabled: Bool) {
+        automaticallyFitsLargeSurfaces = enabled
+        guard let baseImage else { return }
+        automaticFitScale = enabled
+            ? automaticSurfaceFitScale(imageSize: baseImage.size, visibleSize: NSScreen.main?.visibleFrame.size)
+            : 1
+        guard let window else { return }
+        window.setContentSize(displaySize(for: baseImage))
+        updateImageViewCoordinateScale()
+    }
+
     func setRuntimeScale(
         horizontal: CGFloat,
         vertical: CGFloat,
@@ -1176,9 +1264,18 @@ private final class CharacterSurfaceController {
 
     private func displaySize(for image: NSImage) -> NSSize {
         NSSize(
-            width: max(1, image.size.width * displayScale * abs(runtimeScaleX)),
-            height: max(1, image.size.height * displayScale * abs(runtimeScaleY))
+            width: max(1, image.size.width * effectiveDisplayScale * abs(runtimeScaleX)),
+            height: max(1, image.size.height * effectiveDisplayScale * abs(runtimeScaleY))
         )
+    }
+
+    private var effectiveDisplayScale: CGFloat {
+        automaticFitScale < 1 ? min(displayScale, automaticFitScale) : displayScale
+    }
+
+    private func updateImageViewCoordinateScale() {
+        imageView?.coordinateScaleX = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(runtimeScaleX))
+        imageView?.coordinateScaleY = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(runtimeScaleY))
     }
 
     var onWindowDragDelta: ((_ delta: NSPoint) -> Void)?
@@ -1255,8 +1352,8 @@ private final class CharacterSurfaceController {
         imageView.image = boundImage
         imageView.imageAlignment = .alignCenter
         imageView.imageScaling = .scaleAxesIndependently
-        imageView.coordinateScaleX = max(.leastNonzeroMagnitude, displayScale * abs(runtimeScaleX))
-        imageView.coordinateScaleY = max(.leastNonzeroMagnitude, displayScale * abs(runtimeScaleY))
+        imageView.coordinateScaleX = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(runtimeScaleX))
+        imageView.coordinateScaleY = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(runtimeScaleY))
         imageView.flipsHorizontally = runtimeScaleX < 0
         imageView.flipsVertically = runtimeScaleY < 0
         imageView.locksHorizontalMovement = [.left, .right].contains(desktopAlignment)
@@ -1440,8 +1537,8 @@ private final class CharacterSurfaceController {
         guard let definition = currentSurfaceDefinition else { return .zero }
         let offset = definition.scopeBalloonOffsets[scope] ?? definition.balloonOffset ?? SurfacePoint(x: 0, y: 0)
         return NSPoint(
-            x: Double(offset.x) * displayScale * abs(runtimeScaleX),
-            y: Double(offset.y) * displayScale * abs(runtimeScaleY)
+            x: Double(offset.x) * effectiveDisplayScale * abs(runtimeScaleX),
+            y: Double(offset.y) * effectiveDisplayScale * abs(runtimeScaleY)
         )
     }
 
@@ -1475,14 +1572,11 @@ private final class CharacterSurfaceController {
                     if components.contains("always") {
                         return true
                     }
-                    if components.contains("sometimes") {
-                        return Int.random(in: 0 ..< 2) == 0
-                    }
-                    if components.contains("rarely") {
-                        return Int.random(in: 0 ..< 4) == 0
-                    }
-                    if components.contains("random") {
-                        return Int.random(in: 0 ..< max(animation.intervalParameter ?? 1, 1)) == 0
+                    if let denominator = automaticAnimationRandomDenominator(
+                        components: components,
+                        parameter: animation.intervalParameter
+                    ) {
+                        return Int.random(in: 0 ..< denominator) == 0
                     }
                     if components.contains("periodic"),
                        elapsedSeconds[animation.id, default: 0] >= max(animation.intervalParameter ?? 1, 1)

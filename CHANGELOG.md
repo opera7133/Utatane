@@ -1,11 +1,18 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.5] - 2026-08-29
 
 ### 追加
 
 - kagariとLuaをアプリのビルド時に自動でコンパイル・同梱。配布版はApple Silicon／Intelの両CPUに対応し、kagari利用のための追加ビルドを不要にした。kagari・Lua・sol2の著作権表示とライセンス本文も同梱
 - 同梱kagariの構成・ライセンス確認と、別の場所へ移したライブラリのロード・応答・終了テストを配布前のCIに追加。Windows用Lua拡張DLLやSAORIの互換性は対象外
+- 大きすぎるシェルを画面の高さ75%・幅90%以内へ自動縮小するゴースト別設定を追加。通常サイズは等倍のまま表示し、必要なら自動縮小を無効にして従来の手動倍率だけで調整できる
+
+### 修正
+
+- 右クリックメニューにゴーストの着せ替え項目を表示し、既定で有効なマスクなどを着脱できるようにした。操作後の`OnDressupChanged`と`OnNotifyDressupInfo`もSSP互換の`user`指定で通知
+- SERIKOの`sometimes`がUKADOCどおり毎秒1/2、`rarely`が毎秒1/4の確率であることを回帰テストへ追加
+- 複数のYAYAゴーストを同時に扱うと、YAYA内部の共有状態が競合して応答が混ざることがある問題を修正
 
 ## [0.1.4] - 2026-08-28
 
@@ -337,7 +344,7 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.1.4...HEAD
+[0.1.5]: https://github.com/opera7133/Utatane/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/opera7133/Utatane/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/opera7133/Utatane/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/opera7133/Utatane/compare/v0.1.1...v0.1.2

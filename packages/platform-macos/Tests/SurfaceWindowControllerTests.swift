@@ -6,6 +6,25 @@ import UtataneCore
 import UtataneSakuraScript
 import UtataneShell
 
+@Test func `automatic animation probabilities match SERIKO intervals`() {
+    #expect(automaticAnimationRandomDenominator(components: ["sometimes"], parameter: nil) == 2)
+    #expect(automaticAnimationRandomDenominator(components: ["rarely"], parameter: nil) == 4)
+    #expect(automaticAnimationRandomDenominator(components: ["random"], parameter: 7) == 7)
+    #expect(automaticAnimationRandomDenominator(components: ["periodic"], parameter: 7) == nil)
+}
+
+@Test func `automatic surface fit only shrinks oversized images`() {
+    #expect(automaticSurfaceFitScale(
+        imageSize: NSSize(width: 400, height: 600),
+        visibleSize: NSSize(width: 1440, height: 900)
+    ) == 1)
+    #expect(abs(automaticSurfaceFitScale(
+        imageSize: NSSize(width: 676, height: 1000),
+        visibleSize: NSSize(width: 1440, height: 900)
+    ) - 0.675) < 0.0001)
+    #expect(automaticSurfaceFitScale(imageSize: NSSize(width: 676, height: 1000), visibleSize: nil) == 1)
+}
+
 @Test func `chooses interaction cursors from collision regions`() {
     #expect(SurfaceCursorStyle(region: nil) == .arrow)
     #expect(SurfaceCursorStyle(region: "Head") == .openHand)
@@ -796,6 +815,90 @@ func `bind command switches exclusive dressup parts and sends events`() async th
     #expect(events.map(\.0) == ["OnDressupChanged", "OnDressupChanged", "OnNotifyDressupInfo"])
     #expect(events[0].1 == ["0", "コート", "0", "服", "script"])
     #expect(events[1].1 == ["0", "パーカー", "1", "服", "script"])
+}
+
+@Test
+@MainActor
+func `dressup context menu can remove an optional default part`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+    let mask = ShellBindGroup(id: 1000, category: "顔", part: "マスク")
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(
+        shell: ShellDefinition(
+            directory: directory,
+            surfaces: [:],
+            defaultBindGroups: [0: [1000]],
+            bindGroups: [0: [1000: mask]]
+        ),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { controller.hideAll() }
+
+    let root = try #require(controller.dressupContextMenuItem(title: "着せ替え"))
+    guard case let .submenu(title, categoryItems) = root,
+          case let .submenu(category, partItems) = try #require(categoryItems.first),
+          case let .action(part, selected, enabled, handler) = try #require(partItems.first)
+    else {
+        Issue.record("expected dressup/category/part menu hierarchy")
+        return
+    }
+    #expect(title == "着せ替え")
+    #expect(category == "顔")
+    #expect(part == "マスク")
+    #expect(selected)
+    #expect(enabled)
+    handler()
+    #expect(controller.dressupInfo().first?.enabled == false)
+}
+
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_MOMOCHI_SHELL"] != nil))
+@MainActor
+struct MomochiCompatibilityTests {
+    @Test func `real shell fits the screen and its mask can be removed`() throws {
+        let directory = try URL(filePath: #require(ProcessInfo.processInfo.environment["UTATANE_MOMOCHI_SHELL"]))
+        let shell = try ShellLoader().load(from: directory)
+        #expect(shell.usesSelfAlpha)
+        #expect(shell.defaultBindGroups[0]?.contains(1000) == true)
+        #expect(shell.bindGroups[0]?[1000]?.part == "マスク")
+        let (defaults, positionStore) = makePositionStore()
+        defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+        let controller = SurfaceWindowController(positionStore: positionStore)
+        try controller.show(shell: shell, scope: 0, surfaceID: 0)
+        defer { controller.hideAll() }
+        let frame = try #require(controller.windowFrame(for: 0))
+        let expectedScale = automaticSurfaceFitScale(
+            imageSize: NSSize(width: 676, height: 1000),
+            visibleSize: NSScreen.main?.visibleFrame.size
+        )
+        #expect(abs(frame.height - 1000 * expectedScale) < 1)
+
+        let root = try #require(controller.dressupContextMenuItem(title: "着せ替え"))
+        guard case let .submenu(_, categories) = root
+        else {
+            Issue.record("expected the real mask dressup item")
+            return
+        }
+        let maskItem: SurfaceContextMenuItem? = categories.lazy.compactMap { item in
+            guard case let .submenu(_, parts) = item else { return nil }
+            return parts.first(where: { part in
+                guard case let .action(title, _, _, _) = part else { return false }
+                return title == "マスク"
+            })
+        }.first
+        guard case let .action(_, _, _, handler) = try #require(maskItem) else {
+            Issue.record("expected the real mask dressup item")
+            return
+        }
+        handler()
+        #expect(controller.dressupInfo().first(where: { $0.group.id == 1000 })?.enabled == false)
+    }
 }
 
 @Test

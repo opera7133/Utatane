@@ -274,5 +274,7 @@
   "Realtime APIのモデルとVoiceを設定して。" : "Set the Realtime API model and voice.",
   "Realtime APIキーを設定して。" : "Set the Realtime API key.",
   "再起動できなかった" : "Could not restart",
-  "Utataneを終了して、もう一度開いてね。" : "Quit Utatane and open it again."
+  "Utataneを終了して、もう一度開いてね。" : "Quit Utatane and open it again.",
+  "着せ替え" : "Dress Up",
+  "大きいシェルを画面に合わせて縮小" : "Shrink Large Shells to Fit Screen"
 }

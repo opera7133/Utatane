@@ -5569,6 +5569,35 @@
         }
       }
     },
+    "大きいシェルを画面に合わせて縮小" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shrink Large Shells to Fit Screen"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "큰 셸을 화면에 맞게 축소"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缩小过大的外壳以适应屏幕"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "縮小過大的外殼以符合螢幕"
+          }
+        }
+      }
+    },
     "実行" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6754,6 +6783,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保持在螢幕內"
+          }
+        }
+      }
+    },
+    "着せ替え" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dress Up"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "옷 갈아입기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "换装"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "換裝"
           }
         }
       }
