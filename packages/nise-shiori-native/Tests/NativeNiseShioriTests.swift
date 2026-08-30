@@ -46,6 +46,9 @@ import UtataneCore
     defer { try? FileManager.default.removeItem(at: root) }
     try Data().write(to: root.appending(path: "ai1.txt"))
     #expect(NativeNiseShioriPersonalityEngine.supports(masterDirectoryURL: root, shioriFilename: "NISESHIORI.DLL"))
+    #expect(!NativeNiseShioriPersonalityEngine.supports(masterDirectoryURL: root, shioriFilename: nil))
+    try Data().write(to: root.appending(path: "niseshiori.dll"))
+    #expect(NativeNiseShioriPersonalityEngine.supports(masterDirectoryURL: root, shioriFilename: nil))
     #expect(!NativeNiseShioriPersonalityEngine.supports(masterDirectoryURL: root, shioriFilename: "ese-shiori.dll"))
 }
 

@@ -29,21 +29,33 @@ public struct ShellLoader: Sendable {
 
     public func load(from shellDirectory: URL) throws -> ShellDefinition {
         let fileManager = FileManager.default
-        let surfacesURLs = try fileManager.contentsOfDirectory(
+        let shellFiles = try fileManager.contentsOfDirectory(
             at: shellDirectory,
             includingPropertiesForKeys: nil,
             options: [.skipsHiddenFiles]
-        ).filter {
+        )
+        let surfacesURLs = shellFiles.filter {
             $0.pathExtension.lowercased() == "txt"
                 && $0.lastPathComponent.lowercased().hasPrefix("surfaces")
         }.sorted { $0.lastPathComponent < $1.lastPathComponent }
-        guard !surfacesURLs.isEmpty else {
+        let legacySurfaceURLs = shellFiles.compactMap { url -> (url: URL, surfaceID: Int)? in
+            legacySurfaceID(from: url.lastPathComponent).map { (url, $0) }
+        }.sorted {
+            if $0.surfaceID != $1.surfaceID {
+                return $0.surfaceID < $1.surfaceID
+            }
+            return $0.url.lastPathComponent < $1.url.lastPathComponent
+        }
+        guard !surfacesURLs.isEmpty || !legacySurfaceURLs.isEmpty else {
             throw ShellError.missingFile(
                 shellDirectory.appending(path: "surfaces.txt", directoryHint: .notDirectory)
             )
         }
 
-        var sources = try surfacesURLs.map(readText(from:))
+        var sources = try legacySurfaceURLs.map { entry in
+            try "surface\(entry.surfaceID)\n{\n\(readText(from: entry.url))\n}"
+        }
+        try sources.append(contentsOf: surfacesURLs.map(readText(from:)))
         let aliasURL = shellDirectory.appending(path: "alias.txt", directoryHint: .notDirectory)
         if fileManager.fileExists(atPath: aliasURL.path) {
             try sources.append(readText(from: aliasURL))
@@ -130,6 +142,15 @@ public struct ShellLoader: Sendable {
             throw ShellError.unsupportedTextEncoding(url)
         }
         return text
+    }
+
+    private func legacySurfaceID(from filename: String) -> Int? {
+        let name = filename.lowercased()
+        guard name.hasPrefix("surface"), name.hasSuffix(".txt") else { return nil }
+        let suffixStart = name.index(name.endIndex, offsetBy: -5)
+        guard ["a", "s"].contains(name[suffixStart]) else { return nil }
+        let idStart = name.index(name.startIndex, offsetBy: "surface".count)
+        return Int(name[idStart ..< suffixStart])
     }
 
     private func metadata(in shellDirectory: URL) -> (

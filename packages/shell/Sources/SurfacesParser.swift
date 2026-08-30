@@ -453,8 +453,8 @@ public struct SurfacesParser: Sendable {
             animation.collisions[collisionID] = SurfaceCollision(
                 id: collisionID, left: left, top: top, right: right, bottom: bottom, name: values[4]
             )
-        } else if directive.hasPrefix("pattern"),
-                  let order = Int(directive.dropFirst("pattern".count)),
+        } else if let patternPrefix = ["pattern", "patturn"].first(where: { directive.hasPrefix($0) }),
+                  let order = Int(directive.dropFirst(patternPrefix.count)),
                   values.count >= 2,
                   let surfaceID = Int(values[legacySyntax ? 0 : 1])
         {

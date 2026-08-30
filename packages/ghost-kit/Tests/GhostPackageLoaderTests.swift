@@ -63,6 +63,32 @@ func `loads and names every installed shell with master as default`() throws {
     ])
 }
 
+@Test
+func `loads a legacy SHIORI declaration from alias txt`() throws {
+    let root = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let shell = root.appending(path: "shell/master", directoryHint: .isDirectory)
+    let master = root.appending(path: "ghost/master", directoryHint: .isDirectory)
+    for directory in [shell, master] {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+    try Data("name,Legacy Ghost\n".utf8).write(to: master.appending(path: "descript.txt"))
+    try Data("""
+    shiori,niseshiori.dll
+    sakura.surface.alias
+    {
+    normal,[0]
+    }
+    """.utf8).write(to: master.appending(path: "alias.txt"))
+    try Data("name,Master\n".utf8).write(to: shell.appending(path: "descript.txt"))
+
+    let ghost = try GhostPackageLoader().loadGhost(at: root)
+
+    #expect(ghost.shioriFilename == "niseshiori.dll")
+}
+
 @Test func `loads the installed mixed encoding Korean ghost`() throws {
     let repositoryRoot = URL(filePath: #filePath)
         .deletingLastPathComponent()

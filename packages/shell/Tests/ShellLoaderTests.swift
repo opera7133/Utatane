@@ -22,6 +22,35 @@ func `loads an APNG base surface`() throws {
 }
 
 @Test
+func `loads legacy per-surface animation and collision files`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: UUID().uuidString,
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data().write(to: root.appending(path: "surface0.png"))
+    try Data("""
+    0interval,sometimes
+    0patturn0,100,5,overlay,105,86
+    """.utf8).write(to: root.appending(path: "surface0a.txt"))
+    try Data("""
+    collision0,116,30,176,62,Head
+    point.kinoko.centerx,135
+    point.kinoko.centery,42
+    """.utf8).write(to: root.appending(path: "surface0s.txt"))
+
+    let shell = try ShellLoader().load(from: root)
+    let surface = try #require(shell.surfaces[0])
+    let animation = try #require(surface.animations.first { $0.id == 0 })
+
+    #expect(animation.interval == "sometimes")
+    #expect(animation.patterns.first?.surfaceID == 100)
+    #expect(surface.collisions.first?.name == "Head")
+    #expect(surface.points["kinoko.center"] == SurfacePoint(x: 135, y: 42))
+}
+
+@Test
 func `loads an SSP element path containing backslashes`() throws {
     let root = FileManager.default.temporaryDirectory.appending(
         path: UUID().uuidString,

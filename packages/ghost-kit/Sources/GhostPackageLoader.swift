@@ -31,6 +31,10 @@ public struct GhostPackageLoader: Sendable {
         }
 
         let metadata = try descriptParser.parse(contentsOf: descriptURL)
+        let aliasURL = masterDirectory.appending(path: "alias.txt", directoryHint: .notDirectory)
+        let aliasMetadata = FileManager.default.fileExists(atPath: aliasURL.path)
+            ? (try? descriptParser.parse(contentsOf: aliasURL)) ?? [:]
+            : [:]
         let shells = try findShells(in: rootDirectory)
         let shellDirectory = try findDefaultShell(in: rootDirectory, shells: shells)
         let name = metadata["name"] ?? rootDirectory.lastPathComponent
@@ -41,7 +45,7 @@ public struct GhostPackageLoader: Sendable {
             defaultShellDirectory: shellDirectory,
             shells: shells,
             characters: characters(from: metadata),
-            shioriFilename: metadata["shiori"],
+            shioriFilename: metadata["shiori"] ?? aliasMetadata["shiori"],
             charset: metadata["charset"],
             defaultBalloonDirectoryName: metadata["balloon"]
         )

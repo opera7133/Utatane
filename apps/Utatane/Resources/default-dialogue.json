@@ -1,33 +1,10 @@
 {
   "boot": [
-    "\\0\\s[0]Utataneを起動したよ。\\n今は変換済みのセリフデータから喋ってる。\\e"
+    "\\0\\s[0]エラー：ゴーストの会話機能を開始できませんでした。\\nSHIORIが未指定・未対応、または読み込みに失敗しています。\\nデバッグログを確認し、必要ならゴースト名とともに報告してください。\\e"
   ],
-  "close": [
-    "\\0またね。\\e"
-  ],
-  "ghostChanging": [
-    "\\0{{ghostName}}に交代するね。\\e"
-  ],
-  "randomTalk": [
-    "\\0\\cランダムトークのイベントを受け取ったよ。\\n\\q[選択肢A,OnDemoChoice,A]\\q[選択肢B,OnDemoChoice,B]\\_a[OnDemoAnchor,詳細]アンカーも押せる\\_a\\e"
-  ],
-  "mouseClick": {
-    "Bust": [
-      "\\0そこはBustの当たり判定。surface側の名前もイベントへ届いてる。\\e"
-    ],
-    "Head": [
-      "\\0頭の当たり判定をクリックしたね。\\e"
-    ],
-    "*": [
-      "\\0そこには個別のセリフがないみたい。\\e"
-    ]
-  },
-  "choices": {
-    "OnDemoChoice": [
-      "\\0\\c選んだ値は {{argument0}}。イベントIDと引数を人格エンジンまで渡せてる。\\e"
-    ],
-    "OnDemoAnchor": [
-      "\\0\\cアンカーのイベントも同じ経路で届いたよ。\\e"
-    ]
-  }
+  "close": [],
+  "ghostChanging": [],
+  "randomTalk": [],
+  "mouseClick": {},
+  "choices": {}
 }

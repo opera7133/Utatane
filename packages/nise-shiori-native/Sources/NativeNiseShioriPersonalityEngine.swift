@@ -26,11 +26,15 @@ public actor NativeNiseShioriPersonalityEngine: PersonalityEngine {
     }
 
     public static func supports(masterDirectoryURL: URL, shioriFilename: String?) -> Bool {
-        guard shioriFilename?.caseInsensitiveCompare("niseshiori.dll") == .orderedSame else { return false }
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: masterDirectoryURL.path) else { return false }
-        return files.contains { name in
+        let hasDictionary = files.contains { name in
             name.lowercased().hasPrefix("ai") && ["txt", "dtx"].contains(URL(filePath: name).pathExtension.lowercased())
         }
+        guard hasDictionary else { return false }
+        if let shioriFilename {
+            return shioriFilename.caseInsensitiveCompare("niseshiori.dll") == .orderedSame
+        }
+        return files.contains { $0.caseInsensitiveCompare("niseshiori.dll") == .orderedSame }
     }
 
     public func handle(event: GhostEvent) async throws -> SakuraScript? {

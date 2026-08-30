@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.8] - 2026-08-30
 
 ### 追加
 
@@ -12,6 +12,8 @@
 
 ### 修正
 
+- `descript.txt`ではなく`alias.txt`にSHIORI指定がある古いゴーストを正しく識別するよう修正。SHIORIを利用できない場合の既定会話も、通常の台詞に見えない診断メッセージへ変更
+- `surfaces.txt`以前の旧式シェルで使われる`surfaceNs.txt`・`surfaceNa.txt`と`patturn`形式を読み込み、サーフェスごとの当たり判定・座標・アニメーションを反映するよう修正
 - EUC-KRなどでese-shioriの`STRLENGTH`が原版と同じ符号化後バイト数を返すよう修正
 - `ese_pop.dat`をNeuron・Synapses学習グラフとしていた互換性資料の誤記を訂正（実体は`$PUSH`／`$POP`領域の永続化）
 
@@ -393,6 +395,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
+[0.1.8]: https://github.com/opera7133/Utatane/compare/v0.1.7...v0.1.8
+[0.1.7]: https://github.com/opera7133/Utatane/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/opera7133/Utatane/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/opera7133/Utatane/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/opera7133/Utatane/compare/v0.1.3...v0.1.4
