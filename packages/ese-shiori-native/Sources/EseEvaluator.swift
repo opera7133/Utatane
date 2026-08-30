@@ -1,4 +1,5 @@
 import Foundation
+import UtataneCore
 import UtataneShiori
 
 struct EseEvaluator: Sendable {
@@ -10,6 +11,9 @@ struct EseEvaluator: Sendable {
     var recursionDepth = 0
     var talkInterval: Int?
     var talkSeconds = 0
+    var newsInterval: Int?
+    var newsCounters: [String: Int] = [:]
+    var dictionaryCharset = "Shift_JIS"
     var otherGhosts: [String] = []
     var selectedGhost: String?
     var reflectedTarget: String?
@@ -220,6 +224,11 @@ struct EseEvaluator: Sendable {
                 }
             }
         case "TALK_INTERVAL": talkInterval = args.first.flatMap(Int.init)
+        case "NEWS_INTERVAL": newsInterval = args.first.flatMap(Int.init)
+        case "NEWSCOUNTER":
+            if let filename = args.first, let counter = args.dropFirst().first.flatMap(Int.init) {
+                newsCounters[filename] = max(0, counter)
+            }
         case "MODE": value = "0"
         case "SELFEVENT":
             if let event = args.first {
@@ -235,7 +244,21 @@ struct EseEvaluator: Sendable {
                 storage[index] = ghost ?? ""
             }
             value = args.count < 3 || args[2] == "1" ? (ghost ?? "") : ""
-        case "READNEWS": value = ""
+        case "READNEWS":
+            if let filename = args.first {
+                let lines = newsLines(in: fileContents[filename] ?? "")
+                let counter = newsCounters[filename, default: 0]
+                let found = counter < lines.count ? lines[counter] : ""
+                if counter < lines.count {
+                    newsCounters[filename] = counter + 1
+                }
+                if args.count > 1, let index = Int(args[1]) {
+                    storage[index] = found
+                } else {
+                    storage[1] = found
+                }
+                value = args.count < 3 || args[2] == "1" ? found : ""
+            }
         case "REFLECT":
             reflectedTarget = args.first.flatMap { $0.isEmpty ? nil : $0 } ?? selectedGhost
         case "GETSENTSTR", "GETSENTSTR_LL", "GETSENTSTR_LR", "GETSENTSTR_RL", "GETSENTSTR_RR": value = args.first ?? ""
@@ -245,7 +268,8 @@ struct EseEvaluator: Sendable {
             if args.count > 2 {
                 value = substring(args[0], start: Int(args[1]) ?? 0, length: Int(args[2]) ?? 0)
             }
-        case "STRLENGTH": value = String(args.first?.count ?? 0)
+        case "STRLENGTH":
+            value = String(args.first.flatMap { LegacyTextDecoder.encode($0, charset: dictionaryCharset)?.count } ?? 0)
         case "READFILE":
             if let filename = args.first {
                 let stored = fileContents[filename] ?? ""
@@ -478,5 +502,18 @@ struct EseEvaluator: Sendable {
 
     private func substring(_ text: String, start: Int, length: Int) -> String {
         let lower = text.index(text.startIndex, offsetBy: max(0, start), limitedBy: text.endIndex) ?? text.endIndex; return String(text[lower...].prefix(max(0, length)))
+    }
+
+    private func newsLines(in text: String) -> [String] {
+        var lines = text.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .components(separatedBy: "\n")
+        while lines.last?.isEmpty == true {
+            lines.removeLast()
+        }
+        if lines.first?.caseInsensitiveCompare("[SAKURA]") == .orderedSame {
+            lines.removeFirst()
+        }
+        return lines
     }
 }

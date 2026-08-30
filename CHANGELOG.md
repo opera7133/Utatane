@@ -4,8 +4,14 @@
 
 ### 追加
 
+- ese-shioriのMateria形式ニュース読込と既読位置の保存に対応
 - ese-shioriの`RANDOM_TALK_INTERVAL`と実行中の`TALK_INTERVAL`変更を`OnSecondChange`へ接続し、ゴースト側の設定だけで定期会話できるようにした
 - ese-shioriの`GETGHOST`・`REFLECT`による他ゴースト検索と会話転送、`READFILE`・`WRITEFILE`・`WRITEFILEAP`、文字列長と透過文字列関数をネイティブ実装。ファイルはゴースト本体ではなく専用データ領域へ保存
+
+### 修正
+
+- EUC-KRなどでese-shioriの`STRLENGTH`が原版と同じ符号化後バイト数を返すよう修正
+- `ese_pop.dat`をNeuron・Synapses学習グラフとしていた互換性資料の誤記を訂正（実体は`$PUSH`／`$POP`領域の永続化）
 
 ## [0.1.7] - 2026-08-29
 
