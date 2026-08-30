@@ -2,6 +2,14 @@
 
 なるべくWineを使わずにゴーストを動かすための話です。既知のSHIORIとSAORIはUtataneのネイティブ実装を優先し、未知のモジュールには標準ABIのmacOS dynamic libraryと、設定済みWineホストによるWindows DLLの経路があります。
 
+## SHIORIカタログ
+
+SHIORIの識別子、別名、代表的なDLL名、実行方式、誰が本体を用意するか、追加ランタイムの要否を`UtataneCore`のカタログへ集約しています。設定の「SHIORI対応状況」では、このカタログを基に実行方式と追加ランタイムの要否を確認できます。SHIORIの検索・ダウンロード・更新は行いません。
+
+SHIOLINKは外部SHIORIそのものではなく接続方式として登録し、利用者が実行ファイルを用意する扱いです。似非shioriはese-shioriの別名、偽栞は`niseshiori.dll`を使う別のSHIORIとして区別します。偽栞は存在を検出できますが、専用のネイティブ実装はまだなく、現状はWine互換経路です。
+
+既知の名前に一致しない`.dylib`、`.so`、`.bundle`も「外部macOS SHIORI」として検出し、ゴーストが指定したモジュールを標準SHIORI ABIの`load`・`request`・`unload`で直接読み込みます。未知の`.dll`は「外部Windows SHIORI」として検出し、Wineと汎用DLLホストが設定済みの場合だけ実行します。
+
 ## 共通ネイティブSAORI
 
 `UtataneNativeSaori`はSHIORIから独立したSAORIレジストリです。ネイティブMISAKA、YAYA、SATORI、KAWARIは、それぞれの既存SAORI呼び出し構文を変えずに同じレジストリへ要求を渡します。

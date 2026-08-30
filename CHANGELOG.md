@@ -4,6 +4,7 @@
 
 ### 追加
 
+- SHIORIの識別子・別名・DLL名・実行方式・追加ランタイムの要否を共通カタログへ集約し、設定に対応状況一覧を追加。未知のmacOS向けdylibとWindows DLLも汎用経路として識別し、似非shioriと偽栞を別のSHIORIとして検出
 - ese-shioriのMateria形式ニュース読込と既読位置の保存に対応
 - ese-shioriの`RANDOM_TALK_INTERVAL`と実行中の`TALK_INTERVAL`変更を`OnSecondChange`へ接続し、ゴースト側の設定だけで定期会話できるようにした
 - ese-shioriの`GETGHOST`・`REFLECT`による他ゴースト検索と会話転送、`READFILE`・`WRITEFILE`・`WRITEFILEAP`、文字列長と透過文字列関数をネイティブ実装。ファイルはゴースト本体ではなく専用データ領域へ保存

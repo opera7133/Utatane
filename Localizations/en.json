@@ -276,5 +276,22 @@
   "再起動できなかった" : "Could not restart",
   "Utataneを終了して、もう一度開いてね。" : "Quit Utatane and open it again.",
   "着せ替え" : "Dress Up",
-  "大きいシェルを画面に合わせて縮小" : "Shrink Large Shells to Fit Screen"
+  "大きいシェルを画面に合わせて縮小" : "Shrink Large Shells to Fit Screen",
+  "内蔵" : "Built in",
+  "外部ランタイムが必要" : "External Runtime Required",
+  "Wineが必要" : "Wine Required",
+  "ゴースト同梱" : "Included with Ghost",
+  "ネイティブ実装" : "Native Implementation",
+  "macOSネイティブモジュール" : "Native macOS Module",
+  "外部プロセス" : "External Process",
+  "標準SHIORI dylib" : "Standard SHIORI dylib",
+  "Windows DLL互換経路" : "Windows DLL Compatibility",
+  "外部macOS SHIORI" : "External macOS SHIORI",
+  "外部Windows SHIORI" : "External Windows SHIORI",
+  "SHIORI対応状況" : "SHIORI Support",
+  "Utataneが認識するSHIORIの実行方式を確認する。" : "View how Utatane runs recognized SHIORI implementations.",
+  "対応SHIORI" : "Recognized SHIORI",
+  "実行方式と追加ランタイムの要否を表示する。SHIORIのダウンロードや更新は行わない。" : "Shows execution methods and additional runtime requirements. Utatane does not download or update SHIORI.",
+  "手動導入" : "Manual Setup",
+  "未対応" : "Unsupported"
 }

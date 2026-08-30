@@ -55,6 +55,7 @@ final class UtataneSettingsStore: ObservableObject {
         case general
         case ghost
         case talkAndBalloon
+        case shiori
         case network
         case advanced
     }
@@ -570,6 +571,15 @@ struct UtataneSettingsView: View {
             }
             .tabItem { Label("喋り / バルーン", systemImage: "text.bubble") }
             .tag(UtataneSettingsStore.Pane.talkAndBalloon)
+
+            SettingsPage(
+                title: "SHIORI対応状況",
+                description: "Utataneが認識するSHIORIの実行方式を確認する。"
+            ) {
+                ShioriStatusView()
+            }
+            .tabItem { Label("SHIORI", systemImage: "puzzlepiece.extension") }
+            .tag(UtataneSettingsStore.Pane.shiori)
 
             SettingsPage(
                 title: "ネットワーク",

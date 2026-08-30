@@ -1,4 +1,5 @@
 import Foundation
+import UtataneCore
 
 public struct InstalledPlugin: Identifiable, Sendable, Equatable {
     public enum Runtime: Sendable, Equatable {
@@ -82,7 +83,10 @@ public struct PluginCatalog: Sendable {
     }
 
     private static func runtime(for moduleURL: URL, directory: URL) -> InstalledPlugin.Runtime {
-        if let kind = nativeSHIORIKind(in: directory) {
+        if let kind = nativeSHIORIKind(
+            in: directory,
+            declaredModuleFilename: moduleURL.lastPathComponent
+        ) {
             return .nativeSHIORI(kind)
         }
         switch moduleURL.pathExtension.lowercased() {
@@ -92,24 +96,21 @@ public struct PluginCatalog: Sendable {
         }
     }
 
-    private static func nativeSHIORIKind(in directory: URL) -> InstalledPlugin.NativeSHIORIKind? {
-        let exists: (String) -> Bool = { FileManager.default.fileExists(atPath: directory.appending(path: $0).path) }
-        if exists("main.amb") || exists("main.azr") || exists("akari.ini") {
-            return .akari
+    private static func nativeSHIORIKind(
+        in directory: URL,
+        declaredModuleFilename: String
+    ) -> InstalledPlugin.NativeSHIORIKind? {
+        switch ShioriCatalog.identify(
+            masterDirectory: directory,
+            declaredModuleFilename: declaredModuleFilename
+        )?.id.rawValue {
+        case "akari": .akari
+        case "kawari": .kawari
+        case "misaka": .misaka
+        case "satori": .satori
+        case "yaya": .yaya
+        default: nil
         }
-        if exists("kawarirc.kis") || exists("kawari.ini") {
-            return .kawari
-        }
-        if exists("misaka.ini") {
-            return .misaka
-        }
-        if exists("satori_conf.txt") || exists("satori.dll") {
-            return .satori
-        }
-        if exists("yaya.txt") || exists("yaya_config.txt") {
-            return .yaya
-        }
-        return nil
     }
 
     private static func safeFile(named name: String, in root: URL, mustExist: Bool = false) -> URL? {

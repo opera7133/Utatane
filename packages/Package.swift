@@ -127,7 +127,7 @@ let package = Package(
         ),
         .target(
             name: "UtatanePlugin",
-            dependencies: ["UtataneShiori"],
+            dependencies: ["UtataneCore", "UtataneShiori"],
             path: "plugin/Sources"
         ),
         .target(
