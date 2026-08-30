@@ -109,10 +109,8 @@ public enum ShioriCatalog {
             displayName: "偽栞",
             aliases: ["Nise Shiori"],
             moduleFilenames: ["niseshiori.dll"],
-            execution: .windowsDLL,
-            provisioning: .ghost,
-            runtimeRequirement: .wine,
-            support: .compatibilityLayer
+            execution: .builtIn,
+            provisioning: .included
         ),
         .init(
             id: "external-posix-shiori",

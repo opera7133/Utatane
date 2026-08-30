@@ -4,6 +4,7 @@
 
 ### 追加
 
+- 偽栞をネイティブ実装。`niseshiori.dll`を使うゴーストの`ai*.txt`・`ai*.dtx`辞書を読み込み、イベント、条件、単語展開、変数、定期トーク、ニュース、名前入力と状態保存をWineなしで実行
 - SHIORIの識別子・別名・DLL名・実行方式・追加ランタイムの要否を共通カタログへ集約し、設定に対応状況一覧を追加。未知のmacOS向けdylibとWindows DLLも汎用経路として識別し、似非shioriと偽栞を別のSHIORIとして検出
 - ese-shioriのMateria形式ニュース読込と既読位置の保存に対応
 - ese-shioriの`RANDOM_TALK_INTERVAL`と実行中の`TALK_INTERVAL`変更を`OnSecondChange`へ接続し、ゴースト側の設定だけで定期会話できるようにした

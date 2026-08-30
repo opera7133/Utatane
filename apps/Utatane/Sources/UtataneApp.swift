@@ -15,6 +15,7 @@ import UtataneMakoto
 import UtataneMisakaNative
 import UtataneNativeSaori
 import UtataneNetwork
+import UtataneNiseShioriNative
 import UtatanePlatformMacOS
 import UtatanePlugin
 import UtatanePOSIXShiori
@@ -1875,6 +1876,17 @@ private struct UtataneRootView: View {
                 stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
                     .deletingLastPathComponent()
                     .appending(path: "ese-shiori-state.json", directoryHint: .notDirectory)
+            )
+        }
+        if NativeNiseShioriPersonalityEngine.supports(
+            masterDirectoryURL: masterDirectory,
+            shioriFilename: ghost.shioriFilename
+        ) {
+            return try NativeNiseShioriPersonalityEngine(
+                masterDirectoryURL: masterDirectory,
+                stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
+                    .deletingLastPathComponent()
+                    .appending(path: "nise-shiori-state.json", directoryHint: .notDirectory)
             )
         }
         if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),

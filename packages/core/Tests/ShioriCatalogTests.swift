@@ -7,8 +7,8 @@ import Testing
 
     #expect(descriptor?.id == "nise-shiori")
     #expect(descriptor?.displayName == "偽栞")
-    #expect(descriptor?.runtimeRequirement == .wine)
-    #expect(descriptor?.support == .compatibilityLayer)
+    #expect(descriptor?.runtimeRequirement == ShioriDescriptor.RuntimeRequirement.none)
+    #expect(descriptor?.support == .supported)
 }
 
 @Test func `keeps nise shiori separate from ese shiori`() {
