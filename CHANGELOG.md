@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### 追加
+
+- ese-shioriの`RANDOM_TALK_INTERVAL`と実行中の`TALK_INTERVAL`変更を`OnSecondChange`へ接続し、ゴースト側の設定だけで定期会話できるようにした
+- ese-shioriの`GETGHOST`・`REFLECT`による他ゴースト検索と会話転送、`READFILE`・`WRITEFILE`・`WRITEFILEAP`、文字列長と透過文字列関数をネイティブ実装。ファイルはゴースト本体ではなく専用データ領域へ保存
+
 ## [0.1.7] - 2026-08-29
 
 ### 追加

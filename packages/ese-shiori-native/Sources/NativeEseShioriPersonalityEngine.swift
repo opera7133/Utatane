@@ -18,17 +18,22 @@ public actor NativeEseShioriPersonalityEngine: PersonalityEngine {
         var variables: [String: String]
         var storage: [Int: String]
         var learnedEntries: [String: [String]]?
+        var talkInterval: Int?
+        var talkSeconds: Int?
     }
 
     private var evaluator: EseEvaluator
     private let adapter = GhostEventShioriAdapter()
     private let stateStoreURL: URL
+    private let dictionaryCharset: String
 
     public init(masterDirectoryURL: URL, stateStoreURL: URL? = nil) throws {
         let ini = masterDirectoryURL.appending(path: "eseai.ini")
         guard FileManager.default.fileExists(atPath: ini.path) else { throw NativeEseShioriError.missingConfiguration(ini) }
         let iniText = try LegacyTextDecoder.decode(Data(contentsOf: ini)) ?? ""
         let charset = Self.value(named: "DIC_CHAR_SET", in: iniText) ?? "Shift_JIS"
+        dictionaryCharset = charset
+        let configuredTalkInterval = Self.value(named: "RANDOM_TALK_INTERVAL", in: iniText).flatMap(Int.init)
         let dictionary = try EseDictionary.load(masterDirectoryURL: masterDirectoryURL, charset: charset)
         self.stateStoreURL = stateStoreURL ?? masterDirectoryURL.appending(path: "ese-shiori-state.json")
         let saved = (try? Data(contentsOf: self.stateStoreURL)).flatMap { try? JSONDecoder().decode(PersistedState.self, from: $0) }
@@ -36,10 +41,20 @@ public actor NativeEseShioriPersonalityEngine: PersonalityEngine {
             dictionary: dictionary,
             storage: saved?.storage ?? [:],
             variables: saved?.variables ?? [:],
-            learnedEntries: saved?.learnedEntries ?? [:]
+            learnedEntries: saved?.learnedEntries ?? [:],
+            talkInterval: saved?.talkInterval ?? configuredTalkInterval,
+            talkSeconds: saved?.talkSeconds ?? 0
         )
         for (name, values) in evaluator.learnedEntries {
             evaluator.dictionary.entries[name, default: []].append(contentsOf: values)
+        }
+        let fileDirectory = self.stateStoreURL.deletingLastPathComponent().appending(path: "ese-shiori-files", directoryHint: .isDirectory)
+        if let files = try? FileManager.default.contentsOfDirectory(at: fileDirectory, includingPropertiesForKeys: nil) {
+            for file in files where !file.hasDirectoryPath {
+                if let data = try? Data(contentsOf: file), let text = LegacyTextDecoder.decode(data, preferredCharset: charset) {
+                    evaluator.fileContents[file.lastPathComponent] = text
+                }
+            }
         }
         evaluator.variables["selfname"] = Self.descriptValue("name", at: masterDirectoryURL) ?? ""
         evaluator.variables["keroname"] = Self.descriptValue("name2", at: masterDirectoryURL) ?? ""
@@ -71,10 +86,16 @@ public actor NativeEseShioriPersonalityEngine: PersonalityEngine {
         let value = LegacyMateriaScriptNormalizer.normalizeKeroSurfaces(
             in: evaluator.response(for: request)
         )
+        try flushPendingFileWrites()
         if case .close = event {
             try save()
         }
-        return PersonalityResponse(script: value.isEmpty ? nil : SakuraScript(rawValue: value))
+        let script: SakuraScript? = if let target = evaluator.reflectedTarget, !value.isEmpty {
+            SakuraScript(rawValue: "\\![otherghosttalk,\(Self.quotedArgument(target)),\(Self.quotedArgument(value))]")
+        } else {
+            value.isEmpty ? nil : SakuraScript(rawValue: value)
+        }
+        return PersonalityResponse(script: script)
     }
 
     public func save() throws {
@@ -82,7 +103,9 @@ public actor NativeEseShioriPersonalityEngine: PersonalityEngine {
         try JSONEncoder().encode(PersistedState(
             variables: evaluator.variables,
             storage: evaluator.storage,
-            learnedEntries: evaluator.learnedEntries
+            learnedEntries: evaluator.learnedEntries,
+            talkInterval: evaluator.talkInterval,
+            talkSeconds: evaluator.talkSeconds
         )).write(to: stateStoreURL, options: .atomic)
     }
 
@@ -90,10 +113,27 @@ public actor NativeEseShioriPersonalityEngine: PersonalityEngine {
         try? save()
     }
 
+    private func flushPendingFileWrites() throws {
+        guard !evaluator.pendingFileWrites.isEmpty else { return }
+        let directory = stateStoreURL.deletingLastPathComponent().appending(path: "ese-shiori-files", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for (filename, value) in evaluator.pendingFileWrites {
+            let safeName = URL(filePath: filename).lastPathComponent
+            guard !safeName.isEmpty, safeName != ".", safeName != ".." else { continue }
+            guard let data = LegacyTextDecoder.encode(value, charset: dictionaryCharset) else { continue }
+            try data.write(to: directory.appending(path: safeName), options: .atomic)
+        }
+        evaluator.pendingFileWrites.removeAll()
+    }
+
     private static func value(named name: String, in text: String) -> String? {
         text.components(separatedBy: .newlines).compactMap { line -> String? in
             let parts = line.split(separator: "=", maxSplits: 1); guard parts.count == 2, parts[0].trimmingCharacters(in: .whitespaces).caseInsensitiveCompare(name) == .orderedSame else { return nil }; return parts[1].trimmingCharacters(in: .whitespacesAndNewlines)
         }.first
+    }
+
+    private static func quotedArgument(_ value: String) -> String {
+        "\"\(value.replacingOccurrences(of: "\"", with: "\"\""))\""
     }
 
     private static func descriptValue(_ key: String, at master: URL) -> String? {

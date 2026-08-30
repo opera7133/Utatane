@@ -9,11 +9,35 @@ struct EseEvaluator: Sendable {
     var request: ShioriRequest?
     var recursionDepth = 0
     var talkInterval: Int?
+    var talkSeconds = 0
+    var otherGhosts: [String] = []
+    var selectedGhost: String?
+    var reflectedTarget: String?
+    var pendingFileWrites: [String: String] = [:]
+    var fileContents: [String: String] = [:]
 
     mutating func response(for request: ShioriRequest) -> String {
         self.request = request
+        reflectedTarget = nil
         guard let requestedID = request.id else { return "" }
-        let id = requestedID.caseInsensitiveCompare("OnAITalk") == .orderedSame ? "OnRandomTalk" : requestedID
+        if requestedID.caseInsensitiveCompare("otherghostname") == .orderedSame {
+            otherGhosts = request.headers.entries.compactMap { header -> (Int, String)? in
+                guard header.name.lowercased().hasPrefix("reference"),
+                      let index = Int(header.name.dropFirst("Reference".count))
+                else { return nil }
+                return (index, header.value)
+            }.sorted { $0.0 < $1.0 }.map(\.1)
+                .map { $0.components(separatedBy: "\u{1}").first ?? $0 }
+                .filter { !$0.isEmpty }
+            return ""
+        }
+        var id = requestedID.caseInsensitiveCompare("OnAITalk") == .orderedSame ? "OnRandomTalk" : requestedID
+        if id.caseInsensitiveCompare("OnSecondChange") == .orderedSame, request.reference(3) == "1" {
+            talkSeconds += 1
+            if let talkInterval, talkInterval > 0, talkSeconds >= talkInterval {
+                id = "OnRandomTalk"
+            }
+        }
         if id.caseInsensitiveCompare("OnChoiceSelect") == .orderedSame,
            let target = request.reference(0), target.hasPrefix("#")
         {
@@ -24,7 +48,11 @@ struct EseEvaluator: Sendable {
         let specificity = matchingRules.map(\.conditions.count).max()
         let rules = matchingRules.filter { $0.conditions.count == specificity }
         guard let rule = rules.randomElement() else { return "" }
-        return expand(rule.values.joined())
+        let value = expand(rule.values.joined())
+        if !value.isEmpty {
+            talkSeconds = 0
+        }
+        return value
     }
 
     private func matches(_ rule: EseRule, id: String) -> Bool {
@@ -138,6 +166,7 @@ struct EseEvaluator: Sendable {
         case "RAND":
             let upper = max(Int(args.first ?? "0") ?? 0, 1), offset = args.dropFirst().first.flatMap(Int.init) ?? 0
             value = String(Int.random(in: 0 ..< upper) + offset)
+        case "THROUGH", "GURONGI": value = args.first ?? ""
         case "GETSENTRES":
             let begin = args.first ?? "", end = args.dropFirst().first ?? "[13][10]"
             let requestText = requestLines + contextText
@@ -196,11 +225,19 @@ struct EseEvaluator: Sendable {
             if let event = args.first {
                 value = "\\![raise,\(event)]"
             }
-        case "GETGHOST", "READNEWS": value = ""
-        case "REFLECT":
-            if args.count > 1 {
-                variables[args[0]] = args[1]
+        case "GETGHOST":
+            let sought = args.first ?? ""
+            let ghost = sought.isEmpty
+                ? otherGhosts.randomElement()
+                : otherGhosts.first { $0.localizedCaseInsensitiveContains(sought) }
+            selectedGhost = ghost
+            if args.count > 1, let index = Int(args[1]) {
+                storage[index] = ghost ?? ""
             }
+            value = args.count < 3 || args[2] == "1" ? (ghost ?? "") : ""
+        case "READNEWS": value = ""
+        case "REFLECT":
+            reflectedTarget = args.first.flatMap { $0.isEmpty ? nil : $0 } ?? selectedGhost
         case "GETSENTSTR", "GETSENTSTR_LL", "GETSENTSTR_LR", "GETSENTSTR_RL", "GETSENTSTR_RR": value = args.first ?? ""
         case "GETSTRLEFT": value = args.first.map { String($0.prefix(Int(args.dropFirst().first ?? "0") ?? 0)) } ?? ""
         case "GETSTRRIGHT": value = args.first.map { String($0.suffix(Int(args.dropFirst().first ?? "0") ?? 0)) } ?? ""
@@ -208,7 +245,27 @@ struct EseEvaluator: Sendable {
             if args.count > 2 {
                 value = substring(args[0], start: Int(args[1]) ?? 0, length: Int(args[2]) ?? 0)
             }
-        case "WRITEFILE": break
+        case "STRLENGTH": value = String(args.first?.count ?? 0)
+        case "READFILE":
+            if let filename = args.first {
+                let stored = fileContents[filename] ?? ""
+                if args.count > 1, let index = Int(args[1]) {
+                    storage[index] = stored
+                }
+                value = args.count < 3 || args[2] == "1" ? stored : ""
+            }
+        case "WRITEFILEAP":
+            if let filename = args.first, let index = args.dropFirst().first.flatMap(Int.init) {
+                let appended = (fileContents[filename] ?? "") + (storage[index] ?? "") + "\r\n"
+                fileContents[filename] = appended
+                pendingFileWrites[filename] = appended
+            }
+        case "WRITEFILE":
+            if let filename = args.first, let index = args.dropFirst().first.flatMap(Int.init) {
+                let written = (storage[index] ?? "") + "\r\n"
+                fileContents[filename] = written
+                pendingFileWrites[filename] = written
+            }
         default: break
         }
         return value

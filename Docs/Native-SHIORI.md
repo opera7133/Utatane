@@ -28,7 +28,9 @@ SSUはSATORIに同梱された既存実装を使います。`saori_cpuid.dll`と
 
 `ghost/master`に`eseai.ini`がある場合は、Windows DLLより`UtataneEseShioriNative`を優先します。`ESESHIORI`ヘッダを持つ難読化辞書と平文辞書を読み込み、`##EVNT`、`##RESP`、`##GETS`、ラベル・ワイルドカード参照、条件分岐、変数・スタック操作など、ese-shiori 3.03で使われる言語をSwiftで評価します。辞書文字コードは`DIC_CHAR_SET`に従います。
 
-状態は配布物の`ghost/master`へ書かず、Utataneのゴースト別データ領域へJSONで保存します。偽さくら Rebirth 2.008を使ったテストでは、起動、定期会話、OnFirstBootの名前入力と選択肢遷移、ダブルクリックメニューに加え、入力ボックスからの単語学習と終了後の再読込までWineなしで確認しています。古いMateria互換の相方サーフェス番号も現行の番号へ変換します。ニュース取得、元DLLのNeuron・Synapses学習グラフ、未使用命令を含む任意のese-shioriゴーストとの完全互換は未確認です。
+状態は配布物の`ghost/master`へ書かず、Utataneのゴースト別データ領域へJSONで保存します。辞書の`READFILE`・`WRITEFILE`・`WRITEFILEAP`も同領域の専用フォルダへ制限します。`RANDOM_TALK_INTERVAL`と`TALK_INTERVAL`による定期会話、`GETGHOST`・`REFLECT`による起動中の他ゴーストとの会話を処理します。
+
+偽さくら Rebirth 2.008を使ったテストでは、起動、定期会話、OnFirstBootの名前入力と選択肢遷移、ダブルクリックメニューに加え、入力ボックスからの単語学習と終了後の再読込までWineなしで確認しています。古いMateria互換の相方サーフェス番号も現行の番号へ変換します。元DLLを参照実装として組み込み関数の応答とファイル副作用を照合していますが、Materiaのニュースデータに依存する`READNEWS`と、元DLLの900要素Neuron・Synapses学習グラフは保存形式と選択アルゴリズムを確定できておらず、まだ未対応です。
 
 ## 外部SHIORI
 
