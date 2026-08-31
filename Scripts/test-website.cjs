@@ -20,7 +20,7 @@ async function run(data, options={}) {
     return el;
   });
   const languages = element();
-  assert.equal(translated.length, 75, 'All translated content should be exercised');
+  assert.equal(translated.length, 79, 'All translated content should be exercised');
   let saved = options.saved;
   const document = {documentElement:{lang:'ja'},getElementById:id=>ids[id],querySelector:()=>languages,querySelectorAll:q=>q==='[data-language]'?buttons:q==='[data-ja][data-en]'?translated:[]};
   let abort;
