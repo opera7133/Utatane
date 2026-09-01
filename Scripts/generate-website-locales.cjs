@@ -14,7 +14,7 @@ const locales = {
   ja: {
     directory: '', htmlLang: 'ja', ogLocale: 'ja_JP',
     title: 'Utatane — macOSで伺かを',
-    description: 'Utatane — macOSで伺かを楽しむための本体アプリ。',
+    description: 'Utataneは、伺かのゴースト、会話、シェル、バルーン、アニメーションをmacOSで楽しむためのネイティブなベースウェアです。',
   },
   en: {
     directory: 'en', htmlLang: 'en', ogLocale: 'en_US',
@@ -50,7 +50,7 @@ function render(code, locale) {
     .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${locale.title}">`)
     .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${locale.description}">`)
     .replace(/<meta property="og:url" content="[^"]*">/, `<meta property="og:url" content="${localeURL}">`)
-    .replace(/"url":"https:\/\/dl\.wmsci\.com\/utatane\/[^"]*"/, `"url":"${localeURL}"`)
+    .replace(/<script type="application\/ld\+json">.*?<\/script>/, softwareApplicationJSON(localeURL, locale))
     .replace(/<link rel="alternate" hreflang="ja"[^>]*>[\s\S]*?<link rel="alternate" hreflang="x-default"[^>]*>/, alternateLinks());
 
   let translated = 0;
@@ -83,6 +83,27 @@ function render(code, locale) {
       .replaceAll('href="./simple.html"', 'href="../simple.html"');
   }
   return html;
+}
+
+function softwareApplicationJSON(localeURL, locale) {
+  const data = {
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: 'Utatane',
+    alternateName: '転寝',
+    description: locale.description,
+    inLanguage: locale.htmlLang,
+    operatingSystem: 'macOS 14 or later',
+    applicationCategory: 'DesktopEnhancementApplication',
+    url: localeURL,
+    downloadUrl: 'https://github.com/opera7133/Utatane/releases',
+    image: `${origin}/utatane/assets/utatane-icon.png`,
+    softwareRequirements: 'macOS 14 or later',
+    license: 'https://opensource.org/license/mit',
+    codeRepository: 'https://github.com/opera7133/Utatane',
+    offers: {'@type': 'Offer', price: '0', priceCurrency: 'JPY'},
+  };
+  return `<script type="application/ld+json">${JSON.stringify(data)}</script>`;
 }
 
 function alternateLinks() {
@@ -215,8 +236,19 @@ ${guideAlternateLinks()}
 <meta property="og:title" content="${content.title}">
 <meta property="og:description" content="${content.description}">
 <meta property="og:url" content="${canonical}">
+<meta property="og:site_name" content="Utatane">
 <meta property="og:image" content="${origin}/utatane/assets/utatane-icon.png">
 <meta name="twitter:card" content="summary">
+<script type="application/ld+json">${JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'WebPage',
+    name: content.title,
+    description: content.description,
+    inLanguage: locale.htmlLang,
+    url: canonical,
+    isPartOf: {'@type': 'WebSite', name: 'Utatane', url: `${origin}/utatane/`},
+    about: {'@type': 'SoftwareApplication', name: 'Utatane', operatingSystem: 'macOS 14 or later'},
+  })}</script>
 <link rel="icon" href="${depth}/assets/utatane-icon.png">
 <link rel="stylesheet" href="${depth}/utatane-modern.css">
 </head>

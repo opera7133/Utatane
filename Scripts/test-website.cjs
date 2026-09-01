@@ -80,12 +80,27 @@ async function run(data, options={}) {
     assert.ok(localized.includes(`<link rel="canonical" href="${canonical}">`));
     assert.ok(localized.includes('hreflang="ja"'));
     assert.ok(localized.includes('hreflang="x-default"'));
+    assert.ok(localized.includes('<meta property="og:site_name" content="Utatane">'));
+    assert.ok(localized.includes('<meta property="og:image" content="https://dl.wmsci.com/utatane/assets/utatane-icon.png">'));
+    const applicationData=JSON.parse(localized.match(/<script type="application\/ld\+json">(.*?)<\/script>/)[1]);
+    assert.equal(applicationData['@type'],'SoftwareApplication');
+    assert.equal(applicationData.description,localized.match(/<meta name="description" content="([^"]*)">/)[1]);
+    assert.equal(applicationData.inLanguage,lang);
+    assert.equal(applicationData.url,canonical);
+    assert.equal(applicationData.image,'https://dl.wmsci.com/utatane/assets/utatane-icon.png');
+    assert.equal(applicationData.offers.priceCurrency,'JPY');
     assert.ok(localized.includes(directory ? 'href="../utatane-modern.css"' : 'href="./utatane-modern.css"'));
     assert.ok(localized.includes(directory ? 'src="../utatane-modern.js"' : 'src="./utatane-modern.js"'));
   }
   const japanese=fs.readFileSync(path.join(__dirname,'../website/utatane/index.html'),'utf8');
   for (const lang of ['ja','en','zh-Hans','zh-Hant','ko','x-default']) assert.ok(japanese.includes(`hreflang="${lang}"`));
   const sitemap=fs.readFileSync(path.join(__dirname,'../website/sitemap.xml'),'utf8');
+  const robots=fs.readFileSync(path.join(__dirname,'../website/robots.txt'),'utf8');
+  const llms=fs.readFileSync(path.join(__dirname,'../website/llms.txt'),'utf8');
+  assert.ok(robots.includes('Sitemap: https://dl.wmsci.com/sitemap.xml'));
+  assert.ok(llms.includes('https://dl.wmsci.com/utatane/'));
+  assert.ok(llms.includes('https://dl.wmsci.com/utatane/getting-started/'));
+  assert.ok(llms.includes('https://github.com/opera7133/Utatane'));
   for (const directory of Object.keys(localeFiles)) assert.ok(sitemap.includes(`<loc>https://dl.wmsci.com/utatane/${directory ? directory+'/' : ''}</loc>`));
   for (const [directory,[lang]] of Object.entries(localeFiles)) {
     const guide=fs.readFileSync(path.join(__dirname,'../website/utatane',directory,'getting-started/index.html'),'utf8');
@@ -103,6 +118,11 @@ async function run(data, options={}) {
     assert.ok(guide.includes('role="tablist"'));
     assert.ok(guide.includes('id="panel-beginner"'));
     assert.ok(guide.includes('id="panel-veteran"'));
+    const guideData=JSON.parse(guide.match(/<script type="application\/ld\+json">(.*?)<\/script>/)[1]);
+    assert.equal(guideData['@type'],'WebPage');
+    assert.equal(guideData.inLanguage,lang);
+    assert.equal(guideData.url,canonical);
+    assert.equal(guideData.about.name,'Utatane');
     assert.ok(sitemap.includes(`<loc>${canonical}</loc>`));
   }
   const publicRoot=path.join(__dirname,'../website');

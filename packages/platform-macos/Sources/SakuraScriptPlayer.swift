@@ -135,7 +135,11 @@ public final class SakuraScriptPlayer {
                 }
             } else {
                 if linkKind != .anchor {
-                    cancel(hidesBalloon: false)
+                    // A choice may intentionally return an empty SHIORI response
+                    // (for example a menu item named "閉じる"). Hide the old
+                    // dialogue before dispatching so an empty response still
+                    // completes the choice. A non-empty response opens normally.
+                    cancel(hidesBalloon: true)
                 }
                 if linkKind != .anchor {
                     onChoice?(id, arguments)

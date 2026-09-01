@@ -1439,7 +1439,7 @@ func `plain choice dispatches only the ordinary choice event`() async throws {
 
     #expect(ordinaryChoice == "talkinterval")
     #expect(extendedChoice == nil)
-    #expect(balloonController.visibleScopes == [0])
+    #expect(balloonController.visibleScopes.isEmpty)
 }
 
 @Test
