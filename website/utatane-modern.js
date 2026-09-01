@@ -2,9 +2,8 @@
 (() => {
   const RELEASES = "https://github.com/opera7133/Utatane/releases";
   const API = "https://api.github.com/repos/opera7133/Utatane/releases?per_page=100";
-  const STORAGE_KEY = "utatane-language";
   const LANGUAGES = ["ja", "en", "zh-Hans", "zh-Hant", "ko"];
-  let language = "ja";
+  const language = LANGUAGES.includes(document.documentElement.lang) ? document.documentElement.lang : "ja";
   let releaseState = { kind: "loading" };
   const words = {
     ja: { loading:"最新リリースを確認中…", fallback:"取得できませんでした。GitHub Releasesからダウンロードできます。", all:"リリース一覧", page:"配布ページを開く", download:"macOS版をダウンロード", prerelease:" / 開発版", stable:" / 通常リリース", published:"公開", noAsset:"このリリースの配布ファイルを確認してください。" },
@@ -118,18 +117,6 @@
     status.textContent = bits.join(" · ");
   }
 
-  function setLanguage(next, persist = false) {
-    language = LANGUAGES.includes(next) ? next : "ja";
-    document.documentElement.lang = language;
-    document.title = words[language].title;
-    document.querySelectorAll("[data-ja][data-en]").forEach(el => { el.textContent = el.getAttribute("data-" + language.toLowerCase()) || el.dataset.ja; });
-    document.querySelectorAll("[data-alt-ja]").forEach(el => { el.alt = el.getAttribute("data-alt-" + language); });
-    document.querySelectorAll("[data-language]").forEach(el => { el.setAttribute("aria-pressed", String(el.dataset.language === language)); });
-    if (persist) { try { localStorage.setItem(STORAGE_KEY, language); } catch {} }
-    renderRelease();
-    renderMotion();
-  }
-
   async function fetchLatestVersion() {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
@@ -158,22 +145,7 @@
     renderRelease();
   }
 
-  function matchLanguage(value) {
-    const tag = value.toLowerCase();
-    if (tag === "zh" || tag.startsWith("zh-")) {
-      if (tag.includes("-hant")) return "zh-Hant";
-      if (tag.includes("-hans")) return "zh-Hans";
-      return /-(tw|hk|mo)(-|$)/.test(tag) ? "zh-Hant" : "zh-Hans";
-    }
-    return ["ja", "en", "ko"].find(code => tag === code || tag.startsWith(code + "-"));
-  }
-  const requested = navigator.languages?.length ? navigator.languages : [navigator.language || "ja"];
-  let preferred = requested.map(matchLanguage).find(Boolean) || "ja";
-  try { const saved = localStorage.getItem(STORAGE_KEY); if (LANGUAGES.includes(saved)) preferred = saved; } catch {}
-  document.querySelectorAll("[data-language]").forEach(button => {
-    button.addEventListener("click", () => setLanguage(button.dataset.language, true));
-  });
-  document.querySelector(".languages").hidden = false;
-  setLanguage(preferred);
+  renderRelease();
+  renderMotion();
   fetchLatestVersion();
 })();

@@ -8,11 +8,18 @@ on:
       - "website/utatane-modern.html"
       - "website/utatane-modern.css"
       - "website/utatane-modern.js"
+      - "website/en/utatane-modern.html"
+      - "website/zh-hans/utatane-modern.html"
+      - "website/zh-hant/utatane-modern.html"
+      - "website/ko/utatane-modern.html"
+      - "website/robots.txt"
+      - "website/sitemap.xml"
       - "website/assets/utatane-icon.png"
       - "website/assets/utatane-icon.webp"
       - "website/assets/utatane-screenshot.png"
       - "website/assets/utatane-screenshot.webp"
       - "Scripts/test-website.cjs"
+      - "Scripts/generate-website-locales.cjs"
       - ".github/workflows/deploy-website.yml"
   workflow_dispatch:
 
@@ -28,7 +35,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Test website
-        run: node Scripts/test-website.cjs
+        run: node Scripts/generate-website-locales.cjs --check && node Scripts/test-website.cjs
 
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install --yes lftp
@@ -53,10 +60,20 @@ jobs:
           set ssl:verify-certificate true
           set net:max-retries 3
           set net:timeout 20
+          mkdir -p "$WEBSITE_DEPLOY_PATH/en"
+          mkdir -p "$WEBSITE_DEPLOY_PATH/zh-hans"
+          mkdir -p "$WEBSITE_DEPLOY_PATH/zh-hant"
+          mkdir -p "$WEBSITE_DEPLOY_PATH/ko"
           put -O "$WEBSITE_DEPLOY_PATH" website/utatane.html
           put -O "$WEBSITE_DEPLOY_PATH" website/utatane-modern.html
           put -O "$WEBSITE_DEPLOY_PATH" website/utatane-modern.css
           put -O "$WEBSITE_DEPLOY_PATH" website/utatane-modern.js
+          put -O "$WEBSITE_DEPLOY_PATH/en" website/en/utatane-modern.html
+          put -O "$WEBSITE_DEPLOY_PATH/zh-hans" website/zh-hans/utatane-modern.html
+          put -O "$WEBSITE_DEPLOY_PATH/zh-hant" website/zh-hant/utatane-modern.html
+          put -O "$WEBSITE_DEPLOY_PATH/ko" website/ko/utatane-modern.html
+          put -O "$WEBSITE_DEPLOY_PATH" website/robots.txt
+          put -O "$WEBSITE_DEPLOY_PATH" website/sitemap.xml
           put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/utatane-icon.png
           put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/utatane-icon.webp
           put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/utatane-screenshot.png

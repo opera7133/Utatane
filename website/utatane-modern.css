@@ -13,9 +13,8 @@ button{cursor:pointer}
 .brand picture,.brand img{display:block}.brand img{width:30px;height:30px}
 .topbar nav{display:flex;align-items:center;gap:26px;font-size:12px}
 .languages{display:flex;gap:10px;border-left:1px solid var(--line);padding-left:24px}
-.languages[hidden]{display:none}
-.languages button{border:0;background:none;padding:2px;color:var(--muted);font-size:12px}
-.languages button[aria-pressed="true"]{color:var(--ink);text-decoration:underline;text-underline-offset:5px}
+.languages a{padding:2px;color:var(--muted);font-size:12px;text-decoration:none}
+.languages a[aria-current="page"]{color:var(--ink);text-decoration:underline;text-underline-offset:5px}
 .hero{display:grid;grid-template-columns:1fr 1.04fr;align-items:center;gap:40px;padding:72px 0 58px}
 .eyebrow{font-size:10px;font-weight:600;letter-spacing:.16em;color:var(--accent);margin:0 0 22px}
 /* Both names share a grid cell, reserving the wider name without layout shifts. */
