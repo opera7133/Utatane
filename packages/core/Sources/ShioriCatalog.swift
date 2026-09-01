@@ -112,6 +112,8 @@ public enum ShioriCatalog {
             execution: .builtIn,
             provisioning: .included
         ),
+        .init(id: "shino", displayName: "忍", aliases: ["Shino"], moduleFilenames: ["shino.dll"], execution: .builtIn, provisioning: .included),
+        .init(id: "hisui", displayName: "翡翠", aliases: ["Hisui"], moduleFilenames: ["hisui.dll"], execution: .builtIn, provisioning: .included, support: .experimental),
         .init(
             id: "external-posix-shiori",
             displayName: "外部macOS SHIORI",

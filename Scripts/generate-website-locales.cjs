@@ -131,7 +131,7 @@ function languageLinks(current) {
 const guideContent = {
   ja: {
     title: '伺かとUtataneをはじめる — ゴーストの探し方と互換性', description: '伺かゴーストを探せる配布サイトと、SSPなどからUtataneへ移る人向けの互換性・実装方式を案内します。',
-    label: 'START HERE', heading: 'ゴーストを探す。仕組みを知る。', lead: '伺かが初めての人と、ほかのベースウェアを使ってきた人へ。インストール手順は概要ページにまとめています。', home: '概要', guide: 'はじめに',
+    label: 'START HERE', heading: 'ゴーストを探す。仕組みを知る。', lead: '伺かが初めての人と、ほかのベースウェアを使ってきた人へ。インストール手順は概要ページにまとめています。', home: '概要', guide: 'ガイド',
     sections: [
       ['01', '伺かとゴースト', '<p>Utataneは「ベースウェア」と呼ばれる本体です。そこへキャラクター、会話、反応をまとめた「ゴースト」を追加して使います。見た目の差分はシェル、台詞を表示する枠はバルーン、配布ファイルは主にNAR形式です。</p>'],
       ['02', 'ゴーストを探す場所', '<p><a href="http://ghosttown.mikage.jp/cgi-bin/tdb/tdb.cgi?mode=preview_list">GHOST TOWN</a>は長く使われてきたゴーストデータベース、<a href="https://buynowforsale.shillest.net/ghosts/">ゴーストキャプターさくら</a>は画像と更新順から眺められる更新フィードです。最近の更新を追うなら<a href="https://nikolat.github.io/sirefaso/">偽SiReFaSo</a>、登録された配布物をカテゴリから探すなら<a href="https://nikolat.github.io/sosiremi/ghost/">偽SoSiReMi</a>も使えます。</p><p class="note">古いデータベースには公開終了やリンク切れもあります。最終的には作者の配布ページと利用条件を確認してください。SSPのみで動作確認された作品も多く、Utataneでの互換性はゴーストごとに異なります。</p>'],
@@ -144,7 +144,7 @@ const guideContent = {
   },
   en: {
     title: 'Start with Ukagaka and Utatane — Find ghosts and understand compatibility', description: 'Find Ukagaka ghost distribution sites and learn how Utatane compatibility differs from SSP.',
-    label: 'START HERE', heading: 'Find ghosts. Understand the machinery.', lead: 'For people new to Ukagaka and people moving from another baseware. App installation is covered on the overview page.', home: 'Overview', guide: 'Start here',
+    label: 'START HERE', heading: 'Find ghosts. Understand the machinery.', lead: 'For people new to Ukagaka and people moving from another baseware. App installation is covered on the overview page.', home: 'Overview', guide: 'Guide',
     sections: [
       ['01', 'Ukagaka and ghosts', '<p>Utatane is the “baseware,” the program that runs Ukagaka content. A “ghost” bundles a character, dialogue, and reactions. Shells change its appearance, balloons display dialogue, and releases commonly use the NAR archive format.</p>'],
       ['02', 'Where to find ghosts', '<p><a href="http://ghosttown.mikage.jp/cgi-bin/tdb/tdb.cgi?mode=preview_list">GHOST TOWN</a> is a long-running database. <a href="https://buynowforsale.shillest.net/ghosts/">Ghost Captor Sakura</a> presents an image-rich update feed. Use <a href="https://nikolat.github.io/sirefaso/">Nise SiReFaSo</a> to follow recent updates and <a href="https://nikolat.github.io/sosiremi/ghost/">Nise SoSiReMi</a> to browse registered downloads. The <a href="https://ukagakadreamteam.com/wiki/guide/beginner_guide">Ukagaka Dream Team beginner guide</a> is an English-language introduction.</p><p class="note">Older databases contain discontinued or broken links. Follow through to the creator’s page and read its terms. Many releases are tested only with SSP, so Utatane compatibility varies by ghost.</p>'],
@@ -156,7 +156,7 @@ const guideContent = {
   },
   'zh-Hans': {
     title: '开始使用伺か与 Utatane — 寻找人格与兼容性说明', description: '了解在哪里寻找伺か人格，以及 Utatane 与 SSP 的兼容性和实现方式。',
-    label: '从这里开始', heading: '寻找人格，了解运行原理。', lead: '面向第一次接触伺か，以及从其他本体迁移的用户。应用安装步骤已列在概览页面。', home: '概览', guide: '入门',
+    label: '从这里开始', heading: '寻找人格，了解运行原理。', lead: '面向第一次接触伺か，以及从其他本体迁移的用户。应用安装步骤已列在概览页面。', home: '概览', guide: '指南',
     sections: [
       ['01', '伺か与人格', '<p>Utatane 是运行伺か内容的“本体（baseware）”。“人格（ghost）”包含角色、对话和互动；外壳（shell）改变外观，对话框（balloon）显示文字，发布文件通常采用 NAR 格式。</p>'],
       ['02', '寻找人格的入口', '<p><a href="http://ghosttown.mikage.jp/cgi-bin/tdb/tdb.cgi?mode=preview_list">GHOST TOWN</a> 是历史悠久的人格数据库；<a href="https://buynowforsale.shillest.net/ghosts/">Ghost Captor Sakura</a> 可按图片和更新时间浏览。<a href="https://nikolat.github.io/sirefaso/">偽SiReFaSo</a>适合追踪近期更新，<a href="https://nikolat.github.io/sosiremi/ghost/">偽SoSiReMi</a>可按分类查找已登记的发布内容。</p><p class="note">旧数据库中可能有停止发布或失效的链接。请进入作者页面并确认使用条款。许多作品只在 SSP 上测试，因此 Utatane 兼容性因人格而异。</p>'],
@@ -168,7 +168,7 @@ const guideContent = {
   },
   'zh-Hant': {
     title: '開始使用伺か與 Utatane — 尋找人格與相容性說明', description: '瞭解在哪裡尋找伺か人格，以及 Utatane 與 SSP 的相容性和實作方式。',
-    label: '從這裡開始', heading: '尋找人格，瞭解運作原理。', lead: '寫給第一次接觸伺か，以及從其他本體移轉的使用者。應用程式安裝步驟已列在概要頁面。', home: '概要', guide: '入門',
+    label: '從這裡開始', heading: '尋找人格，瞭解運作原理。', lead: '寫給第一次接觸伺か，以及從其他本體移轉的使用者。應用程式安裝步驟已列在概要頁面。', home: '概要', guide: '指南',
     sections: [
       ['01', '伺か與人格', '<p>Utatane 是執行伺か內容的「本體（baseware）」。「人格（ghost）」包含角色、對話與互動；外殼（shell）改變外觀，對話框（balloon）顯示文字，發行檔案通常採用 NAR 格式。</p>'],
       ['02', '尋找人格的入口', '<p><a href="http://ghosttown.mikage.jp/cgi-bin/tdb/tdb.cgi?mode=preview_list">GHOST TOWN</a> 是歷史悠久的人格資料庫；<a href="https://buynowforsale.shillest.net/ghosts/">Ghost Captor Sakura</a> 可依圖片與更新時間瀏覽。<a href="https://nikolat.github.io/sirefaso/">偽SiReFaSo</a>適合追蹤近期更新，<a href="https://nikolat.github.io/sosiremi/ghost/">偽SoSiReMi</a>可依分類尋找已登記的發布內容。</p><p class="note">舊資料庫中可能有停止發布或失效的連結。請前往作者頁面並確認使用條款。許多作品只在 SSP 上測試，因此 Utatane 相容性因人格而異。</p>'],
@@ -180,7 +180,7 @@ const guideContent = {
   },
   ko: {
     title: '우카가카와 Utatane 시작하기 — 고스트 찾기와 호환성', description: '우카가카 고스트 배포 사이트와 Utatane와 SSP의 호환성 및 구현 방식을 안내합니다.',
-    label: '여기서 시작', heading: '고스트를 찾고, 작동 방식을 알아봐요.', lead: '우카가카를 처음 접하는 사람과 다른 베이스웨어에서 옮겨 오는 사람을 위한 안내예요. 앱 설치는 개요 페이지에 정리되어 있어요.', home: '개요', guide: '입문',
+    label: '여기서 시작', heading: '고스트를 찾고, 작동 방식을 알아봐요.', lead: '우카가카를 처음 접하는 사람과 다른 베이스웨어에서 옮겨 오는 사람을 위한 안내예요. 앱 설치는 개요 페이지에 정리되어 있어요.', home: '개요', guide: '가이드',
     sections: [
       ['01', '우카가카와 고스트', '<p>Utatane는 우카가카 콘텐츠를 실행하는 “베이스웨어”예요. “고스트”에는 캐릭터, 대화, 반응이 들어 있어요. 셸은 외형을 바꾸고 벌룬은 대사를 표시하며, 배포 파일은 주로 NAR 형식을 사용해요.</p>'],
       ['02', '고스트를 찾는 곳', '<p><a href="http://ghosttown.mikage.jp/cgi-bin/tdb/tdb.cgi?mode=preview_list">GHOST TOWN</a>은 오래된 고스트 데이터베이스이고, <a href="https://buynowforsale.shillest.net/ghosts/">Ghost Captor Sakura</a>는 이미지와 업데이트 순서로 둘러볼 수 있는 피드예요. 최근 업데이트는 <a href="https://nikolat.github.io/sirefaso/">偽SiReFaSo</a>, 등록된 배포물은 <a href="https://nikolat.github.io/sosiremi/ghost/">偽SoSiReMi</a>에서 분류별로 찾을 수 있어요.</p><p class="note">오래된 데이터베이스에는 배포 종료나 끊어진 링크도 있어요. 제작자 페이지와 이용 조건을 확인하세요. SSP에서만 시험한 작품이 많아 Utatane 호환성은 고스트마다 달라요.</p>'],
@@ -255,8 +255,15 @@ ${guideAlternateLinks()}
 <body>
 <div class="wrap">
 <header class="topbar">
-<a class="brand" href="${home}"><img src="${depth}/assets/utatane-icon.png" width="30" height="30" alt="">Utatane</a>
-<nav aria-label="Navigation"><a href="${home}">${content.home}</a><a href="./" aria-current="page">${content.guide}</a><div class="languages" aria-label="Language / 言語">${guideLanguageLinks(code)}</div></nav>
+<a class="brand" href="${home}"><picture><source srcset="${depth}/assets/utatane-icon.webp" type="image/webp"><img src="${depth}/assets/utatane-icon.png" width="128" height="128" alt=""></picture>Utatane</a>
+<nav aria-label="Navigation">
+<a class="nav-feature" href="${home}#experience"><span data-ja="できること" data-en="Experience" data-zh-hans="功能" data-zh-hant="功能" data-ko="기능">${code === 'ja' ? 'できること' : code === 'en' ? 'Experience' : code === 'ko' ? '기능' : '功能'}</span></a>
+<a href="./" aria-current="page"><span data-ja="ガイド" data-en="Guide" data-zh-hans="指南" data-zh-hant="指南" data-ko="가이드">${content.guide}</span></a>
+<a href="${home}#install"><span data-ja="ダウンロード" data-en="Download" data-zh-hans="下载" data-zh-hant="下載" data-ko="다운로드">${code === 'ja' ? 'ダウンロード' : code === 'en' ? 'Download' : code === 'zh-Hans' ? '下载' : code === 'zh-Hant' ? '下載' : '다운로드'}</span></a>
+<div class="languages" aria-label="Language / 言語">
+${guideLanguageLinks(code)}
+</div>
+</nav>
 </header>
 <main class="guide-page">
 <header class="guide-hero"><p class="eyebrow">${content.label}</p><h1>${content.heading}</h1><p class="lead">${content.lead}</p></header>

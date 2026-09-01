@@ -10,6 +10,7 @@ import UtataneCore
 import UtataneEseShioriNative
 import UtataneFirstNative
 import UtataneGhostKit
+import UtataneHisuiNative
 import UtataneKawariNative
 import UtataneMakoto
 import UtataneMisakaNative
@@ -24,6 +25,7 @@ import UtataneRuntime
 import UtataneSakuraScript
 import UtataneSatoriNative
 import UtataneShell
+import UtataneShinoNative
 import UtataneWindowsShiori
 import UtataneYayaNative
 
@@ -1888,6 +1890,29 @@ private struct UtataneRootView: View {
                     .deletingLastPathComponent()
                     .appending(path: "nise-shiori-state.json", directoryHint: .notDirectory)
             )
+        }
+        if NativeShinoPersonalityEngine.supports(shioriFilename: ghost.shioriFilename) {
+            let engine = try NativeShinoPersonalityEngine(
+                masterDirectoryURL: masterDirectory,
+                stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
+                    .deletingLastPathComponent().appending(path: "shino-state.json"),
+                saoriCaller: nativeSaoriRegistry(for: masterDirectory)
+            )
+            AppLogStore.shared.info(
+                "忍ネイティブエンジンを選択しました",
+                category: "SHIORI",
+                details: [
+                    "Master: \(masterDirectory.path)",
+                    "辞書ファイル: \(engine.loadedDictionaryFileCount)",
+                    "イベント定義: \(engine.loadedEventEntryCount)",
+                    "ジャンプ定義: \(engine.loadedJumpEntryCount)"
+                ].joined(separator: "\n"),
+                ghostName: ghost.name
+            )
+            return engine
+        }
+        if NativeHisuiPersonalityEngine.supports(shioriFilename: ghost.shioriFilename) {
+            return try NativeHisuiPersonalityEngine(masterDirectoryURL: masterDirectory)
         }
         if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),
            let configuration = ContentRoot.materiaFirstConfiguration(for: ghost)
