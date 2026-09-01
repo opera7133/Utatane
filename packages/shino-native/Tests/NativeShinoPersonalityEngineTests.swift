@@ -50,20 +50,26 @@ import UtataneNativeSaori
 }
 
 private let repositoryRoot = URL(filePath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+private let installedKodamaMaster = repositoryRoot.appending(
+    path: "Content/Local/Ghosts/kodama_alpha/ghost/master",
+    directoryHint: .isDirectory
+)
+private let hasInstalledKodama = FileManager.default.fileExists(atPath: installedKodamaMaster.path)
 
-@Test func `installed kodama boot only`() async throws {
-    let master = repositoryRoot.appending(path: "Content/Local/Ghosts/kodama_alpha/ghost/master", directoryHint: .isDirectory)
+@Test(.enabled(if: hasInstalledKodama)) func `installed kodama boot only`() async throws {
     let engine = try NativeShinoPersonalityEngine(
-        masterDirectoryURL: master,
+        masterDirectoryURL: installedKodamaMaster,
         stateStoreURL: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString).appending(path: "state.json")
     )
     let boot = try await engine.handle(event: .shiori(id: "OnBoot", references: [:]))
     #expect(boot?.rawValue.contains("\\0") == true)
 }
 
-@Test func `installed kodama random talk only`() async throws {
-    let master = repositoryRoot.appending(path: "Content/Local/Ghosts/kodama_alpha/ghost/master", directoryHint: .isDirectory)
-    let engine = try NativeShinoPersonalityEngine(masterDirectoryURL: master)
+@Test(.enabled(if: hasInstalledKodama)) func `installed kodama random talk only`() async throws {
+    let engine = try NativeShinoPersonalityEngine(
+        masterDirectoryURL: installedKodamaMaster,
+        stateStoreURL: FileManager.default.temporaryDirectory.appending(path: UUID().uuidString).appending(path: "state.json")
+    )
     let talk = try await engine.handle(event: .randomTalk)
     #expect(talk?.rawValue.contains("\\e") == true)
 }
