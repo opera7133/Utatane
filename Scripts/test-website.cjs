@@ -4,9 +4,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
-const html = fs.readFileSync(path.join(__dirname, '../website/utatane-modern.html'), 'utf8');
-const css = fs.readFileSync(path.join(__dirname, '../website/utatane-modern.css'), 'utf8');
-const script = fs.readFileSync(path.join(__dirname, '../website/utatane-modern.js'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../website/utatane/index.html'), 'utf8');
+const css = fs.readFileSync(path.join(__dirname, '../website/utatane/utatane-modern.css'), 'utf8');
+const script = fs.readFileSync(path.join(__dirname, '../website/utatane/utatane-modern.js'), 'utf8');
 const base = 'https://github.com/opera7133/Utatane/releases';
 const release = (tag, date, extra = {}) => ({tag_name:tag, published_at:date, html_url:base+'/tag/'+tag, prerelease:true, assets:[{name:'Utatane-macOS.zip', browser_download_url:base+'/download/'+tag+'/Utatane-macOS.zip', size:10485760}], ...extra});
 function element(dataset={}) { return {dataset, textContent:'', attrs:{}, hidden:true, classList:{values:new Set(),add(v){this.values.add(v);},toggle(v,on){on?this.values.add(v):this.values.delete(v);},contains(v){return this.values.has(v);}}, getAttribute(k){return this.attrs[k.toLowerCase()];}, setAttribute(k,v){this.attrs[k]=v;}, removeAttribute(k){delete this.attrs[k];}, addEventListener(k,v){this[k]=v;}}; }
@@ -87,31 +87,56 @@ async function run(data, options={}) {
   for (const lang of ['ja','en','zh-Hans','zh-Hant','ko','x-default']) assert.ok(japanese.includes(`hreflang="${lang}"`));
   const sitemap=fs.readFileSync(path.join(__dirname,'../website/sitemap.xml'),'utf8');
   for (const directory of Object.keys(localeFiles)) assert.ok(sitemap.includes(`<loc>https://dl.wmsci.com/utatane/${directory ? directory+'/' : ''}</loc>`));
+  for (const [directory,[lang]] of Object.entries(localeFiles)) {
+    const guide=fs.readFileSync(path.join(__dirname,'../website/utatane',directory,'getting-started/index.html'),'utf8');
+    const canonical=`https://dl.wmsci.com/utatane/${directory ? directory+'/' : ''}getting-started/`;
+    assert.ok(guide.includes(`<html lang="${lang}">`));
+    assert.ok(guide.includes(`<link rel="canonical" href="${canonical}">`));
+    assert.ok(guide.includes('hreflang="x-default"'));
+    assert.ok(guide.includes('https://buynowforsale.shillest.net/ghosts/'));
+    assert.ok(guide.includes('https://nikolat.github.io/sirefaso/'));
+    assert.ok(guide.includes('https://nikolat.github.io/sosiremi/ghost/'));
+    assert.ok(guide.includes('Docs/Compatibility.md'));
+    assert.ok(guide.includes('Docs/Native-SHIORI.md'));
+    assert.ok(guide.includes('https://github.com/Tatakinov/ninix-kagari'));
+    assert.ok(guide.includes('<table>'));
+    assert.ok(guide.includes('role="tablist"'));
+    assert.ok(guide.includes('id="panel-beginner"'));
+    assert.ok(guide.includes('id="panel-veteran"'));
+    assert.ok(sitemap.includes(`<loc>${canonical}</loc>`));
+  }
+  const publicRoot=path.join(__dirname,'../website');
+  const pages=Object.keys(localeFiles).flatMap(directory=>[
+    path.join(publicRoot,'utatane',directory,'index.html'),
+    path.join(publicRoot,'utatane',directory,'getting-started/index.html'),
+  ]);
+  for (const page of pages) {
+    const markup=fs.readFileSync(page,'utf8');
+    for (const [,raw] of markup.matchAll(/(?:href|src)="([^"]+)"/g)) {
+      if (!raw.startsWith('./') && !raw.startsWith('../')) continue;
+      const clean=raw.split(/[?#]/,1)[0];
+      let target=path.resolve(path.dirname(page),clean);
+      if (clean.endsWith('/')) target=path.join(target,'index.html');
+      assert.ok(fs.existsSync(target),`${path.relative(publicRoot,page)} -> ${raw}`);
+    }
+  }
+  console.log('PASS: localized page assets and internal links resolve');
   assert.ok(japanese.includes('"@type":"SoftwareApplication"'));
   const simple=fs.readFileSync(path.join(__dirname,'../website/utatane/simple.html'),'utf8');
   assert.ok(simple.includes('name="robots" content="noindex,follow"'));
   assert.ok(simple.includes('href="./"'));
-  const legacy=fs.readFileSync(path.join(__dirname,'../website/utatane.html'),'utf8');
   const deploy=fs.readFileSync(path.join(__dirname,'../.github/workflows/deploy-website.yml'),'utf8');
-  assert.ok(legacy.includes('./utatane-modern.html'));
-  assert.ok(legacy.includes('安定性を保証する区分ではありません'));
-  assert.ok(!legacy.includes('最新のpre-release'));
-  for (const name of ['robots.txt','sitemap.xml']) {
-    assert.ok(deploy.includes('"website/'+name+'"'));
-    assert.ok(deploy.includes('put -O "$WEBSITE_DEPLOY_PATH" website/'+name));
-  }
-  for (const directory of Object.keys(localeFiles)) {
-    const relative=directory ? `utatane/${directory}/index.html` : 'utatane/index.html';
-    const destination=directory ? `$WEBSITE_DEPLOY_PATH/utatane/${directory}` : '$WEBSITE_DEPLOY_PATH/utatane';
-    assert.ok(deploy.includes(`"website/${relative}"`));
-    assert.ok(deploy.includes(`put -O "${destination}" website/${relative}`));
-  }
+  assert.ok(deploy.includes('- "website/**"'));
+  assert.match(deploy,/mirror --reverse --verbose --parallel=4[^\n]+website "\$DEPLOY_TARGET"/);
+  assert.ok(deploy.includes('--exclude-glob .DS_Store'));
+  assert.ok(!deploy.includes('mirror --delete'));
+  assert.ok(!deploy.includes('put -O'));
+  assert.ok(deploy.includes('[[ "$WEBSITE_DEPLOY_PATH" != "/" ]]'));
   assert.ok(html.includes('href="./utatane-modern.css"'));
   assert.ok(html.includes('src="./utatane-modern.js"'));
   for (const name of ['utatane-icon.webp','utatane-screenshot.webp']) {
     assert.ok(html.includes('srcset="./assets/'+name+'"'));
-    assert.ok(deploy.includes('"website/assets/'+name+'"'));
-    assert.ok(deploy.includes('put -O "$WEBSITE_DEPLOY_PATH/utatane/assets" website/assets/'+name));
+    assert.ok(fs.existsSync(path.join(__dirname,'../website/utatane/assets',name)));
   }
   assert.match(html,/utatane-screenshot\.png" width="700" height="447"[^>]+fetchpriority="high"/);
   assert.ok(html.includes('そもそも伺かって何？'));

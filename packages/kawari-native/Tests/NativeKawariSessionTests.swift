@@ -8,12 +8,34 @@ import UtataneShiori
 @Suite(.serialized)
 struct NativeKawariSessionTests {
     @Test func `translates legacy KAWARI if false branches`() {
-        #expect(NativeKawariSession.translateLegacyIfSyntax(
-            in: #"$(if $([ ${value} -eq 1 ]) ${yes} ${no})"#
-        ) == #"$(if $([ ${value} -eq 1 ]) ${yes} else ${no})"#)
+        #expect(
+            NativeKawariSession.translateLegacyComparisonOperators(in:
+                NativeKawariSession.translateLegacyIfSyntax(
+                    in: #"$(if $([ ${value} -eq 1 ]) ${yes} ${no})"#
+                )) == #"$(if $([ ${value} == 1 ]) ${yes} else ${no})"#
+        )
+        #expect(NativeKawariSession.translateLegacyExpressionSyntax(
+            in: #"$(if $([ ${value} == 1 ]) ${yes})"#
+        ) == #"$(if $[ ${value} == 1 ] ${yes})"#)
         #expect(NativeKawariSession.translateLegacyIfSyntax(
             in: #"$(set value 1 ; if $([ ${value} -eq 1 ]) ${yes})"#
         ) == #"$(set value 1)$(if $([ ${value} -eq 1 ]) ${yes})"#)
+    }
+
+    @Test func `loads legacy dictionaries through Windows path separators`() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appending(path: "utatane-kawari-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let nested = root.appending(path: "nested", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: true)
+        let config = "dict : nested\\events.txt\r\n"
+        let dictionary = #"event.OnBoot : \0nested dictionary loaded\e"# + "\r\n"
+        try #require(config.data(using: .shiftJIS)).write(to: root.appending(path: "kawari.ini"))
+        try #require(dictionary.data(using: .shiftJIS)).write(to: nested.appending(path: "events.txt"))
+
+        let session = try NativeKawariSession(masterDirectoryURL: root)
+        let response = try session.request(GhostEventShioriAdapter().request(for: .boot))
+        #expect(response.value?.contains("nested dictionary loaded") == true)
     }
 
     @Test
@@ -134,7 +156,7 @@ struct NativeKawariSessionTests {
             references: [0: "5", 1: "10"]
         )))
         #expect(restore.value?.contains(#"\0\s[0]"#) == true)
-        #expect(restore.value?.contains(#"\1\s[10]"#) == true)
+        #expect(restore.value?.contains(#"\1\s[10]"#) == true, "value: \(restore.value ?? "nil")")
         #expect(restore.value?.hasSuffix(#"\e"#) == true)
 
         let menu = try session.request(GhostEventShioriAdapter().request(for: .mouse(GhostMouseEvent(
@@ -151,5 +173,28 @@ struct NativeKawariSessionTests {
 
         let randomTalk = try session.request(GhostEventShioriAdapter().request(for: .randomTalk))
         #expect(randomTalk.value?.isEmpty == false)
+    }
+
+    @Test func `dot sakura loads nested event dictionaries`() throws {
+        let master = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appending(path: "Content/Local/Ghosts/dot_sakura/ghost/master", directoryHint: .isDirectory)
+        guard FileManager.default.fileExists(atPath: master.appending(path: "kawari.ini").path) else { return }
+
+        let session = try NativeKawariSession(masterDirectoryURL: master)
+        let boot = try session.request(GhostEventShioriAdapter().request(for: .boot))
+        #expect(boot.value?.isEmpty == false, "value: \(boot.value ?? "nil")")
+        let menu = try session.request(GhostEventShioriAdapter().request(for: .mouse(GhostMouseEvent(
+            kind: .doubleClick,
+            scope: 0,
+            region: "Bust",
+            x: 100,
+            y: 100
+        ))))
+        #expect(menu.value?.contains("偽ＡＩトーク") == true, "value: \(menu.value ?? "nil")")
+        #expect(menu.value?.contains(#"\q["#) == true, "value: \(menu.value ?? "nil")")
     }
 }

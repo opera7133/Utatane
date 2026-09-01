@@ -113,12 +113,16 @@ public final class NativeKawariSession: @unchecked Sendable {
         var doubleClickEntries: [String: String] = [:]
         var legacyEntries: [String: [String]] = [:]
         for (dictionaryIndex, filename) in dictionaryFilenames.enumerated() {
-            let dictionaryURL = masterDirectoryURL.appending(path: filename)
+            guard let dictionaryURL = legacyDictionaryURL(filename, within: masterDirectoryURL) else {
+                continue
+            }
             guard let data = try? Data(contentsOf: dictionaryURL),
                   var dictionary = String(data: data, encoding: .shiftJIS)
             else { continue }
             doubleClickEntries.merge(extractLegacyDoubleClickEntries(from: dictionary)) { _, newer in newer }
-            dictionary = translateLegacyIfSyntax(in: dictionary)
+            dictionary = translateLegacyExpressionSyntax(
+                in: translateLegacyComparisonOperators(in: translateLegacyIfSyntax(in: dictionary))
+            )
             for index in (0 ... 7).reversed() {
                 dictionary = dictionary.replacingOccurrences(
                     of: "system.Reference\(index)",
@@ -188,6 +192,15 @@ public final class NativeKawariSession: @unchecked Sendable {
             try? FileManager.default.removeItem(at: directory)
             throw error
         }
+    }
+
+    private static func legacyDictionaryURL(_ filename: String, within masterDirectoryURL: URL) -> URL? {
+        let normalized = filename.replacingOccurrences(of: "\\", with: "/")
+        let master = masterDirectoryURL.standardizedFileURL
+        let candidate = master.appending(path: normalized).standardizedFileURL
+        let masterPrefix = master.path.hasSuffix("/") ? master.path : master.path + "/"
+        guard candidate.path.hasPrefix(masterPrefix) else { return nil }
+        return candidate
     }
 
     private static func extractLegacyDoubleClickEntries(from dictionary: String) -> [String: String] {
@@ -279,6 +292,23 @@ public final class NativeKawariSession: @unchecked Sendable {
 
     static func translateLegacyIfSyntax(in source: String) -> String {
         translateLegacyIfSyntax(in: Array(source))
+    }
+
+    static func translateLegacyComparisonOperators(in source: String) -> String {
+        let operators = [
+            "-eq": "==", "-ne": "!=", "-lt": "<", "-le": "<=", "-gt": ">", "-ge": ">="
+        ]
+        return operators.reduce(source) { result, pair in
+            result.replacingOccurrences(of: " \(pair.key) ", with: " \(pair.value) ")
+        }
+    }
+
+    static func translateLegacyExpressionSyntax(in source: String) -> String {
+        guard let expression = try? NSRegularExpression(pattern: #"\$\(\[([^\[\]]*)\]\)"#) else {
+            return source
+        }
+        let range = NSRange(source.startIndex ..< source.endIndex, in: source)
+        return expression.stringByReplacingMatches(in: source, range: range, withTemplate: #"\$[$1]"#)
     }
 
     private static func translateLegacyIfSyntax(in characters: [Character]) -> String {
@@ -464,7 +494,15 @@ public final class NativeKawariSession: @unchecked Sendable {
             originalRequest: request
         )
         var response = try ShioriMessageParser.parseResponse(self.request(effectiveRequest.serialized()))
-        if id == "OnSurfaceRestore", response.value == #"\e"#, let legacySurfaceRestoreScript {
+        let missingLegacySurface = legacySurfaceRestoreScript.map { script in
+            (0 ... 1).contains { scope in
+                let marker = "\\\(scope)\\s["
+                return script.contains(marker) && response.value?.contains(marker) != true
+            }
+        } ?? false
+        if id == "OnSurfaceRestore", let legacySurfaceRestoreScript,
+           response.value == #"\e"# || missingLegacySurface
+        {
             response.headers = ShioriHeaders(response.headers.entries.map { header in
                 header.name.caseInsensitiveCompare("Value") == .orderedSame
                     ? ShioriHeader(name: header.name, value: legacySurfaceRestoreScript + #"\e"#)

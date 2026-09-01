@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="伺かゴーストを探せる配布サイトと、SSPなどからUtataneへ移る人向けの互換性・実装方式を案内します。">
+<title>伺かとUtataneをはじめる — ゴーストの探し方と互換性</title>
+<link rel="canonical" href="https://dl.wmsci.com/utatane/getting-started/">
+<link rel="alternate" hreflang="ja" href="https://dl.wmsci.com/utatane/getting-started/">
+<link rel="alternate" hreflang="en" href="https://dl.wmsci.com/utatane/en/getting-started/">
+<link rel="alternate" hreflang="zh-Hans" href="https://dl.wmsci.com/utatane/zh-hans/getting-started/">
+<link rel="alternate" hreflang="zh-Hant" href="https://dl.wmsci.com/utatane/zh-hant/getting-started/">
+<link rel="alternate" hreflang="ko" href="https://dl.wmsci.com/utatane/ko/getting-started/">
+<link rel="alternate" hreflang="x-default" href="https://dl.wmsci.com/utatane/getting-started/">
+<meta property="og:type" content="article">
+<meta property="og:locale" content="ja_JP">
+<meta property="og:title" content="伺かとUtataneをはじめる — ゴーストの探し方と互換性">
+<meta property="og:description" content="伺かゴーストを探せる配布サイトと、SSPなどからUtataneへ移る人向けの互換性・実装方式を案内します。">
+<meta property="og:url" content="https://dl.wmsci.com/utatane/getting-started/">
+<meta property="og:image" content="https://dl.wmsci.com/utatane/assets/utatane-icon.png">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="../assets/utatane-icon.png">
+<link rel="stylesheet" href="../utatane-modern.css">
+</head>
+<body>
+<div class="wrap">
+<header class="topbar">
+<a class="brand" href="/utatane/"><img src="../assets/utatane-icon.png" width="30" height="30" alt="">Utatane</a>
+<nav aria-label="Navigation"><a href="/utatane/">概要</a><a href="./" aria-current="page">はじめに</a><div class="languages" aria-label="Language / 言語"><a lang="ja" hreflang="ja" href="/utatane/getting-started/" aria-current="page">日本語</a>
+<a lang="en" hreflang="en" href="/utatane/en/getting-started/">EN</a>
+<a lang="zh-Hans" hreflang="zh-Hans" href="/utatane/zh-hans/getting-started/">简体</a>
+<a lang="zh-Hant" hreflang="zh-Hant" href="/utatane/zh-hant/getting-started/">繁體</a>
+<a lang="ko" hreflang="ko" href="/utatane/ko/getting-started/">한국어</a></div></nav>
+</header>
+<main class="guide-page">
+<header class="guide-hero"><p class="eyebrow">START HERE</p><h1>ゴーストを探す。仕組みを知る。</h1><p class="lead">伺かが初めての人と、ほかのベースウェアを使ってきた人へ。インストール手順は概要ページにまとめています。</p></header>
+<div class="guide-tabs" role="tablist" aria-label="はじめに">
+<button type="button" role="tab" id="tab-beginner" aria-controls="panel-beginner" aria-selected="true">伺か初心者</button>
+<button type="button" role="tab" id="tab-veteran" aria-controls="panel-veteran" aria-selected="false">気付けば何年目</button>
+</div>
+<div class="guide-panels">
+<div class="guide-sections" id="panel-beginner" role="tabpanel" aria-labelledby="tab-beginner"><section class="guide-section"><p class="number">01</p><div><h2>伺かとゴースト</h2><p>Utataneは「ベースウェア」と呼ばれる本体です。そこへキャラクター、会話、反応をまとめた「ゴースト」を追加して使います。見た目の差分はシェル、台詞を表示する枠はバルーン、配布ファイルは主にNAR形式です。</p></div></section>
+<section class="guide-section"><p class="number">02</p><div><h2>ゴーストを探す場所</h2><p><a href="http://ghosttown.mikage.jp/cgi-bin/tdb/tdb.cgi?mode=preview_list">GHOST TOWN</a>は長く使われてきたゴーストデータベース、<a href="https://buynowforsale.shillest.net/ghosts/">ゴーストキャプターさくら</a>は画像と更新順から眺められる更新フィードです。最近の更新を追うなら<a href="https://nikolat.github.io/sirefaso/">偽SiReFaSo</a>、登録された配布物をカテゴリから探すなら<a href="https://nikolat.github.io/sosiremi/ghost/">偽SoSiReMi</a>も使えます。</p><p class="note">古いデータベースには公開終了やリンク切れもあります。最終的には作者の配布ページと利用条件を確認してください。SSPのみで動作確認された作品も多く、Utataneでの互換性はゴーストごとに異なります。</p></div></section>
+<section class="guide-section"><p class="number">03</p><div><h2>NARを追加する</h2><p>入手したNARは、Utataneのファイル選択、ドラッグ＆ドロップ、Finderの「このアプリケーションで開く」から追加できます。アプリ自体のダウンロードとmacOSでの初回起動は<a href="/utatane/#install">概要ページのダウンロード欄</a>を見てください。</p></div></section></div>
+<div class="guide-sections" id="panel-veteran" role="tabpanel" aria-labelledby="tab-veteran"><section class="guide-section"><p class="number">04</p><div><h2>ほかのベースウェアと比べる</h2><div class="guide-table"><table><thead><tr><th>観点</th><th>SSP</th><th>ninix-kagari</th><th>Utatane</th></tr></thead><tbody><tr><th>主な環境</th><td>Windows</td><td>Linux、Windows</td><td>macOS 14以降</td></tr><tr><th>位置付け</th><td>現在の事実上の基準</td><td>ninix-ayaのフォーク。主要SHIORIを同時にビルド可能</td><td>macOS向け。主要機能を実装中で完全互換ではない</td></tr><tr><th>外部モジュール</th><td>Windows DLLを直接利用</td><td>Linuxでは対応SHIORIのビルドが必要。SAORIは主にninix-saori</td><td>内蔵のネイティブ実装を優先。一部は設定済みWine経由</td></tr><tr><th>導入・移行</th><td>Windows向け配布</td><td>LinuxではビルドまたはDebianパッケージ</td><td>Macアプリ。展開したSSPフォルダから取り込み可能</td></tr></tbody></table></div><p><a href="https://github.com/Tatakinov/ninix-kagari">ninix-kagari</a>の対応範囲は環境によって異なります。Utataneについては<a href="https://github.com/opera7133/Utatane/blob/main/Docs/Compatibility.md">確認済みゴーストと残っている機能</a>に、実際に確認した範囲を記録しています。</p></div></section>
+<section class="guide-section"><p class="number">05</p><div><h2>辞書をどう読んでいるか</h2><p>最初に<code>descript.txt</code>を読み、指定がなければ<code>alias.txt</code>や特徴的な辞書ファイルも手掛かりにSHIORIを選びます。テキストは宣言された文字コードを優先し、UTF-8、Shift_JIS、EUC-KR、EUC-JP、GB18030、Big5などの候補から復号します。ファイルの途中で文字コードが混ざった古いデータにも行単位の復号で対処します。</p><p>辞書は一種類の共通形式へ雑に変換しているわけではありません。里々、MISAKA、灯、ese-shiori、偽栞などに個別の字句・構文解析と評価器があり、条件分岐、変数、単語群、ジャンプなどを元の実行モデルに合わせて処理します。YAYAと華和梨は移植した本体をmacOS用の薄い接続層から呼び出します。</p></div></section>
+<section class="guide-section"><p class="number">06</p><div><h2>Windows DLLなしで動かす境界</h2><p>画面、イベント配送、SakuraScript解析はSwift側に置き、SHIORIとは<code>PersonalityEngine</code>という共通境界で接続します。既知のSAORIはmacOS APIによる共通実装を優先し、未知のmacOS用モジュールは標準ABIで読み込みます。Windows DLLは直接ロードできないので、必要な場合だけWine上の補助ホストへSHIORI/SAORI電文を渡します。</p><p>配布物は読み取り元として扱い、変数や学習データはApplication Supportのゴースト別領域へ保存します。対応エンジンでも未実装命令、Windows固有API、外部DLL、全分岐の一致までは保証しません。詳しくは<a href="https://github.com/opera7133/Utatane/blob/main/Docs/Native-SHIORI.md">Native SHIORI / SAORI</a>を見てください。</p></div></section></div>
+</div>
+<aside class="guide-help"><h2>不具合を報告する</h2><p>うまく動かないときは、ゴースト名、Utataneのバージョン、起きたことを添えてGitHub Issuesへ報告してください。互換性は開発中で、すべてのゴーストや機能の動作を保証するものではありません。</p><a href="https://github.com/opera7133/Utatane/issues/new/choose">不具合を報告する <span aria-hidden="true">↗</span></a></aside>
+</main>
+<footer><div class="bottom"><span>© 2026 wamo.</span><a href="/utatane/">Utataneの概要へ戻る</a></div></footer>
+</div>
+<script>
+document.documentElement.classList.add('tabs-enabled');
+const tabs=[...document.querySelectorAll('[role="tab"]')];
+const selectTab=(tab,updateHash=false)=>{for(const item of tabs){const selected=item===tab;item.setAttribute('aria-selected',String(selected));item.tabIndex=selected?0:-1;document.getElementById(item.getAttribute('aria-controls')).hidden=!selected}if(updateHash)history.replaceState(null,'','#'+tab.id.replace('tab-',''))};
+for(const tab of tabs){tab.addEventListener('click',()=>selectTab(tab,true));tab.addEventListener('keydown',event=>{if(!['ArrowLeft','ArrowRight'].includes(event.key))return;event.preventDefault();const next=tabs[(tabs.indexOf(tab)+(event.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length];selectTab(next,true);next.focus()})}
+selectTab(location.hash==='#veteran'?tabs[1]:tabs[0]);
+</script>
+</body>
+</html>

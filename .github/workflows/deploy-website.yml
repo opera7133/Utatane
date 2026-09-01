@@ -4,22 +4,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "website/utatane.html"
-      - "website/utatane-modern.html"
-      - "website/utatane-modern.css"
-      - "website/utatane-modern.js"
-      - "website/utatane/index.html"
-      - "website/utatane/simple.html"
-      - "website/utatane/en/index.html"
-      - "website/utatane/zh-hans/index.html"
-      - "website/utatane/zh-hant/index.html"
-      - "website/utatane/ko/index.html"
-      - "website/robots.txt"
-      - "website/sitemap.xml"
-      - "website/assets/utatane-icon.png"
-      - "website/assets/utatane-icon.webp"
-      - "website/assets/utatane-screenshot.png"
-      - "website/assets/utatane-screenshot.webp"
+      - "website/**"
       - "Scripts/test-website.cjs"
       - "Scripts/generate-website-locales.cjs"
       - ".github/workflows/deploy-website.yml"
@@ -55,6 +40,9 @@ jobs:
           test -n "$DEPLOY_PASSWORD"
           test -n "$WEBSITE_DEPLOY_PATH"
           [[ "$WEBSITE_DEPLOY_PATH" == /* ]]
+          [[ "$WEBSITE_DEPLOY_PATH" != "/" ]]
+          DEPLOY_TARGET="${WEBSITE_DEPLOY_PATH%/}"
+          # The mirror intentionally has no --delete, so unrelated remote files remain.
           lftp -u "$DEPLOY_USERNAME","$DEPLOY_PASSWORD" "ftp://$DEPLOY_HOST" <<LFTP
           set cmd:fail-exit true
           set ftp:ssl-force true
@@ -62,25 +50,6 @@ jobs:
           set ssl:verify-certificate true
           set net:max-retries 3
           set net:timeout 20
-          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane"
-          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane/en"
-          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane/zh-hans"
-          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane/zh-hant"
-          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane/ko"
-          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane/assets"
-          put -O "$WEBSITE_DEPLOY_PATH/utatane" website/utatane/index.html
-          put -O "$WEBSITE_DEPLOY_PATH/utatane" website/utatane/simple.html
-          put -O "$WEBSITE_DEPLOY_PATH/utatane" website/utatane-modern.css
-          put -O "$WEBSITE_DEPLOY_PATH/utatane" website/utatane-modern.js
-          put -O "$WEBSITE_DEPLOY_PATH/utatane/en" website/utatane/en/index.html
-          put -O "$WEBSITE_DEPLOY_PATH/utatane/zh-hans" website/utatane/zh-hans/index.html
-          put -O "$WEBSITE_DEPLOY_PATH/utatane/zh-hant" website/utatane/zh-hant/index.html
-          put -O "$WEBSITE_DEPLOY_PATH/utatane/ko" website/utatane/ko/index.html
-          put -O "$WEBSITE_DEPLOY_PATH" website/robots.txt
-          put -O "$WEBSITE_DEPLOY_PATH" website/sitemap.xml
-          put -O "$WEBSITE_DEPLOY_PATH/utatane/assets" website/assets/utatane-icon.png
-          put -O "$WEBSITE_DEPLOY_PATH/utatane/assets" website/assets/utatane-icon.webp
-          put -O "$WEBSITE_DEPLOY_PATH/utatane/assets" website/assets/utatane-screenshot.png
-          put -O "$WEBSITE_DEPLOY_PATH/utatane/assets" website/assets/utatane-screenshot.webp
+          mirror --reverse --verbose --parallel=4 --exclude-glob .DS_Store --exclude-glob '*/.DS_Store' website "$DEPLOY_TARGET"
           bye
           LFTP
