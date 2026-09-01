@@ -1912,7 +1912,11 @@ private struct UtataneRootView: View {
             return engine
         }
         if NativeHisuiPersonalityEngine.supports(shioriFilename: ghost.shioriFilename) {
-            return try NativeHisuiPersonalityEngine(masterDirectoryURL: masterDirectory)
+            return try NativeHisuiPersonalityEngine(
+                masterDirectoryURL: masterDirectory,
+                stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
+                    .deletingLastPathComponent().appending(path: "hisui-state.json")
+            )
         }
         if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),
            let configuration = ContentRoot.materiaFirstConfiguration(for: ghost)
