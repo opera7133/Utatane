@@ -66,44 +66,52 @@ async function run(data, options={}) {
   assert.ok(!html.includes('Design preview'));
   assert.ok(!html.includes('ローカル試作'));
   const localeFiles = {
+    '':['ja','いつものデスクトップに、&#10;話し相手を。'],
     en:['en','A little company for your desktop.'],
     'zh-hans':['zh-Hans','为熟悉的桌面，添一位聊天伙伴。'],
     'zh-hant':['zh-Hant','為熟悉的桌面，添一位聊天夥伴。'],
     ko:['ko','익숙한 데스크톱에, 말동무를.'],
   };
   for (const [directory,[lang,lead]] of Object.entries(localeFiles)) {
-    const localized=fs.readFileSync(path.join(__dirname,'../website',directory,'utatane-modern.html'),'utf8');
+    const localized=fs.readFileSync(path.join(__dirname,'../website/utatane',directory,'index.html'),'utf8');
+    const canonical=`https://dl.wmsci.com/utatane/${directory ? directory+'/' : ''}`;
     assert.ok(localized.includes(`<html lang="${lang}">`));
     assert.ok(localized.includes(lead));
-    assert.ok(localized.includes(`https://dl.wmsci.com/${directory}/utatane-modern.html`));
+    assert.ok(localized.includes(`<link rel="canonical" href="${canonical}">`));
     assert.ok(localized.includes('hreflang="ja"'));
     assert.ok(localized.includes('hreflang="x-default"'));
-    assert.ok(localized.includes('href="../utatane-modern.css"'));
-    assert.ok(localized.includes('src="../utatane-modern.js"'));
+    assert.ok(localized.includes(directory ? 'href="../utatane-modern.css"' : 'href="./utatane-modern.css"'));
+    assert.ok(localized.includes(directory ? 'src="../utatane-modern.js"' : 'src="./utatane-modern.js"'));
   }
-  for (const lang of ['ja','en','zh-Hans','zh-Hant','ko','x-default']) assert.ok(html.includes(`hreflang="${lang}"`));
+  const japanese=fs.readFileSync(path.join(__dirname,'../website/utatane/index.html'),'utf8');
+  for (const lang of ['ja','en','zh-Hans','zh-Hant','ko','x-default']) assert.ok(japanese.includes(`hreflang="${lang}"`));
   const sitemap=fs.readFileSync(path.join(__dirname,'../website/sitemap.xml'),'utf8');
-  for (const directory of Object.keys(localeFiles)) assert.ok(sitemap.includes(`/${directory}/utatane-modern.html`));
-  assert.ok(html.includes('"@type":"SoftwareApplication"'));
+  for (const directory of Object.keys(localeFiles)) assert.ok(sitemap.includes(`<loc>https://dl.wmsci.com/utatane/${directory ? directory+'/' : ''}</loc>`));
+  assert.ok(japanese.includes('"@type":"SoftwareApplication"'));
+  const simple=fs.readFileSync(path.join(__dirname,'../website/utatane/simple.html'),'utf8');
+  assert.ok(simple.includes('name="robots" content="noindex,follow"'));
+  assert.ok(simple.includes('href="./"'));
   const legacy=fs.readFileSync(path.join(__dirname,'../website/utatane.html'),'utf8');
   const deploy=fs.readFileSync(path.join(__dirname,'../.github/workflows/deploy-website.yml'),'utf8');
   assert.ok(legacy.includes('./utatane-modern.html'));
   assert.ok(legacy.includes('安定性を保証する区分ではありません'));
   assert.ok(!legacy.includes('最新のpre-release'));
-  for (const name of ['utatane.html','utatane-modern.html','utatane-modern.css','utatane-modern.js','robots.txt','sitemap.xml']) {
+  for (const name of ['robots.txt','sitemap.xml']) {
     assert.ok(deploy.includes('"website/'+name+'"'));
     assert.ok(deploy.includes('put -O "$WEBSITE_DEPLOY_PATH" website/'+name));
   }
   for (const directory of Object.keys(localeFiles)) {
-    assert.ok(deploy.includes(`"website/${directory}/utatane-modern.html"`));
-    assert.ok(deploy.includes(`put -O "$WEBSITE_DEPLOY_PATH/${directory}" website/${directory}/utatane-modern.html`));
+    const relative=directory ? `utatane/${directory}/index.html` : 'utatane/index.html';
+    const destination=directory ? `$WEBSITE_DEPLOY_PATH/utatane/${directory}` : '$WEBSITE_DEPLOY_PATH/utatane';
+    assert.ok(deploy.includes(`"website/${relative}"`));
+    assert.ok(deploy.includes(`put -O "${destination}" website/${relative}`));
   }
   assert.ok(html.includes('href="./utatane-modern.css"'));
   assert.ok(html.includes('src="./utatane-modern.js"'));
   for (const name of ['utatane-icon.webp','utatane-screenshot.webp']) {
     assert.ok(html.includes('srcset="./assets/'+name+'"'));
     assert.ok(deploy.includes('"website/assets/'+name+'"'));
-    assert.ok(deploy.includes('put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/'+name));
+    assert.ok(deploy.includes('put -O "$WEBSITE_DEPLOY_PATH/utatane/assets" website/assets/'+name));
   }
   assert.match(html,/utatane-screenshot\.png" width="700" height="447"[^>]+fetchpriority="high"/);
   assert.ok(html.includes('そもそも伺かって何？'));

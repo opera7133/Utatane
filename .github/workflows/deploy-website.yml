@@ -8,10 +8,12 @@ on:
       - "website/utatane-modern.html"
       - "website/utatane-modern.css"
       - "website/utatane-modern.js"
-      - "website/en/utatane-modern.html"
-      - "website/zh-hans/utatane-modern.html"
-      - "website/zh-hant/utatane-modern.html"
-      - "website/ko/utatane-modern.html"
+      - "website/utatane/index.html"
+      - "website/utatane/simple.html"
+      - "website/utatane/en/index.html"
+      - "website/utatane/zh-hans/index.html"
+      - "website/utatane/zh-hant/index.html"
+      - "website/utatane/ko/index.html"
       - "website/robots.txt"
       - "website/sitemap.xml"
       - "website/assets/utatane-icon.png"
@@ -60,23 +62,25 @@ jobs:
           set ssl:verify-certificate true
           set net:max-retries 3
           set net:timeout 20
-          mkdir -p "$WEBSITE_DEPLOY_PATH/en"
-          mkdir -p "$WEBSITE_DEPLOY_PATH/zh-hans"
-          mkdir -p "$WEBSITE_DEPLOY_PATH/zh-hant"
-          mkdir -p "$WEBSITE_DEPLOY_PATH/ko"
-          put -O "$WEBSITE_DEPLOY_PATH" website/utatane.html
-          put -O "$WEBSITE_DEPLOY_PATH" website/utatane-modern.html
-          put -O "$WEBSITE_DEPLOY_PATH" website/utatane-modern.css
-          put -O "$WEBSITE_DEPLOY_PATH" website/utatane-modern.js
-          put -O "$WEBSITE_DEPLOY_PATH/en" website/en/utatane-modern.html
-          put -O "$WEBSITE_DEPLOY_PATH/zh-hans" website/zh-hans/utatane-modern.html
-          put -O "$WEBSITE_DEPLOY_PATH/zh-hant" website/zh-hant/utatane-modern.html
-          put -O "$WEBSITE_DEPLOY_PATH/ko" website/ko/utatane-modern.html
+          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane"
+          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane/en"
+          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane/zh-hans"
+          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane/zh-hant"
+          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane/ko"
+          mkdir -p "$WEBSITE_DEPLOY_PATH/utatane/assets"
+          put -O "$WEBSITE_DEPLOY_PATH/utatane" website/utatane/index.html
+          put -O "$WEBSITE_DEPLOY_PATH/utatane" website/utatane/simple.html
+          put -O "$WEBSITE_DEPLOY_PATH/utatane" website/utatane-modern.css
+          put -O "$WEBSITE_DEPLOY_PATH/utatane" website/utatane-modern.js
+          put -O "$WEBSITE_DEPLOY_PATH/utatane/en" website/utatane/en/index.html
+          put -O "$WEBSITE_DEPLOY_PATH/utatane/zh-hans" website/utatane/zh-hans/index.html
+          put -O "$WEBSITE_DEPLOY_PATH/utatane/zh-hant" website/utatane/zh-hant/index.html
+          put -O "$WEBSITE_DEPLOY_PATH/utatane/ko" website/utatane/ko/index.html
           put -O "$WEBSITE_DEPLOY_PATH" website/robots.txt
           put -O "$WEBSITE_DEPLOY_PATH" website/sitemap.xml
-          put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/utatane-icon.png
-          put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/utatane-icon.webp
-          put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/utatane-screenshot.png
-          put -O "$WEBSITE_DEPLOY_PATH/assets" website/assets/utatane-screenshot.webp
+          put -O "$WEBSITE_DEPLOY_PATH/utatane/assets" website/assets/utatane-icon.png
+          put -O "$WEBSITE_DEPLOY_PATH/utatane/assets" website/assets/utatane-icon.webp
+          put -O "$WEBSITE_DEPLOY_PATH/utatane/assets" website/assets/utatane-screenshot.png
+          put -O "$WEBSITE_DEPLOY_PATH/utatane/assets" website/assets/utatane-screenshot.webp
           bye
           LFTP

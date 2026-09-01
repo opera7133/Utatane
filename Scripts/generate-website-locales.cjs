@@ -11,6 +11,11 @@ const check = process.argv.includes('--check');
 const origin = 'https://dl.wmsci.com';
 
 const locales = {
+  ja: {
+    directory: '', htmlLang: 'ja', ogLocale: 'ja_JP',
+    title: 'Utatane — macOSで伺かを',
+    description: 'Utatane — macOSで伺かを楽しむための本体アプリ。',
+  },
   en: {
     directory: 'en', htmlLang: 'en', ogLocale: 'en_US',
     title: 'Utatane — Ukagaka for macOS',
@@ -34,7 +39,8 @@ const locales = {
 };
 
 function render(code, locale) {
-  const localeURL = `${origin}/${locale.directory}/utatane-modern.html`;
+  const localePath = locale.directory ? `${locale.directory}/` : '';
+  const localeURL = `${origin}/utatane/${localePath}`;
   let html = source
     .replace('<html lang="ja">', `<html lang="${locale.htmlLang}">`)
     .replace(/<meta name="description" content="[^"]*">/, `<meta name="description" content="${locale.description}">`)
@@ -44,7 +50,8 @@ function render(code, locale) {
     .replace(/<meta property="og:title" content="[^"]*">/, `<meta property="og:title" content="${locale.title}">`)
     .replace(/<meta property="og:description" content="[^"]*">/, `<meta property="og:description" content="${locale.description}">`)
     .replace('<meta property="og:url" content="https://dl.wmsci.com/utatane-modern.html">', `<meta property="og:url" content="${localeURL}">`)
-    .replace('"url":"https://dl.wmsci.com/utatane-modern.html"', `"url":"${localeURL}"`);
+    .replace('"url":"https://dl.wmsci.com/utatane-modern.html"', `"url":"${localeURL}"`)
+    .replace(/<link rel="alternate" hreflang="ja"[^>]*>[\s\S]*?<link rel="alternate" hreflang="x-default"[^>]*>/, alternateLinks());
 
   let translated = 0;
   const attribute = `data-${code.toLowerCase()}`;
@@ -63,30 +70,44 @@ function render(code, locale) {
   });
 
   html = html
-    .replace(/<div class="languages"[\s\S]*?<\/div>/, languageLinks(code, true))
-    .replaceAll('href="./utatane-modern.css"', 'href="../utatane-modern.css"')
-    .replaceAll('src="./utatane-modern.js"', 'src="../utatane-modern.js"')
-    .replaceAll('src="./assets/', 'src="../assets/')
-    .replaceAll('srcset="./assets/', 'srcset="../assets/')
-    .replaceAll('href="./assets/', 'href="../assets/')
-    .replaceAll('href="./utatane.html"', 'href="../utatane.html"');
+    .replace(/<div class="languages"[\s\S]*?<\/div>/, languageLinks(code))
+    .replaceAll('href="./utatane.html"', 'href="./simple.html"');
+  if (locale.directory) {
+    html = html
+      .replaceAll('href="./utatane-modern.css"', 'href="../utatane-modern.css"')
+      .replaceAll('src="./utatane-modern.js"', 'src="../utatane-modern.js"')
+      .replaceAll('src="./assets/', 'src="../assets/')
+      .replaceAll('srcset="./assets/', 'srcset="../assets/')
+      .replaceAll('href="./assets/', 'href="../assets/')
+      .replaceAll('href="./simple.html"', 'href="../simple.html"');
+  }
   return html;
 }
 
-function languageLinks(current, nested = false) {
-  const prefix = nested ? '../' : './';
+function alternateLinks() {
+  return [
+    ['ja', `${origin}/utatane/`],
+    ['en', `${origin}/utatane/en/`],
+    ['zh-Hans', `${origin}/utatane/zh-hans/`],
+    ['zh-Hant', `${origin}/utatane/zh-hant/`],
+    ['ko', `${origin}/utatane/ko/`],
+    ['x-default', `${origin}/utatane/`],
+  ].map(([lang, href]) => `<link rel="alternate" hreflang="${lang}" href="${href}">`).join('\n');
+}
+
+function languageLinks(current) {
   const links = [
-    ['ja', 'ja', `${prefix}utatane-modern.html`, '日本語'],
-    ['en', 'en', `${prefix}en/utatane-modern.html`, 'EN'],
-    ['zh-Hans', 'zh-Hans', `${prefix}zh-hans/utatane-modern.html`, '简体'],
-    ['zh-Hant', 'zh-Hant', `${prefix}zh-hant/utatane-modern.html`, '繁體'],
-    ['ko', 'ko', `${prefix}ko/utatane-modern.html`, '한국어'],
+    ['ja', 'ja', '/utatane/', '日本語'],
+    ['en', 'en', '/utatane/en/', 'EN'],
+    ['zh-Hans', 'zh-Hans', '/utatane/zh-hans/', '简体'],
+    ['zh-Hant', 'zh-Hant', '/utatane/zh-hant/', '繁體'],
+    ['ko', 'ko', '/utatane/ko/', '한국어'],
   ].map(([code, lang, href, label]) => `<a lang="${lang}" hreflang="${lang}" href="${href}"${code === current ? ' aria-current="page"' : ''}>${label}</a>`).join('\n');
   return `<div class="languages" aria-label="Language / 言語">\n${links}\n</div>`;
 }
 
 for (const [code, locale] of Object.entries(locales)) {
-  const outputPath = path.join(root, 'website', locale.directory, 'utatane-modern.html');
+  const outputPath = path.join(root, 'website/utatane', locale.directory, 'index.html');
   const output = render(code, locale);
   if (check) {
     assert.equal(fs.readFileSync(outputPath, 'utf8'), output, `${path.relative(root, outputPath)} is stale`);
@@ -94,6 +115,21 @@ for (const [code, locale] of Object.entries(locales)) {
     fs.mkdirSync(path.dirname(outputPath), {recursive: true});
     fs.writeFileSync(outputPath, output);
   }
+}
+
+const simpleSource = fs.readFileSync(path.join(root, 'website/utatane.html'), 'utf8');
+const simpleOutput = simpleSource
+  .replace('<link rel="canonical" href="https://dl.wmsci.com/utatane.html" />', '<link rel="canonical" href="https://dl.wmsci.com/utatane/" />\n    <meta name="robots" content="noindex,follow" />')
+  .replace('href="./index.html"', 'href="../index.html"')
+  .replace('href="./utatane-modern.html"', 'href="./"')
+  .replaceAll('src="./assets/', 'src="./assets/')
+  .replaceAll('href="./assets/', 'href="./assets/');
+const simplePath = path.join(root, 'website/utatane/simple.html');
+if (check) {
+  assert.equal(fs.readFileSync(simplePath, 'utf8'), simpleOutput, 'website/utatane/simple.html is stale');
+} else {
+  fs.mkdirSync(path.dirname(simplePath), {recursive: true});
+  fs.writeFileSync(simplePath, simpleOutput);
 }
 
 console.log(check ? 'PASS: localized website files are current' : 'Generated localized website files');

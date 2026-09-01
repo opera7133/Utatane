@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://dl.wmsci.com/utatane-modern.html</loc></url>
-  <url><loc>https://dl.wmsci.com/en/utatane-modern.html</loc></url>
-  <url><loc>https://dl.wmsci.com/zh-hans/utatane-modern.html</loc></url>
-  <url><loc>https://dl.wmsci.com/zh-hant/utatane-modern.html</loc></url>
-  <url><loc>https://dl.wmsci.com/ko/utatane-modern.html</loc></url>
+  <url><loc>https://dl.wmsci.com/utatane/</loc></url>
+  <url><loc>https://dl.wmsci.com/utatane/en/</loc></url>
+  <url><loc>https://dl.wmsci.com/utatane/zh-hans/</loc></url>
+  <url><loc>https://dl.wmsci.com/utatane/zh-hant/</loc></url>
+  <url><loc>https://dl.wmsci.com/utatane/ko/</loc></url>
 </urlset>
