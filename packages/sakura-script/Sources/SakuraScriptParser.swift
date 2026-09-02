@@ -366,6 +366,22 @@ public struct SakuraScriptParser: Sendable {
                             let isOpaque = arguments.count >= 3 && arguments[2].lowercased() == "opaque"
                             let options = Array(arguments.dropFirst(2))
                             tokens.append(.inlineImage(path: arguments[0], isOpaque: isOpaque, options: options))
+                        } else if arguments.count >= 3,
+                                  let x = Int(arguments[1]),
+                                  let y = Int(arguments[2])
+                        {
+                            let options = Array(arguments.dropFirst(3))
+                            let isOpaque = options.contains { option in
+                                let normalized = option.lowercased()
+                                return normalized == "opaque" || normalized == "--option=opaque"
+                            }
+                            tokens.append(.positionedImage(
+                                path: arguments[0],
+                                x: x,
+                                y: y,
+                                isOpaque: isOpaque,
+                                options: options
+                            ))
                         } else {
                             tokens.append(.unknown("\\_b[\(argument)]"))
                         }

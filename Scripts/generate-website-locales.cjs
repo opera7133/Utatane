@@ -61,7 +61,7 @@ function render(code, locale) {
     translated += 1;
     return `${open}${match[1]}${close}`;
   });
-  assert.equal(translated, 76, `${code} translated element count`);
+  assert.equal(translated, 78, `${code} translated element count`);
 
   html = html.replace(/<img\b[^>]*\bdata-alt-ja="[^"]*"[^>]*>/gi, whole => {
     const match = whole.match(new RegExp(`data-alt-${code}="([^"]*)"`, 'i'));

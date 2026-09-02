@@ -47,7 +47,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\i[ID]`, `\i[ID,wait]` | ✅ | 数値IDと`animation*.name`のSERIKOアニメーション開始、実完了待ちに対応 |
 | `\![anim,clear/pause/resume/offset/add/stop,...]` | 🟡 | ID・名前指定の`clear`・`stop`・`pause`・`resume`・`offset`を実装。pause中はフレーム残り時間も停止。add・textは未実装 |
 | `\__w[animation,ID]` | ✅ | 現scopeで同じID・名前のアニメーションTaskが完了・停止するまで待機 |
-| `\![bind,...]`, `\![bind-noevent,...]` | 🟡 | カテゴリ・パーツ指定、明示ON/OFFとトグル、scope、`mustselect`・`multiple`・`addid`の描画、実行時再描画に対応。`bind`は`OnDressupChanged`と`OnNotifyDressupInfo`を通知。着せ替えメニューUIと選択状態の永続化は未実装 |
+| `\![bind,...]`, `\![bind-noevent,...]` | ✅ | カテゴリ・パーツ指定、明示ON/OFFとトグル、scope、`mustselect`・`multiple`・`addid`の描画、実行時再描画に対応。`bind`は`OnDressupChanged`と`OnNotifyDressupInfo`を通知。右クリックの着せ替えメニューと、ゴースト・シェル別の選択状態保存にも対応 |
 | `\![lock/unlock,repaint]` | ✅ | アニメーション進行を止めず描画だけ保留し、unlock時に最新フレームを反映。通常lockはスクリプト終端で自動解除、manualは維持 |
 | `\![set,alignmentondesktop/alignmenttodesktop,...]` | ✅ | scope別の`top`・`bottom`・`left`・`right`・`free`・`default`に対応。端への吸着と吸着軸のドラッグ固定をゴースト終了まで保持 |
 | `\![set,scaling,...]` | ✅ | ユーザー設定倍率を基準にscope別の単一・縦横倍率、負数による軸反転、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
@@ -64,7 +64,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\bID`, `\b[ID]` | ✅ | scope別のバルーンsurface変更に対応。括弧なしは1桁、複数桁は括弧形式。`\b[-1]` によるバルーン非表示に対応 |
-| `\_b[ファイル,...]` 全形式 | 🟡 | `\_b[画像パス,inline]` および `\_b[画像パス,inline,opaque]` によるバルーン内インライン画像描画（相対パスおよび `data:image/...;base64,...` 画像）に対応。通常のinline画像は左上色を透過し、`opaque`は透過処理を行わない。座標指定（x,y）描画は未実装 |
+| `\_b[ファイル,...]` 全形式 | 🟡 | `\_b[画像パス,inline]` と `\_b[画像パス,x,y]` によるバルーン内画像描画（相対パスおよび `data:image/...;base64,...` 画像）に対応。`opaque` / `--option=opaque`も解釈する。拡大縮小・切り抜き・前面固定などの追加オプションは未対応 |
 | `\n` | ✅ | 改行 |
 | `\n[half]`, `\n[百分率]` | ✅ | `half`と数値・`%`付き百分率を改行文字の行高へ反映 |
 | `\_n` | ✅ | 次の`\_n`まで現scopeの自動折返しを停止し、スクリプト終了時に復帰 |
@@ -126,7 +126,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\_a[ID]...\_a` | ✅ | アンカー範囲と引数に対応 |
 | cursor / anchor style・各色 | 🟡 | バルーン `descript.txt` の通常・hover設定を反映。SakuraScriptの `\f[...]` 変更は未実装 |
 | cursor / anchor method | ❌ | ROP / blend method未実装 |
-| anchor visited style・各色・method | ❌ | 訪問済み状態を保持していない |
+| anchor visited style・各色・method | 🟡 | 選択済みアンカーIDをゴースト実行中に保持し、バルーンの`anchor.visited` style・font／pen／brush色を反映。SakuraScriptの`\f[anchorvisited...]`とROP methodは未実装 |
 
 ### イベント・本体操作
 

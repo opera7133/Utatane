@@ -874,6 +874,151 @@ func `dressup context menu can remove an optional default part`() throws {
     #expect(controller.dressupInfo().first?.enabled == false)
 }
 
+@Test
+@MainActor
+func `dressup selection persists per ghost and shell`() throws {
+    let suiteName = "DressupSelectionStoreTests-\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+
+    let coat = ShellBindGroup(id: 10, category: "服", part: "コート")
+    let hoodie = ShellBindGroup(id: 11, category: "服", part: "パーカー")
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [:],
+        defaultBindGroups: [0: [10]],
+        bindGroups: [0: [10: coat, 11: hoodie]],
+        bindOptions: [0: ["服": ShellBindOptions(mustSelect: true)]]
+    )
+    let ghost = directory.appending(path: "ghost-a", directoryHint: .isDirectory)
+
+    do {
+        let controller = SurfaceWindowController(
+            dressupSelectionStore: DressupSelectionStore(defaults: defaults, namespace: suiteName)
+        )
+        controller.setPositionContentID(ghost)
+        try controller.show(shell: shell, scope: 0, surfaceID: 0)
+        _ = controller.changeBind(scope: 0, category: "服", part: "パーカー", enabled: true)
+        #expect(controller.dressupInfo().first(where: { $0.group.id == 11 })?.enabled == true)
+        controller.hideAll()
+    }
+
+    do {
+        let controller = SurfaceWindowController(
+            dressupSelectionStore: DressupSelectionStore(defaults: defaults, namespace: suiteName)
+        )
+        controller.setPositionContentID(ghost)
+        try controller.show(shell: shell, scope: 0, surfaceID: 0)
+        defer { controller.hideAll() }
+        #expect(controller.dressupInfo().first(where: { $0.group.id == 10 })?.enabled == false)
+        #expect(controller.dressupInfo().first(where: { $0.group.id == 11 })?.enabled == true)
+    }
+
+    do {
+        let controller = SurfaceWindowController(
+            dressupSelectionStore: DressupSelectionStore(defaults: defaults, namespace: suiteName)
+        )
+        controller.setPositionContentID(directory.appending(path: "ghost-b", directoryHint: .isDirectory))
+        try controller.show(shell: shell, scope: 0, surfaceID: 0)
+        defer { controller.hideAll() }
+        #expect(controller.dressupInfo().first(where: { $0.group.id == 10 })?.enabled == true)
+        #expect(controller.dressupInfo().first(where: { $0.group.id == 11 })?.enabled == false)
+    }
+}
+
+@Test
+@MainActor
+func `visited anchors use the balloon visited appearance`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 200, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let controller = BalloonWindowController(positionStore: positionStore)
+    let balloon = BalloonDefinition(
+        directory: directory,
+        name: "visited",
+        originX: 10,
+        originY: 10,
+        wordWrapPointX: 190,
+        wordWrapPointY: 10,
+        fontHeight: 14,
+        fontColor: BalloonColor(red: 0, green: 0, blue: 0),
+        anchorNotSelectedStyle: BalloonLinkAppearance(
+            shape: .underline,
+            fontColor: BalloonColor(red: 10, green: 20, blue: 30)
+        ),
+        anchorVisitedStyle: BalloonLinkAppearance(
+            shape: .square,
+            fontColor: BalloonColor(red: 200, green: 40, blue: 50),
+            brushColor: BalloonColor(red: 1, green: 2, blue: 3)
+        )
+    )
+    try controller.show(balloon: balloon, text: "link", near: .zero)
+    defer { controller.hideAll() }
+    controller.updateContent(
+        text: "link",
+        links: [BalloonTextLink(
+            range: NSRange(location: 0, length: 4),
+            id: "OnAnchor",
+            arguments: [],
+            kind: .anchor
+        )]
+    )
+
+    let before = try #require(controller.textAttributes(at: 0, scope: 0)?[.foregroundColor] as? NSColor)
+    #expect(before.redComponent < 0.1)
+    controller.markAnchorVisited("OnAnchor")
+    let after = try #require(controller.textAttributes(at: 0, scope: 0)?[.foregroundColor] as? NSColor)
+    #expect(after.redComponent > 0.7)
+    #expect(controller.textAttributes(at: 0, scope: 0)?[.backgroundColor] != nil)
+}
+
+@Test
+@MainActor
+func `positioned balloon images use top left coordinates`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 200, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    let overlay = try #require(NSImage(data: makePNG(width: 20, height: 10)))
+
+    let controller = BalloonWindowController(positionStore: positionStore)
+    let balloon = BalloonDefinition(
+        directory: directory,
+        name: "positioned-image",
+        originX: 10,
+        originY: 10,
+        wordWrapPointX: 190,
+        wordWrapPointY: 10,
+        fontHeight: 14,
+        fontColor: BalloonColor(red: 0, green: 0, blue: 0)
+    )
+    try controller.show(balloon: balloon, text: "text", near: .zero)
+    defer { controller.hideAll() }
+    controller.addPositionedImage(overlay, x: 50, y: 20)
+
+    let frame = try #require(controller.positionedImageFrames(scope: 0).first)
+    #expect(frame.origin.x == 50)
+    #expect(frame.origin.y == 20)
+    #expect(frame.size.width == 20)
+    #expect(frame.size.height == 10)
+
+    controller.clearPositionedImages(scope: 0)
+    #expect(controller.positionedImageFrames(scope: 0).isEmpty)
+}
+
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_MOMOCHI_SHELL"] != nil))
 @MainActor
 struct MomochiCompatibilityTests {

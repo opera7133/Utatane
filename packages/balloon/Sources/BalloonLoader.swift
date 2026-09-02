@@ -123,7 +123,8 @@ public struct BalloonLoader: Sendable {
             cursorStyle: linkAppearance(prefix: "cursor", in: values, defaultShape: .underline),
             cursorNotSelectedStyle: linkAppearance(prefix: "cursor.notselect", in: values, defaultShape: .none),
             anchorStyle: linkAppearance(prefix: "anchor", in: values, defaultShape: .underline),
-            anchorNotSelectedStyle: linkAppearance(prefix: "anchor.notselect", in: values, defaultShape: .none)
+            anchorNotSelectedStyle: linkAppearance(prefix: "anchor.notselect", in: values, defaultShape: .none),
+            anchorVisitedStyle: linkAppearance(prefix: "anchor.visited", in: values, defaultShape: .none)
         )
     }
 

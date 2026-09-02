@@ -193,6 +193,7 @@ public final class SakuraScriptPlayer {
             tokens.removeFirst()
         } else {
             balloonWindowController.hideAll()
+            balloonWindowController.clearPositionedImages()
         }
         configureCompletionTimeout(for: tokens)
         let effectiveCharacterDelay = characterDelayMilliseconds ?? self.characterDelayMilliseconds
@@ -1159,6 +1160,11 @@ public final class SakuraScriptPlayer {
                             autoscroll: autoscrollByScope[targetScope] ?? true
                         )
                     }
+                case let .positionedImage(path, x, y, isOpaque, _):
+                    if let image = resolveInlineImage(path: path, isOpaque: isOpaque) {
+                        try activateIfNeeded(scope: scope)
+                        balloonWindowController.addPositionedImage(image, x: x, y: y, scope: scope)
+                    }
                 case let .otherGhostTalk(target, script):
                     onOtherGhostTalk?(target, script)
                 case let .otherSurfaceChange(target, scope, surfaceID):
@@ -1234,8 +1240,10 @@ public final class SakuraScriptPlayer {
                     choicesByScope[scope] = nil
                     styleRunsByScope[scope] = []
                     inlineImagesByScope[scope] = [:]
+                    balloonWindowController.clearPositionedImages(scope: scope)
                     updateContent(scope: scope)
                 case .clearAll:
+                    balloonWindowController.clearPositionedImages()
                     for activeScope in activatedScopes {
                         textByScope[activeScope] = ""
                         linksByScope[activeScope] = []

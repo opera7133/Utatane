@@ -30,6 +30,7 @@ public struct BalloonDefinition: Sendable, Equatable {
     public let cursorNotSelectedStyle: BalloonLinkAppearance
     public let anchorStyle: BalloonLinkAppearance
     public let anchorNotSelectedStyle: BalloonLinkAppearance
+    public let anchorVisitedStyle: BalloonLinkAppearance
 
     public init(
         directory: URL,
@@ -60,7 +61,8 @@ public struct BalloonDefinition: Sendable, Equatable {
         cursorStyle: BalloonLinkAppearance = .defaultSelected,
         cursorNotSelectedStyle: BalloonLinkAppearance = .defaultNotSelected,
         anchorStyle: BalloonLinkAppearance = .defaultSelected,
-        anchorNotSelectedStyle: BalloonLinkAppearance = .defaultNotSelected
+        anchorNotSelectedStyle: BalloonLinkAppearance = .defaultNotSelected,
+        anchorVisitedStyle: BalloonLinkAppearance = .defaultNotSelected
     ) {
         self.directory = directory
         self.name = name
@@ -91,6 +93,7 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.cursorNotSelectedStyle = cursorNotSelectedStyle
         self.anchorStyle = anchorStyle
         self.anchorNotSelectedStyle = anchorNotSelectedStyle
+        self.anchorVisitedStyle = anchorVisitedStyle
     }
 }
 

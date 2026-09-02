@@ -72,6 +72,7 @@ public final class SurfaceWindowController {
     private var characters: [Int: CharacterSurfaceController] = [:]
     private var shell: ShellDefinition?
     private let positionStore: WindowPositionStore
+    private let dressupSelectionStore: DressupSelectionStore
     private var defaultSurfaceIDs: [Int: Int] = [:]
     private var enabledBindGroups: [Int: Set<Int>] = [:]
     private var presentationHidden = false
@@ -98,8 +99,12 @@ public final class SurfaceWindowController {
     public var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
     public var onUserDressupChange: (@MainActor ([DressupChange]) -> Void)?
 
-    public init(positionStore: WindowPositionStore = WindowPositionStore()) {
+    public init(
+        positionStore: WindowPositionStore = WindowPositionStore(),
+        dressupSelectionStore: DressupSelectionStore = DressupSelectionStore()
+    ) {
         self.positionStore = positionStore
+        self.dressupSelectionStore = dressupSelectionStore
     }
 
     public func setStayOnTop(_ stayOnTop: Bool) {
@@ -118,6 +123,7 @@ public final class SurfaceWindowController {
 
     public func setPositionContentID(_ contentID: URL?) {
         positionStore.setContentID(contentID)
+        dressupSelectionStore.setContentID(contentID)
     }
 
     public func setPresentationHidden(_ hidden: Bool) {
@@ -249,7 +255,9 @@ public final class SurfaceWindowController {
         hideAll()
         self.shell = shell
         self.defaultSurfaceIDs = defaultSurfaceIDs
-        enabledBindGroups = presentation?.bindings ?? shell.defaultBindGroups
+        enabledBindGroups = presentation?.bindings
+            ?? dressupSelectionStore.restore(for: shell)
+            ?? shell.defaultBindGroups
 
         let surfaces = defaultSurfaceIDs.merging(presentation?.surfaces ?? [:]) { _, restored in restored }
         for (scope, surfaceID) in surfaces.sorted(by: { $0.key < $1.key }) {
@@ -272,7 +280,11 @@ public final class SurfaceWindowController {
     public func show(shell: ShellDefinition, scope: Int, surfaceID: Int) throws {
         self.shell = shell
         defaultSurfaceIDs[scope] = defaultSurfaceIDs[scope] ?? surfaceID
-        enabledBindGroups[scope] = enabledBindGroups[scope] ?? shell.defaultBindGroups[scope] ?? []
+        if enabledBindGroups[scope] == nil {
+            enabledBindGroups[scope] = dressupSelectionStore.restore(for: shell)?[scope]
+                ?? shell.defaultBindGroups[scope]
+                ?? []
+        }
         let character = characterController(for: scope)
         character.setBindGroups(enabledBindGroups[scope] ?? [], redraw: false)
         try character.show(shell: shell, surfaceID: surfaceID)
@@ -608,6 +620,7 @@ public final class SurfaceWindowController {
         }
 
         enabledBindGroups[scope] = selected
+        dressupSelectionStore.save(enabledBindGroups, for: shell)
         characters[scope]?.setBindGroups(selected, redraw: true)
         return categoryIDs.sorted().compactMap { id in
             guard before.contains(id) != selected.contains(id), let group = groups[id] else { return nil }

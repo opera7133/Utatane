@@ -96,6 +96,7 @@ public final class BalloonWindowController {
     private var textScale: CGFloat = 1
     private var stayOnTop = true
     private var presentationHidden = false
+    private var visitedAnchorIDs: Set<String> = []
 
     public var onClick: (@MainActor (Int) -> Void)?
     public var onLinkClick: (@MainActor (String, [String]) -> Void)?
@@ -128,6 +129,7 @@ public final class BalloonWindowController {
         movementLockedScopes.removeAll()
         markerTextByScope.removeAll()
         numberTextByScope.removeAll()
+        visitedAnchorIDs.removeAll()
         offsetByScope.removeAll()
         alignmentByScope.removeAll()
         positionStore.setContentID(contentID)
@@ -169,6 +171,10 @@ public final class BalloonWindowController {
         presentations[scope]?.contentView.textAttributes(at: location)
     }
 
+    func positionedImageFrames(scope: Int) -> [NSRect] {
+        presentations[scope]?.contentView.positionedImageFrames ?? []
+    }
+
     func textLayoutOrientation(scope: Int) -> NSLayoutManager.TextLayoutOrientation? {
         presentations[scope]?.contentView.textLayoutOrientation
     }
@@ -195,6 +201,13 @@ public final class BalloonWindowController {
 
     func alignment(scope: Int) -> BalloonWindowAlignment? {
         alignmentByScope[scope]
+    }
+
+    func markAnchorVisited(_ id: String) {
+        visitedAnchorIDs.insert(id)
+        for presentation in presentations.values {
+            presentation.contentView.visitedAnchorIDs = visitedAnchorIDs
+        }
     }
 
     func textAndLinks(for scope: Int) -> (String, [BalloonTextLink])? {
@@ -245,6 +258,7 @@ public final class BalloonWindowController {
             height: image.size.height * displayScale
         )
         let existingPresentation = presentations[scope]
+        let existingPositionedImages = existingPresentation?.positionedImages ?? []
         let contentView = BalloonContentView(
             frame: NSRect(origin: .zero, size: scaledSize),
             image: image,
@@ -255,6 +269,7 @@ public final class BalloonWindowController {
             displayScale: displayScale,
             textScale: textScale
         )
+        contentView.visitedAnchorIDs = visitedAnchorIDs
         contentView.onClick = { [weak self] in
             self?.onClick?(scope)
         }
@@ -262,6 +277,9 @@ public final class BalloonWindowController {
             self?.onLinkClick?(id, arguments)
         }
         contentView.onLinkActivate = { [weak self] link, label in
+            if link.kind == .anchor {
+                self?.markAnchorVisited(link.id)
+            }
             self?.onLinkActivate?(link, label)
         }
         contentView.onLinkEnter = { [weak self] link, label in self?.onLinkEnter?(link, label) }
@@ -269,6 +287,7 @@ public final class BalloonWindowController {
         contentView.isMovementLocked = movementLockedScopes.contains(scope)
         contentView.setMarkerText(markerTextByScope[scope] ?? "")
         contentView.setNumberText(numberTextByScope[scope] ?? "")
+        contentView.setPositionedImages(existingPositionedImages)
 
         let window = existingPresentation?.window ?? makeWindow(scope: scope)
         let existingOrigin = existingPresentation?.window.frame.origin
@@ -296,6 +315,7 @@ public final class BalloonWindowController {
             surfaceFrame: surfaceFrame
         )
         presentation.text = text
+        presentation.positionedImages = existingPositionedImages
         presentations[scope] = presentation
     }
 
@@ -309,6 +329,22 @@ public final class BalloonWindowController {
 
     public func updateContent(text: String, links: [BalloonTextLink], scope: Int = 0) {
         updateContent(text: text, links: links, styles: [], scope: scope)
+    }
+
+    public func addPositionedImage(_ image: NSImage, x: Int, y: Int, scope: Int = 0) {
+        guard let presentation = presentations[scope] else { return }
+        let item = PositionedBalloonImage(image: image, x: x, y: y)
+        presentation.positionedImages.append(item)
+        presentation.contentView.setPositionedImages(presentation.positionedImages)
+    }
+
+    public func clearPositionedImages(scope: Int? = nil) {
+        let targetScopes = scope.map { [$0] } ?? Array(presentations.keys)
+        for targetScope in targetScopes {
+            guard let presentation = presentations[targetScope] else { continue }
+            presentation.positionedImages.removeAll()
+            presentation.contentView.setPositionedImages([])
+        }
     }
 
     public func textCursorPosition(scope: Int) -> NSPoint {
@@ -549,7 +585,9 @@ public final class BalloonWindowController {
                 presentation.links,
                 presentation.styles,
                 presentation.isWaitingForClick,
-                presentation.window.isVisible
+                presentation.window.isVisible,
+                presentation.inlineImages,
+                presentation.positionedImages
             )
         }
         for snapshot in snapshots {
@@ -561,7 +599,15 @@ public final class BalloonWindowController {
                 style: snapshot.3,
                 near: snapshot.4
             )
-            updateContent(text: snapshot.5, links: snapshot.6, styles: snapshot.7, scope: snapshot.0)
+            updateContent(
+                text: snapshot.5,
+                links: snapshot.6,
+                styles: snapshot.7,
+                inlineImages: snapshot.10,
+                scope: snapshot.0
+            )
+            presentations[snapshot.0]?.positionedImages = snapshot.11
+            presentations[snapshot.0]?.contentView.setPositionedImages(snapshot.11)
             setWaitingForClick(snapshot.8, scope: snapshot.0)
             if !snapshot.9 {
                 hide(scope: snapshot.0)
@@ -577,6 +623,12 @@ struct BalloonContentSnapshot {
     let inlineImages: [NSRange: NSImage]
 }
 
+private struct PositionedBalloonImage {
+    let image: NSImage
+    let x: Int
+    let y: Int
+}
+
 @MainActor
 private final class BalloonPresentation {
     let window: NSWindow
@@ -589,6 +641,7 @@ private final class BalloonPresentation {
     var links: [BalloonTextLink] = []
     var styles: [BalloonTextStyleRun] = []
     var inlineImages: [NSRange: NSImage] = [:]
+    var positionedImages: [PositionedBalloonImage] = []
     var isWaitingForClick = false
 
     init(
@@ -627,6 +680,7 @@ private final class BalloonContentView: NSView {
     private let displayScale: CGFloat
     private let textScale: CGFloat
     private let isVerticalWriting: Bool
+    private var positionedImageViews: [NSImageView] = []
     private var dragStartMouseLocation: NSPoint?
     private var dragStartWindowOrigin: NSPoint?
     private var didDrag = false
@@ -695,6 +749,30 @@ private final class BalloonContentView: NSView {
             width: scrollView.contentSize.width / displayScale,
             height: scrollView.contentSize.height / displayScale
         )
+    }
+
+    var positionedImageFrames: [NSRect] {
+        positionedImageViews.map(\.frame)
+    }
+
+    func setPositionedImages(_ images: [PositionedBalloonImage]) {
+        positionedImageViews.forEach { $0.removeFromSuperview() }
+        positionedImageViews = images.map { item in
+            let size = NSSize(
+                width: item.image.size.width * displayScale,
+                height: item.image.size.height * displayScale
+            )
+            let imageView = PassthroughImageView(frame: NSRect(
+                x: CGFloat(item.x) * displayScale,
+                y: CGFloat(item.y) * displayScale,
+                width: size.width,
+                height: size.height
+            ))
+            imageView.image = item.image
+            imageView.imageScaling = .scaleAxesIndependently
+            addSubview(imageView, positioned: .below, relativeTo: scrollView)
+            return imageView
+        }
     }
 
     func textAttributes(at location: Int) -> [NSAttributedString.Key: Any]? {
@@ -816,6 +894,7 @@ private final class BalloonContentView: NSView {
             .choice: (balloon.cursorNotSelectedStyle, balloon.cursorStyle),
             .anchor: (balloon.anchorNotSelectedStyle, balloon.anchorStyle)
         ]
+        textView.anchorVisitedAppearance = balloon.anchorVisitedStyle
         let textFrame = textFrame(for: balloon)
         textView.frame = NSRect(origin: .zero, size: textFrame.size)
         textView.onBackgroundClick = { [weak self] in
@@ -886,6 +965,14 @@ private final class BalloonContentView: NSView {
             )
             arrowView.isHidden = true
             addSubview(arrowView)
+        }
+    }
+
+    var visitedAnchorIDs: Set<String> {
+        get { textView.visitedAnchorIDs }
+        set {
+            textView.visitedAnchorIDs = newValue
+            textView.refreshLinkAppearance()
         }
     }
 
@@ -1190,6 +1277,8 @@ private func decoratedFont(_ base: NSFont, bold: Bool, italic: Bool) -> NSFont {
 private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
     var linkTargets: [String: BalloonTextLink] = [:]
     var appearanceByKind: [BalloonTextLink.Kind: (normal: BalloonLinkAppearance, hovered: BalloonLinkAppearance)] = [:]
+    var anchorVisitedAppearance: BalloonLinkAppearance?
+    var visitedAnchorIDs: Set<String> = []
     var defaultTextColor = NSColor.textColor
     var onBackgroundClick: (() -> Void)?
     var onLinkClick: ((String, [String]) -> Void)?
@@ -1316,7 +1405,13 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
             textStorage.removeAttribute(.underlineStyle, range: link.range)
             textStorage.removeAttribute(.underlineColor, range: link.range)
             let pair = appearanceByKind[link.kind]
-            let appearance = token == hoveredLinkToken ? pair?.hovered : pair?.normal
+            let appearance = if token == hoveredLinkToken {
+                pair?.hovered
+            } else if link.kind == .anchor, visitedAnchorIDs.contains(link.id) {
+                anchorVisitedAppearance ?? pair?.normal
+            } else {
+                pair?.normal
+            }
             textStorage.addAttribute(
                 .foregroundColor,
                 value: link.fontColor.map(NSColor.init(balloonColor:))

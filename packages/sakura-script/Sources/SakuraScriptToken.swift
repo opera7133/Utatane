@@ -82,6 +82,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case setStickyWindows([Int])
     case resetStickyWindows
     case inlineImage(path: String, isOpaque: Bool, options: [String])
+    case positionedImage(path: String, x: Int, y: Int, isOpaque: Bool, options: [String])
     case otherGhostTalk(target: String, script: String)
     case otherSurfaceChange(target: String, scope: Int, surfaceID: Int)
     case stayOnTop(Bool)

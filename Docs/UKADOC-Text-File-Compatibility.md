@@ -21,7 +21,7 @@ UKADOCに掲載されているゴースト関連の設定・配布用テキス�
 | --- | --- | --- | --- |
 | Ghost `descript.txt` | 🟡 | UTF-8／Shift_JIS、基本情報、SHIORI名、キャラクター名、既定surface・balloon、更新URL、README、推奨balloon | 74項目中、配置、SSTP制御、SHIORI詳細設定、カーソル、メニュー、アイコン等が未反映 |
 | Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`、bindgroup／bindoption | 102項目中、初期配置、balloon offset、メニュー装飾、z-order、sticky-window等が未反映 |
-| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、arrow座標、cursor／anchorのstyle・色 | 162項目中、visited、marker配置、入力欄、透過方式、ウインドウ位置等が未反映 |
+| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、arrow座標、cursor／anchor／anchor.visitedのstyle・色 | 162項目中、marker配置、入力欄、透過方式、ウインドウ位置等が未反映 |
 | Plugin `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、name、id、filename、type、charset、作者、更新URL、README、secondchangeinterval、otherghosttalkを読み込み、SHIORI／dylib／Windows DLLへ分類。メニューから実行、README表示、ネットワーク更新が可能。ネイティブSHIORI型は実体をロードし、OnSecondChange・OnMenuExec・raiseplugin／notifypluginを配送。AKARIの`_create_thread`は独立評価ワーカーで実行し、変更されたグローバル変数を完了時に反映。YAYA製wallet_of_unyuとAKARI製sudohaikuyuは実ファイルでOnMenuExecを確認。macOS dylibは標準`loadu/load`・`unload`・`request`を優先 | dylib実物とWine DLL、AKARIワーカー内の外部通信を伴う長時間処理は未確認 |
 | Headline `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、名前、DLL名、URL、open URL、homeurl、charset、alwaysdisplay、readme、readme.charset。RSS用`type`・`feed`拡張も利用 | UKADOC掲載項目は保持・利用。Windows DLL実行は実行環境依存 |
 | `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストールに加え、refreshとrefreshundeletemaskをバックアップ付き置換で実装 | supplement・languageは未対応 |
@@ -74,10 +74,10 @@ UKADOC掲載は162項目。現在の実利用項目は以下。
 | 利用 | `type`、`name`、`origin.x/y`、`validrect.left/top/right/bottom`、`wordwrappoint.x/y`、`vertical` |
 | 利用 | `font.name`、`font.height`、`font.color.r/g/b`、`font.shadowcolor.r/g/b`、`font.shadowstyle` |
 | 利用 | `font.bold`、`font.italic`、`font.underline`、`font.strike`、`font.outline`、`arrow0.x/y`、`arrow1.x/y` |
-| 利用 | cursor、cursor.notselect、anchor、anchor.notselectの`style`、font／pen／brush RGB |
+| 利用 | cursor、cursor.notselect、anchor、anchor.notselect、anchor.visitedの`style`、font／pen／brush RGB。訪問済みアンカーはゴーストの実行中にID単位で保持 |
 | 画像として利用 | balloon画像、marker画像、arrow画像。ただしfilename指定ではなく既定ファイル名を探索 |
 | 別経路で利用 | `readme`、`readme.charset` |
-| 未反映 | disable.font、blendmethod、visited anchor、各marker座標・間隔・文字、number書式、communicatebox、透過方式、windowposition、filename差替え、recommended ghost |
+| 未反映 | disable.font、blendmethod、各marker座標・間隔・文字、number書式、communicatebox、透過方式、windowposition、filename差替え、recommended ghost |
 
 `origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックする。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置する。入力欄は従来どおり横書き。
 
@@ -145,6 +145,6 @@ size／date／charset拡張フィールドとVersion 3の`charset,`・未知行�
 
 1. Ghost／Shell descript.txtの配置・balloon offset・alignmentを既存ウインドウ機能へ接続する。
 2. `install.txt`のrefresh、複数同梱オブジェクトを実装する。
-3. Balloon descript.txtのフォント装飾・marker・visitedを既存描画へ接続する。
+3. Balloon descript.txtのmarker配置・入力欄・透過方式を既存描画へ接続する。
 4. surfaces.txtのanimation option、surface属性、未対応pattern methodを段階的に追加する。
 5. developer_options.txtを更新定義生成と将来のNAR生成で共通利用する。

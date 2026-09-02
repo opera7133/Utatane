@@ -869,6 +869,10 @@ func `parses inline balloon image commands`() {
         .inlineImage(path: "test.png", isOpaque: false, options: []),
         .inlineImage(path: "sample.png", isOpaque: true, options: ["opaque"])
     ])
+    #expect(SakuraScriptParser().parse(#"\_b[test.png,50,100]\_b[sample.png,-5,20,--option=opaque]"#) == [
+        .positionedImage(path: "test.png", x: 50, y: 100, isOpaque: false, options: []),
+        .positionedImage(path: "sample.png", x: -5, y: 20, isOpaque: true, options: ["--option=opaque"])
+    ])
 }
 
 @Test

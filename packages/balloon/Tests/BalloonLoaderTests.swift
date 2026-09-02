@@ -123,6 +123,10 @@ func `loads SSP choice and anchor appearances`() throws {
     anchor.pen.color.r,70
     anchor.pen.color.g,80
     anchor.pen.color.b,90
+    anchor.visited.style,square
+    anchor.visited.font.color.r,91
+    anchor.visited.font.color.g,92
+    anchor.visited.font.color.b,93
     """.utf8).write(to: directory.appending(path: "descript.txt"))
 
     let balloon = try BalloonLoader().load(from: directory)
@@ -133,6 +137,8 @@ func `loads SSP choice and anchor appearances`() throws {
     #expect(balloon.cursorNotSelectedStyle.shape == .none)
     #expect(balloon.anchorStyle.shape == .underline)
     #expect(balloon.anchorStyle.penColor == BalloonColor(red: 70, green: 80, blue: 90))
+    #expect(balloon.anchorVisitedStyle.shape == .square)
+    #expect(balloon.anchorVisitedStyle.fontColor == BalloonColor(red: 91, green: 92, blue: 93))
 }
 
 @Test
