@@ -56,14 +56,11 @@ FTPS接続には次のGitHub Actions Secretsを使用します。コアサーバ
 - `DEPLOY_PASSWORD`
 - `DEPLOY_PATH`（例: `/public_html/utatane`）
 
-配布サイトの `utatane.html`、`utatane-modern.html`、modern版のCSS・JavaScriptと画像は、`main` に該当ファイルをpushすると
-`Deploy website` workflowが5言語表示・リリース取得・リンクを検査してから別にアップロードします。上記4つに加えて、リポジトリへ
-次のGitHub Actions Secretを設定します。
+配布サイトは`website/`を公開ルートと同じディレクトリ構成で管理します。`main`へサイト、生成スクリプト、検査、デプロイworkflowの変更をpushすると、`Deploy website` workflowが5言語ページ、リリース取得、内部リンク、公開メタデータを検査してから別にアップロードします。上記4つに加えて、リポジトリへ次のGitHub Actions Secretを設定します。
 
 - `WEBSITE_DEPLOY_PATH`（例: `/public_html`）
 
-サイト更新ではアプリのビルドを行わず、2つのHTMLと2枚の画像だけをExplicit
-FTPSで上書きします。`index.html`など、同じ公開ルートにある他のファイルは変更しません。
+サイト更新ではアプリのビルドを行いません。Explicit FTPSのreverse mirrorで`website/`以下をまとめて同期しますが、削除オプションは使わないため、公開ルートにだけ存在する既存ファイルや別フォルダは削除しません。`website/utatane/`は多言語ページ、案内ページ、CSS、JavaScript、画像を含み、`website/sitemap.xml`、`robots.txt`、`llms.txt`は公開ルートへ配置されます。旧`utatane-modern.html`などの転送規則はサーバー側で管理します。
 
 以前の設定が`/public_html/utatane/appcast.xml`なら、ファイル名を外した`/public_html/utatane`へ変更してください。公開先では次の構成になります。
 
