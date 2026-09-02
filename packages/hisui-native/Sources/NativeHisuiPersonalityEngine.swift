@@ -8,6 +8,7 @@ private struct HisuiEntry: Sendable {
     let token: String
     let condition: String?
     let fallback: String?
+    let emotionLimiter: Int?
     let scripts: [String]
 }
 
@@ -15,29 +16,54 @@ private struct HisuiState: Codable, Sendable {
     var variables: [String: String] = [:]
 }
 
+private struct HisuiConfiguration: Sendable {
+    var talkInterval = 120
+    var emotionBorder = 50
+    var birthday: String?
+    var dictionaryDirectories = ["hisui_base"]
+    var learningDirectories = ["hisui_lern"]
+    var defaultCategories: [String: String] = [:]
+}
+
 public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked Sendable {
     private let adapter = GhostEventShioriAdapter()
     private let stateStoreURL: URL
+    private let configuration: HisuiConfiguration
     private var entries: [String: [HisuiEntry]] = [:]
-    private var variables: [String: String] = ["talk_sw": "0", "__TalkInterval": "120"]
+    private var wordCategories: [String: [String]] = [:]
+    private var variables: [String: String]
     private var selfName = ""
     private var keroName = ""
 
     public init(masterDirectoryURL: URL, stateStoreURL: URL? = nil) throws {
         self.stateStoreURL = stateStoreURL ?? masterDirectoryURL.appending(path: "hisui-state.json")
+        configuration = Self.loadConfiguration(masterDirectoryURL)
+        variables = [
+            "talk_sw": "0",
+            "__TalkInterval": String(configuration.talkInterval),
+            "__Emotion": "0",
+            "__EmotionBorder": String(configuration.emotionBorder),
+            "__GhostBirthday": configuration.birthday ?? ""
+        ]
         if let data = try? Data(contentsOf: self.stateStoreURL),
            let state = try? JSONDecoder().decode(HisuiState.self, from: data)
         {
             variables.merge(state.variables) { _, saved in saved }
         }
+        variables["__EmotionBorder"] = String(configuration.emotionBorder)
+        variables["__GhostBirthday"] = configuration.birthday ?? ""
+        if let emotion = Int(variables["__Emotion", default: "0"]) {
+            variables["__Emotion"] = String(max(-configuration.emotionBorder, min(configuration.emotionBorder, emotion)))
+        }
         try loadDescription(masterDirectoryURL)
         let urls = try dictionaryURLs(masterDirectoryURL)
         for url in urls {
-            guard let source = try LegacyTextDecoder.decode(Data(contentsOf: url)) else { continue }
+            guard let source = try decodeHisuiText(Data(contentsOf: url)) else { continue }
             // Foundation decodes CP932 byte 0x5C as a yen sign. Hisui TLK files
             // use that byte for SakuraScript and formula backslashes.
             parse(source.replacingOccurrences(of: "¥", with: "\\"))
         }
+        try loadWordDictionaries(masterDirectoryURL)
     }
 
     public static func supports(shioriFilename: String?) -> Bool {
@@ -70,6 +96,11 @@ public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked S
         visited.insert(token.lowercased())
         guard let candidates = entries.first(where: { $0.key.caseInsensitiveCompare(token) == .orderedSame })?.value else { return nil }
         for entry in candidates {
+            if let limiter = entry.emotionLimiter,
+               abs(Int(variables["__Emotion", default: "0"]) ?? 0) > abs(limiter)
+            {
+                continue
+            }
             if let condition = entry.condition, !matches(condition, request: request) {
                 if let fallback = entry.fallback, let value = evaluate(token: fallback, request: request, visited: visited) {
                     return value
@@ -83,7 +114,7 @@ public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked S
     }
 
     private func expand(_ source: String, request: ShioriRequest, visited: Set<String>) -> String {
-        var value = source
+        var value = replaceReferenceFunctions(in: source, request: request)
         for index in 0 ... 31 {
             if let reference = request.reference(index) {
                 value = value.replacingOccurrences(of: "%ref\(index)", with: reference)
@@ -98,7 +129,8 @@ public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked S
             name == "__ID" ? request.id ?? "" : variables[name, default: "0"]
         }
         value = replacing(pattern: #"%hour\[([^]]+)\]"#, in: value) { _ in
-            hourCategory(Calendar.current.component(.hour, from: Date()))
+            wordForTime(category: "時間感覚_時", value: Calendar.current.component(.hour, from: Date()))
+                ?? hourCategory(Calendar.current.component(.hour, from: Date()))
         }
         value = replacingFunctions(named: "%rand", in: value) { arguments in
             guard let upper = Int(arguments.first ?? ""), upper > 0 else { return "0" }
@@ -111,6 +143,7 @@ public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked S
         value = replacing(pattern: #"%BYTE\[(\d+)\]"#, in: value) { capture in
             UnicodeScalar(Int(capture) ?? 0).map(String.init) ?? ""
         }
+        value = replaceWordFunctions(in: value)
         value = expandControlFlow(value, request: request, visited: visited)
         value = replacing(pattern: #"%token\[([^]]+)\]"#, in: value) { token in
             evaluate(token: token, request: request, visited: visited) ?? ""
@@ -188,7 +221,12 @@ public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked S
             if let equals = formula.firstIndex(of: "=") {
                 let name = formula[..<equals].trimmingCharacters(in: .whitespacesAndNewlines)
                 let expression = String(formula[formula.index(after: equals)...])
-                variables[name] = expressionValue(conditionValue(expression, request: request))
+                let result = expressionValue(conditionValue(expression, request: request))
+                if name == "__Emotion", let emotion = Int(result) {
+                    variables[name] = String(max(-configuration.emotionBorder, min(configuration.emotionBorder, emotion)))
+                } else {
+                    variables[name] = result
+                }
             }
             value.removeSubrange(marker.lowerBound ... closing)
         }
@@ -213,8 +251,8 @@ public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked S
         }
         for op in ["==", "!=", ">=", "<=", ">", "<"] {
             guard let parts = splitTopLevel(expression, separator: op), parts.count == 2 else { continue }
-            let lhs = unquoted(parts[0])
-            let rhs = unquoted(parts[1])
+            let lhs = expressionValue(parts[0])
+            let rhs = expressionValue(parts[1])
             if let left = Double(lhs), let right = Double(rhs) {
                 return ["==": left == right, "!=": left != right, ">=": left >= right,
                         "<=": left <= right, ">": left > right, "<": left < right][op] ?? false
@@ -226,20 +264,63 @@ public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked S
     }
 
     private func expressionValue(_ source: String) -> String {
-        let expression = source.trimmingCharacters(in: .whitespacesAndNewlines)
-        for op in ["+", "-", "*", "/"] {
-            guard let parts = splitTopLevel(expression, separator: op), parts.count == 2,
-                  let lhs = Double(unquoted(parts[0])), let rhs = Double(unquoted(parts[1]))
-            else { continue }
-            let result: Double = switch op {
-            case "+": lhs + rhs
-            case "-": lhs - rhs
-            case "*": lhs * rhs
-            default: rhs == 0 ? 0 : lhs / rhs
+        var expression = source.trimmingCharacters(in: .whitespacesAndNewlines)
+        while expression.first == "(", expression.last == ")",
+              matchingDelimiter(in: expression, openingAt: expression.startIndex, open: "(", close: ")") == expression.index(before: expression.endIndex)
+        {
+            expression = String(expression.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        for operators in [Set<Character>(["+", "-"]), Set<Character>(["*", "/"])] {
+            if let operation = lastTopLevelOperation(in: expression, operators: operators) {
+                let lhs = expressionValue(String(expression[..<operation.index]))
+                let rhsStart = expression.index(after: operation.index)
+                let rhs = expressionValue(String(expression[rhsStart...]))
+                if operation.operator == "+", Double(lhs) == nil || Double(rhs) == nil {
+                    return lhs + rhs
+                }
+                guard let left = Double(lhs), let right = Double(rhs) else { return unquoted(expression) }
+                let result: Double = switch operation.operator {
+                case "+": left + right
+                case "-": left - right
+                case "*": left * right
+                default: right == 0 ? 0 : left / right
+                }
+                return result.rounded() == result ? String(Int(result)) : String(result)
             }
-            return result.rounded() == result ? String(Int(result)) : String(result)
         }
         return unquoted(expression)
+    }
+
+    private func lastTopLevelOperation(
+        in source: String,
+        operators: Set<Character>
+    ) -> (index: String.Index, operator: Character)? {
+        var depth = 0
+        var quoted = false
+        var result: (String.Index, Character)?
+        var previousSignificant: Character?
+        for index in source.indices {
+            let character = source[index]
+            if character == "\"" {
+                quoted.toggle()
+            } else if !quoted {
+                if "([".contains(character) {
+                    depth += 1
+                } else if ")]".contains(character) {
+                    depth -= 1
+                } else if depth == 0, operators.contains(character) {
+                    let unary = (character == "+" || character == "-") &&
+                        (previousSignificant == nil || "(+-*/".contains(previousSignificant!))
+                    if !unary {
+                        result = (index, character)
+                    }
+                }
+            }
+            if !character.isWhitespace {
+                previousSignificant = character
+            }
+        }
+        return result
     }
 
     private func replacingFunctions(
@@ -405,6 +486,9 @@ public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked S
                 token: token,
                 condition: fields["conditional"]?.first?.trimmingCharacters(in: .whitespacesAndNewlines),
                 fallback: fields["conditionalelse"]?.first?.trimmingCharacters(in: .whitespacesAndNewlines),
+                emotionLimiter: fields["emotionlimiter"]?.first.flatMap {
+                    Int($0.trimmingCharacters(in: .whitespacesAndNewlines))
+                },
                 scripts: fields["script", default: []].map(normalizeScript).filter { !$0.isEmpty }
             )
             entries[token, default: []].append(entry)
@@ -481,15 +565,149 @@ public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked S
 
     private func dictionaryURLs(_ master: URL) throws -> [URL] {
         let manager = FileManager.default
-        let rootFiles = try manager.contentsOfDirectory(at: master, includingPropertiesForKeys: nil)
-        let directories = rootFiles.filter { url in
-            (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true &&
-                url.lastPathComponent.lowercased().contains("hisui")
-        }
+        let configured = configuration.dictionaryDirectories + configuration.learningDirectories
+        let directories = configured.map { master.appending(path: $0, directoryHint: .isDirectory) }
+            .filter { manager.fileExists(atPath: $0.path) }
         return try directories.flatMap { directory in
             try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
                 .filter { $0.pathExtension.lowercased() == "tlk" }
         }
+    }
+
+    private func loadWordDictionaries(_ master: URL) throws {
+        for directory in configuration.dictionaryDirectories + configuration.learningDirectories {
+            let root = master.appending(path: directory, directoryHint: .isDirectory)
+            guard FileManager.default.fileExists(atPath: root.path) else { continue }
+            for url in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+                where url.pathExtension.lowercased() == "mem"
+            {
+                guard let source = try decodeHisuiText(Data(contentsOf: url)) else { continue }
+                parseWordDictionary(source)
+            }
+        }
+    }
+
+    private func parseWordDictionary(_ source: String) {
+        var category: String?
+        for rawLine in source.components(separatedBy: .newlines) {
+            let line = stripLineComment(rawLine).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, line != "[HISUI DICTIONARY]" else { continue }
+            if line.first == "[", line.last == "]" {
+                category = String(line.dropFirst().dropLast())
+            } else if let category {
+                wordCategories[category, default: []].append(line)
+            }
+        }
+    }
+
+    private func replaceWordFunctions(in source: String) -> String {
+        var value = source
+        for (name, category) in configuration.defaultCategories.sorted(by: { $0.key.count > $1.key.count }) {
+            guard let regex = try? NSRegularExpression(
+                pattern: "%" + NSRegularExpression.escapedPattern(for: name) + #"(?:\[([^]]*)\])?"#
+            ) else { continue }
+            for match in regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).reversed() {
+                guard let whole = Range(match.range, in: value) else { continue }
+                let requested = Range(match.range(at: 1), in: value).map { String(value[$0]) } ?? ""
+                value.replaceSubrange(whole, with: randomWord(in: requested.isEmpty ? category : requested) ?? "")
+            }
+        }
+        return value
+    }
+
+    private func randomWord(in category: String, visited: Set<String> = []) -> String? {
+        guard !visited.contains(category), let candidate = wordCategories[category]?.randomElement() else { return nil }
+        if wordCategories[candidate] != nil {
+            var visited = visited
+            visited.insert(category)
+            return randomWord(in: candidate, visited: visited)
+        }
+        return candidate.split(separator: "\t", maxSplits: 1).first.map(String.init)
+    }
+
+    private func wordForTime(category: String, value: Int) -> String? {
+        wordCategories[category]?.first { line in
+            let fields = line.split(whereSeparator: { $0 == "\t" || $0 == " " })
+            return fields.dropFirst().contains { field in
+                Int(field) == value || value == 0 && Int(field) == 24
+            }
+        }.flatMap { $0.split(whereSeparator: { $0 == "\t" || $0 == " " }).first.map(String.init) }
+    }
+
+    private func replaceReferenceFunctions(in source: String, request: ShioriRequest) -> String {
+        replacing(pattern: #"%ref(\d+)Byte"#, in: source) { index in
+            let value = request.reference(Int(index) ?? 0) ?? ""
+            return String(value.lengthOfBytes(using: .shiftJIS))
+        }
+    }
+
+    private static func loadConfiguration(_ master: URL) -> HisuiConfiguration {
+        var configuration = HisuiConfiguration()
+        let preferenceURL = master.appending(path: "hisui_preference.def")
+        if let data = try? Data(contentsOf: preferenceURL), let source = decodeHisuiText(data) {
+            var values: [String: String] = [:]
+            for rawLine in source.components(separatedBy: .newlines) {
+                let line = stripLineComment(rawLine)
+                guard let equals = line.firstIndex(of: "=") else { continue }
+                let key = line[..<equals].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                let value = String(line[line.index(after: equals)...]).trimmingCharacters(in: .whitespacesAndNewlines)
+                values[key] = unquoteConfigurationValue(value)
+            }
+            configuration.talkInterval = Int(values["talk_interval"] ?? "") ?? configuration.talkInterval
+            configuration.emotionBorder = Int(values["emotion_border"] ?? "") ?? configuration.emotionBorder
+            configuration.birthday = values["emotion_ghost_birthday"]
+            if let vendor = values["dir_venderdic"], let directory = normalizedDirectory(vendor) {
+                configuration.dictionaryDirectories = [directory]
+            }
+            if let learning = values["dir_lerndic"], let directory = normalizedDirectory(learning) {
+                configuration.learningDirectories = [directory]
+            }
+            for (key, value) in values where key.hasPrefix("dic_") {
+                configuration.defaultCategories[String(key.dropFirst(4))] = value
+            }
+        }
+
+        let url = master.appending(path: "hisuiconf.xml")
+        guard let data = try? Data(contentsOf: url), let source = decodeHisuiText(data) else {
+            return configuration
+        }
+
+        let profile = attributes(of: "GhostProfile", in: source)
+        configuration.talkInterval = Int(profile["talk_interval"] ?? "") ?? configuration.talkInterval
+        configuration.emotionBorder = Int(profile["emotion_border"] ?? "") ?? configuration.emotionBorder
+        configuration.birthday = profile["birthday"]
+
+        if let regex = try? NSRegularExpression(pattern: #"<Directory\s+([^>]+)/?>"#, options: [.caseInsensitive]) {
+            var vendor: [String] = []
+            var learning: [String] = []
+            for match in regex.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+                guard let range = Range(match.range(at: 1), in: source) else { continue }
+                let values = parseAttributes(String(source[range]))
+                guard let rawName = values["name"], let name = normalizedDirectory(rawName) else { continue }
+                if values["type"]?.caseInsensitiveCompare("vender") == .orderedSame {
+                    vendor.append(name)
+                } else if values["type"]?.caseInsensitiveCompare("learning") == .orderedSame {
+                    learning.append(name)
+                }
+            }
+            if !vendor.isEmpty {
+                configuration.dictionaryDirectories = vendor
+            }
+            if !learning.isEmpty {
+                configuration.learningDirectories = learning
+            }
+        }
+
+        if let regex = try? NSRegularExpression(pattern: #"<Define\s+([^>]+)/?>"#, options: [.caseInsensitive]) {
+            for match in regex.matches(in: source, range: NSRange(source.startIndex..., in: source)) {
+                guard let range = Range(match.range(at: 1), in: source) else { continue }
+                let values = parseAttributes(String(source[range]))
+                if let type = values["type"], let category = values["category"] {
+                    configuration.defaultCategories[type] = category
+                }
+            }
+        }
+        return configuration
     }
 
     private func loadDescription(_ directory: URL) throws {
@@ -506,6 +724,54 @@ public final class NativeHisuiPersonalityEngine: PersonalityEngine, @unchecked S
             }
         }
     }
+}
+
+private func decodeHisuiText(_ data: Data) -> String? {
+    if data.starts(with: [0xFF, 0xFE]) {
+        return String(data: data, encoding: .utf16LittleEndian)
+    }
+    if data.starts(with: [0xFE, 0xFF]) {
+        return String(data: data, encoding: .utf16BigEndian)
+    }
+    return LegacyTextDecoder.decode(data)
+}
+
+private func unquoteConfigurationValue(_ source: String) -> String {
+    guard source.count >= 2, source.first == "\"", source.last == "\"" else { return source }
+    return String(source.dropFirst().dropLast())
+}
+
+private func normalizedDirectory(_ source: String) -> String? {
+    let value = source.replacingOccurrences(of: "\\", with: "/")
+    guard !value.hasPrefix("/"), !value.contains(":") else { return nil }
+    let components = value.split(separator: "/", omittingEmptySubsequences: true)
+    guard !components.isEmpty, !components.contains("."), !components.contains("..") else { return nil }
+    return components.joined(separator: "/")
+}
+
+private func attributes(of element: String, in source: String) -> [String: String] {
+    guard let regex = try? NSRegularExpression(
+        pattern: "<" + NSRegularExpression.escapedPattern(for: element) + #"\s+([^>]+)/?>"#,
+        options: [.caseInsensitive]
+    ), let match = regex.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
+    let range = Range(match.range(at: 1), in: source)
+    else { return [:] }
+    return parseAttributes(String(source[range]))
+}
+
+private func parseAttributes(_ source: String) -> [String: String] {
+    guard let regex = try? NSRegularExpression(
+        pattern: #"([A-Za-z_][A-Za-z0-9_]*)\s*=\s*[\"']([^\"']*)[\"']"#
+    ) else { return [:] }
+    return Dictionary(uniqueKeysWithValues: regex.matches(
+        in: source,
+        range: NSRange(source.startIndex..., in: source)
+    ).compactMap { match in
+        guard let key = Range(match.range(at: 1), in: source),
+              let value = Range(match.range(at: 2), in: source)
+        else { return nil }
+        return (String(source[key]).lowercased(), String(source[value]))
+    })
 }
 
 private func replacing(pattern: String, in source: String, transform: (String) -> String) -> String {

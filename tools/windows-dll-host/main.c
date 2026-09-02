@@ -86,8 +86,9 @@ static DWORD run_host(void) {
     module_load_fn loadu = (module_load_fn)GetProcAddress(module, "loadu");
     module_load_fn load = (module_load_fn)GetProcAddress(module, "load");
     module_request_fn request = (module_request_fn)GetProcAddress(module, "request");
+    module_request_fn execute = (module_request_fn)GetProcAddress(module, "execute");
     module_unload_fn unload = (module_unload_fn)GetProcAddress(module, "unload");
-    if ((loadu == NULL && load == NULL) || request == NULL || unload == NULL) {
+    if ((loadu == NULL && load == NULL) || (request == NULL && execute == NULL) || unload == NULL) {
         FreeLibrary(module);
         return 4;
     }
@@ -125,7 +126,7 @@ static DWORD run_host(void) {
             result = 7;
             break;
         }
-        HGLOBAL response_memory = request(request_memory, &response_length);
+        HGLOBAL response_memory = (request != NULL ? request : execute)(request_memory, &response_length);
         if (response_memory == NULL || response_length < 0 || response_length > 16 * 1024 * 1024) {
             result = 7;
             break;

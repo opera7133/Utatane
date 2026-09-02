@@ -28,6 +28,7 @@ import UtataneShell
 import UtataneShinoNative
 import UtataneWindowsShiori
 import UtataneYayaNative
+import UtataneYuhnaNative
 
 private extension Notification.Name {
     static let showUtataneGhostPicker = Notification.Name("dev.utatane.showGhostPicker")
@@ -1803,10 +1804,16 @@ private struct UtataneRootView: View {
             path: "ghost/master",
             directoryHint: .isDirectory
         )
-        guard ParticleMakotoTranslator.supports(masterDirectoryURL: masterDirectory) else {
-            return base
+        var translators: [any SakuraScriptTranslator] = []
+        if ParticleMakotoTranslator.supports(masterDirectoryURL: masterDirectory) {
+            translators.append(ParticleMakotoTranslator())
         }
-        return TranslatingPersonalityEngine(base: base, translators: [ParticleMakotoTranslator()])
+        if BasicMakotoTranslator.supports(masterDirectoryURL: masterDirectory),
+           let translator = try? BasicMakotoTranslator(masterDirectoryURL: masterDirectory)
+        {
+            translators.append(translator)
+        }
+        return translators.isEmpty ? base : TranslatingPersonalityEngine(base: base, translators: translators)
     }
 
     private func basePersonalityEngine(for ghost: InstalledGhost) throws -> any PersonalityEngine {
@@ -1830,6 +1837,12 @@ private struct UtataneRootView: View {
         }
         if ShiolinkPersonalityEngine.supports(shioriFilename: ghost.shioriFilename) {
             return try ShiolinkPersonalityEngine(masterDirectoryURL: masterDirectory)
+        }
+        if RishuPersonalityEngine.supports(
+            masterDirectoryURL: masterDirectory,
+            shioriFilename: ghost.shioriFilename
+        ) {
+            return try RishuPersonalityEngine(masterDirectoryURL: masterDirectory)
         }
         if NativeYayaPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try NativeYayaPersonalityEngine(
@@ -1917,6 +1930,42 @@ private struct UtataneRootView: View {
                 stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
                     .deletingLastPathComponent().appending(path: "hisui-state.json")
             )
+        }
+        if NativeYuhnaPersonalityEngine.supports(
+            masterDirectoryURL: masterDirectory,
+            shioriFilename: ghost.shioriFilename
+        ) {
+            let engine = try NativeYuhnaPersonalityEngine(
+                masterDirectoryURL: masterDirectory,
+                stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
+                    .deletingLastPathComponent().appending(path: "yuhna-state.json")
+            )
+            AppLogStore.shared.info(
+                "結奈ネイティブエンジンを選択しました",
+                category: "SHIORI",
+                details: [
+                    "Master: \(masterDirectory.path)",
+                    "イベント定義: \(engine.loadedEventCount)",
+                    "ルール定義: \(engine.loadedRuleCount)",
+                    "条件付きルール: \(engine.conditionalRuleCount)",
+                    "未解析レコード: \(engine.skippedEventCount)"
+                ].joined(separator: "\n"),
+                ghostName: ghost.name
+            )
+            if let moduleURL = ContentRoot.shioriModuleURL(for: ghost),
+               let configuration = ContentRoot.windowsDLLConfiguration(
+                   for: moduleURL,
+                   charset: ghost.charset ?? "Shift_JIS"
+               )
+            {
+                return try FallbackPersonalityEngine(
+                    primary: engine,
+                    fallback: ExternalSHIORIPersonalityEngine(backend: .windowsDLL(
+                        WindowsDLLModuleProcessSession(configuration: configuration)
+                    ))
+                )
+            }
+            return engine
         }
         if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),
            let configuration = ContentRoot.materiaFirstConfiguration(for: ghost)

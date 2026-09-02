@@ -18,6 +18,33 @@ enum ExternalModuleRuntimeError: LocalizedError {
     }
 }
 
+actor FallbackPersonalityEngine: PersonalityEngine {
+    private let primary: any PersonalityEngine
+    private let fallback: any PersonalityEngine
+
+    init(primary: any PersonalityEngine, fallback: any PersonalityEngine) {
+        self.primary = primary
+        self.fallback = fallback
+    }
+
+    func handle(event: GhostEvent) async throws -> SakuraScript? {
+        try await response(for: event).script
+    }
+
+    func response(for event: GhostEvent) async throws -> PersonalityResponse {
+        let response = try await primary.response(for: event)
+        if response.script != nil || !response.references.isEmpty {
+            return response
+        }
+        return try await fallback.response(for: event)
+    }
+
+    func shutdown() async {
+        await primary.shutdown()
+        await fallback.shutdown()
+    }
+}
+
 actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
     enum Backend: Sendable {
         case dynamicLibrary(DynamicLibraryModuleSession)

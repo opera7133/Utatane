@@ -32,8 +32,8 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 
 ### 人格とかネットワークとか
 
-- YAYA(文) / KAGARI / SHIOLINK(MiyoJS等) / 里々 / 華和梨 / 美坂 / 灯 / ese-shiori / 偽栞 / 忍 / 翡翠をSHIORIとして使うゴーストのネイティブ実行 (蒼空については"実験的な機能"を参照)
-- 韓国語助詞トランスレータ`ParticleMakoto`のネイティブ実行
+- YAYA(文) / KAGARI / SHIOLINK(MiyoJS等) / 里珠(Proxy) / 里々 / 華和梨 / 美坂 / 灯 / ese-shiori / 偽栞 / 忍 / 翡翠 / 結奈をSHIORIとして使うゴーストのネイティブ実行 (蒼空・里珠・結奈については"実験的な機能"を参照)
+- 韓国語助詞トランスレータ`ParticleMakoto`と`Makoto Basic with Select and Repeat`のネイティブ実行
 - SSU、`saori_cpuid`、`kenonoke`、`textcopy2`、`mciaudior`、`wmove`のネイティブSAORI互換
 - ゴーストとバルーンの手動ネットワーク更新と、設定した日数ごとの自動更新
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0

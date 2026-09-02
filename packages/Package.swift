@@ -32,6 +32,7 @@ let package = Package(
         .library(name: "UtataneNiseShioriNative", targets: ["UtataneNiseShioriNative"]),
         .library(name: "UtataneShinoNative", targets: ["UtataneShinoNative"]),
         .library(name: "UtataneHisuiNative", targets: ["UtataneHisuiNative"]),
+        .library(name: "UtataneYuhnaNative", targets: ["UtataneYuhnaNative"]),
         .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"]),
         .executable(name: "utatane-mcp", targets: ["UtataneMCP"])
     ],
@@ -350,6 +351,11 @@ let package = Package(
             dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
             path: "hisui-native/Sources"
         ),
+        .target(
+            name: "UtataneYuhnaNative",
+            dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
+            path: "yuhna-native/Sources"
+        ),
         .testTarget(
             name: "UtataneBalloonTests",
             dependencies: ["UtataneBalloon"],
@@ -489,6 +495,11 @@ let package = Package(
             name: "UtataneHisuiNativeTests",
             dependencies: ["UtataneCore", "UtataneHisuiNative"],
             path: "hisui-native/Tests"
+        ),
+        .testTarget(
+            name: "UtataneYuhnaNativeTests",
+            dependencies: ["UtataneCore", "UtataneYuhnaNative"],
+            path: "yuhna-native/Tests"
         )
     ],
     swiftLanguageModes: [.v6],

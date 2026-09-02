@@ -88,6 +88,15 @@ public enum ShioriCatalog {
             provisioning: .ghost,
             runtimeRequirement: .configuredExecutable
         ),
+        .init(
+            id: "rishu",
+            displayName: "里珠",
+            aliases: ["Rishu"],
+            moduleFilenames: ["rishu_proxy.dll"],
+            execution: .externalProcess,
+            provisioning: .ghost,
+            support: .experimental
+        ),
         .init(id: "yaya", displayName: "YAYA", aliases: ["AYA", "文"], moduleFilenames: ["yaya.dll", "aya.dll", "aya5.dll"], execution: .builtIn, provisioning: .included),
         .init(id: "satori", displayName: "里々", aliases: ["SATORI"], moduleFilenames: ["satori.dll"], execution: .builtIn, provisioning: .included),
         .init(id: "kawari", displayName: "華和梨", aliases: ["KAWARI"], moduleFilenames: ["kawari.dll"], execution: .builtIn, provisioning: .included),
@@ -114,6 +123,15 @@ public enum ShioriCatalog {
         ),
         .init(id: "shino", displayName: "忍", aliases: ["Shino"], moduleFilenames: ["shino.dll"], execution: .builtIn, provisioning: .included),
         .init(id: "hisui", displayName: "翡翠", aliases: ["Hisui"], moduleFilenames: ["hisui.dll"], execution: .builtIn, provisioning: .included, support: .experimental),
+        .init(
+            id: "yuhna",
+            displayName: "結奈",
+            aliases: ["YUHNA"],
+            moduleFilenames: ["yuhna.dll"],
+            execution: .builtIn,
+            provisioning: .included,
+            support: .experimental
+        ),
         .init(
             id: "external-posix-shiori",
             displayName: "外部macOS SHIORI",
