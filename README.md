@@ -129,6 +129,7 @@ Content/Local/
 
 - [変更履歴](CHANGELOG.md)
 - [開発・ビルド](Docs/Development.md)
+- [ゴースト・SHIORI・SAORI制作者向けUtatane対応ガイド](Docs/Content-Authoring.md)
 - [ゴースト互換状況](Docs/Compatibility.md)
 - [Native SHIORI / SAORI](Docs/Native-SHIORI.md)
 - [Realtime音声会話](Docs/Realtime-Voice.md)

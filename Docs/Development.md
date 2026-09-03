@@ -121,6 +121,8 @@ Content/Local/Skins/        カレンダースキン
 
 同梱対象でない実ゴーストや配布素材はコミットしないでください。利用条件を確認して、手元だけで使います。ネイティブSHIORIとSAORIは[Native-SHIORI.md](Native-SHIORI.md)に分けました。
 
+ゴースト・SHIORI・SAORIの制作者がUtatane対応を確認する手順は、[制作者向けUtatane対応ガイド](Content-Authoring.md)を参照してください。
+
 firstのネイティブ解析テストは、実物をFixtureへコピーせず環境変数で指定します。未指定なら実物依存部分だけスキップされます。
 
 ```sh
