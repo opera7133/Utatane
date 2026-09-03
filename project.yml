@@ -31,6 +31,11 @@ targets:
           python3 "$SRCROOT/tools/native-shiori/bundle-kagari.py" \
             --output "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/NativeShiori/kagari" \
             --archs $ARCHS
+      - name: Embed optional nicxlive runtime
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          "$SRCROOT/scripts/embed-nicxlive-runtime.sh"
     sources:
       - path: apps/Utatane/Sources
       - path: apps/Utatane/Resources

@@ -48,6 +48,10 @@ Scripts/build-windows-dll-host.sh apps/Utatane/Resources/WindowsDLLHost/utatane-
 description = "Build universal MCP server"
 run = "swift build --package-path packages --configuration release --arch arm64 --arch x86_64 --product utatane-mcp"
 
+[tasks.build-nicxlive]
+description = "Build the pinned universal nicxlive runtime"
+run = "Scripts/build-nicxlive-runtime.sh References/Local/nicxlive .generated-nicxlive/build .generated-nicxlive/runtime"
+
 [tasks.test-kagari]
 description = "Verify kagari embedded in the universal Release app"
 run = "python3 tools/native-shiori/test-bundle-kagari.py && sh tools/native-shiori/test-bundled-kagari.sh build/Build/Products/Release/Utatane.app arm64 x86_64"

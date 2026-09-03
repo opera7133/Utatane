@@ -1,0 +1,50 @@
+{
+  "viewport": {
+    "width": 420,
+    "height": 720,
+    "contentScale": 0.96,
+    "contentOffsetX": 0,
+    "contentOffsetY": 0,
+    "interactionOffsetX": 0,
+    "interactionOffsetY": 0,
+    "interactionScaleX": 1,
+    "interactionScaleY": 1
+  },
+  "pointer": {
+    "xParameter": "Interaction::LookX",
+    "yParameter": "Interaction::LookY",
+    "centerX": 171,
+    "centerY": 155,
+    "rangeX": 150,
+    "rangeY": 145,
+    "response": 0.35,
+    "restoreMilliseconds": 180
+  },
+  "parameters": {
+    "Interaction::Pet": 0,
+    "Expression::ClosedSmile": 0,
+    "Expression::Smile": 0
+  },
+  "surfaces": {
+    "5": {
+      "Expression::ClosedSmile": 1
+    },
+    "8": {
+      "Expression::Smile": 1
+    }
+  },
+  "reactions": [
+    {
+      "event": "move",
+      "region": "Head",
+      "button": 0,
+      "transitionMilliseconds": 110,
+      "durationMilliseconds": 450,
+      "restoreMilliseconds": 260,
+      "parameters": {
+        "Interaction::Pet": 1,
+        "Expression::ClosedSmile": 1
+      }
+    }
+  ]
+}

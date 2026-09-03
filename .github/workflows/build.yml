@@ -56,7 +56,34 @@ jobs:
           submodules: recursive
 
       - name: Install build tools
-        run: brew install xcodegen zig
+        run: brew install xcodegen zig cmake boost
+
+      - name: Read pinned nicxlive version
+        id: nicxlive-version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          source Scripts/nicxlive-runtime-version.env
+          echo "commit=$NICXLIVE_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pinned nicxlive source
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/checkout@v7
+        with:
+          repository: nijigenerate/nicxlive
+          ref: ${{ steps.nicxlive-version.outputs.commit }}
+          path: build/nicxlive
+
+      - name: Build universal nicxlive runtime
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          Scripts/build-nicxlive-runtime.sh \
+            build/nicxlive \
+            build/nicxlive-universal \
+            build/nicxlive-runtime
+          echo "UTATANE_NICXLIVE_RUNTIME_LIBRARY=$GITHUB_WORKSPACE/build/nicxlive-runtime/libnicxlive.dylib" >> "$GITHUB_ENV"
+          echo "UTATANE_NICXLIVE_RUNTIME_LICENSE=$GITHUB_WORKSPACE/build/nicxlive-runtime/LICENSE" >> "$GITHUB_ENV"
 
       - name: Prepare version
         shell: bash

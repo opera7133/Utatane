@@ -145,6 +145,16 @@ public final class SurfaceWindowController {
         }
     }
 
+    @discardableResult
+    public func setNijigenerateParameter(
+        _ name: String,
+        valueX: Double,
+        valueY: Double = 0,
+        scope: Int = 0
+    ) -> Bool {
+        characters[scope]?.setNijigenerateParameter(name, valueX: valueX, valueY: valueY) ?? false
+    }
+
     public func setAutomaticallyFitsLargeSurfaces(_ enabled: Bool) {
         automaticallyFitsLargeSurfaces = enabled
         for character in characters.values {
@@ -750,6 +760,13 @@ private final class CharacterSurfaceController {
     private let shellLoader = ShellLoader()
     private var window: NSWindow?
     private weak var imageView: SurfaceImageView?
+    private weak var nijigenerateView: NSView?
+    private var nijigenerateBaseSize: NSSize?
+    private var nijigenerateConfiguration = NijigenerateShellConfiguration()
+    private var nijigenerateReactionTask: Task<Void, Never>?
+    private var nijigeneratePointerTask: Task<Void, Never>?
+    private var nijigenerateReactionParameters: [String: Double] = [:]
+    private var nijigenerateParameterValues: [String: Double] = [:]
     private var shell: ShellDefinition?
     private var baseSurfaceID: Int?
     private var surfaceBaseImage: NSImage?
@@ -863,10 +880,21 @@ private final class CharacterSurfaceController {
     func show(shell: ShellDefinition, surfaceID: Int) throws {
         animationTask?.cancel()
         schedulerTask?.cancel()
+        nijigenerateReactionTask?.cancel()
+        nijigeneratePointerTask?.cancel()
+        nijigenerateReactionParameters.removeAll()
+        nijigenerateParameterValues.removeAll()
         pausedAnimationIDs.removeAll()
         animationOffsets.removeAll()
         isRepaintLocked = false
         pendingAnimationImage = nil
+
+        if scope == 0,
+           let runtime = NijigenerateShellRuntime.locate(shellDirectory: shell.directory),
+           (try? showNijigenerate(runtime: runtime, shell: shell, surfaceID: surfaceID)) != nil
+        {
+            return
+        }
 
         let rendered = try render(surfaceID: surfaceID, shell: shell)
         automaticFitScale = automaticallyFitsLargeSurfaces
@@ -881,6 +909,9 @@ private final class CharacterSurfaceController {
         window.makeKeyAndOrderFront(nil)
         self.window = window
         imageView = rendered.view
+        nijigenerateView = nil
+        nijigenerateBaseSize = nil
+        nijigenerateConfiguration = .init()
         self.shell = shell
         baseSurfaceID = surfaceID
         surfaceBaseImage = rendered.image
@@ -889,9 +920,66 @@ private final class CharacterSurfaceController {
         scheduleAutomaticAnimations()
     }
 
+    private func showNijigenerate(
+        runtime: NijigenerateShellRuntime,
+        shell: ShellDefinition,
+        surfaceID: Int
+    ) throws {
+        let baseSize = runtime.configuration.viewport.size
+        let size = displaySize(forNijigenerateBaseSize: baseSize)
+        let view = try NijigenerateViewFactory.make(runtime: runtime, size: size)
+        updateNijigenerateScale(
+            on: view,
+            contentScale: runtime.configuration.viewport.safeContentScale
+        )
+        NijigenerateViewFactory.setOffset(
+            x: runtime.configuration.viewport.contentOffsetX,
+            y: runtime.configuration.viewport.contentOffsetY,
+            on: view
+        )
+        view.autoresizingMask = [.width, .height]
+        let interactionView = SurfaceImageView(frame: NSRect(origin: .zero, size: size))
+        configureInteractionView(
+            interactionView,
+            definition: shell.surfaces[surfaceID],
+            shell: shell
+        )
+        interactionView.coordinateOffsetX = CGFloat(runtime.configuration.viewport.interactionOffsetX)
+        interactionView.coordinateOffsetY = CGFloat(runtime.configuration.viewport.interactionOffsetY)
+        interactionView.coordinateScaleMultiplierX = CGFloat(runtime.configuration.viewport.interactionScaleX)
+        interactionView.coordinateScaleMultiplierY = CGFloat(runtime.configuration.viewport.interactionScaleY)
+        updateImageViewCoordinateScale(on: interactionView)
+        interactionView.addSubview(view)
+        let window = window ?? makeWindow()
+        window.contentView = interactionView
+        window.setContentSize(size)
+        window.alphaValue = presentationAlpha
+        window.makeKeyAndOrderFront(nil)
+        self.window = window
+        nijigenerateView = view
+        nijigenerateBaseSize = baseSize
+        nijigenerateConfiguration = runtime.configuration
+        imageView = interactionView
+        self.shell = shell
+        baseSurfaceID = surfaceID
+        applyNijigenerateParameters(for: surfaceID)
+        surfaceBaseImage = nil
+        baseImage = nil
+        persistentAnimationLayers.removeAll()
+    }
+
     func setBindGroups(_ groups: Set<Int>, redraw: Bool) {
         enabledBindGroups = groups
         schedulerTask?.cancel()
+        if nijigenerateView != nil {
+            if let shell, let baseSurfaceID {
+                imageView?.collisions = effectiveCollisions(
+                    for: shell.surfaces[baseSurfaceID],
+                    shell: shell
+                )
+            }
+            return
+        }
         guard redraw, let shell, let baseSurfaceID, let window,
               let rendered = try? render(surfaceID: baseSurfaceID, shell: shell)
         else { return }
@@ -1070,6 +1158,21 @@ private final class CharacterSurfaceController {
         isRepaintLocked = false
         pendingAnimationImage = nil
 
+        if nijigenerateView != nil {
+            baseSurfaceID = surfaceID
+            applyNijigenerateParameters(for: surfaceID)
+            if surfaceID < 0 {
+                window.orderOut(nil)
+            } else {
+                imageView?.collisions = effectiveCollisions(
+                    for: shell.surfaces[surfaceID],
+                    shell: shell
+                )
+                window.orderFront(nil)
+            }
+            return
+        }
+
         if surfaceID < 0 {
             window.orderOut(nil)
             return
@@ -1138,6 +1241,12 @@ private final class CharacterSurfaceController {
         dragFeedback.hide()
         animationTask?.cancel()
         schedulerTask?.cancel()
+        nijigenerateReactionTask?.cancel()
+        nijigeneratePointerTask?.cancel()
+        nijigenerateReactionParameters.removeAll()
+        if nijigenerateView != nil, let baseSurfaceID {
+            applyNijigenerateParameters(for: baseSurfaceID)
+        }
         window?.orderOut(nil)
     }
 
@@ -1186,6 +1295,15 @@ private final class CharacterSurfaceController {
     func setDisplayScale(_ scale: CGFloat) {
         guard displayScale != scale else { return }
         displayScale = scale
+        if let nijigenerateBaseSize, let window {
+            let origin = window.frame.origin
+            let size = displaySize(forNijigenerateBaseSize: nijigenerateBaseSize)
+            window.setContentSize(size)
+            window.setFrameOrigin(origin)
+            updateImageViewCoordinateScale()
+            updateNijigenerateScale()
+            return
+        }
         guard let shell, let baseSurfaceID, let window else { return }
         let origin = window.frame.origin
         guard let rendered = try? render(surfaceID: baseSurfaceID, shell: shell) else { return }
@@ -1215,6 +1333,27 @@ private final class CharacterSurfaceController {
     ) async {
         runtimeScaleX = horizontal
         runtimeScaleY = vertical
+        if let nijigenerateBaseSize, let window {
+            imageView?.flipsHorizontally = horizontal < 0
+            imageView?.flipsVertically = vertical < 0
+            updateImageViewCoordinateScale()
+            updateNijigenerateScale()
+            let targetSize = displaySize(forNijigenerateBaseSize: nijigenerateBaseSize)
+            guard durationMilliseconds > 0 else {
+                window.setContentSize(targetSize)
+                return
+            }
+            await withCheckedContinuation { continuation in
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = Double(durationMilliseconds) / 1000
+                    context.timingFunction = CAMediaTimingFunction(name: .linear)
+                    window.animator().setContentSize(targetSize)
+                } completionHandler: {
+                    continuation.resume()
+                }
+            }
+            return
+        }
         guard let shell, let baseSurfaceID, let window,
               let rendered = try? render(surfaceID: baseSurfaceID, shell: shell)
         else { return }
@@ -1282,13 +1421,189 @@ private final class CharacterSurfaceController {
         )
     }
 
+    private func displaySize(forNijigenerateBaseSize size: NSSize) -> NSSize {
+        NSSize(
+            width: max(1, size.width * effectiveDisplayScale * abs(runtimeScaleX)),
+            height: max(1, size.height * effectiveDisplayScale * abs(runtimeScaleY))
+        )
+    }
+
+    private func updateNijigenerateScale(
+        on view: NSView? = nil,
+        contentScale: CGFloat? = nil
+    ) {
+        let contentInsetScale = contentScale ?? nijigenerateConfiguration.viewport.safeContentScale
+        NijigenerateViewFactory.setScale(
+            NSSize(
+                width: contentInsetScale * effectiveDisplayScale * abs(runtimeScaleX),
+                height: contentInsetScale * effectiveDisplayScale * abs(runtimeScaleY)
+            ),
+            on: view ?? nijigenerateView
+        )
+    }
+
+    func setNijigenerateParameter(_ name: String, valueX: Double, valueY: Double) -> Bool {
+        let applied = NijigenerateViewFactory.setParameter(
+            name,
+            valueX: valueX,
+            valueY: valueY,
+            on: nijigenerateView
+        )
+        if applied {
+            nijigenerateParameterValues[name] = valueX
+        }
+        return applied
+    }
+
+    private func applyNijigenerateParameters(for surfaceID: Int) {
+        for (name, value) in nijigenerateConfiguration.parameters(for: surfaceID) {
+            _ = setNijigenerateParameter(name, valueX: value, valueY: 0)
+        }
+        for (name, value) in nijigenerateReactionParameters {
+            _ = setNijigenerateParameter(name, valueX: value, valueY: 0)
+        }
+    }
+
+    private func handleNijigenerateReaction(
+        kind: GhostMouseEvent.Kind,
+        region: String?,
+        button: Int
+    ) {
+        guard nijigenerateView != nil,
+              let event = nijigenerateEventName(for: kind),
+              let reaction = nijigenerateConfiguration.reactions.first(where: {
+                  $0.matches(event: event, region: region, button: button)
+              })
+        else { return }
+
+        nijigenerateReactionTask?.cancel()
+        let duration = max(0, reaction.durationMilliseconds)
+        nijigenerateReactionTask = Task { [weak self] in
+            guard let self else { return }
+            await animateNijigenerateReactionParameters(
+                to: reaction.parameters,
+                durationMilliseconds: reaction.transitionMilliseconds
+            )
+            guard !Task.isCancelled else { return }
+            try? await Task.sleep(for: .milliseconds(duration))
+            guard !Task.isCancelled, let surfaceID = baseSurfaceID else { return }
+            let baseParameters = nijigenerateConfiguration.parameters(for: surfaceID)
+            let restoreValues = Dictionary(uniqueKeysWithValues: reaction.parameters.keys.map {
+                ($0, baseParameters[$0] ?? 0)
+            })
+            await animateNijigenerateReactionParameters(
+                to: restoreValues,
+                durationMilliseconds: reaction.restoreMilliseconds
+            )
+            guard !Task.isCancelled else { return }
+            nijigenerateReactionParameters.removeAll()
+            applyNijigenerateParameters(for: surfaceID)
+            nijigenerateReactionTask = nil
+        }
+    }
+
+    private func updateNijigeneratePointer(x: Int, y: Int) {
+        guard nijigenerateView != nil, let pointer = nijigenerateConfiguration.pointer else { return }
+        nijigeneratePointerTask?.cancel()
+        let target = pointer.values(x: x, y: y)
+        let response = pointer.safeResponse
+        let currentX = nijigenerateParameterValues[pointer.xParameter] ?? 0
+        let currentY = nijigenerateParameterValues[pointer.yParameter] ?? 0
+        _ = setNijigenerateParameter(
+            pointer.xParameter,
+            valueX: currentX + (target.x - currentX) * response,
+            valueY: 0
+        )
+        _ = setNijigenerateParameter(
+            pointer.yParameter,
+            valueX: currentY + (target.y - currentY) * response,
+            valueY: 0
+        )
+    }
+
+    private func restoreNijigeneratePointer() {
+        guard nijigenerateView != nil, let pointer = nijigenerateConfiguration.pointer else { return }
+        nijigeneratePointerTask?.cancel()
+        nijigeneratePointerTask = Task { [weak self] in
+            guard let self else { return }
+            await animateNijigenerateParameters(
+                to: [pointer.xParameter: 0, pointer.yParameter: 0],
+                durationMilliseconds: pointer.restoreMilliseconds,
+                recordsReaction: false
+            )
+            guard !Task.isCancelled else { return }
+            nijigeneratePointerTask = nil
+        }
+    }
+
+    private func animateNijigenerateReactionParameters(
+        to targetValues: [String: Double],
+        durationMilliseconds: Int
+    ) async {
+        await animateNijigenerateParameters(
+            to: targetValues,
+            durationMilliseconds: durationMilliseconds,
+            recordsReaction: true
+        )
+    }
+
+    private func animateNijigenerateParameters(
+        to targetValues: [String: Double],
+        durationMilliseconds: Int,
+        recordsReaction: Bool
+    ) async {
+        let starts = targetValues.mapValues { _ in 0 }
+            .merging(nijigenerateParameterValues) { _, current in current }
+        let duration = max(0, durationMilliseconds)
+        let frameCount = max(1, duration / 16)
+        for frame in 1 ... frameCount {
+            guard !Task.isCancelled else { return }
+            let progress = Double(frame) / Double(frameCount)
+            for (name, target) in targetValues {
+                let start = starts[name] ?? 0
+                let value = start + (target - start) * progress
+                if recordsReaction {
+                    nijigenerateReactionParameters[name] = value
+                }
+                _ = setNijigenerateParameter(name, valueX: value, valueY: 0)
+            }
+            if frame < frameCount {
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
+    }
+
+    private func nijigenerateEventName(for kind: GhostMouseEvent.Kind) -> String? {
+        switch kind {
+        case .down: "down"
+        case .up: "up"
+        case .click: "click"
+        case .doubleClick: "doubleClick"
+        case let .multipleClick(count): "multipleClick:\(count)"
+        case .enter: "enter"
+        case .leave: "leave"
+        case .hover: "hover"
+        case .dragStart: "dragStart"
+        case .dragEnd: "dragEnd"
+        case .move: "move"
+        case .enterAll, .leaveAll, .wheel: nil
+        }
+    }
+
     private var effectiveDisplayScale: CGFloat {
         automaticFitScale < 1 ? min(displayScale, automaticFitScale) : displayScale
     }
 
-    private func updateImageViewCoordinateScale() {
-        imageView?.coordinateScaleX = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(runtimeScaleX))
-        imageView?.coordinateScaleY = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(runtimeScaleY))
+    private func updateImageViewCoordinateScale(on targetView: SurfaceImageView? = nil) {
+        guard let targetView = targetView ?? imageView else { return }
+        targetView.coordinateScaleX = max(
+            .leastNonzeroMagnitude,
+            effectiveDisplayScale * abs(runtimeScaleX) * targetView.coordinateScaleMultiplierX
+        )
+        targetView.coordinateScaleY = max(
+            .leastNonzeroMagnitude,
+            effectiveDisplayScale * abs(runtimeScaleY) * targetView.coordinateScaleMultiplierY
+        )
     }
 
     var onWindowDragDelta: ((_ delta: NSPoint) -> Void)?
@@ -1365,6 +1680,15 @@ private final class CharacterSurfaceController {
         imageView.image = boundImage
         imageView.imageAlignment = .alignCenter
         imageView.imageScaling = .scaleAxesIndependently
+        configureInteractionView(imageView, definition: definition, shell: shell)
+        return (boundImage, imageView)
+    }
+
+    private func configureInteractionView(
+        _ imageView: SurfaceImageView,
+        definition: SurfaceDefinition?,
+        shell: ShellDefinition
+    ) {
         imageView.coordinateScaleX = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(runtimeScaleX))
         imageView.coordinateScaleY = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(runtimeScaleY))
         imageView.flipsHorizontally = runtimeScaleX < 0
@@ -1383,6 +1707,7 @@ private final class CharacterSurfaceController {
         }
         imageView.onMouseEvent = { [weak self] kind, region, x, y, button in
             guard let self else { return }
+            handleNijigenerateReaction(kind: kind, region: region, button: button)
             onMouseEvent?(
                 GhostMouseEvent(
                     kind: kind,
@@ -1393,6 +1718,12 @@ private final class CharacterSurfaceController {
                     button: button
                 )
             )
+        }
+        imageView.onPointerMove = { [weak self] x, y in
+            self?.updateNijigeneratePointer(x: x, y: y)
+        }
+        imageView.onPointerExit = { [weak self] in
+            self?.restoreNijigeneratePointer()
         }
         imageView.contextMenuItems = { [weak self] in
             self?.contextMenuItems?() ?? []
@@ -1425,7 +1756,6 @@ private final class CharacterSurfaceController {
                 dragFeedback.hide()
             }
         }
-        return (boundImage, imageView)
     }
 
     private func render(elements: [SurfaceElement], shell: ShellDefinition) throws -> NSImage {
@@ -1792,10 +2122,16 @@ private final class SurfaceImageView: NSImageView {
     var shellDirectory: URL?
     var coordinateScaleX: CGFloat = 1
     var coordinateScaleY: CGFloat = 1
+    var coordinateScaleMultiplierX: CGFloat = 1
+    var coordinateScaleMultiplierY: CGFloat = 1
+    var coordinateOffsetX: CGFloat = 0
+    var coordinateOffsetY: CGFloat = 0
     var flipsHorizontally = false
     var flipsVertically = false
     var onMouseClick: ((String?) -> Void)?
     var onMouseEvent: ((GhostMouseEvent.Kind, String?, Int, Int, Int) -> Void)?
+    var onPointerMove: ((Int, Int) -> Void)?
+    var onPointerExit: (() -> Void)?
     var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
     var onNarDrop: (([URL]) -> Void)?
     var onFileDropping: (([URL]) -> Void)?
@@ -1926,8 +2262,8 @@ private final class SurfaceImageView: NSImageView {
 
     private func collisionPoint(x: Int, y: Int) -> NSPoint {
         NSPoint(
-            x: CGFloat(x) * coordinateScaleX,
-            y: bounds.height - CGFloat(y) * coordinateScaleY
+            x: CGFloat(x) * coordinateScaleX + coordinateOffsetX,
+            y: bounds.height - CGFloat(y) * coordinateScaleY - coordinateOffsetY
         )
     }
 
@@ -1998,6 +2334,7 @@ private final class SurfaceImageView: NSImageView {
 
     override func mouseEntered(with event: NSEvent) {
         let hit = hitTest(event)
+        onPointerMove?(hit.x, hit.y)
         onMouseEvent?(.enterAll, hit.region, hit.x, hit.y, buttonNumber(event))
         updateHoveredRegion(with: hit, event: event)
         scheduleHoverEvent(for: hit, event: event)
@@ -2015,6 +2352,7 @@ private final class SurfaceImageView: NSImageView {
         lastStrokePoint = nil
         lastStrokeRegion = nil
         NSCursor.arrow.set()
+        onPointerExit?()
         super.mouseExited(with: event)
     }
 
@@ -2024,6 +2362,7 @@ private final class SurfaceImageView: NSImageView {
 
     override func mouseMoved(with event: NSEvent) {
         let hit = hitTest(event)
+        onPointerMove?(hit.x, hit.y)
         updateHoveredRegion(with: hit, event: event)
         scheduleHoverEvent(for: hit, event: event)
         sendStrokeEventIfNeeded(event)
@@ -2270,8 +2609,8 @@ private final class SurfaceImageView: NSImageView {
         let point = convert(event.locationInWindow, from: nil)
         let logicalX = flipsHorizontally ? bounds.width - point.x : point.x
         let logicalY = flipsVertically ? point.y : bounds.height - point.y
-        let surfaceX = Int(logicalX / coordinateScaleX)
-        let surfaceY = Int(logicalY / coordinateScaleY)
+        let surfaceX = Int((logicalX - coordinateOffsetX) / coordinateScaleX)
+        let surfaceY = Int((logicalY - coordinateOffsetY) / coordinateScaleY)
         let region = collisions.first { $0.contains(x: surfaceX, y: surfaceY) }?.name
         return (region, surfaceX, surfaceY)
     }

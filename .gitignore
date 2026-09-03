@@ -2,6 +2,7 @@
 .DS_Store
 .build/
 .generated-hosts/
+.generated-nicxlive/
 .generated-native-shiori/
 DerivedData/
 Utatane.xcodeproj/

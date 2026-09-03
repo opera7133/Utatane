@@ -88,8 +88,19 @@ let package = Package(
             path: "shell/Sources"
         ),
         .target(
+            name: "CNicxliveRenderer",
+            path: "platform-macos-nicxlive/Sources",
+            publicHeadersPath: "Include",
+            cxxSettings: [.define("GL_SILENCE_DEPRECATION")],
+            linkerSettings: [
+                .linkedFramework("AppKit"),
+                .linkedFramework("OpenGL")
+            ]
+        ),
+        .target(
             name: "UtatanePlatformMacOS",
             dependencies: [
+                "CNicxliveRenderer",
                 "UtataneBalloon",
                 "UtataneCore",
                 "UtataneRuntime",
