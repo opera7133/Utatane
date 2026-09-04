@@ -765,6 +765,8 @@ private final class CharacterSurfaceController {
     private var nijigenerateConfiguration = NijigenerateShellConfiguration()
     private var nijigenerateReactionTask: Task<Void, Never>?
     private var nijigeneratePointerTask: Task<Void, Never>?
+    private var nijigenerateDragTask: Task<Void, Never>?
+    private var nijigenerateDragValue = (x: 0.0, y: 0.0)
     private var nijigenerateReactionParameters: [String: Double] = [:]
     private var nijigenerateParameterValues: [String: Double] = [:]
     private var shell: ShellDefinition?
@@ -882,6 +884,8 @@ private final class CharacterSurfaceController {
         schedulerTask?.cancel()
         nijigenerateReactionTask?.cancel()
         nijigeneratePointerTask?.cancel()
+        nijigenerateDragTask?.cancel()
+        nijigenerateDragValue = (0, 0)
         nijigenerateReactionParameters.removeAll()
         nijigenerateParameterValues.removeAll()
         pausedAnimationIDs.removeAll()
@@ -938,6 +942,7 @@ private final class CharacterSurfaceController {
             on: view
         )
         view.autoresizingMask = [.width, .height]
+        nijigenerateConfiguration = runtime.configuration
         let interactionView = SurfaceImageView(frame: NSRect(origin: .zero, size: size))
         configureInteractionView(
             interactionView,
@@ -958,7 +963,6 @@ private final class CharacterSurfaceController {
         self.window = window
         nijigenerateView = view
         nijigenerateBaseSize = baseSize
-        nijigenerateConfiguration = runtime.configuration
         imageView = interactionView
         self.shell = shell
         baseSurfaceID = surfaceID
@@ -1243,6 +1247,8 @@ private final class CharacterSurfaceController {
         schedulerTask?.cancel()
         nijigenerateReactionTask?.cancel()
         nijigeneratePointerTask?.cancel()
+        nijigenerateDragTask?.cancel()
+        nijigenerateDragValue = (0, 0)
         nijigenerateReactionParameters.removeAll()
         if nijigenerateView != nil, let baseSurfaceID {
             applyNijigenerateParameters(for: baseSurfaceID)
@@ -1462,6 +1468,10 @@ private final class CharacterSurfaceController {
         for (name, value) in nijigenerateReactionParameters {
             _ = setNijigenerateParameter(name, valueX: value, valueY: 0)
         }
+        if let drag = nijigenerateConfiguration.drag, nijigenerateDragTask == nil {
+            nijigenerateDragValue = (0, 0)
+            _ = setNijigenerateParameter(drag.parameter, valueX: 0, valueY: 0)
+        }
     }
 
     private func handleNijigenerateReaction(
@@ -1533,6 +1543,36 @@ private final class CharacterSurfaceController {
             )
             guard !Task.isCancelled else { return }
             nijigeneratePointerTask = nil
+        }
+    }
+
+    private func updateNijigenerateDrag(deltaX: Int, deltaY: Int) {
+        guard nijigenerateView != nil, let drag = nijigenerateConfiguration.drag else { return }
+        nijigenerateDragTask?.cancel()
+        let value = drag.values(deltaX: deltaX, deltaY: deltaY)
+        nijigenerateDragValue = value
+        _ = setNijigenerateParameter(drag.parameter, valueX: value.x, valueY: value.y)
+    }
+
+    private func restoreNijigenerateDrag() {
+        guard nijigenerateView != nil, let drag = nijigenerateConfiguration.drag else { return }
+        nijigenerateDragTask?.cancel()
+        let start = nijigenerateDragValue
+        let frameCount = max(1, max(0, drag.restoreMilliseconds) / 16)
+        nijigenerateDragTask = Task { [weak self] in
+            guard let self else { return }
+            for frame in 1 ... frameCount {
+                guard !Task.isCancelled else { return }
+                let remaining = 1 - Double(frame) / Double(frameCount)
+                let value = (x: start.x * remaining, y: start.y * remaining)
+                nijigenerateDragValue = value
+                _ = setNijigenerateParameter(drag.parameter, valueX: value.x, valueY: value.y)
+                if frame < frameCount {
+                    try? await Task.sleep(for: .milliseconds(16))
+                }
+            }
+            guard !Task.isCancelled else { return }
+            nijigenerateDragTask = nil
         }
     }
 
@@ -1724,6 +1764,13 @@ private final class CharacterSurfaceController {
         }
         imageView.onPointerExit = { [weak self] in
             self?.restoreNijigeneratePointer()
+        }
+        imageView.parameterDragRegion = nijigenerateConfiguration.drag?.region
+        imageView.onParameterDragUpdate = { [weak self] deltaX, deltaY in
+            self?.updateNijigenerateDrag(deltaX: deltaX, deltaY: deltaY)
+        }
+        imageView.onParameterDragEnd = { [weak self] in
+            self?.restoreNijigenerateDrag()
         }
         imageView.contextMenuItems = { [weak self] in
             self?.contextMenuItems?() ?? []
@@ -2132,6 +2179,9 @@ private final class SurfaceImageView: NSImageView {
     var onMouseEvent: ((GhostMouseEvent.Kind, String?, Int, Int, Int) -> Void)?
     var onPointerMove: ((Int, Int) -> Void)?
     var onPointerExit: (() -> Void)?
+    var parameterDragRegion: String?
+    var onParameterDragUpdate: ((Int, Int) -> Void)?
+    var onParameterDragEnd: (() -> Void)?
     var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
     var onNarDrop: (([URL]) -> Void)?
     var onFileDropping: (([URL]) -> Void)?
@@ -2160,6 +2210,8 @@ private final class SurfaceImageView: NSImageView {
     private var lastDragEvent: NSEvent?
     private var didDrag = false
     private var suppressDragClick = false
+    private var parameterDragStart: (x: Int, y: Int)?
+    private var didParameterDrag = false
     private var hoverWorkItem: DispatchWorkItem?
 
     override init(frame frameRect: NSRect) {
@@ -2190,6 +2242,11 @@ private final class SurfaceImageView: NSImageView {
         didDrag = false
         lastDragEvent = nil
         onDragUpdate?(nil, nil)
+        if parameterDragStart != nil {
+            onParameterDragEnd?()
+        }
+        parameterDragStart = nil
+        didParameterDrag = false
         if let endingEvent {
             sendMouseEvent(.dragEnd, event: endingEvent)
         }
@@ -2279,11 +2336,19 @@ private final class SurfaceImageView: NSImageView {
     override func mouseDown(with event: NSEvent) {
         cancelDrag()
         suppressDragClick = false
+        let hit = hitTest(event)
         sendMouseEvent(.down, event: event)
         cancelHoverEvent()
         setCursor(.mouseDown, for: hitTest(event).region)
         guard event.buttonNumber == 0, let window else {
             super.mouseDown(with: event)
+            return
+        }
+        if let parameterDragRegion,
+           parameterDragRegion.caseInsensitiveCompare(hit.region ?? "") == .orderedSame
+        {
+            parameterDragStart = (hit.x, hit.y)
+            didParameterDrag = false
             return
         }
         dragStartMouseLocation = window.convertPoint(toScreen: event.locationInWindow)
@@ -2292,6 +2357,19 @@ private final class SurfaceImageView: NSImageView {
     }
 
     override func mouseDragged(with event: NSEvent) {
+        if let start = parameterDragStart {
+            let hit = hitTest(event)
+            let deltaX = hit.x - start.x
+            let deltaY = hit.y - start.y
+            if !didParameterDrag, hypot(Double(deltaX), Double(deltaY)) >= 2 {
+                didParameterDrag = true
+                sendMouseEvent(.dragStart, event: event)
+            }
+            if didParameterDrag {
+                onParameterDragUpdate?(deltaX, deltaY)
+            }
+            return
+        }
         guard !isMovementLocked, !suppressDragClick else { return }
         guard let window,
               let startMouseLocation = dragStartMouseLocation,
@@ -2370,6 +2448,34 @@ private final class SurfaceImageView: NSImageView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        if parameterDragStart != nil {
+            let wasDragging = didParameterDrag
+            sendMouseEvent(.up, event: event)
+            if wasDragging {
+                sendMouseEvent(.dragEnd, event: event)
+            }
+            parameterDragStart = nil
+            didParameterDrag = false
+            onParameterDragEnd?()
+            if !wasDragging {
+                let hit = hitTest(event)
+                if event.clickCount >= 3 {
+                    onMouseEvent?(
+                        .multipleClick(count: event.clickCount),
+                        hit.region,
+                        hit.x,
+                        hit.y,
+                        buttonNumber(event)
+                    )
+                } else if event.clickCount == 2 {
+                    onMouseEvent?(.doubleClick, hit.region, hit.x, hit.y, buttonNumber(event))
+                } else {
+                    onMouseClick?(hit.region)
+                    onMouseEvent?(.click, hit.region, hit.x, hit.y, buttonNumber(event))
+                }
+            }
+            return
+        }
         let wasDragging = dragStartMouseLocation != nil && didDrag
         sendMouseEvent(.up, event: event)
         if wasDragging {

@@ -198,9 +198,61 @@ public struct NijigeneratePointerConfiguration: Codable, Sendable, Equatable {
     }
 }
 
+public struct NijigenerateDragConfiguration: Codable, Sendable, Equatable {
+    public var region: String
+    public var parameter: String
+    public var rangeX: Double
+    public var rangeY: Double
+    public var restoreMilliseconds: Int
+
+    public init(
+        region: String,
+        parameter: String,
+        rangeX: Double,
+        rangeY: Double,
+        restoreMilliseconds: Int = 180
+    ) {
+        self.region = region
+        self.parameter = parameter
+        self.rangeX = rangeX
+        self.rangeY = rangeY
+        self.restoreMilliseconds = restoreMilliseconds
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case region
+        case parameter
+        case rangeX
+        case rangeY
+        case restoreMilliseconds
+    }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        region = try container.decode(String.self, forKey: .region)
+        parameter = try container.decode(String.self, forKey: .parameter)
+        rangeX = try container.decode(Double.self, forKey: .rangeX)
+        rangeY = try container.decode(Double.self, forKey: .rangeY)
+        restoreMilliseconds = try container.decodeIfPresent(Int.self, forKey: .restoreMilliseconds) ?? 180
+    }
+
+    func values(deltaX: Int, deltaY: Int) -> (x: Double, y: Double) {
+        (
+            normalized(delta: Double(deltaX), range: rangeX),
+            normalized(delta: Double(deltaY), range: rangeY)
+        )
+    }
+
+    private func normalized(delta: Double, range: Double) -> Double {
+        guard abs(range) >= 1 else { return 0 }
+        return max(0, min(1, delta / range))
+    }
+}
+
 public struct NijigenerateShellConfiguration: Codable, Sendable, Equatable {
     public var viewport: NijigenerateViewportConfiguration
     public var pointer: NijigeneratePointerConfiguration?
+    public var drag: NijigenerateDragConfiguration?
     public var parameters: [String: Double]
     public var surfaces: [String: [String: Double]]
     public var reactions: [NijigenerateReactionConfiguration]
@@ -208,12 +260,14 @@ public struct NijigenerateShellConfiguration: Codable, Sendable, Equatable {
     public init(
         viewport: NijigenerateViewportConfiguration = .init(),
         pointer: NijigeneratePointerConfiguration? = nil,
+        drag: NijigenerateDragConfiguration? = nil,
         parameters: [String: Double] = [:],
         surfaces: [String: [String: Double]] = [:],
         reactions: [NijigenerateReactionConfiguration] = []
     ) {
         self.viewport = viewport
         self.pointer = pointer
+        self.drag = drag
         self.parameters = parameters
         self.surfaces = surfaces
         self.reactions = reactions
@@ -222,6 +276,7 @@ public struct NijigenerateShellConfiguration: Codable, Sendable, Equatable {
     private enum CodingKeys: String, CodingKey {
         case viewport
         case pointer
+        case drag
         case parameters
         case surfaces
         case reactions
@@ -234,6 +289,7 @@ public struct NijigenerateShellConfiguration: Codable, Sendable, Equatable {
             forKey: .viewport
         ) ?? .init()
         pointer = try container.decodeIfPresent(NijigeneratePointerConfiguration.self, forKey: .pointer)
+        drag = try container.decodeIfPresent(NijigenerateDragConfiguration.self, forKey: .drag)
         parameters = try container.decodeIfPresent([String: Double].self, forKey: .parameters) ?? [:]
         surfaces = try container.decodeIfPresent([String: [String: Double]].self, forKey: .surfaces) ?? [:]
         reactions = try container.decodeIfPresent(

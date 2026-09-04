@@ -16,7 +16,7 @@ import Testing
 
     try Data().write(to: directory.appending(path: "puppet.inp"))
     try Data().write(to: library)
-    try Data(#"{"viewport":{"width":480,"height":760,"contentScale":0.94,"contentOffsetY":24,"interactionOffsetY":12,"interactionScaleX":1.25,"interactionScaleY":1.5},"pointer":{"centerX":160,"centerY":150,"rangeX":140,"rangeY":120},"parameters":{"Expression::Smile":0},"surfaces":{"105":{"Expression::Smile":1}},"reactions":[{"event":"doubleClick","region":"Head","durationMilliseconds":2500,"parameters":{"Expression::Smile":1}}]}"#.utf8)
+    try Data(#"{"viewport":{"width":480,"height":760,"contentScale":0.94,"contentOffsetY":24,"interactionOffsetY":12,"interactionScaleX":1.25,"interactionScaleY":1.5},"pointer":{"centerX":160,"centerY":150,"rangeX":140,"rangeY":120},"drag":{"region":"Face","parameter":"Interaction::Cheek","rangeX":-40,"rangeY":-35},"parameters":{"Expression::Smile":0},"surfaces":{"105":{"Expression::Smile":1}},"reactions":[{"event":"doubleClick","region":"Head","durationMilliseconds":2500,"parameters":{"Expression::Smile":1}}]}"#.utf8)
         .write(to: directory.appending(path: "nijigenerate.json"))
     #expect(NijigenerateShellRuntime.locate(
         shellDirectory: directory,
@@ -35,6 +35,7 @@ import Testing
                 interactionScaleY: 1.5
             ),
             pointer: .init(centerX: 160, centerY: 150, rangeX: 140, rangeY: 120),
+            drag: .init(region: "Face", parameter: "Interaction::Cheek", rangeX: -40, rangeY: -35),
             parameters: ["Expression::Smile": 0],
             surfaces: ["105": ["Expression::Smile": 1]],
             reactions: [
@@ -64,6 +65,10 @@ import Testing
     #expect(configuration?.pointer?.values(x: 20, y: 270).x == -1)
     #expect(configuration?.pointer?.values(x: 20, y: 270).y == -1)
     #expect(configuration?.pointer?.safeResponse == 0.35)
+    #expect(configuration?.drag?.values(deltaX: -20, deltaY: -35).x == 0.5)
+    #expect(configuration?.drag?.values(deltaX: -20, deltaY: -35).y == 1)
+    #expect(configuration?.drag?.values(deltaX: 20, deltaY: 35).x == 0)
+    #expect(configuration?.drag?.values(deltaX: 20, deltaY: 35).y == 0)
     #expect(configuration?.reactions.first?.matches(event: "doubleclick", region: "head", button: 0) == true)
     #expect(configuration?.reactions.first?.matches(event: "click", region: "Head", button: 0) == false)
     #expect(configuration?.reactions.first?.transitionMilliseconds == 120)

@@ -20,7 +20,15 @@
     "response": 0.35,
     "restoreMilliseconds": 180
   },
+  "drag": {
+    "region": "Face",
+    "parameter": "Interaction::Cheek",
+    "rangeX": -40,
+    "rangeY": -35,
+    "restoreMilliseconds": 180
+  },
   "parameters": {
+    "Interaction::Cheek": 0,
     "Interaction::Pet": 0,
     "Expression::ClosedSmile": 0,
     "Expression::Smile": 0
