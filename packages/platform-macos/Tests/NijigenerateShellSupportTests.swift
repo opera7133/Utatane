@@ -101,7 +101,9 @@ import Testing
 
 @Test @MainActor func `nijigenerate renderer loads local smoke puppet when configured`() throws {
     let environment = ProcessInfo.processInfo.environment
-    guard let puppetPath = environment["UTATANE_NICXLIVE_SMOKE_PUPPET"],
+    let puppetPath = environment["UTATANE_NIJIGENERATE_PUPPET"]
+        ?? environment["UTATANE_NICXLIVE_SMOKE_PUPPET"]
+    guard let puppetPath,
           let libraryPath = environment["UTATANE_NICXLIVE_LIBRARY"]
     else { return }
     let runtime = NijigenerateShellRuntime(
@@ -112,13 +114,27 @@ import Testing
         runtime: runtime,
         size: NSSize(width: 720, height: 720)
     )
+    #expect(!view.isOpaque)
+    #expect(view.layer?.isOpaque == false)
     let window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 720, height: 720),
         styleMask: [.borderless],
         backing: .buffered,
         defer: false
     )
-    window.contentView = view
+    window.backgroundColor = .clear
+    window.isOpaque = false
+    let containerView = NSView(frame: NSRect(origin: .zero, size: view.frame.size))
+    containerView.wantsLayer = true
+    containerView.layer?.isOpaque = false
+    containerView.layer?.backgroundColor = NSColor.clear.cgColor
+    let interactionView = NSView(frame: NSRect(origin: .zero, size: view.frame.size))
+    interactionView.wantsLayer = true
+    interactionView.layer?.isOpaque = false
+    interactionView.layer?.backgroundColor = NSColor.clear.cgColor
+    containerView.addSubview(view)
+    containerView.addSubview(interactionView)
+    window.contentView = containerView
     window.orderFront(nil)
     RunLoop.main.run(until: Date().addingTimeInterval(0.2))
     NijigenerateViewFactory.setScale(NSSize(width: 0.5, height: 0.5), on: view)
@@ -127,8 +143,12 @@ import Testing
     #expect(NijigenerateViewFactory.setParameter(additionalParameter, valueX: 1, on: view))
     #expect(!NijigenerateViewFactory.setParameter("Missing::Parameter", valueX: 1, on: view))
     RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+    if environment["UTATANE_NIJIGENERATE_VERIFY_PIXELS"] != nil {
+        #expect(NijigenerateViewFactory.lastFrameHadVisiblePixels(view))
+    }
     NotificationCenter.default.post(name: NSApplication.willTerminateNotification, object: NSApp)
     window.orderOut(nil)
     window.contentView = nil
+    #expect(containerView.subviews == [view, interactionView])
     #expect(view.frame.size == NSSize(width: 720, height: 720))
 }

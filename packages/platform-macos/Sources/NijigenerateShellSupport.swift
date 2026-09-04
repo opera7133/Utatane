@@ -372,6 +372,10 @@ public struct NijigenerateShellRuntime: Sendable, Equatable {
 
 @MainActor
 enum NijigenerateViewFactory {
+    static func lastFrameHadVisiblePixels(_ view: NSView) -> Bool {
+        UTNicxliveViewLastFrameHadVisiblePixels(view)
+    }
+
     static func make(runtime: NijigenerateShellRuntime, size: NSSize) throws -> NSView {
         var rendererError: NSError?
         guard let view = UTCreateNicxliveView(

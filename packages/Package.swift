@@ -91,10 +91,10 @@ let package = Package(
             name: "CNicxliveRenderer",
             path: "platform-macos-nicxlive/Sources",
             publicHeadersPath: "Include",
-            cxxSettings: [.define("GL_SILENCE_DEPRECATION")],
             linkerSettings: [
                 .linkedFramework("AppKit"),
-                .linkedFramework("OpenGL")
+                .linkedFramework("Metal"),
+                .linkedFramework("MetalKit")
             ]
         ),
         .target(

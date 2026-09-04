@@ -128,6 +128,14 @@ public final class SurfaceWindowController {
 
     public func setPresentationHidden(_ hidden: Bool) {
         presentationHidden = hidden
+        if ProcessInfo.processInfo.environment["UTATANE_NIJIGENERATE_DIAGNOSTICS"] != nil {
+            NSLog(
+                "Utatane nijigenerate visibility request: source=presentation hidden=%d startupHidden=%d effectiveHidden=%d",
+                hidden,
+                startupPresentationHidden,
+                hidden || startupPresentationHidden
+            )
+        }
         for character in characters.values {
             character.setPresentationHidden(hidden || startupPresentationHidden)
         }
@@ -135,6 +143,14 @@ public final class SurfaceWindowController {
 
     public func setStartupPresentationHidden(_ hidden: Bool) {
         startupPresentationHidden = hidden
+        if ProcessInfo.processInfo.environment["UTATANE_NIJIGENERATE_DIAGNOSTICS"] != nil {
+            NSLog(
+                "Utatane nijigenerate visibility request: source=startup hidden=%d presentationHidden=%d effectiveHidden=%d",
+                hidden,
+                presentationHidden,
+                hidden || presentationHidden
+            )
+        }
         setPresentationHidden(presentationHidden)
     }
 
@@ -894,10 +910,14 @@ private final class CharacterSurfaceController {
         pendingAnimationImage = nil
 
         if scope == 0,
-           let runtime = NijigenerateShellRuntime.locate(shellDirectory: shell.directory),
-           (try? showNijigenerate(runtime: runtime, shell: shell, surfaceID: surfaceID)) != nil
+           let runtime = NijigenerateShellRuntime.locate(shellDirectory: shell.directory)
         {
-            return
+            do {
+                try showNijigenerate(runtime: runtime, shell: shell, surfaceID: surfaceID)
+                return
+            } catch {
+                NSLog("Utatane nijigenerate renderer failed: %@", String(describing: error))
+            }
         }
 
         let rendered = try render(surfaceID: surfaceID, shell: shell)
@@ -944,6 +964,9 @@ private final class CharacterSurfaceController {
         view.autoresizingMask = [.width, .height]
         nijigenerateConfiguration = runtime.configuration
         let interactionView = SurfaceImageView(frame: NSRect(origin: .zero, size: size))
+        interactionView.autoresizingMask = [.width, .height]
+        interactionView.layer?.isOpaque = false
+        interactionView.layer?.backgroundColor = NSColor.clear.cgColor
         configureInteractionView(
             interactionView,
             definition: shell.surfaces[surfaceID],
@@ -954,12 +977,32 @@ private final class CharacterSurfaceController {
         interactionView.coordinateScaleMultiplierX = CGFloat(runtime.configuration.viewport.interactionScaleX)
         interactionView.coordinateScaleMultiplierY = CGFloat(runtime.configuration.viewport.interactionScaleY)
         updateImageViewCoordinateScale(on: interactionView)
-        interactionView.addSubview(view)
+        let containerView = NijigenerateSurfaceContainerView(frame: NSRect(origin: .zero, size: size))
+        view.frame = containerView.bounds
+        interactionView.frame = containerView.bounds
+        containerView.addSubview(view)
+        containerView.addSubview(interactionView)
         let window = window ?? makeWindow()
-        window.contentView = interactionView
+        window.contentView = containerView
         window.setContentSize(size)
         window.alphaValue = presentationAlpha
         window.makeKeyAndOrderFront(nil)
+        if ProcessInfo.processInfo.environment["UTATANE_NIJIGENERATE_DIAGNOSTICS"] != nil {
+            DispatchQueue.main.async {
+                NSLog(
+                    "Utatane nijigenerate presentation: windowVisible=%d windowAlpha=%.3f windowOpaque=%d content=%@ metalFrame=%@ metalHidden=%d metalAlpha=%.3f layer=%@ superlayer=%@",
+                    window.isVisible,
+                    window.alphaValue,
+                    window.isOpaque,
+                    String(describing: type(of: window.contentView!)),
+                    NSStringFromRect(view.frame),
+                    view.isHidden,
+                    view.alphaValue,
+                    String(describing: view.layer),
+                    String(describing: view.layer?.superlayer)
+                )
+            }
+        }
         self.window = window
         nijigenerateView = view
         nijigenerateBaseSize = baseSize
@@ -1267,6 +1310,17 @@ private final class CharacterSurfaceController {
             imageView?.cancelDrag()
         }
         window?.alphaValue = presentationAlpha
+        if nijigenerateView != nil,
+           ProcessInfo.processInfo.environment["UTATANE_NIJIGENERATE_DIAGNOSTICS"] != nil
+        {
+            NSLog(
+                "Utatane nijigenerate visibility applied: hidden=%d surfaceAlpha=%.3f dragging=%d windowAlpha=%.3f",
+                hidden,
+                surfaceAlpha,
+                isDragging,
+                window?.alphaValue ?? -1
+            )
+        }
     }
 
     func setAlpha(_ alpha: CGFloat?, durationMilliseconds: Int) async {
@@ -2160,6 +2214,24 @@ func surfaceCompositingOperation(for method: String) -> NSCompositingOperation? 
 func surfaceCompositingClipsToBaseAlpha(_ method: String) -> Bool {
     let method = method.lowercased()
     return method == "overlaymultiply" || method == "blend-multiply-fast"
+}
+
+private final class NijigenerateSurfaceContainerView: NSView {
+    override var isOpaque: Bool {
+        false
+    }
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        wantsLayer = true
+        layer?.isOpaque = false
+        layer?.backgroundColor = NSColor.clear.cgColor
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 }
 
 private final class SurfaceImageView: NSImageView {

@@ -1,10 +1,11 @@
 #import <AppKit/AppKit.h>
+#import <MetalKit/MetalKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
 /// Experimental nicxlive-backed view. The runtime is loaded dynamically so
 /// Utatane can still build and run when nicxlive is not installed.
-@interface UTNicxliveView : NSOpenGLView
+@interface UTNicxliveView : MTKView <MTKViewDelegate>
 
 + (nullable instancetype)viewWithFrame:(NSRect)frame
                              puppetURL:(NSURL *)puppetURL
@@ -29,5 +30,8 @@ FOUNDATION_EXPORT BOOL UTSetNicxliveViewParameter(
     CGFloat valueX,
     CGFloat valueY
 );
+
+/// Returns whether the most recently verified Metal frame contained a visible pixel.
+FOUNDATION_EXPORT BOOL UTNicxliveViewLastFrameHadVisiblePixels(NSView *view);
 
 NS_ASSUME_NONNULL_END
