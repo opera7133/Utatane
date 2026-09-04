@@ -59,6 +59,26 @@
       "target": "utatane-mcp",
       "configuration": "release",
       "preLaunchTask": "swift: Build Release utatane-mcp (packages)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:utatane}/packages",
+      "name": "Debug utatane-validate (packages)",
+      "target": "utatane-validate",
+      "configuration": "debug",
+      "preLaunchTask": "swift: Build Debug utatane-validate (packages)"
+    },
+    {
+      "type": "swift",
+      "request": "launch",
+      "args": [],
+      "cwd": "${workspaceFolder:utatane}/packages",
+      "name": "Release utatane-validate (packages)",
+      "target": "utatane-validate",
+      "configuration": "release",
+      "preLaunchTask": "swift: Build Release utatane-validate (packages)"
     }
   ]
 }

@@ -519,13 +519,21 @@ final class CalledGhostRuntime {
         player.onCloseSystemDialog = { [weak self] id in
             self?.systemDialogController.close(id: id)
         }
-        player.onInputBox = { [weak self] id, _, initialValue in
+        player.onInputBox = { [weak self] id, timeoutMilliseconds, initialValue in
             guard let self else { return nil }
+            let autocomplete = try? await session.handle(event: .shiori(
+                id: "inputbox.autocomplete",
+                references: [0: "inputbox", 1: id]
+            ))
             guard let value = await textInputWindowController.showPrompt(
                 id: id,
                 title: String(localized: "文字を入力"),
                 initialValue: initialValue,
-                actionTitle: String(localized: "OK")
+                autocompleteValues: TextInputWindowController.autocompleteValues(
+                    from: autocomplete?.rawValue
+                ),
+                actionTitle: String(localized: "OK"),
+                timeoutMilliseconds: timeoutMilliseconds
             ) else {
                 return try? await session.handle(event: .shiori(
                     id: "OnUserInputCancel",
@@ -577,9 +585,16 @@ final class CalledGhostRuntime {
         }
         player.onCommunicateBox = { [weak self] initialValue in
             guard let self else { return nil }
+            let autocomplete = try? await session.handle(event: .shiori(
+                id: "inputbox.autocomplete",
+                references: [0: "communicatebox"]
+            ))
             guard let value = await textInputWindowController.showPrompt(
                 title: String(localized: "文字を入力"),
                 initialValue: initialValue,
+                autocompleteValues: TextInputWindowController.autocompleteValues(
+                    from: autocomplete?.rawValue
+                ),
                 actionTitle: String(localized: "OK")
             ) else {
                 return try? await session.handle(event: .shiori(
@@ -595,9 +610,16 @@ final class CalledGhostRuntime {
         player.onTeachBox = { [weak self] initialValue in
             guard let self else { return nil }
             _ = try? await session.handle(event: .shiori(id: "OnTeachStart", references: [:]))
+            let autocomplete = try? await session.handle(event: .shiori(
+                id: "inputbox.autocomplete",
+                references: [0: "teachbox"]
+            ))
             guard let value = await textInputWindowController.showPrompt(
                 title: String(localized: "文字を入力"),
                 initialValue: initialValue,
+                autocompleteValues: TextInputWindowController.autocompleteValues(
+                    from: autocomplete?.rawValue
+                ),
                 actionTitle: String(localized: "OK")
             ) else {
                 return try? await session.handle(event: .shiori(

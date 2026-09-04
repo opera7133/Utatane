@@ -3655,6 +3655,35 @@
         }
       }
     },
+    "ゴーストの更新チェックのみ実行" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check Ghost for Updates Only"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고스트 업데이트 확인만 실행"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅检查 Ghost 更新"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "僅檢查 Ghost 更新"
+          }
+        }
+      }
+    },
     "ゴーストを呼ぶ" : {
       "extractionState" : "manual",
       "localizations" : {

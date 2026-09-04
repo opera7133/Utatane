@@ -1,8 +1,15 @@
 import Foundation
 
+struct FirstTypingRecord: Codable, Equatable, Sendable {
+    var correctCount: Int
+    var totalMilliseconds: Int
+}
+
 struct FirstNativePersistentState: Codable, Equatable, Sendable {
     var energy: Int
     var lastBathDate: Date?
+    var lastUpdateDate: Date? = nil
+    var typingRecords: [FirstTypingRecord?]? = nil
 }
 
 struct FirstNativeStateStore: Sendable {

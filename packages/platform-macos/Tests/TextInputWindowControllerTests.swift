@@ -64,4 +64,27 @@ struct TextInputWindowControllerTests {
         controller.close(id: "input-1")
         #expect(cancelled)
     }
+
+    @Test
+    func `times out an input window`() async {
+        let controller = TextInputWindowController()
+
+        let result = await controller.showPrompt(
+            id: "timed-input",
+            title: "テスト入力",
+            timeoutMilliseconds: 10
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test
+    func `parses autocomplete values separated by byte one`() {
+        let values = TextInputWindowController.autocompleteValues(
+            from: "apple\u{1}banana\u{1}apple\u{1}\u{1}cherry"
+        )
+
+        #expect(values == ["apple", "banana", "cherry"])
+        #expect(TextInputWindowController.autocompleteValues(from: nil).isEmpty)
+    }
 }

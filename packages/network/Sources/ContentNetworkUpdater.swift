@@ -25,6 +25,40 @@ public struct ContentUpdateResult: Sendable, Equatable {
     }
 }
 
+public struct ContentUpdateEventRecord: Sendable, Equatable {
+    public let name: String
+    public let type: String
+    public let succeeded: Bool
+    public let result: String
+    public let failurePath: String?
+
+    public init(name: String, type: String, succeeded: Bool, result: String, failurePath: String? = nil) {
+        self.name = name
+        self.type = type
+        self.succeeded = succeeded
+        self.result = result
+        self.failurePath = failurePath
+    }
+
+    public var legacyValue: String {
+        fields(includingName: false).joined(separator: "\u{1}")
+    }
+
+    public var extendedValue: String {
+        fields(includingName: true).joined(separator: "\u{1}")
+    }
+
+    private func fields(includingName: Bool) -> [String] {
+        var values = includingName ? [name, type] : [type]
+        values.append(succeeded ? "OK" : "NG")
+        values.append(result)
+        if let failurePath, !failurePath.isEmpty {
+            values.append(failurePath)
+        }
+        return values
+    }
+}
+
 public enum ContentUpdateProgress: Sendable, Equatable {
     case ready(files: [String])
     case downloadBegin(path: String, index: Int, total: Int)
@@ -168,6 +202,25 @@ public struct ContentNetworkUpdater: Sendable {
             try Self.applyDeleteList(deleteData, root: root)
         }
         return ContentUpdateResult(changedFiles: changed.map(\.entry.path))
+    }
+
+    /// Fetches and compares the update manifest without downloading or changing content files.
+    public func check(rootDirectory: URL, homeURL: URL) async throws -> ContentUpdateResult {
+        guard let scheme = homeURL.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
+            throw ContentNetworkUpdateError.invalidHomeURL
+        }
+        let (_, manifestData) = try await fetchManifest(homeURL: homeURL)
+        let entries = try Self.parseManifest(manifestData)
+        guard entries.count <= maximumFileCount else { throw ContentNetworkUpdateError.tooManyFiles }
+        let root = rootDirectory.standardizedFileURL
+        let pending = try entries.compactMap { entry -> String? in
+            let local = try Self.confinedURL(path: entry.path, root: root)
+            guard let data = try? Data(contentsOf: local), Self.md5(data) == entry.md5 else {
+                return entry.path
+            }
+            return nil
+        }
+        return ContentUpdateResult(changedFiles: pending)
     }
 
     public static func homeURL(in rootDirectory: URL) -> URL? {

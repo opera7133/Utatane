@@ -100,6 +100,17 @@ Localizations/             文字列カタログの生成元JSON
 Internal-Docs/             調査記録、TODO、実装上の補足
 ```
 
+## コンテンツの静的検査
+
+ゴーストのディレクトリを指定すると、必須ファイル、Shellの既定surfaceとelement画像、SHIORIの判定、辞書内の未対応SakuraScriptを確認できる。
+
+```bash
+swift run --package-path packages utatane-validate "/path/to/ghost"
+swift run --package-path packages utatane-validate --json "/path/to/ghost"
+```
+
+エラーがある場合は終了コード1、警告だけなら0を返す。辞書言語の正規表現やパスを誤検出しないよう、SakuraScript検査は一般的なscope／surface命令を含む行に限定する。静的検査なので、辞書の実行時分岐、外部SHIORI／SAORI、実際の描画までは保証しない。
+
 ## 同梱コンテンツとローカル検証データ
 
 再配布条件を確認済みの同梱コンテンツは`Content/Bundled`で管理します。riaの会話、シェル、専用バルーンを変更するときはこちらだけを編集してください。

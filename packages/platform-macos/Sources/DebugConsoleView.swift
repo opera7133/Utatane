@@ -82,6 +82,7 @@ public struct DebugConsoleView: View {
     private let onExecuteScript: (String) -> Void
     private let onSetCollisionMode: (Bool, Bool) -> Void
     private let onShowBalloonTest: () -> Void
+    private let onCheckForUpdates: () -> Void
     private let surfaces: [DeveloperSurfaceTestItem]
     private let onSelectSurface: (Int, Int) -> Void
     private let onPlayAnimation: (Int, Int) -> Void
@@ -115,6 +116,7 @@ public struct DebugConsoleView: View {
         onExecuteScript: @escaping (String) -> Void,
         onSetCollisionMode: @escaping (Bool, Bool) -> Void,
         onShowBalloonTest: @escaping () -> Void,
+        onCheckForUpdates: @escaping () -> Void,
         surfaces: [DeveloperSurfaceTestItem],
         onSelectSurface: @escaping (Int, Int) -> Void,
         onPlayAnimation: @escaping (Int, Int) -> Void,
@@ -135,6 +137,7 @@ public struct DebugConsoleView: View {
         self.onExecuteScript = onExecuteScript
         self.onSetCollisionMode = onSetCollisionMode
         self.onShowBalloonTest = onShowBalloonTest
+        self.onCheckForUpdates = onCheckForUpdates
         self.surfaces = surfaces
         self.onSelectSurface = onSelectSurface
         self.onPlayAnimation = onPlayAnimation
@@ -327,6 +330,8 @@ public struct DebugConsoleView: View {
             }
 
             Section("既存の開発操作") {
+                Button("ゴーストの更新チェックのみ実行", action: onCheckForUpdates)
+                    .disabled(!isSessionAvailable)
                 Text("ゴーストの再読み込み、低速アニメーション、再生の進行・停止、ログ確認は上部の操作とログ画面から利用できる。")
                     .foregroundStyle(.secondary)
             }

@@ -34,7 +34,8 @@ let package = Package(
         .library(name: "UtataneHisuiNative", targets: ["UtataneHisuiNative"]),
         .library(name: "UtataneYuhnaNative", targets: ["UtataneYuhnaNative"]),
         .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"]),
-        .executable(name: "utatane-mcp", targets: ["UtataneMCP"])
+        .executable(name: "utatane-mcp", targets: ["UtataneMCP"]),
+        .executable(name: "utatane-validate", targets: ["UtataneValidate"])
     ],
     targets: [
         .target(
@@ -81,6 +82,21 @@ let package = Package(
         .executableTarget(
             name: "UtataneMCP",
             path: "mcp-server/Sources"
+        ),
+        .target(
+            name: "UtataneContentValidator",
+            dependencies: [
+                "UtataneCore",
+                "UtataneGhostKit",
+                "UtataneSakuraScript",
+                "UtataneShell"
+            ],
+            path: "content-validator/Sources"
+        ),
+        .executableTarget(
+            name: "UtataneValidate",
+            dependencies: ["UtataneContentValidator"],
+            path: "content-validator-cli/Sources"
         ),
         .target(
             name: "UtataneShell",
@@ -411,6 +427,11 @@ let package = Package(
             name: "UtataneMCPTests",
             dependencies: ["UtataneMCP"],
             path: "mcp-server/Tests"
+        ),
+        .testTarget(
+            name: "UtataneContentValidatorTests",
+            dependencies: ["UtataneContentValidator"],
+            path: "content-validator/Tests"
         ),
         .testTarget(
             name: "UtataneShellTests",

@@ -15,6 +15,18 @@ private actor UpdateProgressRecorder {
     }
 }
 
+private actor UpdateFetchRecorder {
+    private var values: [String] = []
+
+    func append(_ value: String) {
+        values.append(value)
+    }
+
+    func recorded() -> [String] {
+        values
+    }
+}
+
 @Test func `parses both update manifest formats and rejects traversal`() throws {
     let delimiter = "\u{1}"
     let data = Data("charset,Shift_JIS\ncomment,ignored\nghost/master/a.txt\(delimiter)d41d8cd98f00b204e9800998ecf8427e\(delimiter)\nfile,shell/master/a.png\(delimiter)d41d8cd98f00b204e9800998ecf8427e\(delimiter)size=0\(delimiter)date=2026-08-24T00:00:00Z\(delimiter)charset=UTF-8\(delimiter)\n".utf8)
@@ -27,6 +39,22 @@ private actor UpdateProgressRecorder {
     #expect(throws: ContentNetworkUpdateError.self) {
         try ContentNetworkUpdater.parseManifest(Data("../outside\(delimiter)d41d8cd98f00b204e9800998ecf8427e\n".utf8))
     }
+}
+
+@Test func `formats legacy and extended aggregate update results`() {
+    let success = ContentUpdateEventRecord(name: "Ghost", type: "ghost", succeeded: true, result: "2")
+    #expect(success.legacyValue == "ghost\u{1}OK\u{1}2")
+    #expect(success.extendedValue == "Ghost\u{1}ghost\u{1}OK\u{1}2")
+
+    let failure = ContentUpdateEventRecord(
+        name: "Ghost",
+        type: "ghost",
+        succeeded: false,
+        result: "md5 miss",
+        failurePath: "ghost/master/a.txt"
+    )
+    #expect(failure.legacyValue == "ghost\u{1}NG\u{1}md5 miss\u{1}ghost/master/a.txt")
+    #expect(failure.extendedValue == "Ghost\u{1}ghost\u{1}NG\u{1}md5 miss\u{1}ghost/master/a.txt")
 }
 
 @Test func `parses and safely applies delete txt after update`() async throws {
@@ -88,6 +116,35 @@ private actor UpdateProgressRecorder {
         .checksumBegin(path: "descript.txt", expected: hash, actual: hash),
         .checksumComplete(path: "descript.txt", expected: hash, actual: hash)
     ])
+}
+
+@Test func `checks pending files without downloading or changing them`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data("current".utf8).write(to: root.appending(path: "current.txt"))
+    let currentHash = Insecure.MD5.hash(data: Data("current".utf8)).map { String(format: "%02x", $0) }.joined()
+    let newHash = Insecure.MD5.hash(data: Data("new".utf8)).map { String(format: "%02x", $0) }.joined()
+    let delimiter = "\u{1}"
+    let manifest = Data("current.txt\(delimiter)\(currentHash)\(delimiter)\nnew.txt\(delimiter)\(newHash)\(delimiter)\n".utf8)
+    let fetched = UpdateFetchRecorder()
+    let updater = ContentNetworkUpdater { url in
+        await fetched.append(url.lastPathComponent)
+        if url.lastPathComponent == "updates2.dau" {
+            return manifest
+        }
+        throw NetworkFetchError.unsuccessfulStatus(404)
+    }
+
+    let result = try await updater.check(
+        rootDirectory: root,
+        homeURL: #require(URL(string: "https://example.test/ghost/"))
+    )
+
+    #expect(result.changedFiles == ["new.txt"])
+    #expect(await fetched.recorded() == ["updates2.dau"])
+    #expect(try Data(contentsOf: root.appending(path: "current.txt")) == Data("current".utf8))
+    #expect(!FileManager.default.fileExists(atPath: root.appending(path: "new.txt").path))
 }
 
 @Test func `reads homeurl from ghost and balloon descriptors`() throws {

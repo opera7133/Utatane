@@ -6,8 +6,8 @@ Utatane が発行する SHIORI Event を UKADOC の一覧と比較するため�
 基準: [SHIORI Eventリスト](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html)
 
 UKADOC掲載イベント数: 290
-調査日: 2026-08-25
-調査結果: ✅ 6 / 🟡 206 / ❌ 74 / ➖ 4
+調査日: 2026-09-04
+調査結果: ✅ 15 / 🟡 214 / ❌ 57 / ➖ 4
 
 ## 判定
 
@@ -69,7 +69,7 @@ UKADOC掲載イベント数: 290
 | [`OnCommunicateInputCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCommunicateInputCancel) | 🟡 | 通知経路のUKADOC照合 | 低 | CommunicateBoxをキャンセルまたは閉じた時に空のReference0とReference1=cancelを通知。実動未確認 |
 | [`OnUserInput`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUserInput) | 🟡 | 通知経路のUKADOC照合 | 低 | Onで始まらないInputBox IDの決定時にID・入力内容・空の補足をReference0〜2へ通知。追加reference等は未対応 |
 | [`OnUserInputCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUserInputCancel) | 🟡 | 通知経路のUKADOC照合 | 低 | InputBoxをキャンセルまたは閉じた時にID・close・空の補足をReference0〜2へ通知。タイムアウト理由は未対応 |
-| [`inputbox.autocomplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#inputbox.autocomplete) | ❌ | 既存入力UIへの通知追加 | 低 | 本番コードにベースウェアからの自動発行経路なし |
+| [`inputbox.autocomplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#inputbox.autocomplete) | 🟡 | 実際の候補選択操作 | 低 | inputbox・teachbox・communicatebox展開時に種類とIDを通知し、バイト値1区切りの応答を重複除去してmacOS候補入力欄へ反映。実ゴーストでの操作確認は未実施 |
 
 ## ダイアログボックスイベント
 
@@ -237,12 +237,12 @@ UKADOC掲載イベント数: 290
 | [`OnUpdateOther.OnMD5CompareBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnMD5CompareBegin) | 🟡 | 実更新確認 | 低 | バルーン更新ファイルの照合前にパス・期待値・実測MD5・種別・理由を通知 |
 | [`OnUpdateOther.OnMD5CompareComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnMD5CompareComplete) | 🟡 | 実更新確認 | 低 | バルーン更新ファイルのMD5一致時に照合情報を通知 |
 | [`OnUpdateOther.OnMD5CompareFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateOther.OnMD5CompareFailure) | 🟡 | 実更新確認 | 低 | バルーン更新ファイルのMD5不一致時に照合情報を通知してから更新を中断 |
-| [`OnUpdateCheckComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateCheckComplete) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateCheckFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateCheckFailure) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateResult`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateResult) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateResultEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateResultEx) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateCheckResult`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateCheckResult) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnUpdateCheckResultEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateCheckResultEx) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnUpdateCheckComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateCheckComplete) | 🟡 | 実通信・画面確認 | 低 | 開発用パレットの「更新チェックのみ」でmanifestとローカルMD5を比較し、none／changed、対象ファイル、ghostを通知。ファイルは取得・変更しない |
+| [`OnUpdateCheckFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateCheckFailure) | 🟡 | 実通信・画面確認 | 低 | 更新チェックのみのURL・manifest取得／解析失敗を分類して通知 |
+| [`OnUpdateResult`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateResult) | 🟡 | 複数対象の集約 | 低 | 通常のゴースト更新結果をghost・OK／NG・件数／失敗理由・任意の失敗パスとして、Ex無応答時に通知 |
+| [`OnUpdateResultEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateResultEx) | 🟡 | 複数対象の集約 | 低 | 通常のゴースト更新結果を名前・ghost・OK／NG・件数／失敗理由・任意の失敗パスとして通知 |
+| [`OnUpdateCheckResult`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateCheckResult) | 🟡 | 複数対象の集約 | 低 | 更新チェックのみの結果をghost・OK／NG・件数／失敗理由・任意の失敗パスとして、Ex無応答時に通知 |
+| [`OnUpdateCheckResultEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateCheckResultEx) | 🟡 | 複数対象の集約 | 低 | 更新チェックのみの結果を名前・ghost・OK／NG・件数／失敗理由・任意の失敗パスとして通知 |
 | [`OnUpdateResultExplorer`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdateResultExplorer) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 
 ## 時計合わせイベント

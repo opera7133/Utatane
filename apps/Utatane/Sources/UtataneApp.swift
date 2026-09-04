@@ -304,6 +304,9 @@ private struct UtataneRootView: View {
                         surfaceWindowController.setCollisionMode(enabled, showsNames: showsNames)
                     },
                     onShowBalloonTest: showBalloonTest,
+                    onCheckForUpdates: {
+                        Task { await checkCurrentGhostUpdate() }
+                    },
                     surfaces: developerSurfaceTestItems,
                     onSelectSurface: { scope, surfaceID in
                         showDeveloperSurface(scope: scope, surfaceID: surfaceID)
@@ -1639,13 +1642,21 @@ private struct UtataneRootView: View {
             scriptPlayer.onCloseSystemDialog = { id in
                 systemDialogController.close(id: id)
             }
-            scriptPlayer.onInputBox = { id, _, initialValue in
+            scriptPlayer.onInputBox = { id, timeoutMilliseconds, initialValue in
                 guard let activeSession = session else { return nil }
+                let autocomplete = try? await activeSession.handle(event: .shiori(
+                    id: "inputbox.autocomplete",
+                    references: [0: "inputbox", 1: id]
+                ))
                 guard let value = await textInputWindowController.showPrompt(
                     id: id,
                     title: String(localized: "文字を入力"),
                     initialValue: initialValue,
-                    actionTitle: String(localized: "OK")
+                    autocompleteValues: TextInputWindowController.autocompleteValues(
+                        from: autocomplete?.rawValue
+                    ),
+                    actionTitle: String(localized: "OK"),
+                    timeoutMilliseconds: timeoutMilliseconds
                 ) else {
                     return try? await activeSession.handle(event: .shiori(
                         id: "OnUserInputCancel",
@@ -1668,9 +1679,16 @@ private struct UtataneRootView: View {
             }
             scriptPlayer.onCommunicateBox = { initialValue in
                 guard let activeSession = session else { return nil }
+                let autocomplete = try? await activeSession.handle(event: .shiori(
+                    id: "inputbox.autocomplete",
+                    references: [0: "communicatebox"]
+                ))
                 guard let value = await textInputWindowController.showPrompt(
                     title: String(localized: "文字を入力"),
                     initialValue: initialValue,
+                    autocompleteValues: TextInputWindowController.autocompleteValues(
+                        from: autocomplete?.rawValue
+                    ),
                     actionTitle: String(localized: "OK")
                 ) else {
                     return try? await activeSession.handle(event: .shiori(
@@ -1689,9 +1707,16 @@ private struct UtataneRootView: View {
                     id: "OnTeachStart",
                     references: [:]
                 ))
+                let autocomplete = try? await activeSession.handle(event: .shiori(
+                    id: "inputbox.autocomplete",
+                    references: [0: "teachbox"]
+                ))
                 guard let value = await textInputWindowController.showPrompt(
                     title: String(localized: "文字を入力"),
                     initialValue: initialValue,
+                    autocompleteValues: TextInputWindowController.autocompleteValues(
+                        from: autocomplete?.rawValue
+                    ),
                     actionTitle: String(localized: "OK")
                 ) else {
                     return try? await activeSession.handle(event: .shiori(
@@ -3678,6 +3703,15 @@ private struct UtataneRootView: View {
                 session: updateSession,
                 balloon: updateBalloon
             )
+            await playUpdateResult(
+                checkOnly: false,
+                name: ghost.name,
+                succeeded: true,
+                result: String(result.changedFiles.count),
+                failurePath: nil,
+                session: updateSession,
+                balloon: updateBalloon
+            )
         } catch {
             AppLogStore.shared.error(
                 "「\(ghost.name)」の更新に失敗しました: \(error.localizedDescription)",
@@ -3695,9 +3729,128 @@ private struct UtataneRootView: View {
                 session: updateSession,
                 balloon: updateBalloon
             )
+            await playUpdateResult(
+                checkOnly: false,
+                name: ghost.name,
+                succeeded: false,
+                result: updateFailureReason(error),
+                failurePath: updateFailurePath(error),
+                session: updateSession,
+                balloon: updateBalloon
+            )
             if !handled, !isAutomatic {
                 showError(error.localizedDescription)
             }
+        }
+    }
+
+    private func checkCurrentGhostUpdate() async {
+        guard !isUpdatingContent,
+              let ghost = currentGhost,
+              let updateSession = session,
+              let updateBalloon = balloon
+        else { return }
+        isUpdatingContent = true
+        defer { isUpdatingContent = false }
+
+        let statusToken = statusWindowController.show("「\(ghost.name)」の更新を確認中…")
+        defer { statusWindowController.hide(token: statusToken) }
+        do {
+            let homeURL: URL
+            if let configured = ContentNetworkUpdater.homeURL(in: ghost.rootDirectory) {
+                homeURL = configured
+            } else if let value = try await updateSession.handle(event: .shiori(id: "On_homeurl", references: [:])),
+                      let configured = URL(string: value.rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+            {
+                homeURL = configured
+            } else {
+                throw ContentNetworkUpdateError.invalidHomeURL
+            }
+            let result = try await ContentNetworkUpdater().check(
+                rootDirectory: ghost.rootDirectory,
+                homeURL: homeURL
+            )
+            let reason = result.changedFiles.isEmpty ? "none" : "changed"
+            _ = await playInstallationEvent(
+                .shiori(id: "OnUpdateCheckComplete", references: [
+                    0: reason,
+                    1: result.changedFiles.joined(separator: ","),
+                    3: "ghost"
+                ]),
+                session: updateSession,
+                balloon: updateBalloon
+            )
+            await playUpdateResult(
+                checkOnly: true,
+                name: ghost.name,
+                succeeded: true,
+                result: String(result.changedFiles.count),
+                failurePath: nil,
+                session: updateSession,
+                balloon: updateBalloon
+            )
+            AppLogStore.shared.info(
+                result.changedFiles.isEmpty
+                    ? "「\(ghost.name)」は最新です（確認のみ）"
+                    : "「\(ghost.name)」に\(result.changedFiles.count)件の更新があります",
+                category: "Update",
+                details: result.changedFiles.isEmpty ? nil : result.changedFiles.joined(separator: "\n"),
+                ghostName: ghost.name
+            )
+        } catch {
+            let reason = updateFailureReason(error)
+            _ = await playInstallationEvent(
+                .shiori(id: "OnUpdateCheckFailure", references: [0: reason]),
+                session: updateSession,
+                balloon: updateBalloon
+            )
+            await playUpdateResult(
+                checkOnly: true,
+                name: ghost.name,
+                succeeded: false,
+                result: reason,
+                failurePath: updateFailurePath(error),
+                session: updateSession,
+                balloon: updateBalloon
+            )
+            AppLogStore.shared.error(
+                "「\(ghost.name)」の更新確認に失敗しました: \(error.localizedDescription)",
+                category: "Update",
+                details: String(describing: error),
+                ghostName: ghost.name
+            )
+        }
+    }
+
+    private func playUpdateResult(
+        checkOnly: Bool,
+        name: String,
+        succeeded: Bool,
+        result: String,
+        failurePath: String?,
+        session: GhostSession,
+        balloon: BalloonDefinition
+    ) async {
+        let record = ContentUpdateEventRecord(
+            name: name,
+            type: "ghost",
+            succeeded: succeeded,
+            result: result,
+            failurePath: failurePath
+        )
+        let extendedID = checkOnly ? "OnUpdateCheckResultEx" : "OnUpdateResultEx"
+        let legacyID = checkOnly ? "OnUpdateCheckResult" : "OnUpdateResult"
+        let handled = await playInstallationEvent(
+            .shiori(id: extendedID, references: [0: record.extendedValue]),
+            session: session,
+            balloon: balloon
+        )
+        if !handled {
+            _ = await playInstallationEvent(
+                .shiori(id: legacyID, references: [0: record.legacyValue]),
+                session: session,
+                balloon: balloon
+            )
         }
     }
 

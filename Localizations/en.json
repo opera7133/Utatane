@@ -296,5 +296,6 @@
   "対応SHIORI" : "Recognized SHIORI",
   "実行方式と追加ランタイムの要否を表示する。SHIORIのダウンロードや更新は行わない。" : "Shows execution methods and additional runtime requirements. Utatane does not download or update SHIORI.",
   "手動導入" : "Manual Setup",
-  "未対応" : "Unsupported"
+  "未対応" : "Unsupported",
+  "ゴーストの更新チェックのみ実行" : "Check Ghost for Updates Only"
 }

@@ -8,6 +8,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         public let title: String
         public let prompt: String?
         public let initialValue: String
+        public let autocompleteValues: [String]
         public let placeholder: String?
         public let actionTitle: String
         public let allowsCancel: Bool
@@ -19,6 +20,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             title: String,
             prompt: String? = nil,
             initialValue: String = "",
+            autocompleteValues: [String] = [],
             placeholder: String? = nil,
             actionTitle: String = String(localized: "OK"),
             allowsCancel: Bool = true,
@@ -29,6 +31,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             self.title = title
             self.prompt = prompt
             self.initialValue = initialValue
+            self.autocompleteValues = autocompleteValues
             self.placeholder = placeholder
             self.actionTitle = actionTitle
             self.allowsCancel = allowsCancel
@@ -39,6 +42,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
 
     private var window: NSWindow?
     private var currentRequest: Request?
+    private var timeoutTask: Task<Void, Never>?
 
     override public init() {
         super.init()
@@ -89,9 +93,11 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         title: String,
         prompt: String? = nil,
         initialValue: String = "",
+        autocompleteValues: [String] = [],
         placeholder: String? = nil,
         actionTitle: String = String(localized: "OK"),
-        allowsCancel: Bool = true
+        allowsCancel: Bool = true,
+        timeoutMilliseconds: Int? = nil
     ) async -> String? {
         await withCheckedContinuation { continuation in
             show(Request(
@@ -99,6 +105,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
                 title: title,
                 prompt: prompt,
                 initialValue: initialValue,
+                autocompleteValues: autocompleteValues,
                 placeholder: placeholder,
                 actionTitle: actionTitle,
                 allowsCancel: allowsCancel,
@@ -109,7 +116,23 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
                     continuation.resume(returning: nil)
                 }
             ))
+            if let timeoutMilliseconds, timeoutMilliseconds > 0 {
+                timeoutTask = Task { [weak self] in
+                    try? await Task.sleep(for: .milliseconds(timeoutMilliseconds))
+                    guard !Task.isCancelled else { return }
+                    self?.closeCurrentWindow(invokeCancel: true)
+                }
+            }
         }
+    }
+
+    public static func autocompleteValues(from value: String?) -> [String] {
+        guard let value else { return [] }
+        var seen = Set<String>()
+        return value
+            .split(separator: "\u{1}", omittingEmptySubsequences: true)
+            .map(String.init)
+            .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
     public func close(id: String? = nil) {
@@ -123,6 +146,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
     }
 
     private func closeCurrentWindow(invokeCancel: Bool) {
+        timeoutTask?.cancel()
+        timeoutTask = nil
         let request = currentRequest
         currentRequest = nil
         if let window {
@@ -169,14 +194,24 @@ private struct TextInputDialogView: View {
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
-            TextField(
-                request.placeholder ?? "",
-                text: $text
-            )
-            .textFieldStyle(.roundedBorder)
-            .focused($isFocused)
-            .onSubmit {
-                onCommit(text)
+            if request.autocompleteValues.isEmpty {
+                TextField(
+                    request.placeholder ?? "",
+                    text: $text
+                )
+                .textFieldStyle(.roundedBorder)
+                .focused($isFocused)
+                .onSubmit {
+                    onCommit(text)
+                }
+            } else {
+                AutocompleteTextField(
+                    text: $text,
+                    placeholder: request.placeholder ?? "",
+                    values: request.autocompleteValues,
+                    onCommit: onCommit
+                )
+                .frame(height: 24)
             }
             HStack {
                 if request.allowsCancel {
@@ -194,6 +229,61 @@ private struct TextInputDialogView: View {
         .frame(width: 380)
         .onAppear {
             isFocused = true
+        }
+    }
+}
+
+private struct AutocompleteTextField: NSViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let values: [String]
+    let onCommit: (String) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text, onCommit: onCommit)
+    }
+
+    func makeNSView(context: Context) -> NSComboBox {
+        let comboBox = NSComboBox()
+        comboBox.usesDataSource = false
+        comboBox.completes = true
+        comboBox.placeholderString = placeholder
+        comboBox.addItems(withObjectValues: values)
+        comboBox.stringValue = text
+        comboBox.delegate = context.coordinator
+        return comboBox
+    }
+
+    func updateNSView(_ comboBox: NSComboBox, context: Context) {
+        if comboBox.stringValue != text {
+            comboBox.stringValue = text
+        }
+        let currentValues = comboBox.objectValues.compactMap { $0 as? String }
+        if currentValues != values {
+            comboBox.removeAllItems()
+            comboBox.addItems(withObjectValues: values)
+        }
+    }
+
+    final class Coordinator: NSObject, NSComboBoxDelegate, NSTextFieldDelegate {
+        private var text: Binding<String>
+        private let onCommit: (String) -> Void
+
+        init(text: Binding<String>, onCommit: @escaping (String) -> Void) {
+            self.text = text
+            self.onCommit = onCommit
+        }
+
+        func controlTextDidChange(_ notification: Notification) {
+            guard let comboBox = notification.object as? NSComboBox else { return }
+            text.wrappedValue = comboBox.stringValue
+        }
+
+        func controlTextDidEndEditing(_ notification: Notification) {
+            guard let comboBox = notification.object as? NSComboBox,
+                  notification.userInfo?["NSTextMovement"] as? Int == NSReturnTextMovement
+            else { return }
+            onCommit(comboBox.stringValue)
         }
     }
 }
