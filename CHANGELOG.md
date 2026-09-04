@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.0] - 2026-09-04
 
 ### 追加
 
@@ -12,15 +12,21 @@
 - macOSの「再生中」情報を監視し、Spotify、ミュージック、ブラウザなどで曲が変わった際に、曲名・アーティスト・アルバム・再生元・長さを`OnMusicPlayEx`でゴーストへ通知する設定を追加。無反応時は`OnMusicPlay`へフォールバック
 - 同梱ゴースト「りあ」に`OnMusicPlayEx`／`OnMusicPlay`への反応を追加し、曲名・アーティスト・アルバム・再生元を使った会話を表示
 - 新規ゴーストの作成手順と、既存のSSP向けゴースト・シェル・バルーン・SHIORI・SAORI資産をUtataneで動かすための移行、切り分け、配布前確認をまとめた制作者向けガイドを追加
+- MateriaのFIRST専用ネイティブ実装を拡充。利用者所有の`first.dll`を実行せずに解析し、起動・終了・通常会話、眠気・睡眠・入浴、更新・ネットワーク・主要メニュー、クイズ、タイピングゲームと最高記録の保存へ対応
+- 開発用パレットから、現在のゴーストのネットワーク更新をファイル変更なしで確認できる機能を追加
+- ゴーストの必須ファイル、既定surface、element画像、SHIORI判定、未対応SakuraScriptを調べる`utatane-validate`コマンドを追加。通常表示とJSON出力に対応
 
 ### 変更
 
 - 配布サイトの5言語ページへ、結奈のネイティブ実行と里珠Proxyの実験的対応・追加Perl要件を追記
+- inputbox、communicatebox、teachboxでSHIORIの補完候補を表示。inputboxのタイムアウト指定も実際の入力画面へ反映
+- ゴーストの更新確認・更新完了時に、結果を`OnUpdateCheckResultEx`／`OnUpdateResultEx`と従来イベントへ通知
 
 ### 開発・検証
 
 - nicxliveランタイムの取得・ビルド・アプリへの同梱スクリプトとCIキャッシュを追加。ランタイムやパペットがない場合は通常のPNGシェルへフォールバック
 - nijigenerate設定、パラメータ反応、ドラッグ座標、Metal描画結果と、音楽イベントのSSP形式・同梱りあの応答を回帰テストへ追加
+- FIRSTの対応版DLLを使ったイベント、ゲーム、状態保存と、更新確認・入力画面・コンテンツ検証CLIの回帰テストを追加
 
 ## [0.1.9] - 2026-09-02
 
@@ -447,6 +453,7 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
+[0.2.0]: https://github.com/opera7133/Utatane/compare/v0.1.9...v0.2.0
 [0.1.9]: https://github.com/opera7133/Utatane/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/opera7133/Utatane/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/opera7133/Utatane/compare/v0.1.6...v0.1.7

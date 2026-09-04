@@ -25,6 +25,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - NARのファイル選択、ドラッグ＆ドロップ、Finderからの「このアプリケーションで開く」によるインストール
 - 展開済みSSPフォルダからのゴーストとバルーンの取り込み
 - シェルとバルーンの個別倍率、連動倍率、バルーン文字倍率
+- 通常シェルと併用できるnijigenerateパペット表示、視線追従、表情・マウス反応・ドラッグ操作
 - シェルの画面下固定と画面端補正をゴーストごとに切り替え
 - 前回のゴースト、起動時選択、ランダムの3種類の起動方法
 - システム設定に従う／ライト／ダークの外観切り替え
@@ -65,13 +66,13 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 
 ## とりあえず使う
 
-1. [Releases](../../releases)から最新のpre-releaseにある`Utatane-macOS.zip`をダウンロードする
+1. [Releases](../../releases)から最新リリースの`Utatane-macOS.zip`をダウンロードする
 2. ZIPを展開し、`Utatane.app`を「アプリケーション」フォルダへ移動する
 3. Utataneを起動する
 
 初回起動時から、同梱ゴースト「りあ」と専用バルーン「Ria」を利用できます。りあは時間帯や曜日に応じた会話、マウス操作、着せ替え、短い外出、現在地の天気確認などに対応しています。
 
-現在のpre-releaseは未署名です。macOSに止められたら、一度起動を試してから「システム設定」→「プライバシーとセキュリティ」で許可してください。アプリケーションのディレクトリで`sudo xattr -rc Utatane.app`でも構いません。
+現在の配布版は未署名です。macOSに止められたら、一度起動を試してから「システム設定」→「プライバシーとセキュリティ」で許可してください。アプリケーションのディレクトリで`sudo xattr -rc Utatane.app`でも構いません。
 
 ## ほかのゴーストを追加する
 
@@ -130,6 +131,7 @@ Content/Local/
 - [変更履歴](CHANGELOG.md)
 - [開発・ビルド](Docs/Development.md)
 - [ゴースト・SHIORI・SAORI制作者向けUtatane対応ガイド](Docs/Content-Authoring.md)
+- [nijigenerateシェル拡張](Docs/nijigenerate-shell.md)
 - [ゴースト互換状況](Docs/Compatibility.md)
 - [Native SHIORI / SAORI](Docs/Native-SHIORI.md)
 - [Realtime音声会話](Docs/Realtime-Voice.md)
