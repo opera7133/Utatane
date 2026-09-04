@@ -128,15 +128,10 @@ Content/Local/
 
 ## もう少し詳しい話
 
+- [ドキュメント一覧](Docs/README.md)
 - [変更履歴](CHANGELOG.md)
-- [開発・ビルド](Docs/Development.md)
 - [ゴースト・SHIORI・SAORI制作者向けUtatane対応ガイド](Docs/Content-Authoring.md)
-- [nijigenerateシェル拡張](Docs/nijigenerate-shell.md)
 - [ゴースト互換状況](Docs/Compatibility.md)
-- [Native SHIORI / SAORI](Docs/Native-SHIORI.md)
-- [Realtime音声会話](Docs/Realtime-Voice.md)
-- [SakuraScript対応状況](Docs/UKADOC-SakuraScript-Compatibility.md)
-- [SHIORI対応状況](Docs/UKADOC-SHIORI-Event-Compatibility.md)
 
 ## ライセンス
 
