@@ -376,6 +376,47 @@ import UtataneShiori
     #expect(mayura?.rawValue.contains("まゆら") == true)
 }
 
+@Test func `installed ria responds to now playing events with track details`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-now-playing-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+    let extended = try await engine.handle(event: .shiori(
+        id: "OnMusicPlayEx",
+        references: [
+            0: "Test Song",
+            1: "Test Artist",
+            2: "album\u{01}Test Album",
+            3: "source\u{01}Spotify"
+        ]
+    ))
+    let legacy = try await engine.handle(event: .shiori(
+        id: "OnMusicPlay",
+        references: [0: "Legacy Song", 1: "Legacy Artist"]
+    ))
+
+    #expect(extended?.rawValue.contains("Test Song") == true)
+    #expect(extended?.rawValue.contains("Test Artist") == true)
+    #expect(extended?.rawValue.contains("Test Album") == true)
+    #expect(extended?.rawValue.contains("Spotify") == true)
+    #expect(legacy?.rawValue.contains("Legacy Song") == true)
+    #expect(legacy?.rawValue.contains("Legacy Artist") == true)
+}
+
 @Test func `installed ria resets pet count after idle or event`() async throws {
     let repositoryRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()

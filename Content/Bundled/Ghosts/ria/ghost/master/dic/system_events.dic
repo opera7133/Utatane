@@ -29,6 +29,48 @@ RiaBalloonChangeTalks : array
 	'\0\s[0]新しいバルーンね。\w5文字が端にはみ出してなければいい。\e'
 }
 
+OnMusicPlayEx
+{
+	_title = reference0
+	_artist = reference1
+	_album = ''
+	_source = ''
+	for _i = 2 ; _i < ARRAYSIZE(reference) ; _i++ {
+		_item = SPLIT(reference[_i], CHR(1))
+		if ARRAYSIZE(_item) >= 2 {
+			if _item[0] == 'album' {
+				_album = _item[1]
+			}
+			elseif _item[0] == 'source' {
+				_source = _item[1]
+			}
+		}
+	}
+
+	if _artist == '' {
+		"\0\s[304]今流れ始めたの、%(_title)か。\w5曲名は拾えたけど、アーティストまでは分からないみたい。\e"
+	}
+	elseif _source != '' && _album != '' {
+		"\0\s[304]%(_artist)の「%(_title)」。\w5%(_source)で再生中。\w5アルバムは「%(_album)」ね。\e"
+	}
+	elseif _source != '' {
+		"\0\s[304]%(_artist)の「%(_title)」ね。\w5%(_source)で聴いてるんだ。\e"
+	}
+	else {
+		"\0\s[304]%(_artist)の「%(_title)」。\w5ふーん、こういうの聴くんだ。\e"
+	}
+}
+
+OnMusicPlay
+{
+	if reference1 == '' {
+		"\0\s[304]「%(reference0)」が流れてる。\w5アーティスト名は取れなかったみたい。\e"
+	}
+	else {
+		"\0\s[304]%(reference1)の「%(reference0)」ね。\w5一応、曲名まで見えてる。\e"
+	}
+}
+
 OnChoiceTimeout
 {
 	_talks = RiaChoiceTimeoutTalks
@@ -192,4 +234,3 @@ RiaSysResumeTalks : array
 	'\0\s[105]おかえり、お兄。\w5続きやるなら付き合うけど。\e'
 	'\0\s[100]ふぁ……。\w5もう復帰？\w5まだ眠い。\e'
 }
-

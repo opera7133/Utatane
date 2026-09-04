@@ -80,6 +80,7 @@ final class UtataneSettingsStore: ObservableObject {
         static let balloonTextScalePercent = "display.balloonTextScalePercent"
         static let locksShellToDesktopBottom = "display.locksShellToDesktopBottom"
         static let keepsShellOnScreen = "display.keepsShellOnScreen"
+        static let notifiesNowPlaying = "general.notifiesNowPlaying"
         static let showsDebugWindow = "debug.showsWindow"
         static let wineExecutablePath = "windowsShiori.wineExecutablePath"
         static let winePrefixPath = "windowsShiori.winePrefixPath"
@@ -180,6 +181,10 @@ final class UtataneSettingsStore: ObservableObject {
         didSet { saveGhostValue(keepsShellOnScreen, kind: Key.keepsShellOnScreen) }
     }
 
+    @Published var notifiesNowPlaying: Bool {
+        didSet { defaults.set(notifiesNowPlaying, forKey: Key.notifiesNowPlaying) }
+    }
+
     @Published var showsDebugWindow: Bool {
         didSet { defaults.set(showsDebugWindow, forKey: Key.showsDebugWindow) }
     }
@@ -274,6 +279,7 @@ final class UtataneSettingsStore: ObservableObject {
         balloonTextScalePercent = 100
         locksShellToDesktopBottom = true
         keepsShellOnScreen = true
+        notifiesNowPlaying = defaults.bool(forKey: Key.notifiesNowPlaying)
         showsDebugWindow = defaults.bool(forKey: Key.showsDebugWindow)
         wineExecutablePath = defaults.string(forKey: Key.wineExecutablePath) ?? ""
         winePrefixPath = defaults.string(forKey: Key.winePrefixPath) ?? ""
@@ -453,6 +459,12 @@ struct UtataneSettingsView: View {
                         Text("ダーク").tag(UtataneSettingsStore.Appearance.dark)
                     }
                     Text("Shell、バルーン、キャラクター位置は、最後に使った状態がゴーストごとに復元される。")
+                        .foregroundStyle(.secondary)
+                }
+                Section("音楽再生") {
+                    Toggle("再生中の曲情報をゴーストに通知", isOn: $settings.notifiesNowPlaying)
+                    Text("Spotify、ミュージック、ブラウザなど、macOSの「再生中」に表示される曲が変わった時に通知する。")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Section("言語") {

@@ -159,6 +159,40 @@ final class CalledGhostRuntime {
         }
     }
 
+    func sendMusicTrack(_ track: NowPlayingTrack) {
+        Task {
+            do {
+                let extended = try await session.response(for: .shiori(
+                    id: "OnMusicPlayEx",
+                    references: track.sspExtendedReferences
+                ))
+                if let extended {
+                    forwardCommunication(extended)
+                    if let script = extended.script, !script.rawValue.isEmpty {
+                        player.play(script, balloon: balloon)
+                        return
+                    }
+                }
+                guard let legacy = try await session.response(for: .shiori(
+                    id: "OnMusicPlay",
+                    references: [0: track.title, 1: track.artist]
+                )) else { return }
+                if let script = legacy.script, !script.rawValue.isEmpty {
+                    player.play(script, balloon: balloon)
+                }
+                forwardCommunication(legacy)
+            } catch {
+                AppLogStore.shared.error(
+                    "音楽再生イベント処理エラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: "Title: \(track.title)\nError: \(error)",
+                    ghostName: ghost.name
+                )
+                onError?(error)
+            }
+        }
+    }
+
     func sendSecondChange(references: [Int: String]) {
         let canTalk = player.canTalk
         var references = references

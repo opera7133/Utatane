@@ -55,6 +55,7 @@ targets:
         NSLocationUsageDescription: "ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。"
         NSLocationWhenInUseUsageDescription: "ゴーストが現在地に応じた天気を案内するために使用します。位置情報は天気の取得時だけ利用します。"
         NSMicrophoneUsageDescription: "音声認識やゴーストとのリアルタイム音声会話に使用します。音声は選択したRealtime APIへ送信されます。"
+        NSAppleEventsUsageDescription: "Spotifyやミュージックで再生中の曲情報をゴーストに通知するために使用します。"
         NSPrincipalClass: NSApplication
         # Legacy ghosts declare arbitrary HTTP update sites. TLS certificate
         # validation remains enabled; keep application update hosts under ATS.

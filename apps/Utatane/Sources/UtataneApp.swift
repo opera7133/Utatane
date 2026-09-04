@@ -238,6 +238,7 @@ private struct UtataneRootView: View {
     private let systemDialogController = SystemDialogController()
     private let networkStatusMonitor = NetworkStatusMonitor()
     private let recycleBinSampler = MacOSRecycleBinSampler()
+    private let nowPlayingReader = MacOSNowPlayingReader()
     @State private var isTransitioningGhost = false
     @State private var isClosingCurrentGhost = false
     @State private var isHiddenForFullScreenApp = false
@@ -256,6 +257,7 @@ private struct UtataneRootView: View {
     @State private var batteryTransitionDetector = BatteryTransitionDetector()
     @State private var previousWindowLayoutSnapshot: WindowLayoutSnapshot?
     @State private var previousRecycleBinSnapshot: RecycleBinSnapshot?
+    @State private var nowPlayingChangeDetector = NowPlayingChangeDetector()
     @State private var configuredShellScalePercent: Int?
     @State private var configuredBalloonScalePercent: Int?
     @State private var gamepadMonitor = GamepadEventMonitor()
@@ -460,6 +462,29 @@ private struct UtataneRootView: View {
                     previousRecycleBinSnapshot = snapshot
                 }
                 try? await Task.sleep(for: .seconds(5))
+            }
+        }
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "now-playing", id: networkSettings.notifiesNowPlaying) {
+            guard networkSettings.notifiesNowPlaying else { return }
+            var hasLoggedReadError = false
+            while !Task.isCancelled {
+                do {
+                    let track = try await nowPlayingReader.currentTrack()
+                    hasLoggedReadError = false
+                    if let changedTrack = nowPlayingChangeDetector.consume(track) {
+                        notifyMusicTrack(changedTrack)
+                    }
+                } catch {
+                    if !hasLoggedReadError {
+                        AppLogStore.shared.error(
+                            "再生中の曲情報を取得できませんでした",
+                            category: "NowPlaying",
+                            details: error.localizedDescription
+                        )
+                        hasLoggedReadError = true
+                    }
+                }
+                try? await Task.sleep(for: .seconds(4))
             }
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "ghost-selection", id: selectedGhostID) {
@@ -709,6 +734,45 @@ private struct UtataneRootView: View {
         sendEvent(event)
         for runtime in calledGhosts.values {
             runtime.send(event)
+        }
+    }
+
+    private func notifyMusicTrack(_ track: NowPlayingTrack) {
+        guard !isTransitioningGhost else { return }
+        if let session, let balloon {
+            Task {
+                do {
+                    let extended = try await session.response(for: .shiori(
+                        id: "OnMusicPlayEx",
+                        references: track.sspExtendedReferences
+                    ))
+                    if let extended {
+                        forwardCommunication(from: currentGhost, response: extended)
+                        if let script = extended.script, !script.rawValue.isEmpty {
+                            scriptPlayer.play(script, balloon: balloon)
+                            return
+                        }
+                    }
+                    guard let legacy = try await session.response(for: .shiori(
+                        id: "OnMusicPlay",
+                        references: [0: track.title, 1: track.artist]
+                    )) else { return }
+                    if let script = legacy.script, !script.rawValue.isEmpty {
+                        scriptPlayer.play(script, balloon: balloon)
+                    }
+                    forwardCommunication(from: currentGhost, response: legacy)
+                } catch {
+                    AppLogStore.shared.error(
+                        "音楽再生イベント処理エラー: \(error.localizedDescription)",
+                        category: "SHIORI",
+                        details: "Title: \(track.title)\nError: \(error)",
+                        ghostName: currentGhost?.name
+                    )
+                }
+            }
+        }
+        for runtime in calledGhosts.values {
+            runtime.sendMusicTrack(track)
         }
     }
 

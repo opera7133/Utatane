@@ -1857,6 +1857,35 @@
         }
       }
     },
+    "Spotify、ミュージック、ブラウザなど、macOSの「再生中」に表示される曲が変わった時に通知する。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notify ghosts when the track shown in macOS Now Playing changes, including Spotify, Music, and browsers."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Spotify, 음악, 브라우저 등 macOS '재생 중'에 표시되는 곡이 바뀌면 고스트에 알립니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当 macOS“正在播放”中显示的曲目发生变化时通知 Ghost，包括 Spotify、音乐和浏览器。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "當 macOS「播放中」顯示的歌曲變更時通知 Ghost，包括 Spotify、音樂和瀏覽器。"
+          }
+        }
+      }
+    },
     "Surfaceを再表示" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5482,6 +5511,35 @@
         }
       }
     },
+    "再生中の曲情報をゴーストに通知" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notify ghosts about the currently playing track"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "재생 중인 곡 정보를 고스트에 알림"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将正在播放的曲目信息通知给 Ghost"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將正在播放的歌曲資訊通知給 Ghost"
+          }
+        }
+      }
+    },
     "再起動できなかった" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8523,6 +8581,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "韓語"
+          }
+        }
+      }
+    },
+    "音楽再生" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Music Playback"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음악 재생"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音乐播放"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音樂播放"
           }
         }
       }
