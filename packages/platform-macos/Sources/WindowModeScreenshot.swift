@@ -32,11 +32,13 @@ enum WindowModeScreenshotRenderer {
 
         context.scaleBy(x: scale, y: scale)
         context.clear(rootView.bounds)
-        if kind == .backgroundIncluded,
-           let backgroundColor = rootView.layer?.backgroundColor
-        {
-            context.setFillColor(backgroundColor)
-            context.fill(rootView.bounds)
+        if kind == .backgroundIncluded {
+            if let stageRootView = rootView as? WindowModeStageRootView {
+                stageRootView.drawStageBackground(in: context)
+            } else if let backgroundColor = rootView.layer?.backgroundColor {
+                context.setFillColor(backgroundColor)
+                context.fill(rootView.bounds)
+            }
         }
 
         let presentedViews = Set(itemViews.map(ObjectIdentifier.init))

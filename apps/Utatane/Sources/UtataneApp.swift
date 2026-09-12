@@ -496,6 +496,14 @@ private struct UtataneRootView: View {
                 dispatchSystemLoadEvents(sample: sample)
             }
         }
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "desktop-wallpaper") {
+            presentationCoordinator.refreshDesktopWallpapers()
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                presentationCoordinator.refreshDesktopWallpapers()
+            }
+        }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "battery") {
             dispatchBatteryEvents(snapshot: batterySampler.sample())
             while !Task.isCancelled {

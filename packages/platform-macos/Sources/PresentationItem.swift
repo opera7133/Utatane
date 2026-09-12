@@ -195,6 +195,7 @@ public enum WindowModeStageBackground: String, CaseIterable, Sendable {
     case white
     case gray
     case black
+    case desktop
 }
 
 struct WindowModeStageState {
@@ -268,7 +269,9 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     private let onCloseRequest: () -> Void
     private let stateStore: WindowModeStageStateStore?
     private let stateIdentifier: String
-    private(set) var background: WindowModeStageBackground = .gray
+    private let desktopWallpaperProvider: any WindowModeDesktopWallpaperProviding
+    private var desktopWallpaperSignature: String?
+    private(set) var background: WindowModeStageBackground = .desktop
     private(set) var showsWindowFrame = true
 
     init(
@@ -278,7 +281,8 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         onModeRequest: @escaping (GhostWindowMode) -> Void = { _ in },
         onCloseRequest: @escaping () -> Void = {},
         stateStore: WindowModeStageStateStore? = nil,
-        stateIdentifier: String = ""
+        stateIdentifier: String = "",
+        desktopWallpaperProvider: any WindowModeDesktopWallpaperProviding = SystemWindowModeDesktopWallpaperProvider()
     ) {
         let restoredState = stateStore?.load(identifier: stateIdentifier)
         let contentSize = restoredState?.contentSize ?? contentSize
@@ -301,6 +305,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         self.onCloseRequest = onCloseRequest
         self.stateStore = stateStore
         self.stateIdentifier = stateIdentifier
+        self.desktopWallpaperProvider = desktopWallpaperProvider
         geometryProvider = WindowModePresentationGeometryProvider(
             window: window,
             rootView: rootView,
@@ -313,7 +318,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         if let origin = restoredState?.origin {
             window.setFrameOrigin(origin)
         }
-        setBackground(restoredState?.background ?? .gray)
+        setBackground(restoredState?.background ?? .desktop)
         setShowsWindowFrame(restoredState?.showsWindowFrame ?? true)
     }
 
@@ -327,12 +332,35 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
 
     func setBackground(_ background: WindowModeStageBackground) {
         self.background = background
-        rootView.layer?.backgroundColor = switch background {
-        case .white: NSColor.white.cgColor
-        case .gray: NSColor(calibratedWhite: 0.25, alpha: 1).cgColor
-        case .black: NSColor.black.cgColor
+        switch background {
+        case .white:
+            desktopWallpaperSignature = nil
+            rootView.setSolidBackground(.white)
+        case .gray:
+            desktopWallpaperSignature = nil
+            rootView.setSolidBackground(NSColor(calibratedWhite: 0.25, alpha: 1))
+        case .black:
+            desktopWallpaperSignature = nil
+            rootView.setSolidBackground(.black)
+        case .desktop:
+            refreshDesktopWallpaper()
         }
         persistState()
+    }
+
+    @discardableResult
+    func refreshDesktopWallpaper() -> Bool {
+        guard background == .desktop else { return false }
+        guard let snapshot = desktopWallpaperProvider.snapshot(for: window.screen) else {
+            let changed = desktopWallpaperSignature != nil
+            desktopWallpaperSignature = nil
+            rootView.setSolidBackground(NSColor(calibratedWhite: 0.25, alpha: 1))
+            return changed
+        }
+        guard snapshot.signature != desktopWallpaperSignature else { return false }
+        desktopWallpaperSignature = snapshot.signature
+        rootView.setDesktopWallpaper(snapshot)
+        return true
     }
 
     func setShowsWindowFrame(_ showsWindowFrame: Bool) {
@@ -392,6 +420,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         addBackgroundItem(String(localized: "白"), background: .white, to: backgroundMenu)
         addBackgroundItem(String(localized: "灰"), background: .gray, to: backgroundMenu)
         addBackgroundItem(String(localized: "黒"), background: .black, to: backgroundMenu)
+        addBackgroundItem(String(localized: "デスクトップ"), background: .desktop, to: backgroundMenu)
         backgroundItem.submenu = backgroundMenu
         menu.addItem(backgroundItem)
 
@@ -510,6 +539,10 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         persistState()
     }
 
+    func windowDidChangeScreen(_ notification: Notification) {
+        refreshDesktopWallpaper()
+    }
+
     func windowDidEnterFullScreen(_ notification: Notification) {
         rootView.setTransientControlsEnabled(true)
     }
@@ -579,6 +612,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
 @MainActor
 final class WindowModeStageRootView: NSView {
     weak var host: WindowModePresentationHost?
+    private(set) var desktopWallpaper: WindowModeDesktopWallpaperSnapshot?
     private let menuButton = WindowModeTransientButton(
         symbolName: "line.3.horizontal",
         accessibilityLabel: String(localized: "操作")
@@ -618,6 +652,33 @@ final class WindowModeStageRootView: NSView {
             x: bounds.maxX - inset - buttonSize.width,
             y: bounds.maxY - inset - buttonSize.height
         ))
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard let desktopWallpaper, let context = NSGraphicsContext.current?.cgContext else { return }
+        WindowModeDesktopWallpaperRenderer.draw(desktopWallpaper, in: bounds, context: context)
+    }
+
+    func setSolidBackground(_ color: NSColor) {
+        desktopWallpaper = nil
+        layer?.backgroundColor = color.cgColor
+        needsDisplay = true
+    }
+
+    func setDesktopWallpaper(_ snapshot: WindowModeDesktopWallpaperSnapshot) {
+        desktopWallpaper = snapshot
+        layer?.backgroundColor = snapshot.fillColor.cgColor
+        needsDisplay = true
+    }
+
+    func drawStageBackground(in context: CGContext) {
+        if let desktopWallpaper {
+            WindowModeDesktopWallpaperRenderer.draw(desktopWallpaper, in: bounds, context: context)
+        } else if let backgroundColor = layer?.backgroundColor {
+            context.setFillColor(backgroundColor)
+            context.fill(bounds)
+        }
     }
 
     override func updateTrackingAreas() {
@@ -992,6 +1053,10 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
         activeHost.setTitle(title)
     }
 
+    func refreshDesktopWallpaper() {
+        (activeHost as? WindowModePresentationHost)?.refreshDesktopWallpaper()
+    }
+
     private final class PresentationItemHandle: PresentationItem {
         private let descriptor: ItemDescriptor
         private var backing: (any PresentationItem)?
@@ -1280,6 +1345,13 @@ public final class PresentationCoordinator {
                 for: session.title,
                 identifier: session.identifier
             ))
+        }
+    }
+
+    public func refreshDesktopWallpapers() {
+        sessions = sessions.filter { $0.value != nil }
+        for session in sessions.compactMap(\.value) {
+            session.presentationHost.refreshDesktopWallpaper()
         }
     }
 

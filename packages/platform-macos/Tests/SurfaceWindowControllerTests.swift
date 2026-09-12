@@ -551,6 +551,80 @@ func `window mode screenshots can include or omit the stage background`() throws
 
 @Test
 @MainActor
+func `desktop wallpaper background follows provider changes and screenshot transparency`() throws {
+    let firstImage = try #require(NSImage(data: makePNG(
+        width: 4,
+        height: 4,
+        color: NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1)
+    )))
+    let secondImage = try #require(NSImage(data: makePNG(
+        width: 4,
+        height: 4,
+        color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    )))
+    let provider = StubDesktopWallpaperProvider(snapshot: WindowModeDesktopWallpaperSnapshot(
+        image: firstImage,
+        url: URL(fileURLWithPath: "/tmp/first.png"),
+        scaling: .scaleAxesIndependently,
+        allowsClipping: false,
+        fillColor: .black,
+        signature: "first"
+    ))
+    let stage = WindowModePresentationHost(
+        contentSize: NSSize(width: 20, height: 20),
+        desktopWallpaperProvider: provider
+    )
+    defer { stage.window.orderOut(nil) }
+
+    #expect(stage.background == .desktop)
+    #expect(stage.rootView.desktopWallpaper?.signature == "first")
+    let includedData = try #require(stage.screenshotPNGData(kind: .backgroundIncluded))
+    let transparentData = try #require(stage.screenshotPNGData(kind: .transparentBackground))
+    let included = try #require(NSBitmapImageRep(data: includedData))
+    let transparent = try #require(NSBitmapImageRep(data: transparentData))
+    #expect(included.colorAt(x: 0, y: 0)?.greenComponent ?? 0 > 0.8)
+    #expect(transparent.colorAt(x: 0, y: 0)?.alphaComponent == 0)
+
+    provider.currentSnapshot = WindowModeDesktopWallpaperSnapshot(
+        image: secondImage,
+        url: URL(fileURLWithPath: "/tmp/second.png"),
+        scaling: .scaleAxesIndependently,
+        allowsClipping: false,
+        fillColor: .black,
+        signature: "second"
+    )
+    #expect(stage.refreshDesktopWallpaper())
+    #expect(stage.rootView.desktopWallpaper?.signature == "second")
+    #expect(!stage.refreshDesktopWallpaper())
+}
+
+@Test
+@MainActor
+func `desktop wallpaper layout respects system scaling options`() {
+    let bounds = NSRect(x: 0, y: 0, width: 200, height: 100)
+    let imageSize = NSSize(width: 100, height: 100)
+    #expect(WindowModeDesktopWallpaperRenderer.destinationRect(
+        imageSize: imageSize,
+        bounds: bounds,
+        scaling: .scaleAxesIndependently,
+        allowsClipping: false
+    ) == bounds)
+    #expect(WindowModeDesktopWallpaperRenderer.destinationRect(
+        imageSize: imageSize,
+        bounds: bounds,
+        scaling: .scaleProportionallyUpOrDown,
+        allowsClipping: false
+    ) == NSRect(x: 50, y: 0, width: 100, height: 100))
+    #expect(WindowModeDesktopWallpaperRenderer.destinationRect(
+        imageSize: imageSize,
+        bounds: bounds,
+        scaling: .scaleProportionallyUpOrDown,
+        allowsClipping: true
+    ) == NSRect(x: 0, y: -50, width: 200, height: 200))
+}
+
+@Test
+@MainActor
 func `presentation modes share one stage or separate stages without replacing rendered views`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)
@@ -3035,6 +3109,19 @@ private struct SurfaceDragFixture {
         controller.hideAll()
         defaults.removePersistentDomain(forName: defaultsSuiteName(defaults))
         try? FileManager.default.removeItem(at: directory)
+    }
+}
+
+@MainActor
+private final class StubDesktopWallpaperProvider: WindowModeDesktopWallpaperProviding {
+    var currentSnapshot: WindowModeDesktopWallpaperSnapshot?
+
+    init(snapshot: WindowModeDesktopWallpaperSnapshot?) {
+        currentSnapshot = snapshot
+    }
+
+    func snapshot(for screen: NSScreen?) -> WindowModeDesktopWallpaperSnapshot? {
+        currentSnapshot
     }
 }
 
