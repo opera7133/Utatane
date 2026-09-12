@@ -570,8 +570,17 @@ public final class BalloonWindowController {
         let item = presentationHost.makeItem(
             kind: .balloon,
             title: "Ghost Balloon \(scope)",
+            restoredOrigin: { [positionStore, scope] coordinateSpace, itemSize, visibleFrames in
+                positionStore.restoredOrigin(
+                    for: .balloon,
+                    scope: scope,
+                    windowSize: itemSize,
+                    visibleFrames: visibleFrames,
+                    coordinateSpace: coordinateSpace
+                )
+            },
             onMove: { [positionStore, geometryProvider, scope] origin, reason in
-                if reason != .programmatic {
+                if reason == .userInteraction {
                     positionStore.save(
                         origin,
                         for: .balloon,

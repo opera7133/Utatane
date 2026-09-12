@@ -476,6 +476,9 @@ private struct UtataneRootView: View {
                 speechHistoryPresenter?.hide()
                 calledGhosts.values.forEach { $0.setIntegratesSpeechHistory(false) }
             }
+            // Rehosting changes the coordinate space of every presented item.
+            // Compare overlap/offscreen state only after the new host settles.
+            previousWindowLayoutSnapshot = nil
             presentationCoordinator.setMode(networkSettings.windowMode)
             if integratesHistory {
                 calledGhosts.values.forEach { $0.setIntegratesSpeechHistory(true) }

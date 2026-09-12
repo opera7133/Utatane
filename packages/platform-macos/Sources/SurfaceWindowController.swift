@@ -1986,11 +1986,22 @@ private final class CharacterSurfaceController {
 
     private func makePresentationItem() -> any PresentationItem {
         var previousOrigin: NSPoint?
+        let constrainsToVisibleFrame = keepsOnScreen
         let item = presentationHost.makeItem(
             kind: .surface,
             title: "Ghost Surface \(scope)",
+            restoredOrigin: { [positionStore, scope] coordinateSpace, itemSize, visibleFrames in
+                positionStore.restoredOrigin(
+                    for: .surface,
+                    scope: scope,
+                    windowSize: itemSize,
+                    visibleFrames: visibleFrames,
+                    constrainsToVisibleFrame: constrainsToVisibleFrame,
+                    coordinateSpace: coordinateSpace
+                )
+            },
             onMove: { [weak self, positionStore, geometryProvider, scope] origin, reason in
-                if reason != .programmatic {
+                if reason == .userInteraction {
                     positionStore.save(
                         origin,
                         for: .surface,

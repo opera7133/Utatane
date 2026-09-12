@@ -8,6 +8,7 @@ protocol PresentationHosting: AnyObject {
     func makeItem(
         kind: PresentationItemKind,
         title: String,
+        restoredOrigin: PresentationOriginRestorer?,
         onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void,
         onCancel: (() -> Void)?
     ) -> any PresentationItem
@@ -17,7 +18,28 @@ protocol PresentationHosting: AnyObject {
 
 extension PresentationHosting {
     func setTitle(_ title: String) {}
+
+    func makeItem(
+        kind: PresentationItemKind,
+        title: String,
+        onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void,
+        onCancel: (() -> Void)?
+    ) -> any PresentationItem {
+        makeItem(
+            kind: kind,
+            title: title,
+            restoredOrigin: nil,
+            onMove: onMove,
+            onCancel: onCancel
+        )
+    }
 }
+
+typealias PresentationOriginRestorer = @MainActor (
+    _ coordinateSpace: PresentationCoordinateSpace,
+    _ itemSize: NSSize,
+    _ visibleFrames: [NSRect]
+) -> NSPoint?
 
 enum PresentationItemKind {
     case surface
@@ -194,6 +216,7 @@ final class DesktopPresentationHost: PresentationHosting {
     func makeItem(
         kind: PresentationItemKind,
         title: String,
+        restoredOrigin _: PresentationOriginRestorer?,
         onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void,
         onCancel: (() -> Void)?
     ) -> any PresentationItem {
@@ -293,7 +316,9 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     private let stateStore: WindowModeStageStateStore?
     private let stateIdentifier: String
     private let desktopWallpaperProvider: any WindowModeDesktopWallpaperProviding
+    private let automaticallyExpandsForSpeechHistory: Bool
     private var desktopWallpaperSignature: String?
+    private var didEnsureSpeechHistoryRoom = false
     private(set) var background: WindowModeStageBackground = .desktop
     private(set) var showsWindowFrame = true
 
@@ -305,7 +330,8 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         onCloseRequest: @escaping () -> Void = {},
         stateStore: WindowModeStageStateStore? = nil,
         stateIdentifier: String = "",
-        desktopWallpaperProvider: any WindowModeDesktopWallpaperProviding = SystemWindowModeDesktopWallpaperProvider()
+        desktopWallpaperProvider: any WindowModeDesktopWallpaperProviding = SystemWindowModeDesktopWallpaperProvider(),
+        automaticallyExpandsForSpeechHistory: Bool = true
     ) {
         let restoredState = stateStore?.load(identifier: stateIdentifier)
         let contentSize = restoredState?.contentSize ?? contentSize
@@ -329,6 +355,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         self.stateStore = stateStore
         self.stateIdentifier = stateIdentifier
         self.desktopWallpaperProvider = desktopWallpaperProvider
+        self.automaticallyExpandsForSpeechHistory = automaticallyExpandsForSpeechHistory
         geometryProvider = WindowModePresentationGeometryProvider(
             window: window,
             rootView: rootView,
@@ -599,7 +626,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     private func layoutSpeechHistoryItems() {
         let bounds = rootView.bounds
         guard bounds.width > 0, bounds.height > 0 else { return }
-        let height = min(280, max(180, (bounds.height * 0.34).rounded()))
+        let height = speechHistoryHeight(for: bounds.height)
         let hasVisibleHistory = items.contains {
             $0.kind == .speechHistory && $0.isVisible
         }
@@ -610,9 +637,32 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         }
     }
 
+    private func speechHistoryHeight(for stageHeight: CGFloat) -> CGFloat {
+        min(280, max(180, (stageHeight * 0.34).rounded()))
+    }
+
+    private func ensureSpeechHistoryRoom() {
+        guard automaticallyExpandsForSpeechHistory, !didEnsureSpeechHistoryRoom,
+              let contentView = window.contentView
+        else { return }
+        didEnsureSpeechHistoryRoom = true
+        let originalSize = contentView.bounds.size
+        var targetHeight = originalSize.height
+        for _ in 0 ..< 6 {
+            targetHeight = originalSize.height + speechHistoryHeight(for: targetHeight)
+        }
+        let chromeHeight = max(0, window.frame.height - originalSize.height)
+        if let visibleFrame = window.screen?.visibleFrame {
+            targetHeight = min(targetHeight, max(originalSize.height, visibleFrame.height - chromeHeight))
+        }
+        guard targetHeight > originalSize.height + 1 else { return }
+        window.setContentSize(NSSize(width: originalSize.width, height: targetHeight.rounded()))
+    }
+
     func makeItem(
         kind: PresentationItemKind,
         title: String,
+        restoredOrigin _: PresentationOriginRestorer?,
         onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void,
         onCancel: (() -> Void)?
     ) -> any PresentationItem {
@@ -632,6 +682,12 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     }
 
     fileprivate func present(_ item: WindowModePresentationItem, activating: Bool) {
+        let wasShowingSpeechHistory = items.contains {
+            $0.kind == .speechHistory && $0.isVisible
+        }
+        if item.kind == .speechHistory, !wasShowingSpeechHistory {
+            ensureSpeechHistoryRoom()
+        }
         if mode == .shared, item.kind == .speechHistory {
             for other in items where other !== item && other.kind == .speechHistory {
                 other.hide()
@@ -1067,6 +1123,7 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
     private struct ItemDescriptor {
         let kind: PresentationItemKind
         let title: String
+        let restoredOrigin: PresentationOriginRestorer?
         let onMove: (NSPoint, PresentationItemMoveReason) -> Void
         let onCancel: (() -> Void)?
     }
@@ -1097,12 +1154,14 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
     func makeItem(
         kind: PresentationItemKind,
         title: String,
+        restoredOrigin: PresentationOriginRestorer?,
         onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void,
         onCancel: (() -> Void)?
     ) -> any PresentationItem {
         let handle = PresentationItemHandle(descriptor: ItemDescriptor(
             kind: kind,
             title: title,
+            restoredOrigin: restoredOrigin,
             onMove: onMove,
             onCancel: onCancel
         ))
@@ -1218,11 +1277,17 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
             newBacking.setPlacementPolicy(placementPolicy)
             newBacking.setStaysOnTop(staysOnTop)
             newBacking.alphaValue = alpha
-            let destinationOrigin = originsByCoordinateSpace[newCoordinateSpace] ?? mappedOrigin(
-                for: oldFrame,
-                from: oldVisibleFrame,
-                to: newVisibleFrame
-            )
+            let destinationOrigin = originsByCoordinateSpace[newCoordinateSpace]
+                ?? descriptor.restoredOrigin?(
+                    newCoordinateSpace,
+                    oldFrame.size,
+                    host.geometryProvider.visibleFrames
+                )
+                ?? mappedOrigin(
+                    for: oldFrame,
+                    from: oldVisibleFrame,
+                    to: newVisibleFrame
+                )
             newBacking.setFrameOrigin(destinationOrigin)
             let appliedOrigin = newBacking.frame.origin
             originsByCoordinateSpace[newCoordinateSpace] = appliedOrigin
@@ -1300,6 +1365,7 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
             return host.makeItem(
                 kind: descriptor.kind,
                 title: descriptor.title,
+                restoredOrigin: descriptor.restoredOrigin,
                 onMove: { [weak self] origin, reason in
                     guard let self, !isRehosting else { return }
                     originsByCoordinateSpace[coordinateSpace] = origin

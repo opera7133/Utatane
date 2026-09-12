@@ -473,6 +473,84 @@ func `presentation coordinator reparents live views between desktop and window m
 
 @Test
 @MainActor
+func `first mode switch restores saved surface and balloon positions in the destination space`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    positionStore.setContentID(URL(filePath: "/ghosts/mode-restore", directoryHint: .isDirectory))
+    let desktopSurfaceOrigin = NSPoint(x: 500, y: 0)
+    let desktopBalloonOrigin = NSPoint(x: 260, y: 400)
+    let windowSurfaceOrigin = NSPoint(x: 420, y: 0)
+    let windowBalloonOrigin = NSPoint(x: 120, y: 280)
+    positionStore.save(desktopSurfaceOrigin, for: .surface, scope: 0)
+    positionStore.save(desktopBalloonOrigin, for: .balloon, scope: 0)
+    positionStore.save(
+        windowSurfaceOrigin,
+        for: .surface,
+        scope: 0,
+        coordinateSpace: .sharedWindowMode
+    )
+    positionStore.save(
+        windowBalloonOrigin,
+        for: .balloon,
+        scope: 0,
+        coordinateSpace: .sharedWindowMode
+    )
+
+    let desktopGeometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 760),
+            bitsPerPixel: 32,
+            scale: 2,
+            isPrimary: true
+        )
+    ])
+    let coordinator = PresentationHostCoordinator(
+        initialHost: DesktopPresentationHost(geometryProvider: desktopGeometry)
+    )
+    let surfaces = SurfaceWindowController(positionStore: positionStore, presentationHost: coordinator)
+    let balloons = BalloonWindowController(positionStore: positionStore, presentationHost: coordinator)
+    defer {
+        surfaces.resetContent()
+        balloons.resetContent()
+    }
+
+    try surfaces.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    let surfaceFrame = try #require(surfaces.windowFrame(for: 0))
+    try balloons.show(
+        balloon: makeBalloon(directory: directory),
+        text: "restore",
+        near: surfaceFrame
+    )
+    #expect(surfaces.windowFrame(for: 0)?.origin == desktopSurfaceOrigin)
+    #expect(balloons.windowFrame(for: 0)?.origin == desktopBalloonOrigin)
+
+    let stage = WindowModePresentationHost(
+        contentSize: NSSize(width: 640, height: 480),
+        mode: .shared
+    )
+    coordinator.switchHost(to: stage)
+    #expect(surfaces.windowFrame(for: 0)?.origin == windowSurfaceOrigin)
+    #expect(balloons.windowFrame(for: 0)?.origin == windowBalloonOrigin)
+
+    coordinator.switchHost(to: DesktopPresentationHost(geometryProvider: desktopGeometry))
+    #expect(surfaces.windowFrame(for: 0)?.origin == desktopSurfaceOrigin)
+    #expect(balloons.windowFrame(for: 0)?.origin == desktopBalloonOrigin)
+}
+
+@Test
+@MainActor
 func `speech history is presented only inside a window mode stage and stays docked at the bottom`() {
     let desktopGeometry = MutablePresentationGeometryProvider(screens: [
         PresentationScreenGeometry(
@@ -498,7 +576,10 @@ func `speech history is presented only inside a window mode stage and stays dock
     item.show(activating: false)
     #expect(!item.isVisible)
 
-    let firstStage = WindowModePresentationHost(contentSize: NSSize(width: 640, height: 480))
+    let firstStage = WindowModePresentationHost(
+        contentSize: NSSize(width: 640, height: 480),
+        automaticallyExpandsForSpeechHistory: false
+    )
     coordinator.switchHost(to: firstStage)
     #expect(item.isVisible)
     #expect(item.frame == NSRect(x: 0, y: 0, width: 640, height: 180))
@@ -519,7 +600,10 @@ func `speech history is presented only inside a window mode stage and stays dock
     #expect(!item.isVisible)
     #expect(!firstStage.window.isVisible)
 
-    let secondStage = WindowModePresentationHost(contentSize: NSSize(width: 700, height: 500))
+    let secondStage = WindowModePresentationHost(
+        contentSize: NSSize(width: 700, height: 500),
+        automaticallyExpandsForSpeechHistory: false
+    )
     coordinator.switchHost(to: secondStage)
     #expect(item.isVisible)
     #expect(item.frame == NSRect(x: 0, y: 0, width: 700, height: 180))
@@ -527,10 +611,31 @@ func `speech history is presented only inside a window mode stage and stays dock
 
 @Test
 @MainActor
+func `opening speech history expands the stage before reserving its panel`() {
+    let stage = WindowModePresentationHost(contentSize: NSSize(width: 640, height: 480))
+    let item = stage.makeItem(
+        kind: .speechHistory,
+        title: "history",
+        onMove: { _, _ in },
+        onCancel: nil
+    )
+    defer { item.discard() }
+    item.contentView = NSView()
+
+    item.show(activating: false)
+
+    #expect(stage.rootView.bounds.height > 480)
+    #expect(stage.rootView.presentationView.bounds.height >= 475)
+    #expect(item.frame.maxY == stage.rootView.presentationView.frame.minY)
+}
+
+@Test
+@MainActor
 func `shared window mode shows only the most recently opened speech history`() {
     let stage = WindowModePresentationHost(
         contentSize: NSSize(width: 640, height: 480),
-        mode: .shared
+        mode: .shared,
+        automaticallyExpandsForSpeechHistory: false
     )
     let first = stage.makeItem(
         kind: .speechHistory,
@@ -789,7 +894,10 @@ func `window mode screenshot preserves balloon text orientation`() throws {
 @Test
 @MainActor
 func `window mode screenshot includes the docked speech history boundaries`() throws {
-    let stage = WindowModePresentationHost(contentSize: NSSize(width: 320, height: 240))
+    let stage = WindowModePresentationHost(
+        contentSize: NSSize(width: 320, height: 240),
+        automaticallyExpandsForSpeechHistory: false
+    )
     stage.setBackground(.black)
     let store = SpeechHistoryStore()
     let talkIdentifier = UUID()

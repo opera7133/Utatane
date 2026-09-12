@@ -33,6 +33,7 @@ public enum NativeSatoriError: LocalizedError, Equatable, Sendable {
 public final class NativeSatoriSession: @unchecked Sendable {
     private let lock = NSLock()
     private var instanceID: Int
+    private var isMouseDragActive = false
     private let saoriRegistry: NativeSaoriRegistry
 
     public init(masterDirectoryURL: URL, saoriRegistry: NativeSaoriRegistry? = nil) throws {
@@ -53,39 +54,60 @@ public final class NativeSatoriSession: @unchecked Sendable {
     }
 
     public func request(_ request: ShioriRequest) throws -> ShioriResponse {
-        var request = request
-        if request.id == "OnSurfaceChange" {
-            for index in 0 ... 1 where request.reference(index) == nil {
-                request.headers.append(name: "Reference\(index)", value: "-1")
+        try lock.withLock {
+            var request = request
+            if request.id == "OnSurfaceChange" {
+                for index in 0 ... 1 where request.reference(index) == nil {
+                    request.headers.append(name: "Reference\(index)", value: "-1")
+                }
             }
+            switch request.id {
+            case "OnMouseDown":
+                isMouseDragActive = false
+            case "OnMouseDragStart":
+                isMouseDragActive = true
+            case "OnMouseUp" where isMouseDragActive:
+                // Upstream SATORI treats both mouse-up and drag-end as the end
+                // of a hold. Sending both after a long drag clears its saved
+                // references twice and aborts on the second access.
+                return ShioriResponse(statusCode: 204, reasonPhrase: "No Content")
+            case "OnMouseDragEnd":
+                isMouseDragActive = false
+            default:
+                break
+            }
+            return try ShioriMessageParser.parseResponse(requestUnlocked(request.serialized()))
         }
-        return try ShioriMessageParser.parseResponse(self.request(request.serialized()))
     }
 
     public func request(_ request: String) throws -> String {
         try lock.withLock {
-            activeSatoriSaori.registry = saoriRegistry
-            defer { activeSatoriSaori.registry = nil }
-            let encoding: String.Encoding = request.localizedCaseInsensitiveContains("Charset: Shift_JIS")
-                ? .shiftJIS
-                : .utf8
-            var requestBytes = Array(request.data(using: encoding) ?? Data(request.utf8))
-            requestBytes.append(0)
-            var responseLength = 0
-            let responseBuffer = requestBytes.withUnsafeBufferPointer {
-                utatane_satori_request(instanceID, $0.baseAddress, &responseLength)
-            }
-            guard let responseBuffer else { throw NativeSatoriError.requestFailed }
-            defer { utatane_satori_free(responseBuffer) }
-            let data = Data(bytes: responseBuffer, count: responseLength)
-            if let text = String(data: data, encoding: .utf8) {
-                return text
-            }
-            if let text = String(data: data, encoding: .shiftJIS) {
-                return text
-            }
-            return decodeMixedJapanese(data)
+            try requestUnlocked(request)
         }
+    }
+
+    private func requestUnlocked(_ request: String) throws -> String {
+        activeSatoriSaori.registry = saoriRegistry
+        defer { activeSatoriSaori.registry = nil }
+        let encoding: String.Encoding = request.localizedCaseInsensitiveContains("Charset: Shift_JIS")
+            ? .shiftJIS
+            : .utf8
+        var requestBytes = Array(request.data(using: encoding) ?? Data(request.utf8))
+        requestBytes.append(0)
+        var responseLength = 0
+        let responseBuffer = requestBytes.withUnsafeBufferPointer {
+            utatane_satori_request(instanceID, $0.baseAddress, &responseLength)
+        }
+        guard let responseBuffer else { throw NativeSatoriError.requestFailed }
+        defer { utatane_satori_free(responseBuffer) }
+        let data = Data(bytes: responseBuffer, count: responseLength)
+        if let text = String(data: data, encoding: .utf8) {
+            return text
+        }
+        if let text = String(data: data, encoding: .shiftJIS) {
+            return text
+        }
+        return decodeMixedJapanese(data)
     }
 }
 

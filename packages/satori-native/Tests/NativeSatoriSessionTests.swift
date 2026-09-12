@@ -56,6 +56,45 @@ struct NativeSatoriSessionTests {
         #expect((200 ..< 300).contains(response.statusCode))
     }
 
+    @Test func `native SATORI completes a long surface drag only once`() throws {
+        let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+            path: UUID().uuidString,
+            directoryHint: .isDirectory
+        )
+        let master = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+        try FileManager.default.createDirectory(at: master, withIntermediateDirectories: true)
+        let dictionary = "＊OnBoot\r\n：起動。\r\n＊OnMouseUp\r\n：up\r\n＊OnMouseDragEnd\r\n：end\r\n＊0Headホールド\r\n：hold\r\n"
+        try #require(dictionary.data(using: .shiftJIS)).write(
+            to: master.appending(path: "dic00_base.txt")
+        )
+
+        let session = try NativeSatoriSession(masterDirectoryURL: master)
+        let adapter = GhostEventShioriAdapter()
+        _ = try session.request(adapter.request(for: .boot))
+        let mouseEvent: (GhostMouseEvent.Kind) -> GhostEvent = { kind in
+            .mouse(.init(kind: kind, scope: 0, region: "Head", x: 100, y: 100, button: 0))
+        }
+        _ = try session.request(adapter.request(for: mouseEvent(.down)))
+        let ordinaryMouseUp = try session.request(adapter.request(for: mouseEvent(.up)))
+        #expect(ordinaryMouseUp.value?.contains("up") == true)
+
+        _ = try session.request(adapter.request(for: mouseEvent(.down)))
+        Thread.sleep(forTimeInterval: 1.5)
+        let hold = try session.request(adapter.request(for: .shiori(
+            id: "OnSecondChange",
+            references: [0: "0", 1: "0", 2: "0", 3: "1"]
+        )))
+        _ = try session.request(adapter.request(for: mouseEvent(.dragStart)))
+        let mouseUp = try session.request(adapter.request(for: mouseEvent(.up)))
+        let dragEnd = try session.request(adapter.request(for: mouseEvent(.dragEnd)))
+
+        #expect(hold.value?.contains("hold") == true)
+        #expect(mouseUp.statusCode == 204)
+        #expect((200 ..< 300).contains(dragEnd.statusCode))
+        #expect(dragEnd.value?.contains("end") == true)
+    }
+
     @Test func `native SATORI loads memory-na and answers boot`() throws {
         let source = repositoryRoot.appending(path: "Content/Local/Ghosts/memory-na/ghost/master", directoryHint: .isDirectory)
         guard hasLocalContent(source) else { return }
