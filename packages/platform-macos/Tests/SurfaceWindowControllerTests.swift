@@ -521,6 +521,92 @@ func `switching presentation modes restores each coordinate space and retires ol
 
 @Test
 @MainActor
+func `per ghost identity switch retires the previous stage`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let coordinator = PresentationCoordinator(mode: .perGhost, defaults: defaults)
+    let session = coordinator.makeSession(title: "Previous", identifier: "previous")
+    let surfaces = SurfaceWindowController(positionStore: positionStore, presentationSession: session)
+    let balloons = BalloonWindowController(positionStore: positionStore, presentationSession: session)
+    defer {
+        surfaces.resetContent()
+        balloons.resetContent()
+    }
+    try surfaces.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    let surfaceFrame = try #require(surfaces.windowFrame(for: 0))
+    try balloons.show(
+        balloon: makeBalloon(directory: directory),
+        text: "previous",
+        near: surfaceFrame
+    )
+    let previousWindowNumber = try #require(surfaces.windowNumbers.first)
+    let previousWindow = try #require(NSApp.window(withWindowNumber: previousWindowNumber))
+    #expect(previousWindow.isVisible)
+
+    surfaces.resetContent()
+    balloons.resetContent()
+    session.setTitle("Next")
+    session.setIdentifier("next")
+    #expect(!previousWindow.isVisible)
+
+    try surfaces.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    let nextWindowNumber = try #require(surfaces.windowNumbers.first)
+    #expect(nextWindowNumber != previousWindowNumber)
+    #expect(NSApp.window(withWindowNumber: nextWindowNumber)?.isVisible == true)
+    #expect(!previousWindow.isVisible)
+}
+
+@Test
+@MainActor
+func `releasing a ghost presentation retires its stage`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+
+    let coordinator = PresentationCoordinator(mode: .perGhost, defaults: defaults)
+    var session: GhostPresentationSession? = coordinator.makeSession(
+        title: "Called Ghost",
+        identifier: "called"
+    )
+    var surfaces: SurfaceWindowController? = session.map {
+        SurfaceWindowController(positionStore: positionStore, presentationSession: $0)
+    }
+    try surfaces?.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    let windowNumber = try #require(surfaces?.windowNumbers.first)
+    let window = try #require(NSApp.window(withWindowNumber: windowNumber))
+    #expect(window.isVisible)
+
+    surfaces = nil
+    session = nil
+
+    #expect(!window.isVisible)
+}
+
+@Test
+@MainActor
 func `window mode stage delegates close without disappearing first`() {
     var closeRequests = 0
     let stage = WindowModePresentationHost(onCloseRequest: { closeRequests += 1 })

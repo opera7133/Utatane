@@ -616,7 +616,9 @@ public final class SurfaceWindowController {
     }
 
     public func resetContent() {
-        hideAll()
+        for character in characters.values {
+            character.discard()
+        }
         characters.removeAll()
         shell = nil
         defaultSurfaceIDs.removeAll()
@@ -1345,6 +1347,15 @@ private final class CharacterSurfaceController {
             applyNijigenerateParameters(for: baseSurfaceID)
         }
         item?.hide()
+    }
+
+    func discard() {
+        hide()
+        item?.discard()
+        item = nil
+        imageView = nil
+        nijigenerateView = nil
+        nijigenerateBaseSize = nil
     }
 
     func restore() {

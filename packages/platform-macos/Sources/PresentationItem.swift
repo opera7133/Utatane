@@ -1074,6 +1074,12 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
             self.descriptor = descriptor
         }
 
+        deinit {
+            MainActor.assumeIsolated {
+                backing?.discard()
+            }
+        }
+
         var frame: NSRect {
             backing?.frame ?? .zero
         }

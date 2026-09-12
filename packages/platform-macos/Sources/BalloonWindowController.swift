@@ -148,7 +148,14 @@ public final class BalloonWindowController {
     }
 
     public func setPositionContentID(_ contentID: URL?) {
-        hideAll()
+        resetContent()
+        positionStore.setContentID(contentID)
+    }
+
+    public func resetContent() {
+        for presentation in presentations.values {
+            presentation.item.discard()
+        }
         presentations.removeAll()
         repaintLockedScopes.removeAll()
         movementLockedScopes.removeAll()
@@ -157,7 +164,6 @@ public final class BalloonWindowController {
         visitedAnchorIDs.removeAll()
         offsetByScope.removeAll()
         alignmentByScope.removeAll()
-        positionStore.setContentID(contentID)
     }
 
     public func setDisplayScale(_ scale: Double, textScale: Double) {

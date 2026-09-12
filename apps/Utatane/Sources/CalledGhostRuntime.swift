@@ -321,8 +321,8 @@ final class CalledGhostRuntime {
             await player.playAndWait(script, balloon: balloon)
         }
         player.cancel()
-        surfaceController.hideAll()
-        balloonController.hideAll()
+        surfaceController.resetContent()
+        balloonController.resetContent()
         return finalScript
     }
 

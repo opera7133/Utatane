@@ -2865,8 +2865,8 @@ private struct UtataneRootView: View {
             defer { isClosingCurrentGhost = false }
             await closeCurrentGhost(reason: .close)
             scriptPlayer.cancel()
-            surfaceWindowController.hideAll()
-            balloonWindowController.hideAll()
+            surfaceWindowController.resetContent()
+            balloonWindowController.resetContent()
             session = nil
             currentGhost = nil
             selectedShell = nil
