@@ -19,8 +19,8 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 
 基準: [さくらスクリプトリスト](https://ssp.shillest.net/ukadoc/manual/list_sakura_script.html)
 
-調査日: 2026-08-25
-調査結果: ✅ 75 / 🟡 39 / ❌ 8 / ➖ 4
+調査日: 2026-09-12
+調査結果: ✅ 77 / 🟡 42 / ❌ 5 / ➖ 4
 
 ### 基本仕様
 
@@ -81,7 +81,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | online / nouserbreak mode | 🟡 | `enter` / `leave`を解析。onlineは現scopeのバルーンを強制表示して簡易オンライン印を表示し、nouserbreakは区間中の別スクリプトによる割込みを拒否。SSPの専用マーカー画像とOwned SSTP判定は未対応 |
 | balloon repaint / move lock | ✅ | `balloonrepaint`は描画を保留してunlock時に最新内容を反映。通常lockは終端解除、manualは維持。`balloonmove`は明示解除までドラッグを抑止 |
 | `\_!`, `\_?` | ✅ | 区間内のタグ・環境変数を解釈せずそのまま表示。閉じタグがない場合は末尾までを対象にしParserテストで確認 |
-| `\__v` | ❌ | 音声合成・バックログ制御は未実装 |
+| `\__v` | 🟡 | `disable`で発話履歴への記録を一時停止し、`alternate,テキスト`で履歴へ残す代替文を指定。引数なしで通常記録へ戻る。音声合成の制御は未実装 |
 | `\![execute,resetballoonpos]` | ✅ | 保存済みの全scopeのバルーン位置を消去し、表示中バルーンをサーフェス近傍へ戻す |
 
 ### 文字装飾
@@ -169,7 +169,8 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | help / messenger / readme / terms / file | 🟡 | `\![open,readme]`、`\![open,help]`、`\![open,file,パス]`、`\![open,folder,パス]` に対応。該当ドキュメントやファイルを外部アプリ／Finderで開く |
 | open/save/folder/color dialog、close dialog | 🟡 | `open` / `save` / `folder` / `color` とID指定・全ダイアログのcloseに対応。title、dir、filter、ext、name、color、idを受け取り、結果を `OnSystemDialog` / `OnSystemDialogCancel` または指定イベントへ通知。filterは拡張子ワイルドカードのみ、実UIは未確認 |
 | surfacetest / aigraph / developer / shiorirequest / errorlog | ❌ | 開発UI未実装 |
-| dressup / picture / archive / backlog viewer | ❌ | 未実装 |
+| `\![open,backlogviewer]` | ✅ | 通常・呼び出しゴーストとも対象ゴーストの発話履歴を開く。ウィンドウモードでは設定に応じて下部へ統合表示 |
+| dressup / picture / archive | ❌ | 未実装 |
 
 ### Property System
 
