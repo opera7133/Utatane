@@ -607,6 +607,11 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     }
 
     fileprivate func present(_ item: WindowModePresentationItem, activating: Bool) {
+        if mode == .shared, item.kind == .speechHistory {
+            for other in items where other !== item && other.kind == .speechHistory {
+                other.hide()
+            }
+        }
         if item.containerView.superview !== rootView {
             rootView.addSubview(item.containerView)
         }

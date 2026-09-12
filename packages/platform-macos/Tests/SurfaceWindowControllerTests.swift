@@ -517,6 +517,40 @@ func `speech history is presented only inside a window mode stage and stays snap
 
 @Test
 @MainActor
+func `shared window mode shows only the most recently opened speech history`() {
+    let stage = WindowModePresentationHost(
+        contentSize: NSSize(width: 640, height: 480),
+        mode: .shared
+    )
+    let first = stage.makeItem(
+        kind: .speechHistory,
+        title: "first history",
+        onMove: { _, _ in },
+        onCancel: nil
+    )
+    let second = stage.makeItem(
+        kind: .speechHistory,
+        title: "second history",
+        onMove: { _, _ in },
+        onCancel: nil
+    )
+    defer {
+        first.discard()
+        second.discard()
+    }
+
+    first.show(activating: false)
+    #expect(first.isVisible)
+    second.show(activating: false)
+    #expect(!first.isVisible)
+    #expect(second.isVisible)
+    first.show(activating: false)
+    #expect(first.isVisible)
+    #expect(!second.isVisible)
+}
+
+@Test
+@MainActor
 func `switching presentation modes restores each coordinate space and retires old stages`() {
     let desktopGeometry = MutablePresentationGeometryProvider(screens: [
         PresentationScreenGeometry(
