@@ -68,8 +68,21 @@ public final class SpeechHistoryStore: ObservableObject {
 
     public func append(_ entry: SpeechHistoryEntry) {
         entries.append(entry)
+        trimEntries(for: entry.ghostIdentifier)
+    }
+
+    public func upsert(_ entry: SpeechHistoryEntry) {
+        if let index = entries.firstIndex(where: { $0.id == entry.id }) {
+            entries[index] = entry
+        } else {
+            entries.append(entry)
+        }
+        trimEntries(for: entry.ghostIdentifier)
+    }
+
+    private func trimEntries(for ghostIdentifier: String) {
         let matchingIndices = entries.indices.filter {
-            entries[$0].ghostIdentifier == entry.ghostIdentifier
+            entries[$0].ghostIdentifier == ghostIdentifier
         }
         let overflow = matchingIndices.count - capacityPerGhost
         if overflow > 0 {
@@ -177,10 +190,14 @@ public struct SpeechHistoryView: View {
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }
                 }
-                .onReceive(store.$entries) { _ in
-                    guard let last = entries.last else { return }
-                    withAnimation(.easeOut(duration: 0.15)) {
-                        proxy.scrollTo(last.id, anchor: .bottom)
+                .onReceive(store.$entries) { updatedEntries in
+                    guard let last = updatedEntries.last(where: {
+                        $0.ghostIdentifier == ghostIdentifier
+                    }) else { return }
+                    DispatchQueue.main.async {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            proxy.scrollTo(last.id, anchor: .bottom)
+                        }
                     }
                 }
             }
@@ -402,7 +419,10 @@ struct SpeechHistoryRecorder {
     private var text = ""
     private var mode: SakuraScriptVoiceMode = .defaultValue
     private var alternateHasVisibleContent = false
+    private var entryID: UUID?
     private var timestamp: Date?
+    private var entrySurfaceID: Int?
+    private var entryThumbnailPNGData: Data?
     private let talkIdentifier = UUID()
 
     init(
@@ -435,16 +455,24 @@ struct SpeechHistoryRecorder {
         case .defaultValue:
             markStarted()
             text.append(character)
+            publish()
         case .disabled:
             break
         case .alternate:
             alternateHasVisibleContent = true
             markStarted()
+            publish()
+        }
+    }
+
+    mutating func append(_ value: String) {
+        for character in value {
+            append(character)
         }
     }
 
     mutating func appendLineBreak() {
-        append("\n")
+        append(Character("\n"))
     }
 
     mutating func finish() {
@@ -452,34 +480,50 @@ struct SpeechHistoryRecorder {
     }
 
     private mutating func markStarted() {
-        if timestamp == nil {
-            timestamp = Date()
-        }
+        guard entryID == nil else { return }
+        entryID = UUID()
+        timestamp = Date()
+        entrySurfaceID = surfaceID(scope)
+        entryThumbnailPNGData = thumbnailPNGData(scope)
     }
 
     private mutating func flushAlternateText() {
         guard case let .alternate(alternate) = mode, alternateHasVisibleContent else { return }
         text.append(alternate)
         alternateHasVisibleContent = false
+        publish()
     }
 
     private mutating func commit() {
         flushAlternateText()
-        defer {
-            text = ""
-            timestamp = nil
-            alternateHasVisibleContent = false
+        publish()
+        text = ""
+        entryID = nil
+        timestamp = nil
+        entrySurfaceID = nil
+        entryThumbnailPNGData = nil
+        alternateHasVisibleContent = false
+    }
+
+    private mutating func publish() {
+        let displayedText: String = if case let .alternate(alternate) = mode, alternateHasVisibleContent {
+            text + alternate
+        } else {
+            text
         }
-        guard text.contains(where: { !$0.isWhitespace }) else { return }
-        store.append(SpeechHistoryEntry(
+        guard displayedText.contains(where: { !$0.isWhitespace }) else { return }
+        markStarted()
+        guard let entryID else { return }
+        store.upsert(SpeechHistoryEntry(
+            id: entryID,
             talkIdentifier: talkIdentifier,
             ghostIdentifier: context.ghostIdentifier,
             ghostName: context.ghostName,
             scope: scope,
             speakerName: context.speakerNames[scope] ?? context.ghostName,
-            surfaceID: surfaceID(scope),
-            thumbnailPNGData: thumbnailPNGData(scope),
-            text: text,
+            surfaceID: entrySurfaceID,
+            thumbnailPNGData: entryThumbnailPNGData,
+            text: displayedText,
             timestamp: timestamp ?? Date()
         ))
     }

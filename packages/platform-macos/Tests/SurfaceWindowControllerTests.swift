@@ -357,7 +357,7 @@ func `window mode hosts a surface and balloon in one capturable window`() throws
     )
 
     #expect(host.itemCount == 2)
-    #expect(host.rootView.subviews.filter { !($0 is NSButton) }.count == 2)
+    #expect(host.rootView.presentationView.subviews.count == 2)
     #expect(surfaces.visibleScopes == [0])
     #expect(balloons.visibleScopes == [0])
     #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 1)
@@ -432,8 +432,8 @@ func `presentation coordinator reparents live views between desktop and window m
         text: "rehost",
         near: surfaceFrame
     )
-    surfaces.onWindowMove = { scope, delta in
-        balloons.moveWithSurface(by: delta, scope: scope)
+    surfaces.onPresentationMove = { scope, delta, reason in
+        balloons.moveWithSurface(by: delta, scope: scope, reason: reason)
     }
     let desktopSurfaceFrame = try #require(surfaces.windowFrame(for: 0))
     let desktopBalloonFrame = try #require(balloons.windowFrame(for: 0))
@@ -444,7 +444,7 @@ func `presentation coordinator reparents live views between desktop and window m
     coordinator.switchHost(to: stage)
 
     #expect(stage.itemCount == 2)
-    #expect(stage.rootView.subviews.filter { !($0 is NSButton) }.count == 2)
+    #expect(stage.rootView.presentationView.subviews.count == 2)
     #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 1)
     #expect(surfaces.renderedImage(for: 0) === renderedBeforeSwitch)
     #expect(coordinator.mainScreen?.frame.size == NSSize(width: 640, height: 480))
@@ -463,7 +463,7 @@ func `presentation coordinator reparents live views between desktop and window m
     coordinator.switchHost(to: DesktopPresentationHost(geometryProvider: desktopGeometry))
 
     #expect(stage.itemCount == 0)
-    #expect(stage.rootView.subviews.allSatisfy { $0 is NSButton })
+    #expect(stage.rootView.presentationView.subviews.isEmpty)
     #expect(!stage.window.isVisible)
     #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 2)
     #expect(surfaces.renderedImage(for: 0) === renderedBeforeSwitch)
@@ -502,9 +502,18 @@ func `speech history is presented only inside a window mode stage and stays dock
     coordinator.switchHost(to: firstStage)
     #expect(item.isVisible)
     #expect(item.frame == NSRect(x: 0, y: 0, width: 640, height: 180))
+    #expect(firstStage.geometryProvider.mainScreen?.frame == NSRect(x: 0, y: 0, width: 640, height: 300))
+    #expect(firstStage.rootView.presentationView.frame == NSRect(x: 0, y: 180, width: 640, height: 300))
 
     firstStage.window.setContentSize(NSSize(width: 800, height: 600))
     #expect(item.frame == NSRect(x: 0, y: 0, width: 800, height: 204))
+    #expect(firstStage.geometryProvider.mainScreen?.frame == NSRect(x: 0, y: 0, width: 800, height: 396))
+    #expect(firstStage.rootView.presentationView.frame == NSRect(x: 0, y: 204, width: 800, height: 396))
+
+    item.hide()
+    #expect(firstStage.geometryProvider.mainScreen?.frame == NSRect(x: 0, y: 0, width: 800, height: 600))
+    #expect(firstStage.rootView.presentationView.frame == NSRect(x: 0, y: 0, width: 800, height: 600))
+    item.show(activating: false)
 
     coordinator.switchHost(to: DesktopPresentationHost(geometryProvider: desktopGeometry))
     #expect(!item.isVisible)
@@ -752,7 +761,7 @@ func `window mode screenshot preserves balloon text orientation`() throws {
         near: NSRect(x: 100, y: 40, width: 40, height: 80)
     )
     let itemFrame = try #require(balloons.windowFrame(for: 0))
-    let container = try #require(stage.rootView.subviews.first { !($0 is NSButton) })
+    let container = try #require(stage.presentationItemViews.first)
     container.layoutSubtreeIfNeeded()
     let expected = try #require(container.bitmapImageRepForCachingDisplay(in: container.bounds))
     container.cacheDisplay(in: container.bounds, to: expected)
@@ -1376,7 +1385,7 @@ func `records displayed speech using backlog voice modes`() async throws {
     )
 
     await player.playAndWait(
-        SakuraScript(rawValue: #"\0表示\__v[disable]除外\__v\__v[alternate,代替]見た目\__v終端\1相手\n二行目\e"#),
+        SakuraScript(rawValue: #"\0表示\__v[disable]除外\__v\__v[alternate,代替]見た目\__v終端\q[選択,OnSelect]\_a[OnAnchor]錨\_a\1相手\n二行目\e"#),
         balloon: makeBalloon(directory: directory),
         characterDelayMilliseconds: 0
     )
@@ -1385,7 +1394,7 @@ func `records displayed speech using backlog voice modes`() async throws {
     #expect(history.entries.map(\.speakerName) == ["さくら", "うにゅう"])
     #expect(history.entries.map(\.surfaceID) == [0, 1])
     #expect(history.entries.allSatisfy { $0.thumbnailPNGData != nil })
-    #expect(history.entries.map(\.text) == ["表示代替終端", "相手\n二行目"])
+    #expect(history.entries.map(\.text) == ["表示代替終端選択錨", "相手\n二行目"])
     #expect(Set(history.entries.map(\.talkIdentifier)).count == 1)
 }
 
@@ -1405,6 +1414,36 @@ func `speech history keeps its newest entries within capacity`() {
     }
 
     #expect(history.entries.map(\.text) == ["発話1", "発話2"])
+}
+
+@Test
+@MainActor
+func `speech history updates the current entry while text is being displayed`() {
+    let history = SpeechHistoryStore()
+    var recorder = SpeechHistoryRecorder(
+        store: history,
+        context: SpeechHistoryContext(
+            ghostIdentifier: "test-ghost",
+            ghostName: "テストゴースト",
+            speakerNames: [0: "さくら", 1: "うにゅう"]
+        ),
+        initialScope: 0,
+        surfaceID: { $0 }
+    )
+
+    recorder.append("一")
+    let firstID = history.entries.first?.id
+    #expect(history.entries.map(\.text) == ["一"])
+
+    recorder.append("言")
+    #expect(history.entries.count == 1)
+    #expect(history.entries.first?.id == firstID)
+    #expect(history.entries.first?.text == "一言")
+
+    recorder.setScope(1)
+    recorder.append("返")
+    #expect(history.entries.map(\.text) == ["一言", "返"])
+    #expect(Set(history.entries.map(\.talkIdentifier)).count == 1)
 }
 
 @Test
@@ -1967,6 +2006,65 @@ func `startup content sizing does not overwrite restored desktop positions`() th
 
     #expect(surfaces.windowFrame(for: 0)?.origin == surfaceOrigin)
     #expect(balloons.windowFrame(for: 0)?.origin == balloonOrigin)
+}
+
+@Test
+@MainActor
+func `automatic desktop layout is not saved as a user position`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 70, height: 110).write(to: directory.appending(path: "surface0001.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    positionStore.setContentID(URL(filePath: "/ghosts/automatic-layout", directoryHint: .isDirectory))
+    let geometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 760),
+            bitsPerPixel: 32,
+            scale: 2,
+            isPrimary: true
+        )
+    ])
+    let surfaces = SurfaceWindowController(positionStore: positionStore, geometryProvider: geometry)
+    let balloons = BalloonWindowController(positionStore: positionStore, geometryProvider: geometry)
+    defer {
+        surfaces.resetContent()
+        balloons.resetContent()
+    }
+
+    try surfaces.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    let surfaceFrame = try #require(surfaces.windowFrame(for: 0))
+    try balloons.show(balloon: makeBalloon(directory: directory), text: "first", near: surfaceFrame)
+    try surfaces.changeSurface(scope: 0, to: 1)
+    let changedSurfaceFrame = try #require(surfaces.windowFrame(for: 0))
+    try balloons.show(
+        balloon: makeBalloon(directory: directory),
+        text: "resized",
+        near: changedSurfaceFrame
+    )
+
+    #expect(positionStore.restoredOrigin(
+        for: .surface,
+        scope: 0,
+        windowSize: NSSize(width: 70, height: 110),
+        visibleFrames: geometry.visibleFrames
+    ) == nil)
+    #expect(positionStore.restoredOrigin(
+        for: .balloon,
+        scope: 0,
+        windowSize: NSSize(width: 160, height: 100),
+        visibleFrames: geometry.visibleFrames
+    ) == nil)
 }
 
 @Test

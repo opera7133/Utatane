@@ -26,7 +26,8 @@ enum PresentationItemKind {
 }
 
 enum PresentationItemMoveReason {
-    case movement
+    case userInteraction
+    case programmatic
     case rehost
 }
 
@@ -42,7 +43,7 @@ protocol PresentationItem: AnyObject {
     var captureWindowNumber: Int? { get }
 
     func setContentSize(_ size: NSSize)
-    func setFrameOrigin(_ origin: NSPoint)
+    func setFrameOrigin(_ origin: NSPoint, reason: PresentationItemMoveReason)
     func center()
     func show(activating: Bool)
     func hide()
@@ -55,10 +56,15 @@ protocol PresentationItem: AnyObject {
     func discard()
 }
 
+extension PresentationItem {
+    func setFrameOrigin(_ origin: NSPoint) {
+        setFrameOrigin(origin, reason: .programmatic)
+    }
+}
+
 @MainActor
 final class DesktopPresentationItem: PresentationItem {
     let window: FloatingContentWindow
-    private var hasInitialContentSize = false
 
     init(window: FloatingContentWindow) {
         self.window = window
@@ -91,23 +97,21 @@ final class DesktopPresentationItem: PresentationItem {
     }
 
     func setContentSize(_ size: NSSize) {
-        if hasInitialContentSize {
+        window.performMove(reason: .programmatic) {
             window.setContentSize(size)
-        } else {
-            // AppKit preserves the top edge while changing a window's content size,
-            // which also changes its frame origin. The first layout move must not
-            // overwrite the user's saved origin before startup restoration runs.
-            window.setContentSizeWithoutPersistingMove(size)
-            hasInitialContentSize = true
         }
     }
 
-    func setFrameOrigin(_ origin: NSPoint) {
-        window.setFrameOrigin(origin)
+    func setFrameOrigin(_ origin: NSPoint, reason: PresentationItemMoveReason) {
+        window.performMove(reason: reason) {
+            window.setFrameOrigin(origin)
+        }
     }
 
     func center() {
-        window.center()
+        window.performMove(reason: .programmatic) {
+            window.center()
+        }
     }
 
     func show(activating: Bool) {
@@ -136,15 +140,19 @@ final class DesktopPresentationItem: PresentationItem {
     }
 
     func animateFrameOrigin(_ origin: NSPoint, duration: TimeInterval) async {
+        let previousReason = window.beginMove(reason: .programmatic)
         await animate(duration: duration) {
             self.window.animator().setFrameOrigin(origin)
         }
+        window.endMove(previousReason: previousReason)
     }
 
     func animateContentSize(_ size: NSSize, duration: TimeInterval) async {
+        let previousReason = window.beginMove(reason: .programmatic)
         await animate(duration: duration) {
             self.window.animator().setContentSize(size)
         }
+        window.endMove(previousReason: previousReason)
     }
 
     func animateAlphaValue(_ alpha: CGFloat, duration: TimeInterval) async {
@@ -192,7 +200,7 @@ final class DesktopPresentationHost: PresentationHosting {
         let window = FloatingContentWindow(
             title: title,
             visibleFrames: { [geometryProvider] in geometryProvider.visibleFrames },
-            onMove: { origin in onMove(origin, .movement) }
+            onMove: onMove
         )
         window.backgroundColor = .clear
         window.isOpaque = false
@@ -339,6 +347,10 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
 
     var itemCount: Int {
         items.count
+    }
+
+    var presentationItemViews: [NSView] {
+        items.map(\.containerView)
     }
 
     func setTitle(_ title: String) {
@@ -588,6 +600,10 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         let bounds = rootView.bounds
         guard bounds.width > 0, bounds.height > 0 else { return }
         let height = min(280, max(180, (bounds.height * 0.34).rounded()))
+        let hasVisibleHistory = items.contains {
+            $0.kind == .speechHistory && $0.isVisible
+        }
+        rootView.setSpeechHistoryHeight(hasVisibleHistory ? min(height, bounds.height) : 0)
         for item in items where item.kind == .speechHistory {
             item.setContentSize(NSSize(width: bounds.width, height: min(height, bounds.height)))
             item.setFrameOrigin(bounds.origin)
@@ -604,7 +620,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
             host: self,
             kind: kind,
             hasShadow: kind == .balloon,
-            onMove: { origin in onMove(origin, .movement) }
+            onMove: onMove
         )
         if let onCancel {
             (window as? WindowModeStageWindow)?.cancelHandlers.append(onCancel)
@@ -621,8 +637,9 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
                 other.hide()
             }
         }
-        if item.containerView.superview !== rootView {
-            rootView.addSubview(item.containerView)
+        let parentView = item.kind == .speechHistory ? rootView : rootView.presentationView
+        if item.containerView.superview !== parentView {
+            parentView.addSubview(item.containerView)
         }
         rootView.bringTransientControlsToFront()
         item.containerView.isHidden = false
@@ -637,9 +654,15 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     fileprivate func discard(_ item: WindowModePresentationItem) {
         item.containerView.removeFromSuperview()
         items.removeAll { $0 === item }
+        layoutSpeechHistoryItems()
         if items.isEmpty {
             window.orderOut(nil)
         }
+    }
+
+    fileprivate func hide(_ item: WindowModePresentationItem) {
+        item.containerView.isHidden = true
+        layoutSpeechHistoryItems()
     }
 }
 
@@ -647,6 +670,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
 final class WindowModeStageRootView: NSView {
     weak var host: WindowModePresentationHost?
     private(set) var desktopWallpaper: WindowModeDesktopWallpaperSnapshot?
+    let presentationView = NSView(frame: .zero)
     private let menuButton = WindowModeTransientButton(
         symbolName: "line.3.horizontal",
         accessibilityLabel: String(localized: "操作")
@@ -657,9 +681,14 @@ final class WindowModeStageRootView: NSView {
     )
     private var pointerTrackingArea: NSTrackingArea?
     private(set) var transientControlsAreEnabled = false
+    private var speechHistoryHeight: CGFloat = 0
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        presentationView.frame = bounds
+        presentationView.wantsLayer = true
+        presentationView.layer?.masksToBounds = true
+        addSubview(presentationView)
         menuButton.target = self
         menuButton.action = #selector(openOperationMenu)
         closeButton.target = self
@@ -676,6 +705,12 @@ final class WindowModeStageRootView: NSView {
 
     override func layout() {
         super.layout()
+        presentationView.frame = NSRect(
+            x: bounds.minX,
+            y: bounds.minY + speechHistoryHeight,
+            width: bounds.width,
+            height: max(0, bounds.height - speechHistoryHeight)
+        )
         let inset: CGFloat = 12
         let buttonSize = menuButton.frame.size
         menuButton.setFrameOrigin(NSPoint(
@@ -740,6 +775,14 @@ final class WindowModeStageRootView: NSView {
     func setTransientControlsEnabled(_ enabled: Bool) {
         transientControlsAreEnabled = enabled
         setPointerInside(false)
+    }
+
+    func setSpeechHistoryHeight(_ height: CGFloat) {
+        let height = min(max(0, height), bounds.height)
+        guard speechHistoryHeight != height else { return }
+        speechHistoryHeight = height
+        needsLayout = true
+        layoutSubtreeIfNeeded()
     }
 
     func setPointerInside(_ pointerInside: Bool) {
@@ -827,12 +870,12 @@ private final class WindowModeStageWindow: NSWindow {
 @MainActor
 private final class WindowModePresentationGeometryProvider: PresentationGeometryProviding {
     private weak var window: NSWindow?
-    private weak var rootView: NSView?
+    private weak var rootView: WindowModeStageRootView?
     let coordinateSpace: PresentationCoordinateSpace
 
     init(
         window: NSWindow,
-        rootView: NSView,
+        rootView: WindowModeStageRootView,
         coordinateSpace: PresentationCoordinateSpace
     ) {
         self.window = window
@@ -842,9 +885,11 @@ private final class WindowModePresentationGeometryProvider: PresentationGeometry
 
     var screens: [PresentationScreenGeometry] {
         guard let rootView else { return [] }
+        rootView.layoutSubtreeIfNeeded()
+        let bounds = rootView.presentationView.bounds
         return [PresentationScreenGeometry(
-            frame: rootView.bounds,
-            visibleFrame: rootView.bounds,
+            frame: bounds,
+            visibleFrame: bounds,
             bitsPerPixel: 32,
             scale: window?.backingScaleFactor ?? 1,
             isPrimary: true
@@ -854,7 +899,7 @@ private final class WindowModePresentationGeometryProvider: PresentationGeometry
     var pointerPosition: CGPoint {
         guard let window, let rootView else { return .zero }
         let windowPoint = window.convertPoint(fromScreen: NSEvent.mouseLocation)
-        return rootView.convert(windowPoint, from: nil)
+        return rootView.presentationView.convert(windowPoint, from: nil)
     }
 }
 
@@ -863,14 +908,14 @@ private final class WindowModePresentationItem: PresentationItem {
     weak var host: WindowModePresentationHost?
     let kind: PresentationItemKind
     let containerView = NSView(frame: .zero)
-    private let onMove: (NSPoint) -> Void
+    private let onMove: (NSPoint, PresentationItemMoveReason) -> Void
     private var placementPolicy = FloatingWindowPlacementPolicy.free
 
     init(
         host: WindowModePresentationHost,
         kind: PresentationItemKind,
         hasShadow: Bool,
-        onMove: @escaping (NSPoint) -> Void
+        onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void
     ) {
         self.host = host
         self.kind = kind
@@ -918,13 +963,13 @@ private final class WindowModePresentationItem: PresentationItem {
         containerView.setFrameSize(size)
     }
 
-    func setFrameOrigin(_ origin: NSPoint) {
+    func setFrameOrigin(_ origin: NSPoint, reason: PresentationItemMoveReason) {
         let oldOrigin = containerView.frame.origin
         containerView.setFrameOrigin(origin)
         applyPlacementConstraint()
         let appliedOrigin = containerView.frame.origin
         if appliedOrigin != oldOrigin {
-            onMove(appliedOrigin)
+            onMove(appliedOrigin, reason)
         }
     }
 
@@ -941,7 +986,7 @@ private final class WindowModePresentationItem: PresentationItem {
     }
 
     func hide() {
-        containerView.isHidden = true
+        host?.hide(self)
     }
 
     func setStaysOnTop(_ staysOnTop: Bool) {
@@ -966,7 +1011,7 @@ private final class WindowModePresentationItem: PresentationItem {
             self.containerView.animator().setFrameOrigin(origin)
         }
         applyPlacementConstraint()
-        onMove(containerView.frame.origin)
+        onMove(containerView.frame.origin, .programmatic)
     }
 
     func animateContentSize(_ size: NSSize, duration: TimeInterval) async {
@@ -1192,8 +1237,8 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
             backing?.setContentSize(size)
         }
 
-        func setFrameOrigin(_ origin: NSPoint) {
-            backing?.setFrameOrigin(origin)
+        func setFrameOrigin(_ origin: NSPoint, reason: PresentationItemMoveReason) {
+            backing?.setFrameOrigin(origin, reason: reason)
         }
 
         func center() {
@@ -1255,10 +1300,10 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
             return host.makeItem(
                 kind: descriptor.kind,
                 title: descriptor.title,
-                onMove: { [weak self] origin, _ in
+                onMove: { [weak self] origin, reason in
                     guard let self, !isRehosting else { return }
                     originsByCoordinateSpace[coordinateSpace] = origin
-                    descriptor.onMove(origin, .movement)
+                    descriptor.onMove(origin, reason)
                 },
                 onCancel: descriptor.onCancel
             )

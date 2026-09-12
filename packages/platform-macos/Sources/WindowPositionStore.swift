@@ -108,17 +108,17 @@ enum FloatingWindowKind: String {
 
 final class FloatingContentWindow: NSWindow, NSWindowDelegate {
     var onCancel: (() -> Void)?
-    private let onMove: (NSPoint) -> Void
+    private let onMove: (NSPoint, PresentationItemMoveReason) -> Void
     private var placementPolicy: FloatingWindowPlacementPolicy
     private let visibleFrames: @MainActor () -> [NSRect]
     private var isApplyingConstraint = false
-    private var suppressesMovePersistence = false
+    private var moveReason = PresentationItemMoveReason.userInteraction
 
     init(
         title: String,
         placementPolicy: FloatingWindowPlacementPolicy = .free,
         visibleFrames: @escaping @MainActor () -> [NSRect] = { NSScreen.screens.map(\.visibleFrame) },
-        onMove: @escaping (NSPoint) -> Void
+        onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void
     ) {
         self.onMove = onMove
         self.placementPolicy = placementPolicy
@@ -152,20 +152,31 @@ final class FloatingContentWindow: NSWindow, NSWindowDelegate {
 
     func setPlacementPolicy(_ placementPolicy: FloatingWindowPlacementPolicy) {
         self.placementPolicy = placementPolicy
-        applyPlacementConstraint()
+        performMove(reason: .programmatic) {
+            applyPlacementConstraint()
+        }
     }
 
-    func setContentSizeWithoutPersistingMove(_ size: NSSize) {
-        suppressesMovePersistence = true
-        setContentSize(size)
-        applyPlacementConstraint()
-        suppressesMovePersistence = false
+    func performMove(reason: PresentationItemMoveReason, _ changes: () -> Void) {
+        let previousReason = moveReason
+        moveReason = reason
+        changes()
+        moveReason = previousReason
+    }
+
+    func beginMove(reason: PresentationItemMoveReason) -> PresentationItemMoveReason {
+        let previousReason = moveReason
+        moveReason = reason
+        return previousReason
+    }
+
+    func endMove(previousReason: PresentationItemMoveReason) {
+        moveReason = previousReason
     }
 
     func windowDidMove(_ notification: Notification) {
         applyPlacementConstraint()
-        guard !suppressesMovePersistence else { return }
-        onMove(frame.origin)
+        onMove(frame.origin, moveReason)
     }
 
     private func applyPlacementConstraint() {

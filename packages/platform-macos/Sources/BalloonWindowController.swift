@@ -526,11 +526,22 @@ public final class BalloonWindowController {
     }
 
     public func moveWithSurface(by delta: NSPoint, scope: Int) {
+        moveWithSurface(by: delta, scope: scope, reason: .programmatic)
+    }
+
+    func moveWithSurface(
+        by delta: NSPoint,
+        scope: Int,
+        reason: PresentationItemMoveReason
+    ) {
         guard let presentation = presentations[scope] else { return }
         presentation.surfaceFrame.origin.x += delta.x
         presentation.surfaceFrame.origin.y += delta.y
         let origin = presentation.item.frame.origin
-        presentation.item.setFrameOrigin(NSPoint(x: origin.x + delta.x, y: origin.y + delta.y))
+        presentation.item.setFrameOrigin(
+            NSPoint(x: origin.x + delta.x, y: origin.y + delta.y),
+            reason: reason
+        )
     }
 
     public func hideAll() {
@@ -559,13 +570,15 @@ public final class BalloonWindowController {
         let item = presentationHost.makeItem(
             kind: .balloon,
             title: "Ghost Balloon \(scope)",
-            onMove: { [positionStore, geometryProvider, scope] origin, _ in
-                positionStore.save(
-                    origin,
-                    for: .balloon,
-                    scope: scope,
-                    coordinateSpace: geometryProvider.coordinateSpace
-                )
+            onMove: { [positionStore, geometryProvider, scope] origin, reason in
+                if reason != .programmatic {
+                    positionStore.save(
+                        origin,
+                        for: .balloon,
+                        scope: scope,
+                        coordinateSpace: geometryProvider.coordinateSpace
+                    )
+                }
             },
             onCancel: nil
         )
@@ -581,7 +594,9 @@ public final class BalloonWindowController {
     private func configureDragging(_ contentView: BalloonContentView, item: any PresentationItem) {
         contentView.configurePresentationItem(
             frame: { [weak item] in item?.frame },
-            setOrigin: { [weak item] origin in item?.setFrameOrigin(origin) }
+            setOrigin: { [weak item] origin in
+                item?.setFrameOrigin(origin, reason: .userInteraction)
+            }
         )
     }
 

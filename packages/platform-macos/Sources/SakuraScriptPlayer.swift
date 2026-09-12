@@ -109,8 +109,8 @@ public final class SakuraScriptPlayer {
         self.surfaceWindowController = surfaceWindowController
         self.balloonWindowController = balloonWindowController
         self.geometryProvider = geometryProvider
-        surfaceWindowController.onWindowMove = { [weak balloonWindowController] scope, delta in
-            balloonWindowController?.moveWithSurface(by: delta, scope: scope)
+        surfaceWindowController.onPresentationMove = { [weak balloonWindowController] scope, delta, reason in
+            balloonWindowController?.moveWithSurface(by: delta, scope: scope, reason: reason)
         }
         self.postDialogueDismissalMilliseconds = postDialogueDismissalMilliseconds
         self.surfaceRestoreDelayMilliseconds = max(0, surfaceRestoreDelayMilliseconds)
@@ -1003,6 +1003,7 @@ public final class SakuraScriptPlayer {
                     )
                     try activateIfNeeded(scope: scope)
                     updateContent(scope: scope, autoscroll: false)
+                    speechHistoryRecorder?.append(label)
                 case let .choiceStart(id, arguments):
                     choicesByScope[scope] = ActiveAnchor(
                         id: id,

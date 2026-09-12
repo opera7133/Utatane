@@ -92,6 +92,7 @@ public final class SurfaceWindowController {
     public var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
     public var onSurfaceChange: (@MainActor (Int, Int?, Int) -> Void)?
     public var onWindowMove: (@MainActor (Int, NSPoint) -> Void)?
+    var onPresentationMove: (@MainActor (Int, NSPoint, PresentationItemMoveReason) -> Void)?
     public var onNarDrop: (@MainActor (Int, [URL]) -> Void)?
     public var onFileDropping: (@MainActor (Int, [URL]) -> Void)?
     public var onFileDrop: (@MainActor (Int, [URL]) -> Void)?
@@ -546,7 +547,7 @@ public final class SurfaceWindowController {
     private func handleWindowDragDelta(scope: Int, delta: NSPoint) {
         for group in stickyGroups where group.contains(scope) {
             for otherScope in group where otherScope != scope {
-                characters[otherScope]?.moveBy(delta: delta)
+                characters[otherScope]?.moveBy(delta: delta, reason: .userInteraction)
             }
         }
     }
@@ -742,8 +743,9 @@ public final class SurfaceWindowController {
         character.onWindowDragDelta = { [weak self] delta in
             self?.handleWindowDragDelta(scope: scope, delta: delta)
         }
-        character.onWindowMove = { [weak self] delta in
+        character.onWindowMove = { [weak self] delta, reason in
             self?.onWindowMove?(scope, delta)
+            self?.onPresentationMove?(scope, delta, reason)
         }
         character.contextMenuItems = { [weak self] in
             self?.contextMenuItems?() ?? []
@@ -1738,7 +1740,7 @@ private final class CharacterSurfaceController {
     }
 
     var onWindowDragDelta: ((_ delta: NSPoint) -> Void)?
-    var onWindowMove: ((NSPoint) -> Void)?
+    var onWindowMove: ((NSPoint, PresentationItemMoveReason) -> Void)?
 
     var windowNumber: Int? {
         item?.captureWindowNumber
@@ -1749,10 +1751,13 @@ private final class CharacterSurfaceController {
         item.orderAbove(otherItem)
     }
 
-    func moveBy(delta: NSPoint) {
+    func moveBy(delta: NSPoint, reason: PresentationItemMoveReason) {
         guard let item else { return }
         let currentOrigin = item.frame.origin
-        item.setFrameOrigin(NSPoint(x: currentOrigin.x + delta.x, y: currentOrigin.y + delta.y))
+        item.setFrameOrigin(
+            NSPoint(x: currentOrigin.x + delta.x, y: currentOrigin.y + delta.y),
+            reason: reason
+        )
     }
 
     func center() {
@@ -1875,7 +1880,9 @@ private final class CharacterSurfaceController {
             self?.onWindowDragDelta?(delta)
         }
         imageView.presentationFrame = { [weak self] in self?.item?.frame }
-        imageView.setPresentationOrigin = { [weak self] origin in self?.item?.setFrameOrigin(origin) }
+        imageView.setPresentationOrigin = { [weak self] origin in
+            self?.item?.setFrameOrigin(origin, reason: .userInteraction)
+        }
         imageView.onDragUpdate = { [weak self] startOrigin, pointer in
             guard let self else { return }
             isDragging = startOrigin != nil
@@ -1983,16 +1990,21 @@ private final class CharacterSurfaceController {
             kind: .surface,
             title: "Ghost Surface \(scope)",
             onMove: { [weak self, positionStore, geometryProvider, scope] origin, reason in
-                positionStore.save(
-                    origin,
-                    for: .surface,
-                    scope: scope,
-                    coordinateSpace: geometryProvider.coordinateSpace
-                )
+                if reason != .programmatic {
+                    positionStore.save(
+                        origin,
+                        for: .surface,
+                        scope: scope,
+                        coordinateSpace: geometryProvider.coordinateSpace
+                    )
+                }
                 let oldOrigin = previousOrigin
                 previousOrigin = origin
-                if reason == .movement, let oldOrigin, oldOrigin != origin {
-                    self?.onWindowMove?(NSPoint(x: origin.x - oldOrigin.x, y: origin.y - oldOrigin.y))
+                if reason != .rehost, let oldOrigin, oldOrigin != origin {
+                    self?.onWindowMove?(
+                        NSPoint(x: origin.x - oldOrigin.x, y: origin.y - oldOrigin.y),
+                        reason
+                    )
                 }
             },
             onCancel: { [weak self] in self?.imageView?.cancelDrag() }

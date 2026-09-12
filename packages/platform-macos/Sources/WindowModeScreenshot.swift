@@ -42,9 +42,7 @@ enum WindowModeScreenshotRenderer {
         }
 
         let presentedViews = Set(itemViews.map(ObjectIdentifier.init))
-        for itemView in rootView.subviews where
-            presentedViews.contains(ObjectIdentifier(itemView)) && !itemView.isHidden
-        {
+        for itemView in presentedItemViews(in: rootView, identifiers: presentedViews) where !itemView.isHidden {
             let metalSnapshots = metalSnapshots(in: itemView)
             context.saveGState()
             if let layer = itemView.layer, layer.shadowOpacity > 0 {
@@ -70,6 +68,20 @@ enum WindowModeScreenshotRenderer {
         let output = NSBitmapImageRep(cgImage: image)
         output.size = size
         return output.representation(using: .png, properties: [:])
+    }
+
+    @MainActor
+    private static func presentedItemViews(
+        in view: NSView,
+        identifiers: Set<ObjectIdentifier>
+    ) -> [NSView] {
+        view.subviews.flatMap { subview in
+            if identifiers.contains(ObjectIdentifier(subview)) {
+                [subview]
+            } else {
+                presentedItemViews(in: subview, identifiers: identifiers)
+            }
+        }
     }
 
     @MainActor
