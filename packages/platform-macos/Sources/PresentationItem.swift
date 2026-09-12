@@ -814,7 +814,11 @@ final class WindowModeStageRootView: NSView {
     ) {
         context.saveGState()
         context.clip(to: presentationView.frame)
-        WindowModeDesktopWallpaperRenderer.draw(desktopWallpaper, in: bounds, context: context)
+        WindowModeDesktopWallpaperRenderer.draw(
+            desktopWallpaper,
+            in: presentationView.frame,
+            context: context
+        )
         context.restoreGState()
     }
 

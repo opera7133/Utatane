@@ -1006,7 +1006,7 @@ func `desktop wallpaper background follows provider changes and screenshot trans
 
 @Test
 @MainActor
-func `desktop wallpaper stays out of the speech history area`() throws {
+func `desktop wallpaper stays out of history and scales to the presentation area`() throws {
     let wallpaper = try #require(NSImage(data: makePNG(
         width: 4,
         height: 4,
@@ -1015,7 +1015,7 @@ func `desktop wallpaper stays out of the speech history area`() throws {
     let provider = StubDesktopWallpaperProvider(snapshot: WindowModeDesktopWallpaperSnapshot(
         image: wallpaper,
         url: URL(fileURLWithPath: "/tmp/wallpaper.png"),
-        scaling: .scaleAxesIndependently,
+        scaling: .scaleProportionallyUpOrDown,
         allowsClipping: false,
         fillColor: .black,
         signature: "wallpaper"
@@ -1033,12 +1033,20 @@ func `desktop wallpaper stays out of the speech history area`() throws {
     let colors = [bitmap.pixelsHigh / 4, bitmap.pixelsHigh * 3 / 4].compactMap {
         bitmap.colorAt(x: bitmap.pixelsWide / 2, y: $0)?.usingColorSpace(.deviceRGB)
     }
+    let edgeColors = [bitmap.pixelsHigh / 4, bitmap.pixelsHigh * 3 / 4].compactMap {
+        bitmap.colorAt(x: bitmap.pixelsWide * 3 / 16, y: $0)?.usingColorSpace(.deviceRGB)
+    }
     let wallpaperSamples = colors.filter {
+        $0.greenComponent > 0.8 && $0.redComponent < 0.2 && $0.blueComponent < 0.2
+    }
+    let edgeWallpaperSamples = edgeColors.filter {
         $0.greenComponent > 0.8 && $0.redComponent < 0.2 && $0.blueComponent < 0.2
     }
 
     #expect(colors.count == 2)
+    #expect(edgeColors.count == 2)
     #expect(wallpaperSamples.count == 1)
+    #expect(edgeWallpaperSamples.isEmpty)
 }
 
 @Test
