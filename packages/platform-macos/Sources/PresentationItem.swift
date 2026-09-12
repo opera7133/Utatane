@@ -190,30 +190,123 @@ final class DesktopPresentationHost: PresentationHosting {
     }
 }
 
-@MainActor
-final class WindowModePresentationHost: PresentationHosting {
-    let window: NSWindow
-    let rootView: NSView
-    let geometryProvider: any PresentationGeometryProviding
-    private var items: [WindowModePresentationItem] = []
+public enum WindowModeStageBackground: String, CaseIterable, Sendable {
+    case white
+    case gray
+    case black
+}
 
-    init(contentSize: NSSize = NSSize(width: 960, height: 540), title: String = "Utatane") {
+struct WindowModeStageState {
+    let contentSize: NSSize
+    let origin: NSPoint?
+    let background: WindowModeStageBackground
+    let showsWindowFrame: Bool
+}
+
+final class WindowModeStageStateStore {
+    private let defaults: UserDefaults
+    private let namespace: String
+
+    init(
+        defaults: UserDefaults = .standard,
+        namespace: String = "dev.utatane.window-mode-stage"
+    ) {
+        self.defaults = defaults
+        self.namespace = namespace
+    }
+
+    func load(identifier: String) -> WindowModeStageState? {
+        guard let value = defaults.dictionary(forKey: key(identifier: identifier)),
+              let width = value["width"] as? Double,
+              let height = value["height"] as? Double,
+              let backgroundValue = value["background"] as? String,
+              let background = WindowModeStageBackground(rawValue: backgroundValue),
+              let showsWindowFrame = value["showsWindowFrame"] as? Bool
+        else { return nil }
+        let origin: NSPoint? = if let x = value["x"] as? Double, let y = value["y"] as? Double {
+            NSPoint(x: x, y: y)
+        } else {
+            nil
+        }
+        return WindowModeStageState(
+            contentSize: NSSize(width: width, height: height),
+            origin: origin,
+            background: background,
+            showsWindowFrame: showsWindowFrame
+        )
+    }
+
+    func save(_ state: WindowModeStageState, identifier: String) {
+        var value: [String: Any] = [
+            "width": Double(state.contentSize.width),
+            "height": Double(state.contentSize.height),
+            "background": state.background.rawValue,
+            "showsWindowFrame": state.showsWindowFrame
+        ]
+        if let origin = state.origin {
+            value["x"] = Double(origin.x)
+            value["y"] = Double(origin.y)
+        }
+        defaults.set(value, forKey: key(identifier: identifier))
+    }
+
+    private func key(identifier: String) -> String {
+        let encoded = Data(identifier.utf8).base64EncodedString()
+        return "\(namespace).\(encoded)"
+    }
+}
+
+@MainActor
+final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowDelegate {
+    let window: NSWindow
+    let rootView: WindowModeStageRootView
+    let geometryProvider: any PresentationGeometryProviding
+    let mode: GhostWindowMode
+    private var items: [WindowModePresentationItem] = []
+    private let onModeRequest: (GhostWindowMode) -> Void
+    private let stateStore: WindowModeStageStateStore?
+    private let stateIdentifier: String
+    private(set) var background: WindowModeStageBackground = .gray
+    private(set) var showsWindowFrame = true
+
+    init(
+        contentSize: NSSize = NSSize(width: 960, height: 540),
+        title: String = "Utatane",
+        mode: GhostWindowMode = .perGhost,
+        onModeRequest: @escaping (GhostWindowMode) -> Void = { _ in },
+        stateStore: WindowModeStageStateStore? = nil,
+        stateIdentifier: String = ""
+    ) {
+        let restoredState = stateStore?.load(identifier: stateIdentifier)
+        let contentSize = restoredState?.contentSize ?? contentSize
         let window = WindowModeStageWindow(
             contentRect: NSRect(origin: .zero, size: contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
-        let rootView = NSView(frame: NSRect(origin: .zero, size: contentSize))
+        let rootView = WindowModeStageRootView(frame: NSRect(origin: .zero, size: contentSize))
         rootView.wantsLayer = true
-        rootView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         window.title = title
         window.contentView = rootView
         window.isReleasedWhenClosed = false
         window.center()
         self.window = window
         self.rootView = rootView
+        self.mode = mode
+        self.onModeRequest = onModeRequest
+        self.stateStore = stateStore
+        self.stateIdentifier = stateIdentifier
         geometryProvider = WindowModePresentationGeometryProvider(window: window, rootView: rootView)
+        super.init()
+        window.delegate = self
+        rootView.host = self
+        window.host = self
+        if let origin = restoredState?.origin {
+            window.setFrameOrigin(origin)
+        }
+        setBackground(restoredState?.background ?? .gray)
+        setShowsWindowFrame(restoredState?.showsWindowFrame ?? true)
     }
 
     var itemCount: Int {
@@ -222,6 +315,137 @@ final class WindowModePresentationHost: PresentationHosting {
 
     func setTitle(_ title: String) {
         window.title = title
+    }
+
+    func setBackground(_ background: WindowModeStageBackground) {
+        self.background = background
+        rootView.layer?.backgroundColor = switch background {
+        case .white: NSColor.white.cgColor
+        case .gray: NSColor(calibratedWhite: 0.25, alpha: 1).cgColor
+        case .black: NSColor.black.cgColor
+        }
+        persistState()
+    }
+
+    func setShowsWindowFrame(_ showsWindowFrame: Bool) {
+        guard self.showsWindowFrame != showsWindowFrame else { return }
+        self.showsWindowFrame = showsWindowFrame
+        if showsWindowFrame {
+            window.styleMask.formUnion([.titled, .closable, .miniaturizable])
+        } else {
+            window.styleMask.subtract([.titled, .closable, .miniaturizable])
+        }
+        window.isMovableByWindowBackground = !showsWindowFrame
+        persistState()
+    }
+
+    func toggleFullScreen() {
+        window.toggleFullScreen(nil)
+    }
+
+    func makeOperationMenu() -> NSMenu {
+        let menu = NSMenu(title: String(localized: "操作"))
+        let modeItem = NSMenuItem(
+            title: String(localized: "ウィンドウモード"),
+            action: nil,
+            keyEquivalent: ""
+        )
+        let modeMenu = NSMenu(title: String(localized: "ウィンドウモード"))
+        addModeItem(String(localized: "切"), mode: .off, to: modeMenu)
+        addModeItem(String(localized: "全ゴーストをまとめて1枚"), mode: .shared, to: modeMenu)
+        addModeItem(String(localized: "ゴーストごとに1枚"), mode: .perGhost, to: modeMenu)
+        modeItem.submenu = modeMenu
+        menu.addItem(modeItem)
+        menu.addItem(.separator())
+
+        let fullscreen = NSMenuItem(
+            title: String(localized: "全画面表示"),
+            action: #selector(toggleFullScreenFromMenu),
+            keyEquivalent: ""
+        )
+        fullscreen.target = self
+        fullscreen.state = window.styleMask.contains(.fullScreen) ? .on : .off
+        menu.addItem(fullscreen)
+
+        let frame = NSMenuItem(
+            title: String(localized: "ウィンドウ枠を表示する"),
+            action: #selector(toggleWindowFrameFromMenu),
+            keyEquivalent: ""
+        )
+        frame.target = self
+        frame.state = showsWindowFrame ? .on : .off
+        menu.addItem(frame)
+
+        let backgroundItem = NSMenuItem(title: String(localized: "背景"), action: nil, keyEquivalent: "")
+        let backgroundMenu = NSMenu(title: String(localized: "背景"))
+        addBackgroundItem(String(localized: "白"), background: .white, to: backgroundMenu)
+        addBackgroundItem(String(localized: "灰"), background: .gray, to: backgroundMenu)
+        addBackgroundItem(String(localized: "黒"), background: .black, to: backgroundMenu)
+        backgroundItem.submenu = backgroundMenu
+        menu.addItem(backgroundItem)
+        return menu
+    }
+
+    private func addModeItem(_ title: String, mode: GhostWindowMode, to menu: NSMenu) {
+        let item = NSMenuItem(title: title, action: #selector(selectModeFromMenu(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = mode.rawValue
+        item.state = self.mode == mode ? .on : .off
+        menu.addItem(item)
+    }
+
+    private func addBackgroundItem(
+        _ title: String,
+        background: WindowModeStageBackground,
+        to menu: NSMenu
+    ) {
+        let item = NSMenuItem(title: title, action: #selector(selectBackgroundFromMenu(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = background.rawValue
+        item.state = self.background == background ? .on : .off
+        menu.addItem(item)
+    }
+
+    @objc private func selectModeFromMenu(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let mode = GhostWindowMode(rawValue: rawValue)
+        else { return }
+        onModeRequest(mode)
+    }
+
+    @objc private func toggleFullScreenFromMenu() {
+        toggleFullScreen()
+    }
+
+    @objc private func toggleWindowFrameFromMenu() {
+        setShowsWindowFrame(!showsWindowFrame)
+    }
+
+    @objc private func selectBackgroundFromMenu(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let background = WindowModeStageBackground(rawValue: rawValue)
+        else { return }
+        setBackground(background)
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        persistState()
+    }
+
+    func windowDidResize(_ notification: Notification) {
+        persistState()
+    }
+
+    private func persistState() {
+        stateStore?.save(
+            WindowModeStageState(
+                contentSize: window.contentView?.bounds.size ?? window.frame.size,
+                origin: window.frame.origin,
+                background: background,
+                showsWindowFrame: showsWindowFrame
+            ),
+            identifier: stateIdentifier
+        )
     }
 
     func makeItem(
@@ -265,14 +489,34 @@ final class WindowModePresentationHost: PresentationHosting {
 }
 
 @MainActor
+final class WindowModeStageRootView: NSView {
+    weak var host: WindowModePresentationHost?
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        host?.makeOperationMenu()
+    }
+}
+
+@MainActor
 private final class WindowModeStageWindow: NSWindow {
+    weak var host: WindowModePresentationHost?
     var cancelHandlers: [() -> Void] = []
 
     override func cancelOperation(_ sender: Any?) {
-        if cancelHandlers.isEmpty {
+        if styleMask.contains(.fullScreen) {
+            toggleFullScreen(sender)
+        } else if cancelHandlers.isEmpty {
             super.cancelOperation(sender)
         } else {
             cancelHandlers.forEach { $0() }
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if event.specialKey == .f11 {
+            host?.toggleFullScreen()
+        } else {
+            super.keyDown(with: event)
         }
     }
 }
@@ -721,6 +965,7 @@ public enum GhostWindowMode: String, CaseIterable, Sendable {
 @MainActor
 public final class GhostPresentationSession {
     public private(set) var title: String
+    public private(set) var identifier: String
     let presentationHost: PresentationHostCoordinator
     private weak var coordinator: PresentationCoordinator?
 
@@ -730,10 +975,12 @@ public final class GhostPresentationSession {
 
     fileprivate init(
         title: String,
+        identifier: String,
         presentationHost: PresentationHostCoordinator,
         coordinator: PresentationCoordinator
     ) {
         self.title = title
+        self.identifier = identifier
         self.presentationHost = presentationHost
         self.coordinator = coordinator
     }
@@ -741,6 +988,12 @@ public final class GhostPresentationSession {
     public func setTitle(_ title: String) {
         self.title = title
         coordinator?.sessionTitleDidChange(self)
+    }
+
+    public func setIdentifier(_ identifier: String) {
+        guard self.identifier != identifier else { return }
+        self.identifier = identifier
+        coordinator?.sessionIdentifierDidChange(self)
     }
 }
 
@@ -751,22 +1004,31 @@ public final class PresentationCoordinator {
     }
 
     public private(set) var mode: GhostWindowMode
+    public var onModeRequest: (@MainActor (GhostWindowMode) -> Void)?
     private let systemGeometry: any PresentationGeometryProviding
+    private let stageStateStore: WindowModeStageStateStore
     private var sharedHost: WindowModePresentationHost?
     private var sessions: [WeakSession] = []
 
     public init(
         mode: GhostWindowMode = .off,
-        systemGeometry: any PresentationGeometryProviding = SystemPresentationGeometryProvider()
+        systemGeometry: any PresentationGeometryProviding = SystemPresentationGeometryProvider(),
+        defaults: UserDefaults = .standard
     ) {
         self.mode = mode
         self.systemGeometry = systemGeometry
+        stageStateStore = WindowModeStageStateStore(defaults: defaults)
     }
 
-    public func makeSession(title: String) -> GhostPresentationSession {
+    public func makeSession(title: String, identifier: String? = nil) -> GhostPresentationSession {
+        let identifier = identifier ?? title
         let session = GhostPresentationSession(
             title: title,
-            presentationHost: PresentationHostCoordinator(initialHost: host(for: title)),
+            identifier: identifier,
+            presentationHost: PresentationHostCoordinator(initialHost: host(
+                for: title,
+                identifier: identifier
+            )),
             coordinator: self
         )
         sessions.append(WeakSession(value: session))
@@ -781,7 +1043,10 @@ public final class PresentationCoordinator {
         }
         sessions = sessions.filter { $0.value != nil }
         for session in sessions.compactMap(\.value) {
-            session.presentationHost.switchHost(to: host(for: session.title))
+            session.presentationHost.switchHost(to: host(
+                for: session.title,
+                identifier: session.identifier
+            ))
         }
     }
 
@@ -790,14 +1055,28 @@ public final class PresentationCoordinator {
         session.presentationHost.setTitle(session.title)
     }
 
-    private func host(for title: String) -> any PresentationHosting {
+    fileprivate func sessionIdentifierDidChange(_ session: GhostPresentationSession) {
+        guard mode == .perGhost else { return }
+        session.presentationHost.switchHost(to: host(
+            for: session.title,
+            identifier: session.identifier
+        ))
+    }
+
+    private func host(for title: String, identifier: String) -> any PresentationHosting {
         switch mode {
         case .off:
             DesktopPresentationHost(geometryProvider: systemGeometry)
         case .shared:
             sharedWindowModeHost()
         case .perGhost:
-            WindowModePresentationHost(title: title)
+            WindowModePresentationHost(
+                title: title,
+                mode: .perGhost,
+                onModeRequest: { [weak self] mode in self?.requestMode(mode) },
+                stateStore: stageStateStore,
+                stateIdentifier: "per-ghost:\(identifier)"
+            )
         }
     }
 
@@ -805,8 +1084,22 @@ public final class PresentationCoordinator {
         if let sharedHost {
             return sharedHost
         }
-        let host = WindowModePresentationHost(title: "Utatane")
+        let host = WindowModePresentationHost(
+            title: "Utatane",
+            mode: .shared,
+            onModeRequest: { [weak self] mode in self?.requestMode(mode) },
+            stateStore: stageStateStore,
+            stateIdentifier: "shared"
+        )
         sharedHost = host
         return host
+    }
+
+    private func requestMode(_ mode: GhostWindowMode) {
+        if let onModeRequest {
+            onModeRequest(mode)
+        } else {
+            setMode(mode)
+        }
     }
 }

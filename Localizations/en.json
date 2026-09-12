@@ -305,5 +305,11 @@
   "ウィンドウモード（実験的）" : "Window Mode (Experimental)",
   "表示方式" : "Display Mode",
   "使用しない" : "Disabled",
-  "ゴーストとバルーンを通常の1枚のウィンドウ内に表示する。配信や画面収録でウィンドウ単位に取り込みやすくなる。" : "Show ghosts and balloons together in a standard window, making window-based streaming and screen recording easier."
+  "ゴーストとバルーンを通常の1枚のウィンドウ内に表示する。配信や画面収録でウィンドウ単位に取り込みやすくなる。" : "Show ghosts and balloons together in a standard window, making window-based streaming and screen recording easier.",
+  "全画面表示" : "Full Screen",
+  "ウィンドウ枠を表示する" : "Show Window Frame",
+  "背景" : "Background",
+  "白" : "White",
+  "灰" : "Gray",
+  "黒" : "Black"
 }

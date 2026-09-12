@@ -67,6 +67,9 @@ struct UtataneApp: App {
             mode: settings.windowMode,
             systemGeometry: systemGeometry
         )
+        presentationCoordinator.onModeRequest = { [weak settings] mode in
+            settings?.windowMode = mode
+        }
         let mainPresentationSession = presentationCoordinator.makeSession(title: "Utatane")
         let presentationGeometry = mainPresentationSession.geometryProvider
         let positionStore = WindowPositionStore()
@@ -1422,6 +1425,7 @@ private struct UtataneRootView: View {
         balloon = nil
         currentGhost = ghost
         mainPresentationSession.setTitle(ghost.name)
+        mainPresentationSession.setIdentifier(ghost.id.path)
         teachHistory = []
         networkSettings.activateGhost(
             directoryName: ghost.rootDirectory.lastPathComponent,
@@ -3470,7 +3474,10 @@ private struct UtataneRootView: View {
                     2: ghost.name,
                     3: ghost.rootDirectory.path
                 ]))
-                let calledPresentationSession = presentationCoordinator.makeSession(title: ghost.name)
+                let calledPresentationSession = presentationCoordinator.makeSession(
+                    title: ghost.name,
+                    identifier: ghost.id.path
+                )
                 let runtime = try CalledGhostRuntime(
                     ghost: ghost,
                     balloons: installedBalloons,

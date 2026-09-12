@@ -364,6 +364,19 @@ func `window mode hosts a surface and balloon in one capturable window`() throws
 
     host.window.setContentSize(NSSize(width: 800, height: 600))
     #expect(host.geometryProvider.mainScreen?.frame.size == NSSize(width: 800, height: 600))
+
+    host.setBackground(.black)
+    #expect(host.background == .black)
+    host.setShowsWindowFrame(false)
+    #expect(!host.window.styleMask.contains(.titled))
+    #expect(host.window.styleMask.contains(.resizable))
+    host.setShowsWindowFrame(true)
+    #expect(host.window.styleMask.contains(.titled))
+
+    let operationMenu = host.makeOperationMenu()
+    let modeMenu = try #require(operationMenu.items.first?.submenu)
+    #expect(modeMenu.items.count == GhostWindowMode.allCases.count)
+    #expect(modeMenu.items.filter { $0.state == NSControl.StateValue.on }.count == 1)
 }
 
 @Test
@@ -490,6 +503,40 @@ func `window mode launch option supports SSP mode names and the previous layout`
     #expect(GhostWindowMode.launchOverride(in: ["Utatane", "--windowmode=shared"]) == .shared)
     #expect(GhostWindowMode.launchOverride(in: ["Utatane", "--windowmode=perghost"]) == .perGhost)
     #expect(GhostWindowMode.launchOverride(in: ["Utatane", "--windowmode=invalid"]) == nil)
+}
+
+@Test
+func `window mode stage appearance is persisted per stage identifier`() throws {
+    let suiteName = "WindowModeStageTests-\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let store = WindowModeStageStateStore(defaults: defaults, namespace: "stage-test")
+    let shared = WindowModeStageState(
+        contentSize: NSSize(width: 800, height: 600),
+        origin: NSPoint(x: 120, y: 90),
+        background: .black,
+        showsWindowFrame: false
+    )
+    let perGhost = WindowModeStageState(
+        contentSize: NSSize(width: 640, height: 480),
+        origin: nil,
+        background: .white,
+        showsWindowFrame: true
+    )
+
+    store.save(shared, identifier: "shared")
+    store.save(perGhost, identifier: "per-ghost:/ghosts/a")
+
+    let restoredShared = try #require(store.load(identifier: "shared"))
+    let restoredPerGhost = try #require(store.load(identifier: "per-ghost:/ghosts/a"))
+    #expect(restoredShared.contentSize == shared.contentSize)
+    #expect(restoredShared.origin == shared.origin)
+    #expect(restoredShared.background == .black)
+    #expect(!restoredShared.showsWindowFrame)
+    #expect(restoredPerGhost.contentSize == perGhost.contentSize)
+    #expect(restoredPerGhost.origin == nil)
+    #expect(restoredPerGhost.background == .white)
+    #expect(restoredPerGhost.showsWindowFrame)
 }
 
 @Test(arguments: ["master", "master2nd"])
