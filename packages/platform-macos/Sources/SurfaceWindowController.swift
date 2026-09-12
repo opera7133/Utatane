@@ -834,6 +834,7 @@ private final class CharacterSurfaceController {
     private var baseSurfaceID: Int?
     private var surfaceBaseImage: NSImage?
     private var baseImage: NSImage?
+    private var renderedLayerCache: [Int: NSImage] = [:]
     private var persistentAnimationLayers: [Int: PersistentAnimationLayer] = [:]
     private var enabledBindGroups: Set<Int> = []
     private var animationTask: Task<Void, Never>?
@@ -957,6 +958,7 @@ private final class CharacterSurfaceController {
         animationOffsets.removeAll()
         isRepaintLocked = false
         pendingAnimationImage = nil
+        renderedLayerCache.removeAll()
 
         if scope == 0,
            let runtime = NijigenerateShellRuntime.locate(shellDirectory: shell.directory)
@@ -992,6 +994,7 @@ private final class CharacterSurfaceController {
         baseSurfaceID = surfaceID
         surfaceBaseImage = rendered.image
         baseImage = rendered.image
+        renderedLayerCache[surfaceID] = rendered.image
         persistentAnimationLayers.removeAll()
         scheduleAutomaticAnimations()
     }
@@ -1070,6 +1073,7 @@ private final class CharacterSurfaceController {
     func setBindGroups(_ groups: Set<Int>, redraw: Bool) {
         enabledBindGroups = groups
         schedulerTask?.cancel()
+        renderedLayerCache.removeAll()
         if nijigenerateView != nil {
             if let shell, let baseSurfaceID {
                 imageView?.collisions = effectiveCollisions(
@@ -1088,6 +1092,7 @@ private final class CharacterSurfaceController {
         item.setFrameOrigin(origin)
         imageView = rendered.view
         baseImage = rendered.image
+        renderedLayerCache[baseSurfaceID] = rendered.image
         scheduleAutomaticAnimations()
     }
 
@@ -1287,6 +1292,7 @@ private final class CharacterSurfaceController {
         baseSurfaceID = surfaceID
         surfaceBaseImage = rendered.image
         baseImage = rendered.image
+        renderedLayerCache[surfaceID] = rendered.image
         persistentAnimationLayers.removeAll()
         scheduleAutomaticAnimations()
     }
@@ -1969,19 +1975,26 @@ private final class CharacterSurfaceController {
         guard !visited.contains(surfaceID) else {
             throw ShellError.missingSurface(id: surfaceID, directory: shell.directory)
         }
+        if let cached = renderedLayerCache[surfaceID] {
+            return cached
+        }
+        let image: NSImage
         if let asset = try? shellLoader.loadSurface(id: surfaceID, from: shell.directory) {
-            return try imageLoader.load(asset, usesSelfAlpha: shell.usesSelfAlpha)
+            image = try imageLoader.load(asset, usesSelfAlpha: shell.usesSelfAlpha)
+        } else {
+            guard let definition = shell.surfaces[surfaceID], !definition.elements.isEmpty else {
+                throw ShellError.missingSurface(id: surfaceID, directory: shell.directory)
+            }
+            let base = try render(elements: definition.elements, shell: shell)
+            image = try applyInitialAnimations(
+                to: base,
+                definition: definition,
+                shell: shell,
+                visited: visited.union([surfaceID])
+            )
         }
-        guard let definition = shell.surfaces[surfaceID], !definition.elements.isEmpty else {
-            throw ShellError.missingSurface(id: surfaceID, directory: shell.directory)
-        }
-        let base = try render(elements: definition.elements, shell: shell)
-        return try applyInitialAnimations(
-            to: base,
-            definition: definition,
-            shell: shell,
-            visited: visited.union([surfaceID])
-        )
+        renderedLayerCache[surfaceID] = image
+        return image
     }
 
     private func makePresentationItem() -> any PresentationItem {

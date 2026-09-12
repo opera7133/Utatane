@@ -1296,6 +1296,74 @@ func `bound blink replaces its initial eye layer instead of overlaying it`() asy
 
 @Test
 @MainActor
+func `self referencing blink reuses the loaded base surface`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let baseURL = directory.appending(path: "surface0.png")
+    try makePNG(
+        width: 4, height: 4,
+        color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    ).write(to: baseURL)
+    try makePNG(
+        width: 4, height: 4,
+        color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    ).write(to: directory.appending(path: "surface1000.png"))
+    let animation = SurfaceAnimation(
+        id: 0,
+        interval: nil,
+        patterns: [
+            SurfaceAnimationPattern(
+                order: 0, method: "overlay", surfaceID: 1000,
+                waitMilliseconds: 1000, x: 0, y: 0
+            ),
+            SurfaceAnimationPattern(
+                order: 1, method: "overlay", surfaceID: 0,
+                waitMilliseconds: 1000, x: 0, y: 0
+            )
+        ]
+    )
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [0: SurfaceDefinition(id: 0, collisions: [], animations: [animation])],
+        usesSelfAlpha: true
+    )
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    defer { controller.resetContent() }
+    try controller.show(shell: shell, scope: 0, surfaceID: 0)
+    let initialImage = try #require(controller.renderedImage(for: 0))
+    try FileManager.default.removeItem(at: baseURL)
+
+    controller.playAnimation(id: 0)
+    for _ in 0 ..< 200 {
+        if controller.renderedImage(for: 0)?.colorAtCenter()?.blueComponent ?? 0 > 0.9 {
+            break
+        }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(try #require(controller.renderedImage(for: 0)?.colorAtCenter()).blueComponent > 0.9)
+
+    var reopenedFrame: NSImage?
+    for _ in 0 ..< 300 {
+        if let candidate = controller.renderedImage(for: 0),
+           candidate !== initialImage,
+           candidate.colorAtCenter()?.redComponent ?? 0 > 0.9
+        {
+            reopenedFrame = candidate
+            break
+        }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    let reopenedImage = try #require(reopenedFrame)
+    #expect(reopenedImage !== initialImage)
+    #expect(try #require(reopenedImage.colorAtCenter()).redComponent > 0.9)
+}
+
+@Test
+@MainActor
 func `base animation pattern temporarily replaces the whole surface`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
