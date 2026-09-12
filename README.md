@@ -14,6 +14,8 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 
 - ゴースト、シェル、バルーンの読み込みと切り替え
 - 複数キャラクター、サーフェス、SERIKOアニメーションの表示
+- ゴーストとバルーンを、全ゴースト共通またはゴーストごとの1枚のウィンドウへまとめるウィンドウモード
+- 独立ウィンドウまたはウィンドウモード内で表示できる、サーフェス画像付きの発話履歴
 - SakuraScriptによる会話、選択肢、リンクの再生
 - クリック、ダブルクリック、撫で、ホイールなどのマウス操作
 - 複数ゴーストの呼び出しとコミュニケーション
@@ -130,6 +132,7 @@ Content/Local/
 
 - [ドキュメント一覧](Docs/README.md)
 - [変更履歴](CHANGELOG.md)
+- [ウィンドウモード](Docs/Window-Mode.md)
 - [ゴースト・SHIORI・SAORI制作者向けUtatane対応ガイド](Docs/Content-Authoring.md)
 - [ゴースト互換状況](Docs/Compatibility.md)
 
