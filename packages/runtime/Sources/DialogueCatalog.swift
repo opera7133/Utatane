@@ -49,7 +49,7 @@ public struct DialogueCatalog: Codable, Sendable, Equatable {
             } else {
                 return mouseClick["*"] ?? []
             }
-        case .shiori:
+        case .shiori, .notification:
             return []
         case let .choice(id, _):
             return choices[id] ?? []

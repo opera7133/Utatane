@@ -463,6 +463,8 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
             }
         case let .shiori(id, references):
             (id, references)
+        case let .notification(id, references):
+            (id, references)
         default:
             nil
         }

@@ -138,7 +138,10 @@ final class CalledGhostRuntime {
         }
     }
 
-    func start(caller: InstalledGhost) async throws -> String? {
+    func start(
+        caller: InstalledGhost,
+        desktopWallpaperEvent: DesktopWallpaperChangeEvent? = nil
+    ) async throws -> String? {
         try show(shell: shell)
         surfaceController.setPresentationHidden(true)
         _ = try? await session.start(event: .shiori(id: "OnInitialize", references: [:]))
@@ -149,8 +152,14 @@ final class CalledGhostRuntime {
                 balloon: balloon,
                 shellDefinition: definition
             ) {
-                _ = try? await session.handle(event: .shiori(id: event.id, references: event.references))
+                _ = try? await session.handle(event: .notification(
+                    id: event.id,
+                    references: event.references
+                ))
             }
+        }
+        if let desktopWallpaperEvent {
+            _ = try? await session.handle(event: desktopWallpaperGhostEvent(desktopWallpaperEvent))
         }
         let script = try await session.handle(event: .shiori(id: "OnGhostCalled", references: [
             0: caller.characters.first(where: { $0.scope == 0 })?.name ?? caller.name,

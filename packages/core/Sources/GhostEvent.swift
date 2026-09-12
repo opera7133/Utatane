@@ -5,6 +5,7 @@ public enum GhostEvent: Sendable, Equatable {
     case mouseClick(scope: Int, region: String?)
     case mouse(GhostMouseEvent)
     case shiori(id: String, references: [Int: String])
+    case notification(id: String, references: [Int: String])
     case randomTalk
     case choice(id: String, arguments: [String])
 }

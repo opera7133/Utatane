@@ -274,6 +274,7 @@ private struct UtataneRootView: View {
     private let networkStatusMonitor = NetworkStatusMonitor()
     private let recycleBinSampler = MacOSRecycleBinSampler()
     private let nowPlayingReader = MacOSNowPlayingReader()
+    private let desktopWallpaperSampler = SystemDesktopWallpaperSampler()
     @State private var isTransitioningGhost = false
     @State private var isClosingCurrentGhost = false
     @State private var isHiddenForFullScreenApp = false
@@ -293,6 +294,7 @@ private struct UtataneRootView: View {
     @State private var previousWindowLayoutSnapshot: WindowLayoutSnapshot?
     @State private var previousRecycleBinSnapshot: RecycleBinSnapshot?
     @State private var nowPlayingChangeDetector = NowPlayingChangeDetector()
+    @State private var desktopWallpaperChangeDetector = DesktopWallpaperChangeDetector()
     @State private var configuredShellScalePercent: Int?
     @State private var configuredBalloonScalePercent: Int?
     @State private var gamepadMonitor = GamepadEventMonitor()
@@ -498,10 +500,17 @@ private struct UtataneRootView: View {
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "desktop-wallpaper") {
             presentationCoordinator.refreshDesktopWallpapers()
+            if let state = desktopWallpaperSampler.sample() {
+                _ = desktopWallpaperChangeDetector.consume(state)
+            }
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(5))
                 guard !Task.isCancelled else { return }
                 presentationCoordinator.refreshDesktopWallpapers()
+                guard let state = desktopWallpaperSampler.sample(),
+                      let event = desktopWallpaperChangeDetector.consume(state)
+                else { continue }
+                broadcastEvent(desktopWallpaperGhostEvent(event))
             }
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "battery") {
@@ -1864,7 +1873,13 @@ private struct UtataneRootView: View {
                     ].joined(separator: "\u{1}")
                 }
             ) {
-                _ = try? await ghostSession.handle(event: .shiori(id: event.id, references: event.references))
+                _ = try? await ghostSession.handle(event: .notification(
+                    id: event.id,
+                    references: event.references
+                ))
+            }
+            if let event = desktopWallpaperSampler.sample()?.initialEvent() {
+                _ = try? await ghostSession.handle(event: desktopWallpaperGhostEvent(event))
             }
             for (_, response) in await pluginRuntime.broadcast(
                 event: "OnGhostBoot",
@@ -3543,7 +3558,10 @@ private struct UtataneRootView: View {
                 }
                 calledGhosts[ghost.id] = runtime
                 configureContextMenu()
-                let startupScript = try await runtime.start(caller: caller) ?? ""
+                let startupScript = try await runtime.start(
+                    caller: caller,
+                    desktopWallpaperEvent: desktopWallpaperSampler.sample()?.initialEvent()
+                ) ?? ""
                 sendEvent(.shiori(id: "OnGhostCallComplete", references: [
                     0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
                     1: startupScript,
@@ -5060,6 +5078,15 @@ private struct UtataneRootView: View {
             surfaceWindowController.hideAll()
             applicationDelegate.completeTermination()
         }
+    }
+}
+
+func desktopWallpaperGhostEvent(_ event: DesktopWallpaperChangeEvent) -> GhostEvent {
+    switch event.delivery {
+    case .event:
+        .shiori(id: "OnDesktopWallpaperChange", references: event.references)
+    case .notification:
+        .notification(id: "OnDesktopWallpaperChange", references: event.references)
     }
 }
 

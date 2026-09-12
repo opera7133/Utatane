@@ -138,6 +138,7 @@ private extension GhostEvent {
         case .mouseClick: "OnMouseClick"
         case let .mouse(event): String(describing: event.kind)
         case let .shiori(id, _): id
+        case let .notification(id, _): id
         case .randomTalk: "OnSecondChange/randomTalk"
         case .choice: "OnChoiceSelect"
         }
@@ -155,6 +156,7 @@ private extension GhostEvent {
                 4: String(event.button)
             ]
         case let .shiori(_, references): references
+        case let .notification(_, references): references
         case let .choice(id, arguments):
             [0: id].merging(Dictionary(uniqueKeysWithValues: arguments.enumerated().map { ($0.offset + 1, $0.element) })) { current, _ in current }
         case .boot, .close, .randomTalk: [:]

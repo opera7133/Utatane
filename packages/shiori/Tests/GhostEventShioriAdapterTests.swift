@@ -181,3 +181,15 @@ import UtataneCore
     #expect(request.reference(1) == "Emily")
     #expect(request.reference(2) == "emily4")
 }
+
+@Test func `maps a baseware notification to SHIORI NOTIFY`() {
+    let request = GhostEventShioriAdapter().request(for: .notification(
+        id: "OnDesktopWallpaperChange",
+        references: [0: "init", 2: "/wallpaper.png"]
+    ))
+
+    #expect(request.method == "NOTIFY")
+    #expect(request.id == "OnDesktopWallpaperChange")
+    #expect(request.reference(0) == "init")
+    #expect(request.reference(2) == "/wallpaper.png")
+}

@@ -35,6 +35,8 @@ public struct AIPersonalityInput: Codable, Sendable, Equatable {
             ])
         case let .shiori(id, references):
             (id, Dictionary(uniqueKeysWithValues: references.map { (String($0.key), $0.value) }))
+        case let .notification(id, references):
+            (id, Dictionary(uniqueKeysWithValues: references.map { (String($0.key), $0.value) }))
         case .randomTalk: ("OnAITalk", [:])
         case let .choice(id, arguments):
             ("OnChoiceSelect", ["id": id, "arguments": arguments.joined(separator: "\u{1}")])

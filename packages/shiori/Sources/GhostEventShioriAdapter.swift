@@ -45,7 +45,12 @@ public struct GhostEventShioriAdapter: Sendable {
         for (index, value) in mapping.references.sorted(by: { $0.key < $1.key }) {
             headers.append(name: "Reference\(index)", value: value)
         }
-        return ShioriRequest(method: "GET", headers: headers)
+        let method = if case .notification = event {
+            "NOTIFY"
+        } else {
+            "GET"
+        }
+        return ShioriRequest(method: method, headers: headers)
     }
 
     private func map(
@@ -122,6 +127,8 @@ public struct GhostEventShioriAdapter: Sendable {
             }
             return (id, references)
         case let .shiori(id, references):
+            return (id, references)
+        case let .notification(id, references):
             return (id, references)
         case .randomTalk:
             return ("OnAITalk", [:])
