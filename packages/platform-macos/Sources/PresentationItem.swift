@@ -297,9 +297,14 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         self.onModeRequest = onModeRequest
         self.stateStore = stateStore
         self.stateIdentifier = stateIdentifier
-        geometryProvider = WindowModePresentationGeometryProvider(window: window, rootView: rootView)
+        geometryProvider = WindowModePresentationGeometryProvider(
+            window: window,
+            rootView: rootView,
+            coordinateSpace: mode == .shared ? .sharedWindowMode : .perGhostWindowMode
+        )
         super.init()
         window.delegate = self
+        window.standardWindowButton(.closeButton)?.isEnabled = false
         rootView.host = self
         window.host = self
         if let origin = restoredState?.origin {
@@ -436,6 +441,10 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         persistState()
     }
 
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        false
+    }
+
     private func persistState() {
         stateStore?.save(
             WindowModeStageState(
@@ -525,10 +534,16 @@ private final class WindowModeStageWindow: NSWindow {
 private final class WindowModePresentationGeometryProvider: PresentationGeometryProviding {
     private weak var window: NSWindow?
     private weak var rootView: NSView?
+    let coordinateSpace: PresentationCoordinateSpace
 
-    init(window: NSWindow, rootView: NSView) {
+    init(
+        window: NSWindow,
+        rootView: NSView,
+        coordinateSpace: PresentationCoordinateSpace
+    ) {
         self.window = window
         self.rootView = rootView
+        self.coordinateSpace = coordinateSpace
     }
 
     var screens: [PresentationScreenGeometry] {
@@ -546,10 +561,6 @@ private final class WindowModePresentationGeometryProvider: PresentationGeometry
         guard let window, let rootView else { return .zero }
         let windowPoint = window.convertPoint(fromScreen: NSEvent.mouseLocation)
         return rootView.convert(windowPoint, from: nil)
-    }
-
-    var coordinateSpace: PresentationCoordinateSpace {
-        .windowMode
     }
 }
 
@@ -759,13 +770,23 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
     }
 
     func switchHost(to newHost: any PresentationHosting) {
-        let oldFrame = activeHost.geometryProvider.mainScreen?.visibleFrame
+        let oldHost = activeHost
+        let oldFrame = oldHost.geometryProvider.mainScreen?.visibleFrame
+        let oldCoordinateSpace = oldHost.geometryProvider.coordinateSpace
         let newFrame = newHost.geometryProvider.mainScreen?.visibleFrame
+        let newCoordinateSpace = newHost.geometryProvider.coordinateSpace
         activeHost = newHost
         handles = handles.filter { $0.value != nil }
         for handle in handles.compactMap(\.value) {
-            handle.rehost(to: newHost, from: oldFrame, to: newFrame)
+            handle.rehost(
+                to: newHost,
+                from: oldFrame,
+                oldCoordinateSpace: oldCoordinateSpace,
+                to: newFrame,
+                newCoordinateSpace: newCoordinateSpace
+            )
         }
+        withExtendedLifetime(oldHost) {}
     }
 
     func setTitle(_ title: String) {
@@ -778,6 +799,7 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
         private var isRehosting = false
         private var placementPolicy = FloatingWindowPlacementPolicy.free
         private var staysOnTop = true
+        private var originsByCoordinateSpace: [PresentationCoordinateSpace: NSPoint] = [:]
 
         init(descriptor: ItemDescriptor) {
             self.descriptor = descriptor
@@ -816,16 +838,18 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
         func rehost(
             to host: any PresentationHosting,
             from oldVisibleFrame: NSRect?,
-            to newVisibleFrame: NSRect?
+            oldCoordinateSpace: PresentationCoordinateSpace,
+            to newVisibleFrame: NSRect?,
+            newCoordinateSpace: PresentationCoordinateSpace
         ) {
             guard let oldBacking = backing else {
                 attach(to: host)
                 return
             }
             isRehosting = true
-            defer { isRehosting = false }
 
             let oldFrame = oldBacking.frame
+            originsByCoordinateSpace[oldCoordinateSpace] = oldFrame.origin
             let wasVisible = oldBacking.isVisible
             let contentView = oldBacking.contentView
             let alpha = oldBacking.alphaValue
@@ -839,14 +863,19 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
             newBacking.setPlacementPolicy(placementPolicy)
             newBacking.setStaysOnTop(staysOnTop)
             newBacking.alphaValue = alpha
-            newBacking.setFrameOrigin(mappedOrigin(
+            let destinationOrigin = originsByCoordinateSpace[newCoordinateSpace] ?? mappedOrigin(
                 for: oldFrame,
                 from: oldVisibleFrame,
                 to: newVisibleFrame
-            ))
+            )
+            newBacking.setFrameOrigin(destinationOrigin)
+            let appliedOrigin = newBacking.frame.origin
+            originsByCoordinateSpace[newCoordinateSpace] = appliedOrigin
             if wasVisible {
                 newBacking.show(activating: false)
             }
+            isRehosting = false
+            descriptor.onMove(appliedOrigin)
         }
 
         func setContentSize(_ size: NSSize) {
@@ -904,11 +933,13 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
         }
 
         private func makeBacking(host: any PresentationHosting) -> any PresentationItem {
-            host.makeItem(
+            let coordinateSpace = host.geometryProvider.coordinateSpace
+            return host.makeItem(
                 kind: descriptor.kind,
                 title: descriptor.title,
                 onMove: { [weak self] origin in
                     guard let self, !isRehosting else { return }
+                    originsByCoordinateSpace[coordinateSpace] = origin
                     descriptor.onMove(origin)
                 },
                 onCancel: descriptor.onCancel
@@ -921,15 +952,17 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
             to newVisibleFrame: NSRect?
         ) -> NSPoint {
             guard let oldVisibleFrame, let newVisibleFrame else { return itemFrame.origin }
-            let oldTravelX = max(0, oldVisibleFrame.width - itemFrame.width)
-            let oldTravelY = max(0, oldVisibleFrame.height - itemFrame.height)
-            let normalizedX = oldTravelX > 0 ? (itemFrame.minX - oldVisibleFrame.minX) / oldTravelX : 0.5
-            let normalizedY = oldTravelY > 0 ? (itemFrame.minY - oldVisibleFrame.minY) / oldTravelY : 0.5
-            let newTravelX = max(0, newVisibleFrame.width - itemFrame.width)
-            let newTravelY = max(0, newVisibleFrame.height - itemFrame.height)
+            let normalizedX = oldVisibleFrame.width > 0
+                ? (itemFrame.midX - oldVisibleFrame.minX) / oldVisibleFrame.width
+                : 0.5
+            let normalizedY = oldVisibleFrame.height > 0
+                ? (itemFrame.midY - oldVisibleFrame.minY) / oldVisibleFrame.height
+                : 0.5
             return NSPoint(
-                x: newVisibleFrame.minX + min(max(normalizedX, 0), 1) * newTravelX,
-                y: newVisibleFrame.minY + min(max(normalizedY, 0), 1) * newTravelY
+                x: newVisibleFrame.minX + min(max(normalizedX, 0), 1) * newVisibleFrame.width
+                    - itemFrame.width / 2,
+                y: newVisibleFrame.minY + min(max(normalizedY, 0), 1) * newVisibleFrame.height
+                    - itemFrame.height / 2
             )
         }
     }

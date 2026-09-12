@@ -437,8 +437,66 @@ func `presentation coordinator reparents live views between desktop and window m
 
     #expect(stage.itemCount == 0)
     #expect(stage.rootView.subviews.isEmpty)
+    #expect(!stage.window.isVisible)
     #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 2)
     #expect(surfaces.renderedImage(for: 0) === renderedBeforeSwitch)
+}
+
+@Test
+@MainActor
+func `switching presentation modes restores each coordinate space and retires old stages`() {
+    let desktopGeometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 760),
+            bitsPerPixel: 32,
+            scale: 2,
+            isPrimary: true
+        )
+    ])
+    let coordinator = PresentationHostCoordinator(
+        initialHost: DesktopPresentationHost(geometryProvider: desktopGeometry)
+    )
+    let item = coordinator.makeItem(kind: .surface, title: "surface", onMove: { _ in }, onCancel: nil)
+    defer { item.discard() }
+    item.setContentSize(NSSize(width: 80, height: 120))
+    item.setFrameOrigin(NSPoint(x: 100, y: 200))
+    item.show(activating: false)
+
+    let firstSharedStage = WindowModePresentationHost(
+        contentSize: NSSize(width: 640, height: 480),
+        mode: .shared
+    )
+    coordinator.switchHost(to: firstSharedStage)
+    item.setFrameOrigin(NSPoint(x: 40, y: 50))
+
+    let perGhostStage = WindowModePresentationHost(
+        contentSize: NSSize(width: 640, height: 480),
+        mode: .perGhost
+    )
+    coordinator.switchHost(to: perGhostStage)
+    #expect(!firstSharedStage.window.isVisible)
+    item.setFrameOrigin(NSPoint(x: 80, y: 90))
+
+    let secondSharedStage = WindowModePresentationHost(
+        contentSize: NSSize(width: 640, height: 480),
+        mode: .shared
+    )
+    coordinator.switchHost(to: secondSharedStage)
+    #expect(!perGhostStage.window.isVisible)
+    #expect(item.frame.origin == NSPoint(x: 40, y: 50))
+
+    coordinator.switchHost(to: DesktopPresentationHost(geometryProvider: desktopGeometry))
+    #expect(!secondSharedStage.window.isVisible)
+    #expect(item.frame.origin == NSPoint(x: 100, y: 200))
+}
+
+@Test
+@MainActor
+func `window mode stage cannot be closed directly`() {
+    let stage = WindowModePresentationHost()
+    #expect(stage.window.standardWindowButton(.closeButton)?.isEnabled == false)
+    #expect(!stage.windowShouldClose(stage.window))
 }
 
 @Test
@@ -1344,7 +1402,7 @@ func `keeps floating window positions separate for each ghost`() {
 
 @Test
 @MainActor
-func `keeps desktop and window mode positions separate`() {
+func `keeps desktop and both window mode positions separate`() {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
 
@@ -1358,7 +1416,13 @@ func `keeps desktop and window mode positions separate`() {
         NSPoint(x: 20, y: 30),
         for: .surface,
         scope: 0,
-        coordinateSpace: .windowMode
+        coordinateSpace: .sharedWindowMode
+    )
+    positionStore.save(
+        NSPoint(x: 40, y: 50),
+        for: .surface,
+        scope: 0,
+        coordinateSpace: .perGhostWindowMode
     )
 
     let desktopOrigin = positionStore.restoredOrigin(
@@ -1368,16 +1432,24 @@ func `keeps desktop and window mode positions separate`() {
         screens: [],
         coordinateSpace: .desktop
     )
-    let windowModeOrigin = positionStore.restoredOrigin(
+    let sharedWindowModeOrigin = positionStore.restoredOrigin(
         for: .surface,
         scope: 0,
         windowSize: NSSize(width: 50, height: 50),
         screens: [],
-        coordinateSpace: .windowMode
+        coordinateSpace: .sharedWindowMode
+    )
+    let perGhostWindowModeOrigin = positionStore.restoredOrigin(
+        for: .surface,
+        scope: 0,
+        windowSize: NSSize(width: 50, height: 50),
+        screens: [],
+        coordinateSpace: .perGhostWindowMode
     )
 
     #expect(desktopOrigin == NSPoint(x: 100, y: 200))
-    #expect(windowModeOrigin == NSPoint(x: 20, y: 30))
+    #expect(sharedWindowModeOrigin == NSPoint(x: 20, y: 30))
+    #expect(perGhostWindowModeOrigin == NSPoint(x: 40, y: 50))
 }
 
 @Test

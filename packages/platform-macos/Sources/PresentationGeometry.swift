@@ -29,9 +29,10 @@ public protocol PresentationGeometryProviding: AnyObject {
     var coordinateSpace: PresentationCoordinateSpace { get }
 }
 
-public enum PresentationCoordinateSpace: String, Sendable {
+public enum PresentationCoordinateSpace: String, Sendable, Hashable {
     case desktop
-    case windowMode = "window-mode"
+    case sharedWindowMode = "window-mode-shared"
+    case perGhostWindowMode = "window-mode-per-ghost"
 }
 
 public extension PresentationGeometryProviding {
