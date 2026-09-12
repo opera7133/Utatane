@@ -30,6 +30,7 @@ final class CalledGhostRuntime {
     private let speechHistoryWindowController: SpeechHistoryWindowController
     private let speechHistoryPresenter: SpeechHistoryPresenter?
     private var integratesSpeechHistory: Bool
+    private var speechHistoryTextScale: CGFloat = 1
     private var weatherTask: Task<Void, Never>?
     private var sntpCoordinator: SNTPEventCoordinator?
     private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
@@ -369,7 +370,8 @@ final class CalledGhostRuntime {
         }
         speechHistoryWindowController.show(
             ghostIdentifier: ghost.id.path,
-            ghostName: ghost.name
+            ghostName: ghost.name,
+            textScale: speechHistoryTextScale
         )
     }
 
@@ -424,6 +426,8 @@ final class CalledGhostRuntime {
         surfaceController.setDisplayScale(Double(shellPercent) / 100)
         surfaceController.setAutomaticallyFitsLargeSurfaces(automaticallyFitsLargeSurfaces)
         balloonController.setDisplayScale(Double(balloonPercent) / 100, textScale: Double(textPercent) / 100)
+        speechHistoryTextScale = CGFloat(textPercent) / 100
+        speechHistoryPresenter?.setTextScale(speechHistoryTextScale)
     }
 
     func resetWindowPositions() {

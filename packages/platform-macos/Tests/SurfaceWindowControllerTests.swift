@@ -1,5 +1,6 @@
 import AppKit
 import CoreText
+import SwiftUI
 import Testing
 import UtataneBalloon
 import UtataneCore
@@ -472,7 +473,7 @@ func `presentation coordinator reparents live views between desktop and window m
 
 @Test
 @MainActor
-func `speech history is presented only inside a window mode stage and stays snapped right`() {
+func `speech history is presented only inside a window mode stage and stays docked at the bottom`() {
     let desktopGeometry = MutablePresentationGeometryProvider(screens: [
         PresentationScreenGeometry(
             frame: NSRect(x: 0, y: 0, width: 1200, height: 800),
@@ -500,10 +501,10 @@ func `speech history is presented only inside a window mode stage and stays snap
     let firstStage = WindowModePresentationHost(contentSize: NSSize(width: 640, height: 480))
     coordinator.switchHost(to: firstStage)
     #expect(item.isVisible)
-    #expect(item.frame == NSRect(x: 244, y: 16, width: 380, height: 448))
+    #expect(item.frame == NSRect(x: 0, y: 0, width: 640, height: 180))
 
     firstStage.window.setContentSize(NSSize(width: 800, height: 600))
-    #expect(item.frame == NSRect(x: 404, y: 16, width: 380, height: 568))
+    #expect(item.frame == NSRect(x: 0, y: 0, width: 800, height: 204))
 
     coordinator.switchHost(to: DesktopPresentationHost(geometryProvider: desktopGeometry))
     #expect(!item.isVisible)
@@ -512,7 +513,7 @@ func `speech history is presented only inside a window mode stage and stays snap
     let secondStage = WindowModePresentationHost(contentSize: NSSize(width: 700, height: 500))
     coordinator.switchHost(to: secondStage)
     #expect(item.isVisible)
-    #expect(item.frame == NSRect(x: 304, y: 16, width: 380, height: 468))
+    #expect(item.frame == NSRect(x: 0, y: 0, width: 700, height: 180))
 }
 
 @Test
@@ -774,6 +775,53 @@ func `window mode screenshot preserves balloon text orientation`() throws {
         flipsExpectedVertically: true
     )
     #expect(normalDifference < flippedDifference)
+}
+
+@Test
+@MainActor
+func `window mode screenshot includes the docked speech history boundaries`() throws {
+    let stage = WindowModePresentationHost(contentSize: NSSize(width: 320, height: 240))
+    stage.setBackground(.black)
+    let store = SpeechHistoryStore()
+    let talkIdentifier = UUID()
+    store.append(SpeechHistoryEntry(
+        talkIdentifier: talkIdentifier,
+        ghostIdentifier: "ghost",
+        ghostName: "Ghost",
+        scope: 0,
+        speakerName: "Sakura",
+        surfaceID: 0,
+        text: "first"
+    ))
+    store.append(SpeechHistoryEntry(
+        talkIdentifier: talkIdentifier,
+        ghostIdentifier: "ghost",
+        ghostName: "Ghost",
+        scope: 1,
+        speakerName: "Kero",
+        surfaceID: 1,
+        text: "last"
+    ))
+    let item = stage.makeItem(
+        kind: .speechHistory,
+        title: "history",
+        onMove: { _, _ in },
+        onCancel: nil
+    )
+    defer { item.discard() }
+    item.contentView = NSHostingView(rootView: SpeechHistoryView(
+        store: store,
+        ghostIdentifier: "ghost",
+        ghostName: "Ghost",
+        showsHeader: false
+    ))
+    item.show(activating: false)
+    stage.rootView.layoutSubtreeIfNeeded()
+
+    #expect(item.frame == NSRect(x: 0, y: 0, width: 320, height: 180))
+    let data = try #require(stage.screenshotPNGData(kind: .transparentBackground))
+    let bitmap = try #require(NSBitmapImageRep(data: data))
+    #expect(bitmapContainsRedAccentPixel(bitmap))
 }
 
 @Test
@@ -1338,6 +1386,7 @@ func `records displayed speech using backlog voice modes`() async throws {
     #expect(history.entries.map(\.surfaceID) == [0, 1])
     #expect(history.entries.allSatisfy { $0.thumbnailPNGData != nil })
     #expect(history.entries.map(\.text) == ["表示代替終端", "相手\n二行目"])
+    #expect(Set(history.entries.map(\.talkIdentifier)).count == 1)
 }
 
 @Test
@@ -1867,6 +1916,57 @@ func `keeps desktop and both window mode positions separate`() {
     #expect(desktopOrigin == NSPoint(x: 100, y: 200))
     #expect(sharedWindowModeOrigin == NSPoint(x: 20, y: 30))
     #expect(perGhostWindowModeOrigin == NSPoint(x: 40, y: 50))
+}
+
+@Test
+@MainActor
+func `startup content sizing does not overwrite restored desktop positions`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let contentID = URL(filePath: "/ghosts/restart", directoryHint: .isDirectory)
+    positionStore.setContentID(contentID)
+    let surfaceOrigin = NSPoint(x: 320, y: 180)
+    let balloonOrigin = NSPoint(x: 90, y: 520)
+    positionStore.save(surfaceOrigin, for: .surface, scope: 0)
+    positionStore.save(balloonOrigin, for: .balloon, scope: 0)
+    let geometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 760),
+            bitsPerPixel: 32,
+            scale: 2,
+            isPrimary: true
+        )
+    ])
+    let surfaces = SurfaceWindowController(positionStore: positionStore, geometryProvider: geometry)
+    let balloons = BalloonWindowController(positionStore: positionStore, geometryProvider: geometry)
+    defer {
+        surfaces.resetContent()
+        balloons.resetContent()
+    }
+    surfaces.setPlacement(locksToDesktopBottom: false, keepsOnScreen: false)
+
+    try surfaces.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    let restoredSurfaceFrame = try #require(surfaces.windowFrame(for: 0))
+    try balloons.show(
+        balloon: makeBalloon(directory: directory),
+        text: "restored",
+        near: restoredSurfaceFrame
+    )
+
+    #expect(surfaces.windowFrame(for: 0)?.origin == surfaceOrigin)
+    #expect(balloons.windowFrame(for: 0)?.origin == balloonOrigin)
 }
 
 @Test
@@ -3190,6 +3290,21 @@ private func bitmapContainsRedPixel(_ bitmap: NSBitmapImageRep) -> Bool {
             guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
             if color.redComponent > 0.8, color.greenComponent < 0.2, color.blueComponent < 0.2,
                color.alphaComponent > 0.8
+            {
+                return true
+            }
+        }
+    }
+    return false
+}
+
+private func bitmapContainsRedAccentPixel(_ bitmap: NSBitmapImageRep) -> Bool {
+    for y in 0 ..< bitmap.pixelsHigh {
+        for x in 0 ..< bitmap.pixelsWide {
+            guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+            if color.redComponent > color.greenComponent + 0.2,
+               color.redComponent > color.blueComponent + 0.2,
+               color.alphaComponent > 0.5
             {
                 return true
             }

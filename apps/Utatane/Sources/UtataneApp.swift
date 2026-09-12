@@ -1684,7 +1684,8 @@ private struct UtataneRootView: View {
             speechHistoryPresenter = SpeechHistoryPresenter(
                 store: speechHistoryStore,
                 context: historyContext,
-                presentationSession: mainPresentationSession
+                presentationSession: mainPresentationSession,
+                textScale: CGFloat(networkSettings.balloonTextScalePercent) / 100
             )
             scriptPlayer.configure(environmentVariables: [
                 "selfname": mainName,
@@ -2947,7 +2948,8 @@ private struct UtataneRootView: View {
         }
         speechHistoryWindowController.show(
             ghostIdentifier: currentGhost.id.path,
-            ghostName: currentGhost.name
+            ghostName: currentGhost.name,
+            textScale: CGFloat(networkSettings.balloonTextScalePercent) / 100
         )
     }
 
@@ -3638,6 +3640,14 @@ private struct UtataneRootView: View {
                         excluding: ghost.id
                     )
                 }
+                runtime.configureDisplay(
+                    shellPercent: networkSettings.shellScalePercent,
+                    automaticallyFitsLargeSurfaces: networkSettings.automaticallyFitsLargeSurfaces,
+                    balloonPercent: networkSettings.linksBalloonScale
+                        ? networkSettings.shellScalePercent
+                        : networkSettings.balloonScalePercent,
+                    textPercent: networkSettings.balloonTextScalePercent
+                )
                 calledGhosts[ghost.id] = runtime
                 configureContextMenu()
                 let startupScript = try await runtime.start(
@@ -3754,6 +3764,7 @@ private struct UtataneRootView: View {
             Double(balloonScalePercent) / 100,
             textScale: Double(networkSettings.balloonTextScalePercent) / 100
         )
+        speechHistoryPresenter?.setTextScale(CGFloat(networkSettings.balloonTextScalePercent) / 100)
         for runtime in calledGhosts.values {
             runtime.configureDisplay(
                 shellPercent: shellPercent,

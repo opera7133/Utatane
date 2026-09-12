@@ -22,6 +22,7 @@ public struct SpeechHistoryContext: Sendable, Equatable {
 
 public struct SpeechHistoryEntry: Identifiable, Sendable, Equatable {
     public let id: UUID
+    public let talkIdentifier: UUID
     public let ghostIdentifier: String
     public let ghostName: String
     public let scope: Int
@@ -33,6 +34,7 @@ public struct SpeechHistoryEntry: Identifiable, Sendable, Equatable {
 
     public init(
         id: UUID = UUID(),
+        talkIdentifier: UUID = UUID(),
         ghostIdentifier: String,
         ghostName: String,
         scope: Int,
@@ -43,6 +45,7 @@ public struct SpeechHistoryEntry: Identifiable, Sendable, Equatable {
         timestamp: Date = Date()
     ) {
         self.id = id
+        self.talkIdentifier = talkIdentifier
         self.ghostIdentifier = ghostIdentifier
         self.ghostName = ghostName
         self.scope = scope
@@ -95,6 +98,7 @@ public struct SpeechHistoryView: View {
     private let ghostName: String
     private let showsHeader: Bool
     private let background: Color
+    private let textScale: CGFloat
     private let onClose: (() -> Void)?
 
     public init(
@@ -103,6 +107,7 @@ public struct SpeechHistoryView: View {
         ghostName: String,
         showsHeader: Bool = true,
         background: Color = Color(nsColor: .windowBackgroundColor),
+        textScale: CGFloat = 1,
         onClose: (() -> Void)? = nil
     ) {
         self.store = store
@@ -110,6 +115,7 @@ public struct SpeechHistoryView: View {
         self.ghostName = ghostName
         self.showsHeader = showsHeader
         self.background = background
+        self.textScale = min(max(textScale, 0.5), 2)
         self.onClose = onClose
     }
 
@@ -151,9 +157,16 @@ public struct SpeechHistoryView: View {
                             .frame(maxWidth: .infinity)
                             .padding(.top, 48)
                         } else {
-                            ForEach(entries) { entry in
-                                SpeechHistoryRow(entry: entry)
-                                    .id(entry.id)
+                            ForEach(Array(entries.enumerated()), id: \.element.id) { index, entry in
+                                SpeechHistoryRow(
+                                    entry: entry,
+                                    beginsTalk: index == 0
+                                        || entries[index - 1].talkIdentifier != entry.talkIdentifier,
+                                    endsTalk: index == entries.count - 1
+                                        || entries[index + 1].talkIdentifier != entry.talkIdentifier,
+                                    textScale: textScale
+                                )
+                                .id(entry.id)
                             }
                         }
                     }
@@ -178,9 +191,17 @@ public struct SpeechHistoryView: View {
 
 private struct SpeechHistoryRow: View {
     let entry: SpeechHistoryEntry
+    let beginsTalk: Bool
+    let endsTalk: Bool
+    let textScale: CGFloat
+
+    private var accent: Color {
+        let colors: [Color] = [.red, .blue, .green, .orange, .purple, .cyan]
+        return colors[abs(entry.scope) % colors.count]
+    }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .top, spacing: 8) {
             Group {
                 if let thumbnailPNGData = entry.thumbnailPNGData,
                    let image = NSImage(data: thumbnailPNGData)
@@ -193,29 +214,68 @@ private struct SpeechHistoryRow: View {
                         Circle()
                             .fill(.secondary.opacity(0.16))
                         Text(String(entry.speakerName.prefix(1)))
-                            .font(.headline)
+                            .font(.system(size: 13 * textScale, weight: .semibold))
                             .foregroundStyle(.secondary)
                     }
                 }
             }
-            .frame(width: 38, height: 38)
-            .clipShape(Circle())
+            .frame(width: 42, height: 42)
+            .clipShape(RoundedRectangle(cornerRadius: 3))
             VStack(alignment: .leading, spacing: 5) {
                 HStack(alignment: .firstTextBaseline) {
                     Text(entry.speakerName)
-                        .font(.headline)
+                        .font(.system(size: 13 * textScale, weight: .semibold))
                     Spacer()
                     Text(entry.timestamp, style: .time)
-                        .font(.caption)
+                        .font(.system(size: 10 * textScale))
                         .foregroundStyle(.secondary)
                 }
                 Text(entry.text)
-                    .font(.body)
+                    .font(.system(size: 13 * textScale))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .background(
+                SpeechHistoryBoundaryShape(beginsTalk: beginsTalk, endsTalk: endsTalk)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.88))
+            )
+            .overlay {
+                SpeechHistoryBoundaryShape(beginsTalk: beginsTalk, endsTalk: endsTalk)
+                    .stroke(accent.opacity(0.9), lineWidth: 2)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+struct SpeechHistoryBoundaryShape: Shape {
+    let beginsTalk: Bool
+    let endsTalk: Bool
+
+    func path(in rect: CGRect) -> Path {
+        let cut = min(10, rect.width / 4, rect.height / 4)
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: beginsTalk ? rect.minY + cut : rect.minY))
+        if beginsTalk {
+            path.addLine(to: CGPoint(x: rect.minX + cut, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.minY))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + cut))
+        } else {
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
+        }
+        if endsTalk {
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - cut))
+            path.addLine(to: CGPoint(x: rect.maxX - cut, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX + cut, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - cut))
+        } else {
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        }
+        path.closeSubpath()
+        return path
     }
 }
 
@@ -233,11 +293,12 @@ public final class SpeechHistoryWindowController: NSWindowController {
         fatalError("init(coder:) has not been implemented")
     }
 
-    public func show(ghostIdentifier: String, ghostName: String) {
+    public func show(ghostIdentifier: String, ghostName: String, textScale: CGFloat = 1) {
         let content = SpeechHistoryView(
             store: store,
             ghostIdentifier: ghostIdentifier,
-            ghostName: ghostName
+            ghostName: ghostName,
+            textScale: textScale
         )
         if let window {
             window.title = "\(String(localized: "発話履歴")) — \(ghostName)"
@@ -268,15 +329,18 @@ public final class SpeechHistoryPresenter {
     private let context: SpeechHistoryContext
     private let presentationSession: GhostPresentationSession
     private var item: (any PresentationItem)?
+    private var textScale: CGFloat
 
     public init(
         store: SpeechHistoryStore,
         context: SpeechHistoryContext,
-        presentationSession: GhostPresentationSession
+        presentationSession: GhostPresentationSession,
+        textScale: CGFloat = 1
     ) {
         self.store = store
         self.context = context
         self.presentationSession = presentationSession
+        self.textScale = min(max(textScale, 0.5), 2)
     }
 
     public var isPresented: Bool {
@@ -292,6 +356,7 @@ public final class SpeechHistoryPresenter {
             ghostIdentifier: context.ghostIdentifier,
             ghostName: context.ghostName,
             background: Color(nsColor: .windowBackgroundColor).opacity(0.92),
+            textScale: textScale,
             onClose: { [weak self] in self?.hide() }
         ))
         item.show(activating: true)
@@ -301,6 +366,13 @@ public final class SpeechHistoryPresenter {
 
     public func hide() {
         item?.hide()
+    }
+
+    public func setTextScale(_ scale: CGFloat) {
+        textScale = min(max(scale, 0.5), 2)
+        if isPresented {
+            _ = show()
+        }
     }
 
     public func discard() {
@@ -331,6 +403,7 @@ struct SpeechHistoryRecorder {
     private var mode: SakuraScriptVoiceMode = .defaultValue
     private var alternateHasVisibleContent = false
     private var timestamp: Date?
+    private let talkIdentifier = UUID()
 
     init(
         store: SpeechHistoryStore,
@@ -399,6 +472,7 @@ struct SpeechHistoryRecorder {
         }
         guard text.contains(where: { !$0.isWhitespace }) else { return }
         store.append(SpeechHistoryEntry(
+            talkIdentifier: talkIdentifier,
             ghostIdentifier: context.ghostIdentifier,
             ghostName: context.ghostName,
             scope: scope,

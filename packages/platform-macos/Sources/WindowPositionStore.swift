@@ -112,6 +112,7 @@ final class FloatingContentWindow: NSWindow, NSWindowDelegate {
     private var placementPolicy: FloatingWindowPlacementPolicy
     private let visibleFrames: @MainActor () -> [NSRect]
     private var isApplyingConstraint = false
+    private var suppressesMovePersistence = false
 
     init(
         title: String,
@@ -154,8 +155,16 @@ final class FloatingContentWindow: NSWindow, NSWindowDelegate {
         applyPlacementConstraint()
     }
 
+    func setContentSizeWithoutPersistingMove(_ size: NSSize) {
+        suppressesMovePersistence = true
+        setContentSize(size)
+        applyPlacementConstraint()
+        suppressesMovePersistence = false
+    }
+
     func windowDidMove(_ notification: Notification) {
         applyPlacementConstraint()
+        guard !suppressesMovePersistence else { return }
         onMove(frame.origin)
     }
 

@@ -58,6 +58,7 @@ protocol PresentationItem: AnyObject {
 @MainActor
 final class DesktopPresentationItem: PresentationItem {
     let window: FloatingContentWindow
+    private var hasInitialContentSize = false
 
     init(window: FloatingContentWindow) {
         self.window = window
@@ -90,7 +91,15 @@ final class DesktopPresentationItem: PresentationItem {
     }
 
     func setContentSize(_ size: NSSize) {
-        window.setContentSize(size)
+        if hasInitialContentSize {
+            window.setContentSize(size)
+        } else {
+            // AppKit preserves the top edge while changing a window's content size,
+            // which also changes its frame origin. The first layout move must not
+            // overwrite the user's saved origin before startup restoration runs.
+            window.setContentSizeWithoutPersistingMove(size)
+            hasInitialContentSize = true
+        }
     }
 
     func setFrameOrigin(_ origin: NSPoint) {
@@ -576,12 +585,12 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     }
 
     private func layoutSpeechHistoryItems() {
-        let bounds = rootView.bounds.insetBy(dx: 16, dy: 16)
+        let bounds = rootView.bounds
         guard bounds.width > 0, bounds.height > 0 else { return }
+        let height = min(280, max(180, (bounds.height * 0.34).rounded()))
         for item in items where item.kind == .speechHistory {
-            let width = min(380, bounds.width)
-            item.setContentSize(NSSize(width: width, height: bounds.height))
-            item.setFrameOrigin(NSPoint(x: bounds.maxX - width, y: bounds.minY))
+            item.setContentSize(NSSize(width: bounds.width, height: min(height, bounds.height)))
+            item.setFrameOrigin(bounds.origin)
         }
     }
 
