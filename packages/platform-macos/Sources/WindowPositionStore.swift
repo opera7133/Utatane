@@ -18,15 +18,24 @@ public final class WindowPositionStore {
         self.contentID = contentID?.standardizedFileURL
     }
 
-    func save(_ origin: NSPoint, for kind: FloatingWindowKind, scope: Int) {
+    func save(
+        _ origin: NSPoint,
+        for kind: FloatingWindowKind,
+        scope: Int,
+        coordinateSpace: PresentationCoordinateSpace = .desktop
+    ) {
         defaults.set(
             ["x": Double(origin.x), "y": Double(origin.y)],
-            forKey: key(for: kind, scope: scope)
+            forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace)
         )
     }
 
-    func remove(for kind: FloatingWindowKind, scope: Int) {
-        defaults.removeObject(forKey: key(for: kind, scope: scope))
+    func remove(
+        for kind: FloatingWindowKind,
+        scope: Int,
+        coordinateSpace: PresentationCoordinateSpace = .desktop
+    ) {
+        defaults.removeObject(forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace))
     }
 
     func restoredOrigin(
@@ -34,14 +43,16 @@ public final class WindowPositionStore {
         scope: Int,
         windowSize: NSSize,
         screens: [NSScreen] = NSScreen.screens,
-        constrainsToVisibleFrame: Bool = true
+        constrainsToVisibleFrame: Bool = true,
+        coordinateSpace: PresentationCoordinateSpace = .desktop
     ) -> NSPoint? {
         restoredOrigin(
             for: kind,
             scope: scope,
             windowSize: windowSize,
             visibleFrames: screens.map(\.visibleFrame),
-            constrainsToVisibleFrame: constrainsToVisibleFrame
+            constrainsToVisibleFrame: constrainsToVisibleFrame,
+            coordinateSpace: coordinateSpace
         )
     }
 
@@ -50,11 +61,14 @@ public final class WindowPositionStore {
         scope: Int,
         windowSize: NSSize,
         visibleFrames: [NSRect],
-        constrainsToVisibleFrame: Bool = true
+        constrainsToVisibleFrame: Bool = true,
+        coordinateSpace: PresentationCoordinateSpace = .desktop
     ) -> NSPoint? {
-        guard let value = defaults.dictionary(forKey: key(for: kind, scope: scope)),
-              let x = value["x"] as? Double,
-              let y = value["y"] as? Double
+        guard let value = defaults.dictionary(
+            forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace)
+        ),
+            let x = value["x"] as? Double,
+            let y = value["y"] as? Double
         else {
             return nil
         }
@@ -76,9 +90,14 @@ public final class WindowPositionStore {
         )
     }
 
-    private func key(for kind: FloatingWindowKind, scope: Int) -> String {
+    private func key(
+        for kind: FloatingWindowKind,
+        scope: Int,
+        coordinateSpace: PresentationCoordinateSpace
+    ) -> String {
         let contentKey = contentID?.path.data(using: .utf8)?.base64EncodedString() ?? "global"
-        return "\(namespace).\(contentKey).\(kind.rawValue).\(scope)"
+        let spaceComponent = coordinateSpace == .desktop ? "" : ".\(coordinateSpace.rawValue)"
+        return "\(namespace).\(contentKey)\(spaceComponent).\(kind.rawValue).\(scope)"
     }
 }
 

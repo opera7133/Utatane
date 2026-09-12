@@ -296,7 +296,19 @@ func `shows scopes in separate side by side windows`() throws {
         to: directory.appending(path: "surface0010.png", directoryHint: .notDirectory)
     )
 
-    let controller = SurfaceWindowController(positionStore: positionStore)
+    let geometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 760),
+            bitsPerPixel: 32,
+            scale: 2,
+            isPrimary: true
+        )
+    ])
+    let controller = SurfaceWindowController(
+        positionStore: positionStore,
+        geometryProvider: geometry
+    )
     let shell = ShellDefinition(directory: directory, surfaces: [:])
     try controller.show(shell: shell, scope: 0, surfaceID: 0)
     try controller.show(shell: shell, scope: 1, surfaceID: 10)
@@ -307,6 +319,177 @@ func `shows scopes in separate side by side windows`() throws {
     #expect(controller.visibleScopes == [0, 1])
     #expect(keroFrame.maxX < sakuraFrame.minX)
     #expect(keroFrame.minY == sakuraFrame.minY)
+}
+
+@Test
+@MainActor
+func `window mode hosts a surface and balloon in one capturable window`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let host = WindowModePresentationHost(contentSize: NSSize(width: 640, height: 480))
+    let surfaces = SurfaceWindowController(positionStore: positionStore, presentationHost: host)
+    let balloons = BalloonWindowController(positionStore: positionStore, presentationHost: host)
+    defer {
+        surfaces.hideAll()
+        balloons.hideAll()
+        host.window.orderOut(nil)
+    }
+
+    try surfaces.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    let surfaceFrame = try #require(surfaces.windowFrame(for: 0))
+    try balloons.show(
+        balloon: makeBalloon(directory: directory),
+        text: "stage",
+        near: surfaceFrame
+    )
+
+    #expect(host.itemCount == 2)
+    #expect(host.rootView.subviews.count == 2)
+    #expect(surfaces.visibleScopes == [0])
+    #expect(balloons.visibleScopes == [0])
+    #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 1)
+    #expect(MacOSPropertySnapshot.values(geometryProvider: host.geometryProvider)["system.monitor.index(0).rect"] == "0,0,640,480")
+
+    host.window.setContentSize(NSSize(width: 800, height: 600))
+    #expect(host.geometryProvider.mainScreen?.frame.size == NSSize(width: 800, height: 600))
+}
+
+@Test
+@MainActor
+func `presentation coordinator reparents live views between desktop and window mode`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let desktopGeometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 760),
+            bitsPerPixel: 32,
+            scale: 2,
+            isPrimary: true
+        )
+    ])
+    let coordinator = PresentationHostCoordinator(
+        initialHost: DesktopPresentationHost(geometryProvider: desktopGeometry)
+    )
+    let surfaces = SurfaceWindowController(positionStore: positionStore, presentationHost: coordinator)
+    let balloons = BalloonWindowController(positionStore: positionStore, presentationHost: coordinator)
+    defer {
+        surfaces.hideAll()
+        balloons.hideAll()
+    }
+
+    try surfaces.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    let surfaceFrame = try #require(surfaces.windowFrame(for: 0))
+    try balloons.show(
+        balloon: makeBalloon(directory: directory),
+        text: "rehost",
+        near: surfaceFrame
+    )
+    let renderedBeforeSwitch = try #require(surfaces.renderedImage(for: 0))
+    #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 2)
+
+    let stage = WindowModePresentationHost(contentSize: NSSize(width: 640, height: 480))
+    coordinator.switchHost(to: stage)
+
+    #expect(stage.itemCount == 2)
+    #expect(stage.rootView.subviews.count == 2)
+    #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 1)
+    #expect(surfaces.renderedImage(for: 0) === renderedBeforeSwitch)
+    #expect(coordinator.mainScreen?.frame.size == NSSize(width: 640, height: 480))
+
+    coordinator.switchHost(to: DesktopPresentationHost(geometryProvider: desktopGeometry))
+
+    #expect(stage.itemCount == 0)
+    #expect(stage.rootView.subviews.isEmpty)
+    #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 2)
+    #expect(surfaces.renderedImage(for: 0) === renderedBeforeSwitch)
+}
+
+@Test
+@MainActor
+func `presentation modes share one stage or separate stages without replacing rendered views`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+
+    let systemGeometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 760),
+            bitsPerPixel: 32,
+            scale: 2,
+            isPrimary: true
+        )
+    ])
+    let coordinator = PresentationCoordinator(systemGeometry: systemGeometry)
+    let firstSession = coordinator.makeSession(title: "First")
+    let secondSession = coordinator.makeSession(title: "Second")
+    let first = SurfaceWindowController(presentationSession: firstSession)
+    let second = SurfaceWindowController(presentationSession: secondSession)
+    defer {
+        first.hideAll()
+        second.hideAll()
+    }
+    let shell = ShellDefinition(directory: directory, surfaces: [:])
+    try first.show(shell: shell, surfaceID: 0)
+    try second.show(shell: shell, surfaceID: 0)
+    let firstImage = try #require(first.renderedImage())
+    let secondImage = try #require(second.renderedImage())
+
+    #expect(Set(first.windowNumbers + second.windowNumbers).count == 2)
+
+    coordinator.setMode(.shared)
+    #expect(Set(first.windowNumbers + second.windowNumbers).count == 1)
+    #expect(first.renderedImage() === firstImage)
+    #expect(second.renderedImage() === secondImage)
+
+    coordinator.setMode(.perGhost)
+    #expect(Set(first.windowNumbers + second.windowNumbers).count == 2)
+    #expect(first.renderedImage() === firstImage)
+    #expect(second.renderedImage() === secondImage)
+
+    coordinator.setMode(.off)
+    #expect(Set(first.windowNumbers + second.windowNumbers).count == 2)
+    #expect(first.renderedImage() === firstImage)
+    #expect(second.renderedImage() === secondImage)
+}
+
+@Test
+func `window mode launch option supports SSP mode names and the previous layout`() {
+    #expect(GhostWindowMode.launchOverride(in: ["Utatane"]) == nil)
+    #expect(GhostWindowMode.launchOverride(in: ["Utatane", "--windowmode"]) == .shared)
+    #expect(GhostWindowMode.launchOverride(
+        in: ["Utatane", "--windowmode"],
+        previousLayout: .perGhost
+    ) == .perGhost)
+    #expect(GhostWindowMode.launchOverride(in: ["Utatane", "--windowmode=shared"]) == .shared)
+    #expect(GhostWindowMode.launchOverride(in: ["Utatane", "--windowmode=perghost"]) == .perGhost)
+    #expect(GhostWindowMode.launchOverride(in: ["Utatane", "--windowmode=invalid"]) == nil)
 }
 
 @Test(arguments: ["master", "master2nd"])
@@ -1110,6 +1293,44 @@ func `keeps floating window positions separate for each ghost`() {
 
     #expect(ghostAOrigin == NSPoint(x: 100, y: 200))
     #expect(ghostBOrigin == NSPoint(x: 300, y: 400))
+}
+
+@Test
+@MainActor
+func `keeps desktop and window mode positions separate`() {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+
+    positionStore.save(
+        NSPoint(x: 100, y: 200),
+        for: .surface,
+        scope: 0,
+        coordinateSpace: .desktop
+    )
+    positionStore.save(
+        NSPoint(x: 20, y: 30),
+        for: .surface,
+        scope: 0,
+        coordinateSpace: .windowMode
+    )
+
+    let desktopOrigin = positionStore.restoredOrigin(
+        for: .surface,
+        scope: 0,
+        windowSize: NSSize(width: 50, height: 50),
+        screens: [],
+        coordinateSpace: .desktop
+    )
+    let windowModeOrigin = positionStore.restoredOrigin(
+        for: .surface,
+        scope: 0,
+        windowSize: NSSize(width: 50, height: 50),
+        screens: [],
+        coordinateSpace: .windowMode
+    )
+
+    #expect(desktopOrigin == NSPoint(x: 100, y: 200))
+    #expect(windowModeOrigin == NSPoint(x: 20, y: 30))
 }
 
 @Test

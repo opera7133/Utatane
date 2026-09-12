@@ -86,6 +86,7 @@ public final class BalloonWindowController {
     private let imageLoader = SurfaceImageLoader()
     private let positionStore: WindowPositionStore
     private let geometryProvider: any PresentationGeometryProviding
+    private let presentationHost: any PresentationHosting
     private var presentations: [Int: BalloonPresentation] = [:]
     private var repaintLockedScopes: Set<Int> = []
     private var movementLockedScopes: Set<Int> = []
@@ -111,6 +112,25 @@ public final class BalloonWindowController {
     ) {
         self.positionStore = positionStore
         self.geometryProvider = geometryProvider
+        presentationHost = DesktopPresentationHost(geometryProvider: geometryProvider)
+    }
+
+    public init(
+        positionStore: WindowPositionStore = WindowPositionStore(),
+        presentationSession: GhostPresentationSession
+    ) {
+        self.positionStore = positionStore
+        geometryProvider = presentationSession.geometryProvider
+        presentationHost = presentationSession.presentationHost
+    }
+
+    init(
+        positionStore: WindowPositionStore = WindowPositionStore(),
+        presentationHost: any PresentationHosting
+    ) {
+        self.positionStore = positionStore
+        geometryProvider = presentationHost.geometryProvider
+        self.presentationHost = presentationHost
     }
 
     public func setStayOnTop(_ stayOnTop: Bool) {
@@ -305,7 +325,8 @@ public final class BalloonWindowController {
             for: .balloon,
             scope: scope,
             windowSize: scaledSize,
-            visibleFrames: geometryProvider.visibleFrames
+            visibleFrames: geometryProvider.visibleFrames,
+            coordinateSpace: geometryProvider.coordinateSpace
         ) {
             item.setFrameOrigin(restoredOrigin)
         } else {
@@ -514,28 +535,36 @@ public final class BalloonWindowController {
 
     public func resetWindowPositions() {
         for (scope, presentation) in presentations {
-            positionStore.remove(for: .balloon, scope: scope)
+            positionStore.remove(
+                for: .balloon,
+                scope: scope,
+                coordinateSpace: geometryProvider.coordinateSpace
+            )
             place(presentation.item, near: presentation.surfaceFrame, scope: scope)
-            positionStore.remove(for: .balloon, scope: scope)
+            positionStore.remove(
+                for: .balloon,
+                scope: scope,
+                coordinateSpace: geometryProvider.coordinateSpace
+            )
         }
     }
 
     private func makePresentationItem(scope: Int) -> any PresentationItem {
-        let window = FloatingContentWindow(
+        let item = presentationHost.makeItem(
+            kind: .balloon,
             title: "Ghost Balloon \(scope)",
-            visibleFrames: { [geometryProvider] in geometryProvider.visibleFrames }
-        ) { [positionStore, scope] origin in
-            positionStore.save(origin, for: .balloon, scope: scope)
-        }
-        window.backgroundColor = .clear
-        window.isOpaque = false
-        window.hasShadow = true
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.acceptsMouseMovedEvents = true
-        window.level = stayOnTop ? .floating : .normal
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        return DesktopPresentationItem(window: window)
+            onMove: { [positionStore, geometryProvider, scope] origin in
+                positionStore.save(
+                    origin,
+                    for: .balloon,
+                    scope: scope,
+                    coordinateSpace: geometryProvider.coordinateSpace
+                )
+            },
+            onCancel: nil
+        )
+        item.setStaysOnTop(stayOnTop)
+        return item
     }
 
     private func reposition(scope: Int) {

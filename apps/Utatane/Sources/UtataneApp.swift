@@ -52,6 +52,8 @@ struct UtataneApp: App {
     private let statusWindowController: StatusWindowController
     private let alertController: ApplicationAlertController
     private let updaterController: SPUStandardUpdaterController
+    private let presentationCoordinator: PresentationCoordinator
+    private let mainPresentationSession: GhostPresentationSession
     private let presentationGeometry: any PresentationGeometryProviding
     @StateObject private var networkSettings: UtataneSettingsStore
 
@@ -59,15 +61,22 @@ struct UtataneApp: App {
         Self.configureApplicationIcon()
         try? ContentRoot.prepareDirectories()
         try? ContentRoot.installBundledContent()
-        let presentationGeometry = SystemPresentationGeometryProvider()
+        let settings = UtataneSettingsStore()
+        let systemGeometry = SystemPresentationGeometryProvider()
+        let presentationCoordinator = PresentationCoordinator(
+            mode: settings.windowMode,
+            systemGeometry: systemGeometry
+        )
+        let mainPresentationSession = presentationCoordinator.makeSession(title: "Utatane")
+        let presentationGeometry = mainPresentationSession.geometryProvider
         let positionStore = WindowPositionStore()
         let surfaceWindowController = SurfaceWindowController(
             positionStore: positionStore,
-            geometryProvider: presentationGeometry
+            presentationSession: mainPresentationSession
         )
         let balloonWindowController = BalloonWindowController(
             positionStore: positionStore,
-            geometryProvider: presentationGeometry
+            presentationSession: mainPresentationSession
         )
         let repository = OverlayGhostRepository(repositories: ContentRoot.ghostReadDirectories.map {
             FileSystemGhostRepository(rootDirectory: $0)
@@ -86,8 +95,10 @@ struct UtataneApp: App {
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
+        self.presentationCoordinator = presentationCoordinator
+        self.mainPresentationSession = mainPresentationSession
         self.presentationGeometry = presentationGeometry
-        _networkSettings = StateObject(wrappedValue: UtataneSettingsStore())
+        _networkSettings = StateObject(wrappedValue: settings)
         scriptPlayer = SakuraScriptPlayer(
             surfaceWindowController: surfaceWindowController,
             balloonWindowController: balloonWindowController,
@@ -118,6 +129,8 @@ struct UtataneApp: App {
                 sstpServer: sstpServer,
                 statusWindowController: statusWindowController,
                 alertController: alertController,
+                presentationCoordinator: presentationCoordinator,
+                mainPresentationSession: mainPresentationSession,
                 presentationGeometry: presentationGeometry,
                 networkSettings: networkSettings,
                 applicationDelegate: applicationDelegate
@@ -153,6 +166,11 @@ struct UtataneApp: App {
                     NotificationCenter.default.post(name: .restoreUtataneSurfaces, object: nil)
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
+                Picker("ウィンドウモード", selection: $networkSettings.windowMode) {
+                    Text("切").tag(GhostWindowMode.off)
+                    Text("全ゴーストをまとめて1枚").tag(GhostWindowMode.shared)
+                    Text("ゴーストごとに1枚").tag(GhostWindowMode.perGhost)
+                }
             }
             CommandGroup(replacing: .help) {
                 Button("Utataneヘルプ") {
@@ -216,6 +234,8 @@ private struct UtataneRootView: View {
     let sstpServer: SSTPServer
     let statusWindowController: StatusWindowController
     let alertController: ApplicationAlertController
+    let presentationCoordinator: PresentationCoordinator
+    let mainPresentationSession: GhostPresentationSession
     let presentationGeometry: any PresentationGeometryProviding
     private let weatherProvider = CurrentWeatherProvider()
     private let propertySystem = PropertySystem(configuration: .init(
@@ -410,6 +430,9 @@ private struct UtataneRootView: View {
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "appearance", id: networkSettings.appearance) {
             applyAppearance()
+        }
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "window-mode", id: networkSettings.windowMode) {
+            presentationCoordinator.setMode(networkSettings.windowMode)
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "random-talk", id: networkSettings.randomTalkIntervalMinutes) {
             let interval = networkSettings.randomTalkIntervalMinutes
@@ -1398,6 +1421,7 @@ private struct UtataneRootView: View {
         session = nil
         balloon = nil
         currentGhost = ghost
+        mainPresentationSession.setTitle(ghost.name)
         teachHistory = []
         networkSettings.activateGhost(
             directoryName: ghost.rootDirectory.lastPathComponent,
@@ -3446,6 +3470,7 @@ private struct UtataneRootView: View {
                     2: ghost.name,
                     3: ghost.rootDirectory.path
                 ]))
+                let calledPresentationSession = presentationCoordinator.makeSession(title: ghost.name)
                 let runtime = try CalledGhostRuntime(
                     ghost: ghost,
                     balloons: installedBalloons,
@@ -3455,7 +3480,7 @@ private struct UtataneRootView: View {
                     personalityEngine: personalityEngine(for: ghost),
                     characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
                     dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000,
-                    presentationGeometry: presentationGeometry
+                    presentationSession: calledPresentationSession
                 )
                 runtime.onError = { showError($0.localizedDescription) }
                 runtime.onNarDrop = { installNars(from: $0) }

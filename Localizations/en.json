@@ -297,5 +297,13 @@
   "実行方式と追加ランタイムの要否を表示する。SHIORIのダウンロードや更新は行わない。" : "Shows execution methods and additional runtime requirements. Utatane does not download or update SHIORI.",
   "手動導入" : "Manual Setup",
   "未対応" : "Unsupported",
-  "ゴーストの更新チェックのみ実行" : "Check Ghost for Updates Only"
+  "ゴーストの更新チェックのみ実行" : "Check Ghost for Updates Only",
+  "ウィンドウモード" : "Window Mode",
+  "切" : "Off",
+  "全ゴーストをまとめて1枚" : "All Ghosts in One Window",
+  "ゴーストごとに1枚" : "One Window per Ghost",
+  "ウィンドウモード（実験的）" : "Window Mode (Experimental)",
+  "表示方式" : "Display Mode",
+  "使用しない" : "Disabled",
+  "ゴーストとバルーンを通常の1枚のウィンドウ内に表示する。配信や画面収録でウィンドウ単位に取り込みやすくなる。" : "Show ghosts and balloons together in a standard window, making window-based streaming and screen recording easier."
 }

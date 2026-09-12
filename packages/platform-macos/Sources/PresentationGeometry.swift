@@ -26,9 +26,19 @@ public struct PresentationScreenGeometry: Equatable, Sendable {
 public protocol PresentationGeometryProviding: AnyObject {
     var screens: [PresentationScreenGeometry] { get }
     var pointerPosition: CGPoint { get }
+    var coordinateSpace: PresentationCoordinateSpace { get }
+}
+
+public enum PresentationCoordinateSpace: String, Sendable {
+    case desktop
+    case windowMode = "window-mode"
 }
 
 public extension PresentationGeometryProviding {
+    var coordinateSpace: PresentationCoordinateSpace {
+        .desktop
+    }
+
     var mainScreen: PresentationScreenGeometry? {
         screens.first(where: \.isPrimary) ?? screens.first
     }

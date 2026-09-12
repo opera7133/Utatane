@@ -3278,6 +3278,64 @@
         }
       }
     },
+    "ウィンドウモード" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Window Mode"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "창 모드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "窗口模式"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "視窗模式"
+          }
+        }
+      }
+    },
+    "ウィンドウモード（実験的）" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Window Mode (Experimental)"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "창 모드(실험적)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "窗口模式（实验性）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "視窗模式（實驗性）"
+          }
+        }
+      }
+    },
     "ウインドウ位置を初期化" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3597,6 +3655,35 @@
         }
       }
     },
+    "ゴーストごとに1枚" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "One Window per Ghost"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고스트마다 하나의 창"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每个 Ghost 一个窗口"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每個 Ghost 一個視窗"
+          }
+        }
+      }
+    },
     "ゴーストごとの設定" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3622,6 +3709,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ghost設定"
+          }
+        }
+      }
+    },
+    "ゴーストとバルーンを通常の1枚のウィンドウ内に表示する。配信や画面収録でウィンドウ単位に取り込みやすくなる。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show ghosts and balloons together in a standard window, making window-based streaming and screen recording easier."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고스트와 말풍선을 하나의 일반 창에 표시하여 방송이나 화면 녹화에서 창 단위로 캡처하기 쉽게 합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将 Ghost 和气泡显示在一个普通窗口中，便于直播或录屏时按窗口捕获。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將 Ghost 與氣泡顯示在一個普通視窗中，方便直播或螢幕錄影時依視窗擷取。"
           }
         }
       }
@@ -5337,6 +5453,35 @@
         }
       }
     },
+    "使用しない" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Disabled"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용 안 함"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不使用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不使用"
+          }
+        }
+      }
+    },
     "使用するShellとバルーン、キャラクター位置はゴーストごとに保存される。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5482,6 +5627,35 @@
         }
       }
     },
+    "全ゴーストをまとめて1枚" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "All Ghosts in One Window"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 고스트를 하나의 창에 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有 Ghost 集中在一个窗口"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有 Ghost 集中在一個視窗"
+          }
+        }
+      }
+    },
     "内容" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5623,6 +5797,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "輸出"
+          }
+        }
+      }
+    },
+    "切" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "끔"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "關閉"
           }
         }
       }
@@ -7798,6 +8001,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "顯示縮放"
+          }
+        }
+      }
+    },
+    "表示方式" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Display Mode"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시 방식"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示方式"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示方式"
           }
         }
       }

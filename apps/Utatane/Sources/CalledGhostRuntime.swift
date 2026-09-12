@@ -22,6 +22,7 @@ final class CalledGhostRuntime {
     private let weatherProvider = CurrentWeatherProvider()
     private let webSocketManager = WebSocketSessionManager()
     private let propertySystem: PropertySystem
+    private let presentationSession: GhostPresentationSession?
     private let presentationGeometry: any PresentationGeometryProviding
     private let textInputWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
@@ -55,17 +56,20 @@ final class CalledGhostRuntime {
         personalityEngine: any PersonalityEngine,
         characterDelayMilliseconds: Int,
         dialogueDismissalMilliseconds: Int,
+        presentationSession: GhostPresentationSession? = nil,
         presentationGeometry: any PresentationGeometryProviding = SystemPresentationGeometryProvider()
     ) throws {
+        let effectivePresentationGeometry = presentationSession?.geometryProvider ?? presentationGeometry
         self.ghost = ghost
         self.shellLoader = shellLoader
         self.selectionStore = selectionStore
-        self.presentationGeometry = presentationGeometry
+        self.presentationSession = presentationSession
+        self.presentationGeometry = effectivePresentationGeometry
         propertySystem = PropertySystem(configuration: .init(
             basewareName: "Utatane",
             basewareVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
             values: Self.propertyValues(for: ghost).merging(
-                MacOSPropertySnapshot.values(geometryProvider: presentationGeometry)
+                MacOSPropertySnapshot.values(geometryProvider: effectivePresentationGeometry)
             ) { current, _ in current }
         ))
 
@@ -84,18 +88,29 @@ final class CalledGhostRuntime {
 
         let positionStore = WindowPositionStore()
         positionStore.setContentID(ghost.id)
-        surfaceController = SurfaceWindowController(
-            positionStore: positionStore,
-            geometryProvider: presentationGeometry
-        )
-        balloonController = BalloonWindowController(
-            positionStore: positionStore,
-            geometryProvider: presentationGeometry
-        )
+        if let presentationSession {
+            surfaceController = SurfaceWindowController(
+                positionStore: positionStore,
+                presentationSession: presentationSession
+            )
+            balloonController = BalloonWindowController(
+                positionStore: positionStore,
+                presentationSession: presentationSession
+            )
+        } else {
+            surfaceController = SurfaceWindowController(
+                positionStore: positionStore,
+                geometryProvider: effectivePresentationGeometry
+            )
+            balloonController = BalloonWindowController(
+                positionStore: positionStore,
+                geometryProvider: effectivePresentationGeometry
+            )
+        }
         player = SakuraScriptPlayer(
             surfaceWindowController: surfaceController,
             balloonWindowController: balloonController,
-            geometryProvider: presentationGeometry
+            geometryProvider: effectivePresentationGeometry
         )
         session = GhostSession(
             personalityEngine: personalityEngine,

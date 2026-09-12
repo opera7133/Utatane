@@ -74,6 +74,7 @@ public final class SurfaceWindowController {
     private let positionStore: WindowPositionStore
     private let dressupSelectionStore: DressupSelectionStore
     private let geometryProvider: any PresentationGeometryProviding
+    private let presentationHost: any PresentationHosting
     private var defaultSurfaceIDs: [Int: Int] = [:]
     private var enabledBindGroups: [Int: Set<Int>] = [:]
     private var presentationHidden = false
@@ -108,6 +109,29 @@ public final class SurfaceWindowController {
         self.positionStore = positionStore
         self.dressupSelectionStore = dressupSelectionStore
         self.geometryProvider = geometryProvider
+        presentationHost = DesktopPresentationHost(geometryProvider: geometryProvider)
+    }
+
+    public init(
+        positionStore: WindowPositionStore = WindowPositionStore(),
+        dressupSelectionStore: DressupSelectionStore = DressupSelectionStore(),
+        presentationSession: GhostPresentationSession
+    ) {
+        self.positionStore = positionStore
+        self.dressupSelectionStore = dressupSelectionStore
+        geometryProvider = presentationSession.geometryProvider
+        presentationHost = presentationSession.presentationHost
+    }
+
+    init(
+        positionStore: WindowPositionStore = WindowPositionStore(),
+        dressupSelectionStore: DressupSelectionStore = DressupSelectionStore(),
+        presentationHost: any PresentationHosting
+    ) {
+        self.positionStore = positionStore
+        self.dressupSelectionStore = dressupSelectionStore
+        geometryProvider = presentationHost.geometryProvider
+        self.presentationHost = presentationHost
     }
 
     public func setStayOnTop(_ stayOnTop: Bool) {
@@ -615,9 +639,17 @@ public final class SurfaceWindowController {
 
     public func resetWindowPositions() {
         for scope in characters.keys.sorted() {
-            positionStore.remove(for: .surface, scope: scope)
+            positionStore.remove(
+                for: .surface,
+                scope: scope,
+                coordinateSpace: geometryProvider.coordinateSpace
+            )
             placeInitialWindow(for: scope)
-            positionStore.remove(for: .surface, scope: scope)
+            positionStore.remove(
+                for: .surface,
+                scope: scope,
+                coordinateSpace: geometryProvider.coordinateSpace
+            )
         }
     }
 
@@ -680,6 +712,7 @@ public final class SurfaceWindowController {
             scope: scope,
             positionStore: positionStore,
             geometryProvider: geometryProvider,
+            presentationHost: presentationHost,
             displayScale: displayScale,
             automaticallyFitsLargeSurfaces: automaticallyFitsLargeSurfaces,
             locksToDesktopBottom: locksToDesktopBottom,
@@ -734,7 +767,8 @@ public final class SurfaceWindowController {
             scope: scope,
             windowSize: frame.size,
             visibleFrames: geometryProvider.visibleFrames,
-            constrainsToVisibleFrame: keepsOnScreen
+            constrainsToVisibleFrame: keepsOnScreen,
+            coordinateSpace: geometryProvider.coordinateSpace
         ) {
             character.setOrigin(restoredOrigin)
             return
@@ -778,6 +812,7 @@ private final class CharacterSurfaceController {
     private let scope: Int
     private let positionStore: WindowPositionStore
     private let geometryProvider: any PresentationGeometryProviding
+    private let presentationHost: any PresentationHosting
     private let imageLoader = SurfaceImageLoader()
     private let shellLoader = ShellLoader()
     private var item: (any PresentationItem)?
@@ -845,6 +880,7 @@ private final class CharacterSurfaceController {
         scope: Int,
         positionStore: WindowPositionStore,
         geometryProvider: any PresentationGeometryProviding,
+        presentationHost: any PresentationHosting,
         displayScale: CGFloat,
         automaticallyFitsLargeSurfaces: Bool,
         locksToDesktopBottom: Bool,
@@ -853,6 +889,7 @@ private final class CharacterSurfaceController {
         self.scope = scope
         self.positionStore = positionStore
         self.geometryProvider = geometryProvider
+        self.presentationHost = presentationHost
         self.displayScale = displayScale
         self.automaticallyFitsLargeSurfaces = automaticallyFitsLargeSurfaces
         self.locksToDesktopBottom = locksToDesktopBottom
@@ -1931,30 +1968,27 @@ private final class CharacterSurfaceController {
 
     private func makePresentationItem() -> any PresentationItem {
         var previousOrigin: NSPoint?
-        let window = FloatingContentWindow(
+        let item = presentationHost.makeItem(
+            kind: .surface,
             title: "Ghost Surface \(scope)",
-            placementPolicy: .init(
-                edge: effectiveDesktopEdge,
-                keepsOnScreen: keepsOnScreen
-            ),
-            visibleFrames: { [geometryProvider] in geometryProvider.visibleFrames }
-        ) { [weak self, positionStore, scope] origin in
-            positionStore.save(origin, for: .surface, scope: scope)
-            let oldOrigin = previousOrigin
-            previousOrigin = origin
-            if let oldOrigin, oldOrigin != origin {
-                self?.onWindowMove?(NSPoint(x: origin.x - oldOrigin.x, y: origin.y - oldOrigin.y))
-            }
-        }
-        window.backgroundColor = .clear
-        window.isOpaque = false
-        window.hasShadow = false
-        window.onCancel = { [weak self] in self?.imageView?.cancelDrag() }
-        window.isMovableByWindowBackground = true
-        window.isReleasedWhenClosed = false
-        window.level = stayOnTop ? .floating : .normal
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        return DesktopPresentationItem(window: window)
+            onMove: { [weak self, positionStore, geometryProvider, scope] origin in
+                positionStore.save(
+                    origin,
+                    for: .surface,
+                    scope: scope,
+                    coordinateSpace: geometryProvider.coordinateSpace
+                )
+                let oldOrigin = previousOrigin
+                previousOrigin = origin
+                if let oldOrigin, oldOrigin != origin {
+                    self?.onWindowMove?(NSPoint(x: origin.x - oldOrigin.x, y: origin.y - oldOrigin.y))
+                }
+            },
+            onCancel: { [weak self] in self?.imageView?.cancelDrag() }
+        )
+        item.setPlacementPolicy(.init(edge: effectiveDesktopEdge, keepsOnScreen: keepsOnScreen))
+        item.setStaysOnTop(stayOnTop)
+        return item
     }
 
     private var currentSurfaceDefinition: SurfaceDefinition? {

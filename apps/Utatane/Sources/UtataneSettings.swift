@@ -68,6 +68,8 @@ final class UtataneSettingsStore: ObservableObject {
         static let contentUpdateIntervalDays = "network.ghostUpdateIntervalDays"
         static let startupBehavior = "general.startupBehavior"
         static let appearance = "general.appearance"
+        static let windowMode = "general.windowMode"
+        static let lastWindowModeLayout = "general.lastWindowModeLayout"
         static let appLanguage = "general.appLanguage"
         static let defaultBalloonDirectoryName = "general.defaultBalloonDirectoryName"
         static let characterDelayMilliseconds = "talk.characterDelayMilliseconds"
@@ -115,6 +117,15 @@ final class UtataneSettingsStore: ObservableObject {
 
     @Published var appearance: Appearance {
         didSet { defaults.set(appearance.rawValue, forKey: Key.appearance) }
+    }
+
+    @Published var windowMode: GhostWindowMode {
+        didSet {
+            defaults.set(windowMode.rawValue, forKey: Key.windowMode)
+            if windowMode != .off {
+                defaults.set(windowMode.rawValue, forKey: Key.lastWindowModeLayout)
+            }
+        }
     }
 
     @Published var appLanguage: AppLanguage {
@@ -241,7 +252,7 @@ final class UtataneSettingsStore: ObservableObject {
     private var activeGhostDirectoryName: String?
     private var isLoadingGhostSettings = false
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, arguments: [String] = CommandLine.arguments) {
         self.defaults = defaults
         automaticHeadlineRefresh = defaults.bool(forKey: Key.automaticHeadlineRefresh)
         headlineRefreshIntervalMinutes = Self.positiveValue(
@@ -259,6 +270,23 @@ final class UtataneSettingsStore: ObservableObject {
         appearance = Appearance(
             rawValue: defaults.string(forKey: Key.appearance) ?? ""
         ) ?? .system
+        let storedWindowMode = GhostWindowMode(
+            rawValue: defaults.string(forKey: Key.windowMode) ?? ""
+        ) ?? .off
+        let lastWindowModeLayout = GhostWindowMode(
+            rawValue: defaults.string(forKey: Key.lastWindowModeLayout) ?? ""
+        ) ?? (storedWindowMode == .off ? .shared : storedWindowMode)
+        let resolvedWindowMode = GhostWindowMode.launchOverride(
+            in: arguments,
+            previousLayout: lastWindowModeLayout
+        ) ?? storedWindowMode
+        windowMode = resolvedWindowMode
+        if resolvedWindowMode != storedWindowMode {
+            defaults.set(resolvedWindowMode.rawValue, forKey: Key.windowMode)
+        }
+        if resolvedWindowMode != .off {
+            defaults.set(resolvedWindowMode.rawValue, forKey: Key.lastWindowModeLayout)
+        }
         let loadedAppLanguage = AppLanguage(
             rawValue: defaults.string(forKey: Key.appLanguage) ?? ""
         ) ?? .system
@@ -459,6 +487,16 @@ struct UtataneSettingsView: View {
                         Text("ダーク").tag(UtataneSettingsStore.Appearance.dark)
                     }
                     Text("Shell、バルーン、キャラクター位置は、最後に使った状態がゴーストごとに復元される。")
+                        .foregroundStyle(.secondary)
+                }
+                Section("ウィンドウモード（実験的）") {
+                    Picker("表示方式", selection: $settings.windowMode) {
+                        Text("使用しない").tag(GhostWindowMode.off)
+                        Text("全ゴーストをまとめて1枚").tag(GhostWindowMode.shared)
+                        Text("ゴーストごとに1枚").tag(GhostWindowMode.perGhost)
+                    }
+                    Text("ゴーストとバルーンを通常の1枚のウィンドウ内に表示する。配信や画面収録でウィンドウ単位に取り込みやすくなる。")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
                 Section("音楽再生") {
