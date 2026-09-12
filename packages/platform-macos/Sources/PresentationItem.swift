@@ -265,6 +265,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     let mode: GhostWindowMode
     private var items: [WindowModePresentationItem] = []
     private let onModeRequest: (GhostWindowMode) -> Void
+    private let onCloseRequest: () -> Void
     private let stateStore: WindowModeStageStateStore?
     private let stateIdentifier: String
     private(set) var background: WindowModeStageBackground = .gray
@@ -275,6 +276,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         title: String = "Utatane",
         mode: GhostWindowMode = .perGhost,
         onModeRequest: @escaping (GhostWindowMode) -> Void = { _ in },
+        onCloseRequest: @escaping () -> Void = {},
         stateStore: WindowModeStageStateStore? = nil,
         stateIdentifier: String = ""
     ) {
@@ -296,6 +298,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         self.rootView = rootView
         self.mode = mode
         self.onModeRequest = onModeRequest
+        self.onCloseRequest = onCloseRequest
         self.stateStore = stateStore
         self.stateIdentifier = stateIdentifier
         geometryProvider = WindowModePresentationGeometryProvider(
@@ -305,7 +308,6 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         )
         super.init()
         window.delegate = self
-        window.standardWindowButton(.closeButton)?.isEnabled = false
         rootView.host = self
         window.host = self
         if let origin = restoredState?.origin {
@@ -342,6 +344,9 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
             window.styleMask.subtract([.titled, .closable, .miniaturizable])
         }
         window.isMovableByWindowBackground = !showsWindowFrame
+        rootView.setTransientControlsEnabled(
+            !showsWindowFrame || window.styleMask.contains(.fullScreen)
+        )
         persistState()
     }
 
@@ -397,6 +402,16 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         )
         screenshot.target = self
         menu.addItem(screenshot)
+        menu.addItem(.separator())
+
+        let close = NSMenuItem(
+            title: String(localized: "閉じる"),
+            action: #selector(closeFromMenu),
+            keyEquivalent: "w"
+        )
+        close.keyEquivalentModifierMask = [.control]
+        close.target = self
+        menu.addItem(close)
         return menu
     }
 
@@ -475,6 +490,10 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         }
     }
 
+    @objc private func closeFromMenu() {
+        window.performClose(nil)
+    }
+
     func screenshotPNGData(kind: WindowModeScreenshotKind) -> Data? {
         WindowModeScreenshotRenderer.pngData(
             rootView: rootView,
@@ -491,8 +510,17 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         persistState()
     }
 
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        rootView.setTransientControlsEnabled(true)
+    }
+
+    func windowDidExitFullScreen(_ notification: Notification) {
+        rootView.setTransientControlsEnabled(!showsWindowFrame)
+    }
+
     func windowShouldClose(_ sender: NSWindow) -> Bool {
-        false
+        onCloseRequest()
+        return false
     }
 
     private func persistState() {
@@ -530,6 +558,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         if item.containerView.superview !== rootView {
             rootView.addSubview(item.containerView)
         }
+        rootView.bringTransientControlsToFront()
         item.containerView.isHidden = false
         if activating {
             window.makeKeyAndOrderFront(nil)
@@ -550,9 +579,129 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
 @MainActor
 final class WindowModeStageRootView: NSView {
     weak var host: WindowModePresentationHost?
+    private let menuButton = WindowModeTransientButton(
+        symbolName: "line.3.horizontal",
+        accessibilityLabel: String(localized: "操作")
+    )
+    private let closeButton = WindowModeTransientButton(
+        symbolName: "xmark",
+        accessibilityLabel: String(localized: "閉じる")
+    )
+    private var pointerTrackingArea: NSTrackingArea?
+    private(set) var transientControlsAreEnabled = false
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        menuButton.target = self
+        menuButton.action = #selector(openOperationMenu)
+        closeButton.target = self
+        closeButton.action = #selector(closeStage)
+        addSubview(menuButton)
+        addSubview(closeButton)
+        setPointerInside(false)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func layout() {
+        super.layout()
+        let inset: CGFloat = 12
+        let buttonSize = menuButton.frame.size
+        menuButton.setFrameOrigin(NSPoint(
+            x: inset,
+            y: bounds.maxY - inset - buttonSize.height
+        ))
+        closeButton.setFrameOrigin(NSPoint(
+            x: bounds.maxX - inset - buttonSize.width,
+            y: bounds.maxY - inset - buttonSize.height
+        ))
+    }
+
+    override func updateTrackingAreas() {
+        if let pointerTrackingArea {
+            removeTrackingArea(pointerTrackingArea)
+        }
+        let area = NSTrackingArea(
+            rect: bounds,
+            options: [.activeAlways, .inVisibleRect, .mouseEnteredAndExited],
+            owner: self
+        )
+        addTrackingArea(area)
+        pointerTrackingArea = area
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        setPointerInside(true)
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        setPointerInside(false)
+    }
+
+    func setTransientControlsEnabled(_ enabled: Bool) {
+        transientControlsAreEnabled = enabled
+        setPointerInside(false)
+    }
+
+    func setPointerInside(_ pointerInside: Bool) {
+        let shouldShow = transientControlsAreEnabled && pointerInside
+        menuButton.isHidden = !shouldShow
+        closeButton.isHidden = !shouldShow
+    }
+
+    func bringTransientControlsToFront() {
+        menuButton.removeFromSuperview()
+        closeButton.removeFromSuperview()
+        addSubview(menuButton, positioned: .above, relativeTo: nil)
+        addSubview(closeButton, positioned: .above, relativeTo: nil)
+    }
+
+    var transientControlButtons: [NSButton] {
+        [menuButton, closeButton]
+    }
 
     override func menu(for event: NSEvent) -> NSMenu? {
         host?.makeOperationMenu()
+    }
+
+    @objc private func openOperationMenu() {
+        guard let host else { return }
+        let menu = host.makeOperationMenu()
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: menuButton.bounds.minX, y: menuButton.bounds.minY),
+            in: menuButton
+        )
+    }
+
+    @objc private func closeStage() {
+        host?.window.performClose(nil)
+    }
+}
+
+@MainActor
+private final class WindowModeTransientButton: NSButton {
+    init(symbolName: String, accessibilityLabel: String) {
+        super.init(frame: NSRect(x: 0, y: 0, width: 30, height: 30))
+        image = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityLabel)
+        imagePosition = .imageOnly
+        bezelStyle = .circular
+        isBordered = true
+        setAccessibilityLabel(accessibilityLabel)
+        toolTip = accessibilityLabel
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
+        true
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
     }
 }
 
@@ -1088,6 +1237,7 @@ public final class PresentationCoordinator {
 
     public private(set) var mode: GhostWindowMode
     public var onModeRequest: (@MainActor (GhostWindowMode) -> Void)?
+    public var onCloseRequest: (@MainActor (GhostWindowMode, String?) -> Void)?
     private let systemGeometry: any PresentationGeometryProviding
     private let stageStateStore: WindowModeStageStateStore
     private var sharedHost: WindowModePresentationHost?
@@ -1157,6 +1307,7 @@ public final class PresentationCoordinator {
                 title: title,
                 mode: .perGhost,
                 onModeRequest: { [weak self] mode in self?.requestMode(mode) },
+                onCloseRequest: { [weak self] in self?.requestClose(identifier: identifier) },
                 stateStore: stageStateStore,
                 stateIdentifier: "per-ghost:\(identifier)"
             )
@@ -1171,6 +1322,7 @@ public final class PresentationCoordinator {
             title: "Utatane",
             mode: .shared,
             onModeRequest: { [weak self] mode in self?.requestMode(mode) },
+            onCloseRequest: { [weak self] in self?.requestClose(identifier: nil) },
             stateStore: stageStateStore,
             stateIdentifier: "shared"
         )
@@ -1184,5 +1336,9 @@ public final class PresentationCoordinator {
         } else {
             setMode(mode)
         }
+    }
+
+    private func requestClose(identifier: String?) {
+        onCloseRequest?(mode, identifier)
     }
 }

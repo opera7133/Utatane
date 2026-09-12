@@ -316,5 +316,6 @@
   "PNG（背景を含む）" : "PNG (Include Background)",
   "PNG（背景透過）" : "PNG (Transparent Background)",
   "PNGの種類" : "PNG Type",
-  "スクリーンショットを作成できなかった" : "Could Not Create Screenshot"
+  "スクリーンショットを作成できなかった" : "Could Not Create Screenshot",
+  "閉じる" : "Close"
 }

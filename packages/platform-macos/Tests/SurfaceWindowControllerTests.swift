@@ -356,7 +356,7 @@ func `window mode hosts a surface and balloon in one capturable window`() throws
     )
 
     #expect(host.itemCount == 2)
-    #expect(host.rootView.subviews.count == 2)
+    #expect(host.rootView.subviews.filter { !($0 is NSButton) }.count == 2)
     #expect(surfaces.visibleScopes == [0])
     #expect(balloons.visibleScopes == [0])
     #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 1)
@@ -370,14 +370,23 @@ func `window mode hosts a surface and balloon in one capturable window`() throws
     host.setShowsWindowFrame(false)
     #expect(!host.window.styleMask.contains(.titled))
     #expect(host.window.styleMask.contains(.resizable))
+    #expect(host.rootView.transientControlsAreEnabled)
+    host.rootView.setPointerInside(true)
+    #expect(host.rootView.transientControlButtons.allSatisfy { !$0.isHidden })
     host.setShowsWindowFrame(true)
     #expect(host.window.styleMask.contains(.titled))
+    #expect(!host.rootView.transientControlsAreEnabled)
+    let allTransientControlsHidden = host.rootView.transientControlButtons.allSatisfy(\.isHidden)
+    #expect(allTransientControlsHidden)
 
     let operationMenu = host.makeOperationMenu()
     let modeMenu = try #require(operationMenu.items.first?.submenu)
     #expect(modeMenu.items.count == GhostWindowMode.allCases.count)
     #expect(modeMenu.items.filter { $0.state == NSControl.StateValue.on }.count == 1)
     #expect(operationMenu.items.contains { $0.title == String(localized: "スクリーンショット...") })
+    let closeItem = try #require(operationMenu.items.first { $0.title == String(localized: "閉じる") })
+    #expect(closeItem.keyEquivalent == "w")
+    #expect(closeItem.keyEquivalentModifierMask == [.control])
 }
 
 @Test
@@ -429,7 +438,7 @@ func `presentation coordinator reparents live views between desktop and window m
     coordinator.switchHost(to: stage)
 
     #expect(stage.itemCount == 2)
-    #expect(stage.rootView.subviews.count == 2)
+    #expect(stage.rootView.subviews.filter { !($0 is NSButton) }.count == 2)
     #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 1)
     #expect(surfaces.renderedImage(for: 0) === renderedBeforeSwitch)
     #expect(coordinator.mainScreen?.frame.size == NSSize(width: 640, height: 480))
@@ -437,7 +446,7 @@ func `presentation coordinator reparents live views between desktop and window m
     coordinator.switchHost(to: DesktopPresentationHost(geometryProvider: desktopGeometry))
 
     #expect(stage.itemCount == 0)
-    #expect(stage.rootView.subviews.isEmpty)
+    #expect(stage.rootView.subviews.allSatisfy { $0 is NSButton })
     #expect(!stage.window.isVisible)
     #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 2)
     #expect(surfaces.renderedImage(for: 0) === renderedBeforeSwitch)
@@ -494,10 +503,12 @@ func `switching presentation modes restores each coordinate space and retires ol
 
 @Test
 @MainActor
-func `window mode stage cannot be closed directly`() {
-    let stage = WindowModePresentationHost()
-    #expect(stage.window.standardWindowButton(.closeButton)?.isEnabled == false)
+func `window mode stage delegates close without disappearing first`() {
+    var closeRequests = 0
+    let stage = WindowModePresentationHost(onCloseRequest: { closeRequests += 1 })
+    #expect(stage.window.standardWindowButton(.closeButton)?.isEnabled == true)
     #expect(!stage.windowShouldClose(stage.window))
+    #expect(closeRequests == 1)
 }
 
 @Test
@@ -521,6 +532,9 @@ func `window mode screenshots can include or omit the stage background`() throws
     item.setContentSize(NSSize(width: 4, height: 4))
     item.setFrameOrigin(NSPoint(x: 8, y: 8))
     item.show(activating: false)
+    stage.setShowsWindowFrame(false)
+    stage.rootView.setPointerInside(true)
+    #expect(stage.rootView.transientControlButtons.allSatisfy { !$0.isHidden })
 
     let includedData = try #require(stage.screenshotPNGData(kind: .backgroundIncluded))
     let transparentData = try #require(stage.screenshotPNGData(kind: .transparentBackground))

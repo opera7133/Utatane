@@ -363,6 +363,17 @@ private struct UtataneRootView: View {
             applicationDelegate.onTerminationRequest = {
                 requestApplicationTermination()
             }
+            presentationCoordinator.onCloseRequest = { mode, identifier in
+                if mode == .shared {
+                    NSApplication.shared.terminate(nil)
+                } else if identifier == mainPresentationSession.identifier {
+                    dismissCurrentGhost()
+                } else if let runtime = calledGhosts.values.first(where: {
+                    $0.ghost.id.path == identifier
+                }) {
+                    dismissCalledGhost(runtime.ghost)
+                }
+            }
             applicationDelegate.setOpenNarHandler { urls in
                 installNars(from: urls)
             }
