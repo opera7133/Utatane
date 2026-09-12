@@ -34,4 +34,7 @@ FOUNDATION_EXPORT BOOL UTSetNicxliveViewParameter(
 /// Returns whether the most recently verified Metal frame contained a visible pixel.
 FOUNDATION_EXPORT BOOL UTNicxliveViewLastFrameHadVisiblePixels(NSView *view);
 
+/// Renders and returns the current Metal frame. The caller owns the returned image.
+FOUNDATION_EXPORT CGImageRef _Nullable UTNicxliveViewCreateSnapshot(NSView *view) CF_RETURNS_RETAINED;
+
 NS_ASSUME_NONNULL_END

@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 @MainActor
 protocol PresentationHosting: AnyObject {
@@ -388,6 +389,14 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         addBackgroundItem(String(localized: "黒"), background: .black, to: backgroundMenu)
         backgroundItem.submenu = backgroundMenu
         menu.addItem(backgroundItem)
+
+        let screenshot = NSMenuItem(
+            title: String(localized: "スクリーンショット..."),
+            action: #selector(saveScreenshotFromMenu),
+            keyEquivalent: ""
+        )
+        screenshot.target = self
+        menu.addItem(screenshot)
         return menu
     }
 
@@ -431,6 +440,47 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
               let background = WindowModeStageBackground(rawValue: rawValue)
         else { return }
         setBackground(background)
+    }
+
+    @objc private func saveScreenshotFromMenu() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.png]
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = WindowModeScreenshotFileName.make()
+
+        let kindPicker = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 240, height: 26))
+        kindPicker.addItems(withTitles: [
+            String(localized: "PNG（背景を含む）"),
+            String(localized: "PNG（背景透過）")
+        ])
+        kindPicker.setAccessibilityLabel(String(localized: "PNGの種類"))
+        panel.accessoryView = kindPicker
+
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        let kind: WindowModeScreenshotKind = kindPicker.indexOfSelectedItem == 1
+            ? .transparentBackground
+            : .backgroundIncluded
+        guard let data = screenshotPNGData(kind: kind) else {
+            NSApp.presentError(NSError(
+                domain: "UtataneWindowModeScreenshot",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "スクリーンショットを作成できなかった")]
+            ))
+            return
+        }
+        do {
+            try data.write(to: destination, options: .atomic)
+        } catch {
+            NSApp.presentError(error)
+        }
+    }
+
+    func screenshotPNGData(kind: WindowModeScreenshotKind) -> Data? {
+        WindowModeScreenshotRenderer.pngData(
+            rootView: rootView,
+            itemViews: items.map(\.containerView),
+            kind: kind
+        )
     }
 
     func windowDidMove(_ notification: Notification) {

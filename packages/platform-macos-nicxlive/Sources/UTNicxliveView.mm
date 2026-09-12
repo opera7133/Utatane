@@ -109,6 +109,28 @@ void multiply(const Mat4&a,const Mat4&b,float out[16]) {
     for(int r=0;r<4;r++) for(int c=0;c<4;c++){ float v=0; for(int k=0;k<4;k++)v+=a.values[r][k]*b.values[k][c]; out[r*4+c]=v; }
 }
 
+CGImageRef createImageFromBGRA(
+    const uint8_t *pixels,
+    size_t width,
+    size_t height,
+    size_t bytesPerRow
+) {
+    CFDataRef data=CFDataCreate(kCFAllocatorDefault,pixels,bytesPerRow*height);
+    if(!data)return nil;
+    CGDataProviderRef provider=CGDataProviderCreateWithCFData(data);
+    CFRelease(data);
+    if(!provider)return nil;
+    CGColorSpaceRef colorSpace=CGColorSpaceCreateDeviceRGB();
+    CGBitmapInfo bitmapInfo=kCGBitmapByteOrder32Little|kCGImageAlphaPremultipliedFirst;
+    CGImageRef image=CGImageCreate(
+        width,height,8,32,bytesPerRow,colorSpace,bitmapInfo,provider,
+        nullptr,false,kCGRenderingIntentDefault
+    );
+    CGColorSpaceRelease(colorSpace);
+    CGDataProviderRelease(provider);
+    return image;
+}
+
 } // namespace
 
 @implementation UTNicxliveView {
@@ -122,6 +144,8 @@ void multiply(const Mat4&a,const Mat4&b,float out[16]) {
     bool _diagnosticsEnabled;
     bool _didLogFirstFrame;
     bool _didInspectFrame;
+    bool _capturesNextFrame;
+    CGImageRef _capturedImage;
 }
 
 + (instancetype)viewWithFrame:(NSRect)frame puppetURL:(NSURL *)puppetURL libraryURL:(NSURL *)libraryURL error:(NSError **)error {
@@ -216,8 +240,19 @@ void multiply(const Mat4&a,const Mat4&b,float out[16]) {
     for(size_t i=0;i<queue.count;i++){const auto&packet=queue.commands[i].part;if(queue.commands[i].kind!=CommandKind::drawPart||!packet.renderable||!packet.textureCount||!packet.indexCount)continue;
         std::vector<Vertex> vertices(packet.vertexCount);for(size_t j=0;j<packet.vertexCount;j++)vertices[j]={{buffers.vertices.data[packet.vertexOffset+j]+buffers.deform.data[packet.deformOffset+j],buffers.vertices.data[packet.vertexStride+packet.vertexOffset+j]+buffers.deform.data[packet.deformStride+packet.deformOffset+j]},{buffers.uvs.data[packet.uvOffset+j],buffers.uvs.data[packet.uvStride+packet.uvOffset+j]}};
         id<MTLBuffer> vb=[self.device newBufferWithBytes:vertices.data() length:vertices.size()*sizeof(Vertex) options:MTLResourceStorageModeShared];id<MTLBuffer> ib=[self.device newBufferWithBytes:packet.indices length:packet.indexCount*sizeof(uint16_t) options:MTLResourceStorageModeShared];float mvp[16];multiply(packet.renderMatrix,packet.modelMatrix,mvp);[encoder setVertexBuffer:vb offset:0 atIndex:0];[encoder setVertexBytes:mvp length:sizeof(mvp) atIndex:1];[encoder setVertexBytes:&packet.origin length:sizeof(packet.origin) atIndex:2];[encoder setVertexBytes:&contentOffset length:sizeof(contentOffset) atIndex:3];[encoder setFragmentTexture:(__bridge id<MTLTexture>)reinterpret_cast<void *>(packet.textures[0]) atIndex:0];[encoder setFragmentBytes:&packet.opacity length:sizeof(packet.opacity) atIndex:0];[encoder setFragmentBytes:&packet.tint length:sizeof(packet.tint) atIndex:1];[encoder setFragmentBytes:&packet.screen length:sizeof(packet.screen) atIndex:2];[encoder drawIndexedPrimitives:MTLPrimitiveTypeTriangle indexCount:packet.indexCount indexType:MTLIndexTypeUInt16 indexBuffer:ib indexBufferOffset:0];
-    }[encoder endEncoding];_api->flush(_renderer);id<MTLBuffer> readback=nil;NSUInteger readbackRowBytes=0;if(!self.framebufferOnly&&!_didInspectFrame){_didInspectFrame=true;readbackRowBytes=(drawable.texture.width*4+255)&~255;readback=[self.device newBufferWithLength:readbackRowBytes*drawable.texture.height options:MTLResourceStorageModeShared];id<MTLBlitCommandEncoder> blit=[command blitCommandEncoder];[blit copyFromTexture:drawable.texture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(drawable.texture.width,drawable.texture.height,1) toBuffer:readback destinationOffset:0 destinationBytesPerRow:readbackRowBytes destinationBytesPerImage:readbackRowBytes*drawable.texture.height];[blit endEncoding];}[command presentDrawable:drawable];[command commit];
-    if(readback){[command waitUntilCompleted];const uint8_t *pixels=(const uint8_t *)readback.contents;NSUInteger visiblePixels=0;for(NSUInteger y=0;y<drawable.texture.height;y++)for(NSUInteger x=0;x<drawable.texture.width;x++)if(pixels[y*readbackRowBytes+x*4+3])visiblePixels++;_lastFrameHadVisiblePixels=visiblePixels>0;if(_diagnosticsEnabled)NSLog(@"Utatane nijigenerate Metal frame pixels: visible=%lu total=%lu",(unsigned long)visiblePixels,(unsigned long)(drawable.texture.width*drawable.texture.height));}
+    }[encoder endEncoding];_api->flush(_renderer);BOOL capturesFrame=_capturesNextFrame;id<MTLBuffer> readback=nil;NSUInteger readbackRowBytes=0;if(!self.framebufferOnly&&(!_didInspectFrame||capturesFrame)){_didInspectFrame=true;readbackRowBytes=(drawable.texture.width*4+255)&~255;readback=[self.device newBufferWithLength:readbackRowBytes*drawable.texture.height options:MTLResourceStorageModeShared];id<MTLBlitCommandEncoder> blit=[command blitCommandEncoder];[blit copyFromTexture:drawable.texture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(drawable.texture.width,drawable.texture.height,1) toBuffer:readback destinationOffset:0 destinationBytesPerRow:readbackRowBytes destinationBytesPerImage:readbackRowBytes*drawable.texture.height];[blit endEncoding];}[command presentDrawable:drawable];[command commit];
+    if(readback){[command waitUntilCompleted];const uint8_t *pixels=(const uint8_t *)readback.contents;NSUInteger visiblePixels=0;for(NSUInteger y=0;y<drawable.texture.height;y++)for(NSUInteger x=0;x<drawable.texture.width;x++)if(pixels[y*readbackRowBytes+x*4+3])visiblePixels++;_lastFrameHadVisiblePixels=visiblePixels>0;if(capturesFrame){if(_capturedImage)CGImageRelease(_capturedImage);_capturedImage=createImageFromBGRA(pixels,drawable.texture.width,drawable.texture.height,readbackRowBytes);}if(_diagnosticsEnabled)NSLog(@"Utatane nijigenerate Metal frame pixels: visible=%lu total=%lu",(unsigned long)visiblePixels,(unsigned long)(drawable.texture.width*drawable.texture.height));}
+}
+- (CGImageRef)createSnapshot {
+    if(_isShuttingDown||!_api||!_renderer||!_puppet)return nil;
+    if(_capturedImage){CGImageRelease(_capturedImage);_capturedImage=nil;}
+    BOOL wasFramebufferOnly=self.framebufferOnly;
+    self.framebufferOnly=NO;
+    _capturesNextFrame=true;
+    [self drawInMTKView:self];
+    _capturesNextFrame=false;
+    self.framebufferOnly=wasFramebufferOnly;
+    return _capturedImage?CGImageCreateCopy(_capturedImage):nil;
 }
 - (void)shutdownRenderer {
     if (_isShuttingDown) return;
@@ -228,7 +263,7 @@ void multiply(const Mat4&a,const Mat4&b,float out[16]) {
     if(_renderer&&_api){_api->destroyRenderer(_renderer);_renderer=nullptr;}
     if(_api){_api->runtimeTerm();delete _api;_api=nullptr;}delete _textureContext;_textureContext=nullptr;
 }
-- (void)dealloc { [self shutdownRenderer]; }
+- (void)dealloc { [self shutdownRenderer]; if(_capturedImage)CGImageRelease(_capturedImage); }
 - (BOOL)lastFrameHadVisiblePixels { return _lastFrameHadVisiblePixels; }
 @end
 
@@ -257,4 +292,9 @@ BOOL UTNicxliveViewLastFrameHadVisiblePixels(NSView *view) {
     UTNicxliveView *metalView=(UTNicxliveView *)view;
     if (!metalView.framebufferOnly) [metalView drawInMTKView:metalView];
     return [metalView lastFrameHadVisiblePixels];
+}
+
+CGImageRef UTNicxliveViewCreateSnapshot(NSView *view) {
+    if (![view isKindOfClass:UTNicxliveView.class]) return nil;
+    return [(UTNicxliveView *)view createSnapshot];
 }

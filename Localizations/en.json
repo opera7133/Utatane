@@ -311,5 +311,10 @@
   "背景" : "Background",
   "白" : "White",
   "灰" : "Gray",
-  "黒" : "Black"
+  "黒" : "Black",
+  "スクリーンショット..." : "Screenshot...",
+  "PNG（背景を含む）" : "PNG (Include Background)",
+  "PNG（背景透過）" : "PNG (Transparent Background)",
+  "PNGの種類" : "PNG Type",
+  "スクリーンショットを作成できなかった" : "Could Not Create Screenshot"
 }

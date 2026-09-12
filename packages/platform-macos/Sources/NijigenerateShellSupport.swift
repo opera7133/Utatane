@@ -376,6 +376,10 @@ enum NijigenerateViewFactory {
         UTNicxliveViewLastFrameHadVisiblePixels(view)
     }
 
+    static func snapshotImage(_ view: NSView) -> CGImage? {
+        UTNicxliveViewCreateSnapshot(view)
+    }
+
     static func make(runtime: NijigenerateShellRuntime, size: NSSize) throws -> NSView {
         var rendererError: NSError?
         guard let view = UTCreateNicxliveView(

@@ -146,6 +146,9 @@ import Testing
     if environment["UTATANE_NIJIGENERATE_VERIFY_PIXELS"] != nil {
         #expect(NijigenerateViewFactory.lastFrameHadVisiblePixels(view))
     }
+    let snapshot = try #require(NijigenerateViewFactory.snapshotImage(view))
+    #expect(snapshot.width > 0)
+    #expect(snapshot.height > 0)
     NotificationCenter.default.post(name: NSApplication.willTerminateNotification, object: NSApp)
     window.orderOut(nil)
     window.contentView = nil

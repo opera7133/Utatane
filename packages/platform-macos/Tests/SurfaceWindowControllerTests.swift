@@ -377,6 +377,7 @@ func `window mode hosts a surface and balloon in one capturable window`() throws
     let modeMenu = try #require(operationMenu.items.first?.submenu)
     #expect(modeMenu.items.count == GhostWindowMode.allCases.count)
     #expect(modeMenu.items.filter { $0.state == NSControl.StateValue.on }.count == 1)
+    #expect(operationMenu.items.contains { $0.title == String(localized: "スクリーンショット...") })
 }
 
 @Test
@@ -497,6 +498,41 @@ func `window mode stage cannot be closed directly`() {
     let stage = WindowModePresentationHost()
     #expect(stage.window.standardWindowButton(.closeButton)?.isEnabled == false)
     #expect(!stage.windowShouldClose(stage.window))
+}
+
+@Test
+@MainActor
+func `window mode screenshots can include or omit the stage background`() throws {
+    let stage = WindowModePresentationHost(contentSize: NSSize(width: 20, height: 20))
+    stage.setBackground(.black)
+    let item = stage.makeItem(kind: .surface, title: "surface", onMove: { _ in }, onCancel: nil)
+    defer { item.discard() }
+    let image = try #require(NSImage(data: makePNG(
+        width: 4,
+        height: 4,
+        color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    )))
+    let sourceBitmap = try #require(image.representations.compactMap { $0 as? NSBitmapImageRep }.first)
+    #expect(sourceBitmap.colorAt(x: 0, y: 0)?.redComponent ?? 0 > 0.8)
+    let imageView = NSImageView(frame: NSRect(x: 0, y: 0, width: 4, height: 4))
+    imageView.image = image
+    imageView.imageScaling = .scaleAxesIndependently
+    item.contentView = imageView
+    item.setContentSize(NSSize(width: 4, height: 4))
+    item.setFrameOrigin(NSPoint(x: 8, y: 8))
+    item.show(activating: false)
+
+    let includedData = try #require(stage.screenshotPNGData(kind: .backgroundIncluded))
+    let transparentData = try #require(stage.screenshotPNGData(kind: .transparentBackground))
+    let included = try #require(NSBitmapImageRep(data: includedData))
+    let transparent = try #require(NSBitmapImageRep(data: transparentData))
+
+    #expect(included.pixelsWide == transparent.pixelsWide)
+    #expect(included.pixelsHigh == transparent.pixelsHigh)
+    #expect(included.colorAt(x: 0, y: 0)?.alphaComponent == 1)
+    #expect(transparent.colorAt(x: 0, y: 0)?.alphaComponent == 0)
+    #expect(bitmapContainsRedPixel(included))
+    #expect(bitmapContainsRedPixel(transparent))
 }
 
 @Test
@@ -2765,6 +2801,20 @@ private func makePNG(
         }
     }
     return try #require(bitmap.representation(using: .png, properties: [:]))
+}
+
+private func bitmapContainsRedPixel(_ bitmap: NSBitmapImageRep) -> Bool {
+    for y in 0 ..< bitmap.pixelsHigh {
+        for x in 0 ..< bitmap.pixelsWide {
+            guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+            if color.redComponent > 0.8, color.greenComponent < 0.2, color.blueComponent < 0.2,
+               color.alphaComponent > 0.8
+            {
+                return true
+            }
+        }
+    }
+    return false
 }
 
 private func makeTopLeftKeyedPNG(width: Int, height: Int) throws -> Data {
