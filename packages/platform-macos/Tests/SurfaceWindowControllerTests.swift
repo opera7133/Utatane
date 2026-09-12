@@ -431,6 +431,11 @@ func `presentation coordinator reparents live views between desktop and window m
         text: "rehost",
         near: surfaceFrame
     )
+    surfaces.onWindowMove = { scope, delta in
+        balloons.moveWithSurface(by: delta, scope: scope)
+    }
+    let desktopSurfaceFrame = try #require(surfaces.windowFrame(for: 0))
+    let desktopBalloonFrame = try #require(balloons.windowFrame(for: 0))
     let renderedBeforeSwitch = try #require(surfaces.renderedImage(for: 0))
     #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 2)
 
@@ -442,6 +447,17 @@ func `presentation coordinator reparents live views between desktop and window m
     #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 1)
     #expect(surfaces.renderedImage(for: 0) === renderedBeforeSwitch)
     #expect(coordinator.mainScreen?.frame.size == NSSize(width: 640, height: 480))
+    let mappedSurfaceOrigin = try #require(mappedPresentationOrigin(
+        desktopSurfaceFrame,
+        from: desktopGeometry.mainScreen?.visibleFrame,
+        to: stage.geometryProvider.mainScreen?.visibleFrame
+    ))
+    #expect(surfaces.windowFrame(for: 0)?.origin == NSPoint(x: mappedSurfaceOrigin.x, y: 0))
+    #expect(balloons.windowFrame(for: 0)?.origin == mappedPresentationOrigin(
+        desktopBalloonFrame,
+        from: desktopGeometry.mainScreen?.visibleFrame,
+        to: stage.geometryProvider.mainScreen?.visibleFrame
+    ))
 
     coordinator.switchHost(to: DesktopPresentationHost(geometryProvider: desktopGeometry))
 
@@ -450,6 +466,8 @@ func `presentation coordinator reparents live views between desktop and window m
     #expect(!stage.window.isVisible)
     #expect(Set(surfaces.windowNumbers + balloons.windowNumbers).count == 2)
     #expect(surfaces.renderedImage(for: 0) === renderedBeforeSwitch)
+    #expect(surfaces.windowFrame(for: 0)?.origin == desktopSurfaceFrame.origin)
+    #expect(balloons.windowFrame(for: 0)?.origin == desktopBalloonFrame.origin)
 }
 
 @Test
@@ -467,7 +485,7 @@ func `switching presentation modes restores each coordinate space and retires ol
     let coordinator = PresentationHostCoordinator(
         initialHost: DesktopPresentationHost(geometryProvider: desktopGeometry)
     )
-    let item = coordinator.makeItem(kind: .surface, title: "surface", onMove: { _ in }, onCancel: nil)
+    let item = coordinator.makeItem(kind: .surface, title: "surface", onMove: { _, _ in }, onCancel: nil)
     defer { item.discard() }
     item.setContentSize(NSSize(width: 80, height: 120))
     item.setFrameOrigin(NSPoint(x: 100, y: 200))
@@ -516,7 +534,7 @@ func `window mode stage delegates close without disappearing first`() {
 func `window mode screenshots can include or omit the stage background`() throws {
     let stage = WindowModePresentationHost(contentSize: NSSize(width: 20, height: 20))
     stage.setBackground(.black)
-    let item = stage.makeItem(kind: .surface, title: "surface", onMove: { _ in }, onCancel: nil)
+    let item = stage.makeItem(kind: .surface, title: "surface", onMove: { _, _ in }, onCancel: nil)
     defer { item.discard() }
     let image = try #require(NSImage(data: makePNG(
         width: 4,
@@ -547,6 +565,50 @@ func `window mode screenshots can include or omit the stage background`() throws
     #expect(transparent.colorAt(x: 0, y: 0)?.alphaComponent == 0)
     #expect(bitmapContainsRedPixel(included))
     #expect(bitmapContainsRedPixel(transparent))
+}
+
+@Test
+@MainActor
+func `window mode screenshot preserves balloon text orientation`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let stage = WindowModePresentationHost(contentSize: NSSize(width: 240, height: 160))
+    stage.setBackground(.black)
+    let balloons = BalloonWindowController(presentationHost: stage)
+    defer { balloons.hideAll() }
+    try balloons.show(
+        balloon: makeBalloon(directory: directory),
+        text: "TOP line\nsecond line",
+        near: NSRect(x: 100, y: 40, width: 40, height: 80)
+    )
+    let itemFrame = try #require(balloons.windowFrame(for: 0))
+    let container = try #require(stage.rootView.subviews.first { !($0 is NSButton) })
+    container.layoutSubtreeIfNeeded()
+    let expected = try #require(container.bitmapImageRepForCachingDisplay(in: container.bounds))
+    container.cacheDisplay(in: container.bounds, to: expected)
+
+    let data = try #require(stage.screenshotPNGData(kind: .transparentBackground))
+    let actual = try #require(NSBitmapImageRep(data: data))
+    let scale = CGFloat(actual.pixelsWide) / stage.rootView.bounds.width
+    let normalDifference = bitmapDifference(
+        actual,
+        itemOrigin: itemFrame.origin,
+        expected: expected,
+        scale: scale,
+        flipsExpectedVertically: false
+    )
+    let flippedDifference = bitmapDifference(
+        actual,
+        itemOrigin: itemFrame.origin,
+        expected: expected,
+        scale: scale,
+        flipsExpectedVertically: true
+    )
+    #expect(normalDifference < flippedDifference)
 }
 
 @Test
@@ -3123,6 +3185,45 @@ private final class StubDesktopWallpaperProvider: WindowModeDesktopWallpaperProv
     func snapshot(for screen: NSScreen?) -> WindowModeDesktopWallpaperSnapshot? {
         currentSnapshot
     }
+}
+
+private func mappedPresentationOrigin(
+    _ itemFrame: NSRect,
+    from oldVisibleFrame: NSRect?,
+    to newVisibleFrame: NSRect?
+) -> NSPoint? {
+    guard let oldVisibleFrame, let newVisibleFrame else { return nil }
+    let normalizedX = (itemFrame.midX - oldVisibleFrame.minX) / oldVisibleFrame.width
+    let normalizedY = (itemFrame.midY - oldVisibleFrame.minY) / oldVisibleFrame.height
+    return NSPoint(
+        x: newVisibleFrame.minX + normalizedX * newVisibleFrame.width - itemFrame.width / 2,
+        y: newVisibleFrame.minY + normalizedY * newVisibleFrame.height - itemFrame.height / 2
+    )
+}
+
+private func bitmapDifference(
+    _ actual: NSBitmapImageRep,
+    itemOrigin: NSPoint,
+    expected: NSBitmapImageRep,
+    scale: CGFloat,
+    flipsExpectedVertically: Bool
+) -> Double {
+    var difference = 0.0
+    let originX = Int((itemOrigin.x * scale).rounded())
+    let originY = Int((itemOrigin.y * scale).rounded())
+    for y in 0 ..< expected.pixelsHigh {
+        let expectedY = flipsExpectedVertically ? expected.pixelsHigh - y - 1 : y
+        for x in 0 ..< expected.pixelsWide {
+            guard let lhs = actual.colorAt(x: originX + x, y: originY + y)?.usingColorSpace(.deviceRGB),
+                  let rhs = expected.colorAt(x: x, y: expectedY)?.usingColorSpace(.deviceRGB)
+            else { continue }
+            difference += abs(Double(lhs.redComponent - rhs.redComponent))
+                + abs(Double(lhs.greenComponent - rhs.greenComponent))
+                + abs(Double(lhs.blueComponent - rhs.blueComponent))
+                + abs(Double(lhs.alphaComponent - rhs.alphaComponent))
+        }
+    }
+    return difference
 }
 
 @MainActor

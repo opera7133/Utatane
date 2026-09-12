@@ -1971,7 +1971,7 @@ private final class CharacterSurfaceController {
         let item = presentationHost.makeItem(
             kind: .surface,
             title: "Ghost Surface \(scope)",
-            onMove: { [weak self, positionStore, geometryProvider, scope] origin in
+            onMove: { [weak self, positionStore, geometryProvider, scope] origin, reason in
                 positionStore.save(
                     origin,
                     for: .surface,
@@ -1980,7 +1980,7 @@ private final class CharacterSurfaceController {
                 )
                 let oldOrigin = previousOrigin
                 previousOrigin = origin
-                if let oldOrigin, oldOrigin != origin {
+                if reason == .movement, let oldOrigin, oldOrigin != origin {
                     self?.onWindowMove?(NSPoint(x: origin.x - oldOrigin.x, y: origin.y - oldOrigin.y))
                 }
             },

@@ -45,6 +45,7 @@ enum WindowModeScreenshotRenderer {
         for itemView in rootView.subviews where
             presentedViews.contains(ObjectIdentifier(itemView)) && !itemView.isHidden
         {
+            let metalSnapshots = metalSnapshots(in: itemView)
             context.saveGState()
             if let layer = itemView.layer, layer.shadowOpacity > 0 {
                 let color = layer.shadowColor ?? NSColor.black.cgColor
@@ -59,6 +60,7 @@ enum WindowModeScreenshotRenderer {
                 itemView,
                 rootView: rootView,
                 inheritedAlpha: 1,
+                metalSnapshots: metalSnapshots,
                 in: context
             )
             context.endTransparencyLayer()
@@ -75,6 +77,7 @@ enum WindowModeScreenshotRenderer {
         _ view: NSView,
         rootView: NSView,
         inheritedAlpha: CGFloat,
+        metalSnapshots: [ObjectIdentifier: CGImage],
         in context: CGContext
     ) {
         guard !view.isHidden else { return }
@@ -84,9 +87,12 @@ enum WindowModeScreenshotRenderer {
             : rootView.convert(view.bounds, from: view)
         context.saveGState()
         context.setAlpha(alpha)
-        if let metalImage = NijigenerateViewFactory.snapshotImage(view) {
+        if let metalImage = metalSnapshots[ObjectIdentifier(view)] {
             context.interpolationQuality = .high
             context.draw(metalImage, in: destination)
+        } else if metalSnapshots.isEmpty, let cachedImage = cachedImage(of: view) {
+            context.interpolationQuality = .high
+            context.draw(cachedImage, in: destination)
         } else if let imageView = view as? NSImageView,
                   let image = imageView.image.flatMap(cgImage)
         {
@@ -96,9 +102,38 @@ enum WindowModeScreenshotRenderer {
             drawView(view, in: destination, context: context)
         }
         context.restoreGState()
+        guard !metalSnapshots.isEmpty else { return }
         for subview in view.subviews {
-            drawHierarchy(subview, rootView: rootView, inheritedAlpha: alpha, in: context)
+            drawHierarchy(
+                subview,
+                rootView: rootView,
+                inheritedAlpha: alpha,
+                metalSnapshots: metalSnapshots,
+                in: context
+            )
         }
+    }
+
+    @MainActor
+    private static func metalSnapshots(in view: NSView) -> [ObjectIdentifier: CGImage] {
+        var snapshots: [ObjectIdentifier: CGImage] = [:]
+        func collect(_ candidate: NSView) {
+            if let image = NijigenerateViewFactory.snapshotImage(candidate) {
+                snapshots[ObjectIdentifier(candidate)] = image
+            }
+            candidate.subviews.forEach(collect)
+        }
+        collect(view)
+        return snapshots
+    }
+
+    @MainActor
+    private static func cachedImage(of view: NSView) -> CGImage? {
+        guard !view.bounds.isEmpty,
+              let representation = view.bitmapImageRepForCachingDisplay(in: view.bounds)
+        else { return nil }
+        view.cacheDisplay(in: view.bounds, to: representation)
+        return representation.cgImage
     }
 
     @MainActor

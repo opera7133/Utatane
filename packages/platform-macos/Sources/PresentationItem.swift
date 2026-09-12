@@ -8,7 +8,7 @@ protocol PresentationHosting: AnyObject {
     func makeItem(
         kind: PresentationItemKind,
         title: String,
-        onMove: @escaping (NSPoint) -> Void,
+        onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void,
         onCancel: (() -> Void)?
     ) -> any PresentationItem
 
@@ -22,6 +22,11 @@ extension PresentationHosting {
 enum PresentationItemKind {
     case surface
     case balloon
+}
+
+enum PresentationItemMoveReason {
+    case movement
+    case rehost
 }
 
 /// The presentation operations shared by independent desktop windows and
@@ -171,13 +176,13 @@ final class DesktopPresentationHost: PresentationHosting {
     func makeItem(
         kind: PresentationItemKind,
         title: String,
-        onMove: @escaping (NSPoint) -> Void,
+        onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void,
         onCancel: (() -> Void)?
     ) -> any PresentationItem {
         let window = FloatingContentWindow(
             title: title,
             visibleFrames: { [geometryProvider] in geometryProvider.visibleFrames },
-            onMove: onMove
+            onMove: { origin in onMove(origin, .movement) }
         )
         window.backgroundColor = .clear
         window.isOpaque = false
@@ -571,13 +576,13 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     func makeItem(
         kind: PresentationItemKind,
         title: String,
-        onMove: @escaping (NSPoint) -> Void,
+        onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void,
         onCancel: (() -> Void)?
     ) -> any PresentationItem {
         let item = WindowModePresentationItem(
             host: self,
             hasShadow: kind == .balloon,
-            onMove: onMove
+            onMove: { origin in onMove(origin, .movement) }
         )
         if let onCancel {
             (window as? WindowModeStageWindow)?.cancelHandlers.append(onCancel)
@@ -985,7 +990,7 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
     private struct ItemDescriptor {
         let kind: PresentationItemKind
         let title: String
-        let onMove: (NSPoint) -> Void
+        let onMove: (NSPoint, PresentationItemMoveReason) -> Void
         let onCancel: (() -> Void)?
     }
 
@@ -1015,7 +1020,7 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
     func makeItem(
         kind: PresentationItemKind,
         title: String,
-        onMove: @escaping (NSPoint) -> Void,
+        onMove: @escaping (NSPoint, PresentationItemMoveReason) -> Void,
         onCancel: (() -> Void)?
     ) -> any PresentationItem {
         let handle = PresentationItemHandle(descriptor: ItemDescriptor(
@@ -1139,7 +1144,7 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
                 newBacking.show(activating: false)
             }
             isRehosting = false
-            descriptor.onMove(appliedOrigin)
+            descriptor.onMove(appliedOrigin, .rehost)
         }
 
         func setContentSize(_ size: NSSize) {
@@ -1201,10 +1206,10 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
             return host.makeItem(
                 kind: descriptor.kind,
                 title: descriptor.title,
-                onMove: { [weak self] origin in
+                onMove: { [weak self] origin, _ in
                     guard let self, !isRehosting else { return }
                     originsByCoordinateSpace[coordinateSpace] = origin
-                    descriptor.onMove(origin)
+                    descriptor.onMove(origin, .movement)
                 },
                 onCancel: descriptor.onCancel
             )

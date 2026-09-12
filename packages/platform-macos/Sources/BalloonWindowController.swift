@@ -553,7 +553,7 @@ public final class BalloonWindowController {
         let item = presentationHost.makeItem(
             kind: .balloon,
             title: "Ghost Balloon \(scope)",
-            onMove: { [positionStore, geometryProvider, scope] origin in
+            onMove: { [positionStore, geometryProvider, scope] origin, _ in
                 positionStore.save(
                     origin,
                     for: .balloon,
