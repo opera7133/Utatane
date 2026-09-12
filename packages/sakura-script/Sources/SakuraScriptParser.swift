@@ -249,6 +249,25 @@ public struct SakuraScriptParser: Sendable {
                     }
                 } else if index + 1 < characters.count,
                           characters[index] == "_",
+                          characters[index + 1] == "v"
+                {
+                    index += 2
+                    if let argument = bracketArgument(in: characters, index: &index) {
+                        let arguments = splitArguments(argument)
+                        if arguments.count == 1, arguments[0].lowercased() == "disable" {
+                            tokens.append(.voiceMode(.disabled))
+                        } else if arguments.count == 2,
+                                  arguments[0].lowercased() == "alternate"
+                        {
+                            tokens.append(.voiceMode(.alternate(arguments[1])))
+                        } else {
+                            tokens.append(.unknown("\\__v[\(argument)]"))
+                        }
+                    } else {
+                        tokens.append(.voiceMode(.defaultValue))
+                    }
+                } else if index + 1 < characters.count,
+                          characters[index] == "_",
                           characters[index + 1] == "w"
                 {
                     index += 2
@@ -684,6 +703,11 @@ public struct SakuraScriptParser: Sendable {
                               arguments[1].lowercased() == "browser"
                     {
                         tokens.append(.open(arguments[2]))
+                    } else if arguments.count == 2,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "backlogviewer"
+                    {
+                        tokens.append(.open(arguments[1]))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "sound"
                     {

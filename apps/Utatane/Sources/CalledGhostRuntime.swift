@@ -26,6 +26,10 @@ final class CalledGhostRuntime {
     private let presentationGeometry: any PresentationGeometryProviding
     private let textInputWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
+    private let speechHistoryStore: SpeechHistoryStore
+    private let speechHistoryWindowController: SpeechHistoryWindowController
+    private let speechHistoryPresenter: SpeechHistoryPresenter?
+    private var integratesSpeechHistory: Bool
     private var weatherTask: Task<Void, Never>?
     private var sntpCoordinator: SNTPEventCoordinator?
     private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
@@ -56,6 +60,8 @@ final class CalledGhostRuntime {
         personalityEngine: any PersonalityEngine,
         characterDelayMilliseconds: Int,
         dialogueDismissalMilliseconds: Int,
+        speechHistoryStore: SpeechHistoryStore,
+        integratesSpeechHistory: Bool,
         presentationSession: GhostPresentationSession? = nil,
         presentationGeometry: any PresentationGeometryProviding = SystemPresentationGeometryProvider()
     ) throws {
@@ -63,6 +69,23 @@ final class CalledGhostRuntime {
         self.ghost = ghost
         self.shellLoader = shellLoader
         self.selectionStore = selectionStore
+        self.speechHistoryStore = speechHistoryStore
+        speechHistoryWindowController = SpeechHistoryWindowController(store: speechHistoryStore)
+        let historyContext = SpeechHistoryContext(
+            ghostIdentifier: ghost.id.path,
+            ghostName: ghost.name,
+            speakerNames: Dictionary(uniqueKeysWithValues: ghost.characters.compactMap { character in
+                character.name.map { (character.scope, $0) }
+            })
+        )
+        speechHistoryPresenter = presentationSession.map {
+            SpeechHistoryPresenter(
+                store: speechHistoryStore,
+                context: historyContext,
+                presentationSession: $0
+            )
+        }
+        self.integratesSpeechHistory = integratesSpeechHistory
         self.presentationSession = presentationSession
         self.presentationGeometry = effectivePresentationGeometry
         propertySystem = PropertySystem(configuration: .init(
@@ -127,6 +150,10 @@ final class CalledGhostRuntime {
             directoryHint: .isDirectory
         ))
         let mainName = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+        player.configureSpeechHistory(
+            store: speechHistoryStore,
+            context: historyContext
+        )
         player.configure(environmentVariables: [
             "selfname": mainName,
             "selfname2": mainName,
@@ -323,7 +350,27 @@ final class CalledGhostRuntime {
         player.cancel()
         surfaceController.resetContent()
         balloonController.resetContent()
+        speechHistoryPresenter?.discard()
+        speechHistoryWindowController.close()
         return finalScript
+    }
+
+    func setIntegratesSpeechHistory(_ integrates: Bool) {
+        integratesSpeechHistory = integrates
+        if !integrates {
+            speechHistoryPresenter?.hide()
+        }
+    }
+
+    func showSpeechHistory() {
+        if integratesSpeechHistory, speechHistoryPresenter?.show() == true {
+            speechHistoryWindowController.close()
+            return
+        }
+        speechHistoryWindowController.show(
+            ghostIdentifier: ghost.id.path,
+            ghostName: ghost.name
+        )
     }
 
     func select(shell newShell: InstalledShell) {
@@ -502,7 +549,11 @@ final class CalledGhostRuntime {
         player.onChoiceTimeout = { [weak self] script in
             self?.send(.shiori(id: "OnChoiceTimeout", references: [0: script]))
         }
-        player.onOpen = { target in
+        player.onOpen = { [weak self] target in
+            if target.caseInsensitiveCompare("backlogviewer") == .orderedSame {
+                self?.showSpeechHistory()
+                return
+            }
             guard let url = URL(string: target),
                   let scheme = url.scheme?.lowercased(),
                   ["http", "https"].contains(scheme)

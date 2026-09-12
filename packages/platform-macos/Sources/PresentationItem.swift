@@ -22,6 +22,7 @@ extension PresentationHosting {
 enum PresentationItemKind {
     case surface
     case balloon
+    case speechHistory
 }
 
 enum PresentationItemMoveReason {
@@ -541,6 +542,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     }
 
     func windowDidResize(_ notification: Notification) {
+        layoutSpeechHistoryItems()
         persistState()
     }
 
@@ -573,6 +575,16 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         )
     }
 
+    private func layoutSpeechHistoryItems() {
+        let bounds = rootView.bounds.insetBy(dx: 16, dy: 16)
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        for item in items where item.kind == .speechHistory {
+            let width = min(380, bounds.width)
+            item.setContentSize(NSSize(width: width, height: bounds.height))
+            item.setFrameOrigin(NSPoint(x: bounds.maxX - width, y: bounds.minY))
+        }
+    }
+
     func makeItem(
         kind: PresentationItemKind,
         title: String,
@@ -581,6 +593,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     ) -> any PresentationItem {
         let item = WindowModePresentationItem(
             host: self,
+            kind: kind,
             hasShadow: kind == .balloon,
             onMove: { origin in onMove(origin, .movement) }
         )
@@ -589,6 +602,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         }
         item.containerView.setAccessibilityLabel(title)
         items.append(item)
+        layoutSpeechHistoryItems()
         return item
     }
 
@@ -598,6 +612,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         }
         rootView.bringTransientControlsToFront()
         item.containerView.isHidden = false
+        layoutSpeechHistoryItems()
         if activating {
             window.makeKeyAndOrderFront(nil)
         } else {
@@ -832,16 +847,19 @@ private final class WindowModePresentationGeometryProvider: PresentationGeometry
 @MainActor
 private final class WindowModePresentationItem: PresentationItem {
     weak var host: WindowModePresentationHost?
+    let kind: PresentationItemKind
     let containerView = NSView(frame: .zero)
     private let onMove: (NSPoint) -> Void
     private var placementPolicy = FloatingWindowPlacementPolicy.free
 
     init(
         host: WindowModePresentationHost,
+        kind: PresentationItemKind,
         hasShadow: Bool,
         onMove: @escaping (NSPoint) -> Void
     ) {
         self.host = host
+        self.kind = kind
         self.onMove = onMove
         containerView.wantsLayer = true
         containerView.layer?.shadowOpacity = hasShadow ? 0.28 : 0
@@ -1068,6 +1086,8 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
         private var isRehosting = false
         private var placementPolicy = FloatingWindowPlacementPolicy.free
         private var staysOnTop = true
+        private var wantsVisibility = false
+        private var coordinateSpace: PresentationCoordinateSpace = .desktop
         private var originsByCoordinateSpace: [PresentationCoordinateSpace: NSPoint] = [:]
 
         init(descriptor: ItemDescriptor) {
@@ -1107,6 +1127,7 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
         }
 
         func attach(to host: any PresentationHosting) {
+            coordinateSpace = host.geometryProvider.coordinateSpace
             backing = makeBacking(host: host)
         }
 
@@ -1125,13 +1146,13 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
 
             let oldFrame = oldBacking.frame
             originsByCoordinateSpace[oldCoordinateSpace] = oldFrame.origin
-            let wasVisible = oldBacking.isVisible
             let contentView = oldBacking.contentView
             let alpha = oldBacking.alphaValue
             oldBacking.contentView = nil
             oldBacking.discard()
 
             let newBacking = makeBacking(host: host)
+            coordinateSpace = newCoordinateSpace
             backing = newBacking
             newBacking.contentView = contentView
             newBacking.setContentSize(oldFrame.size)
@@ -1146,7 +1167,7 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
             newBacking.setFrameOrigin(destinationOrigin)
             let appliedOrigin = newBacking.frame.origin
             originsByCoordinateSpace[newCoordinateSpace] = appliedOrigin
-            if wasVisible {
+            if wantsVisibility, supportsPresentation(in: newCoordinateSpace) {
                 newBacking.show(activating: false)
             }
             isRehosting = false
@@ -1166,10 +1187,13 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
         }
 
         func show(activating: Bool) {
+            wantsVisibility = true
+            guard supportsPresentation(in: coordinateSpace) else { return }
             backing?.show(activating: activating)
         }
 
         func hide() {
+            wantsVisibility = false
             backing?.hide()
         }
 
@@ -1203,8 +1227,13 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
         }
 
         func discard() {
+            wantsVisibility = false
             backing?.discard()
             backing = nil
+        }
+
+        private func supportsPresentation(in coordinateSpace: PresentationCoordinateSpace) -> Bool {
+            descriptor.kind != .speechHistory || coordinateSpace != .desktop
         }
 
         private func makeBacking(host: any PresentationHosting) -> any PresentationItem {

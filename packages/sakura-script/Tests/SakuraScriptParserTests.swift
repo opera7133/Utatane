@@ -143,6 +143,21 @@ func `parses double-underscore millisecond wait`() {
 }
 
 @Test
+func `parses backlog and voice text modes`() {
+    #expect(SakuraScriptParser().parse(
+        #"通常\__v[disable]記録しない\__v\__v[alternate,"読み,代替"]表示\__v"#
+    ) == [
+        .text("通常"),
+        .voiceMode(.disabled),
+        .text("記録しない"),
+        .voiceMode(.defaultValue),
+        .voiceMode(.alternate("読み,代替")),
+        .text("表示"),
+        .voiceMode(.defaultValue)
+    ])
+}
+
+@Test
 func `parses a named surface alias`() {
     #expect(SakuraScriptParser().parse("\\s[smile]") == [.namedSurface("smile")])
 }
@@ -195,6 +210,13 @@ func `parses browser commands`() {
     #expect(SakuraScriptParser().parse(#"\j[https://example.com/]\![open,browser,https://example.net/]"#) == [
         .open("https://example.com/"),
         .open("https://example.net/")
+    ])
+}
+
+@Test
+func `parses the SSP backlog viewer command`() {
+    #expect(SakuraScriptParser().parse(#"\![open,backlogviewer]"#) == [
+        .open("backlogviewer")
     ])
 }
 

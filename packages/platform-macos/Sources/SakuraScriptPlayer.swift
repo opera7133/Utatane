@@ -36,6 +36,8 @@ public final class SakuraScriptPlayer {
     private var activatedLinkKind: BalloonTextLink.Kind?
     private var preventsUserBreak = false
     private var interactionMode: SakuraScriptInteractionMode?
+    private var speechHistoryStore: SpeechHistoryStore?
+    private var speechHistoryContext: SpeechHistoryContext?
 
     public private(set) var isTimeCritical = false
 
@@ -87,6 +89,14 @@ public final class SakuraScriptPlayer {
 
     public var canTalk: Bool {
         !isDialogueActive && interactionMode == nil
+    }
+
+    public func configureSpeechHistory(
+        store: SpeechHistoryStore?,
+        context: SpeechHistoryContext?
+    ) {
+        speechHistoryStore = store
+        speechHistoryContext = context
     }
 
     public init(
@@ -360,6 +370,21 @@ public final class SakuraScriptPlayer {
             }
         }
         var scope = 0
+        var speechHistoryRecorder: SpeechHistoryRecorder? = {
+            guard let speechHistoryStore, let speechHistoryContext else { return nil }
+            return SpeechHistoryRecorder(
+                store: speechHistoryStore,
+                context: speechHistoryContext,
+                initialScope: scope,
+                surfaceID: { [weak surfaceWindowController] scope in
+                    surfaceWindowController?.surfaceID(for: scope)
+                },
+                thumbnailPNGData: { [weak surfaceWindowController] scope in
+                    guard let image = surfaceWindowController?.renderedImage(for: scope) else { return nil }
+                    return SpeechHistoryThumbnail.pngData(from: image)
+                }
+            )
+        }()
         let previousContent = continuesPreviousDialogue
             ? balloonWindowController.contentSnapshots(scopes: balloonWindowController.visibleScopes)
             : [:]
@@ -533,6 +558,7 @@ public final class SakuraScriptPlayer {
         }
 
         defer {
+            speechHistoryRecorder?.finish()
             isWaitingForClick = false
             balloonWindowController.setWaitingForClick(false)
             for lockedScope in repaintLockedScopes.subtracting(manualRepaintScopes) {
@@ -597,6 +623,7 @@ public final class SakuraScriptPlayer {
                                 surfaceWindowController.playTalkAnimation(scope: targetScope)
                             }
                         }
+                        speechHistoryRecorder?.append(character)
                         if !fastForwardRequested, !isQuickSection {
                             try await sleep(milliseconds: currentCharacterDelayMilliseconds)
                         }
@@ -606,6 +633,7 @@ public final class SakuraScriptPlayer {
                     if newScope != scope, talkingScopes.remove(scope) != nil {
                         await surfaceWindowController.playIntervalAnimationAndWait("endtalk", scope: scope)
                     }
+                    speechHistoryRecorder?.setScope(newScope)
                     scope = newScope
                 case let .surface(surfaceID):
                     try surfaceWindowController.changeSurface(scope: scope, to: surfaceID)
@@ -805,6 +833,7 @@ public final class SakuraScriptPlayer {
                         textStyleByScope[targetScope, default: BalloonTextStyle()].paragraphIndent = nil
                         textStyleByScope[targetScope, default: BalloonTextStyle()].paragraphSpacingBefore = nil
                     }
+                    speechHistoryRecorder?.appendLineBreak()
                 case let .cursorMove(x, y):
                     let targets = synchronizedScopes?.sorted() ?? [scope]
                     for targetScope in targets {
@@ -1077,6 +1106,8 @@ public final class SakuraScriptPlayer {
                     }
                 case let .quickSection(enabled):
                     isQuickSection = enabled ?? !isQuickSection
+                case let .voiceMode(mode):
+                    speechHistoryRecorder?.setMode(mode)
                 case let .synchronizeScopes(scopes):
                     if let scopes {
                         synchronizedScopes = Set(scopes)

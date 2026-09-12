@@ -472,6 +472,51 @@ func `presentation coordinator reparents live views between desktop and window m
 
 @Test
 @MainActor
+func `speech history is presented only inside a window mode stage and stays snapped right`() {
+    let desktopGeometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 760),
+            bitsPerPixel: 32,
+            scale: 2,
+            isPrimary: true
+        )
+    ])
+    let coordinator = PresentationHostCoordinator(
+        initialHost: DesktopPresentationHost(geometryProvider: desktopGeometry)
+    )
+    let item = coordinator.makeItem(
+        kind: .speechHistory,
+        title: "history",
+        onMove: { _, _ in },
+        onCancel: nil
+    )
+    defer { item.discard() }
+    item.contentView = NSView()
+    item.setContentSize(NSSize(width: 380, height: 500))
+    item.show(activating: false)
+    #expect(!item.isVisible)
+
+    let firstStage = WindowModePresentationHost(contentSize: NSSize(width: 640, height: 480))
+    coordinator.switchHost(to: firstStage)
+    #expect(item.isVisible)
+    #expect(item.frame == NSRect(x: 244, y: 16, width: 380, height: 448))
+
+    firstStage.window.setContentSize(NSSize(width: 800, height: 600))
+    #expect(item.frame == NSRect(x: 404, y: 16, width: 380, height: 568))
+
+    coordinator.switchHost(to: DesktopPresentationHost(geometryProvider: desktopGeometry))
+    #expect(!item.isVisible)
+    #expect(!firstStage.window.isVisible)
+
+    let secondStage = WindowModePresentationHost(contentSize: NSSize(width: 700, height: 500))
+    coordinator.switchHost(to: secondStage)
+    #expect(item.isVisible)
+    #expect(item.frame == NSRect(x: 304, y: 16, width: 380, height: 468))
+}
+
+@Test
+@MainActor
 func `switching presentation modes restores each coordinate space and retires old stages`() {
     let desktopGeometry = MutablePresentationGeometryProvider(screens: [
         PresentationScreenGeometry(
@@ -1211,6 +1256,72 @@ func `renders synchronized text and line breaks in both scopes`() async throws {
 
     #expect(balloonController.textAndLinks(for: 0)?.0 == "前同期\n後")
     #expect(balloonController.textAndLinks(for: 1)?.0 == "同期\n")
+}
+
+@Test
+@MainActor
+func `records displayed speech using backlog voice modes`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0001.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloonk0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    let shell = ShellDefinition(directory: directory, surfaces: [:])
+    try surfaceController.show(shell: shell, scope: 0, surfaceID: 0)
+    try surfaceController.show(shell: shell, scope: 1, surfaceID: 1)
+    defer { surfaceController.resetContent() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    defer { balloonController.resetContent() }
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    let history = SpeechHistoryStore()
+    player.configureSpeechHistory(
+        store: history,
+        context: SpeechHistoryContext(
+            ghostIdentifier: "test-ghost",
+            ghostName: "テストゴースト",
+            speakerNames: [0: "さくら", 1: "うにゅう"]
+        )
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\0表示\__v[disable]除外\__v\__v[alternate,代替]見た目\__v終端\1相手\n二行目\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(history.entries.map(\.scope) == [0, 1])
+    #expect(history.entries.map(\.speakerName) == ["さくら", "うにゅう"])
+    #expect(history.entries.map(\.surfaceID) == [0, 1])
+    #expect(history.entries.allSatisfy { $0.thumbnailPNGData != nil })
+    #expect(history.entries.map(\.text) == ["表示代替終端", "相手\n二行目"])
+}
+
+@Test
+@MainActor
+func `speech history keeps its newest entries within capacity`() {
+    let history = SpeechHistoryStore(capacityPerGhost: 2)
+    for index in 0 ..< 3 {
+        history.append(SpeechHistoryEntry(
+            ghostIdentifier: "test-ghost",
+            ghostName: "テストゴースト",
+            scope: 0,
+            speakerName: "さくら",
+            surfaceID: 0,
+            text: "発話\(index)"
+        ))
+    }
+
+    #expect(history.entries.map(\.text) == ["発話1", "発話2"])
 }
 
 @Test

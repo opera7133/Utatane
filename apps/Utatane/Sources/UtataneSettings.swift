@@ -70,6 +70,7 @@ final class UtataneSettingsStore: ObservableObject {
         static let appearance = "general.appearance"
         static let windowMode = "general.windowMode"
         static let lastWindowModeLayout = "general.lastWindowModeLayout"
+        static let integratesSpeechHistoryInWindowMode = "general.integratesSpeechHistoryInWindowMode"
         static let appLanguage = "general.appLanguage"
         static let defaultBalloonDirectoryName = "general.defaultBalloonDirectoryName"
         static let characterDelayMilliseconds = "talk.characterDelayMilliseconds"
@@ -125,6 +126,15 @@ final class UtataneSettingsStore: ObservableObject {
             if windowMode != .off {
                 defaults.set(windowMode.rawValue, forKey: Key.lastWindowModeLayout)
             }
+        }
+    }
+
+    @Published var integratesSpeechHistoryInWindowMode: Bool {
+        didSet {
+            defaults.set(
+                integratesSpeechHistoryInWindowMode,
+                forKey: Key.integratesSpeechHistoryInWindowMode
+            )
         }
     }
 
@@ -287,6 +297,9 @@ final class UtataneSettingsStore: ObservableObject {
         if resolvedWindowMode != .off {
             defaults.set(resolvedWindowMode.rawValue, forKey: Key.lastWindowModeLayout)
         }
+        integratesSpeechHistoryInWindowMode = defaults.object(
+            forKey: Key.integratesSpeechHistoryInWindowMode
+        ) as? Bool ?? true
         let loadedAppLanguage = AppLanguage(
             rawValue: defaults.string(forKey: Key.appLanguage) ?? ""
         ) ?? .system
@@ -495,6 +508,11 @@ struct UtataneSettingsView: View {
                         Text("全ゴーストをまとめて1枚").tag(GhostWindowMode.shared)
                         Text("ゴーストごとに1枚").tag(GhostWindowMode.perGhost)
                     }
+                    Toggle(
+                        "発話履歴をウィンドウ内に表示",
+                        isOn: $settings.integratesSpeechHistoryInWindowMode
+                    )
+                    .disabled(settings.windowMode == .off)
                     Text("ゴーストとバルーンを通常の1枚のウィンドウ内に表示する。配信や画面収録でウィンドウ単位に取り込みやすくなる。")
                         .font(.caption)
                         .foregroundStyle(.secondary)

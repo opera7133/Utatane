@@ -55,6 +55,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case setProperty(property: String, value: String)
     case font(name: String, arguments: [String])
     case quickSection(Bool?)
+    case voiceMode(SakuraScriptVoiceMode)
     case synchronizeScopes([Int]?)
     case onlineMode(Bool)
     case noUserBreakMode(Bool)
@@ -105,6 +106,12 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case clearAll
     case end
     case unknown(String)
+}
+
+public enum SakuraScriptVoiceMode: Sendable, Equatable {
+    case defaultValue
+    case disabled
+    case alternate(String)
 }
 
 public struct SakuraScriptSystemDialogCommand: Sendable, Equatable {

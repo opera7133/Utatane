@@ -34,6 +34,7 @@ private extension Notification.Name {
     static let showUtataneGhostPicker = Notification.Name("dev.utatane.showGhostPicker")
     static let showUtataneCalendar = Notification.Name("dev.utatane.showCalendar")
     static let restoreUtataneSurfaces = Notification.Name("dev.utatane.restoreSurfaces")
+    static let showUtataneSpeechHistory = Notification.Name("dev.utatane.showSpeechHistory")
 }
 
 @main
@@ -47,6 +48,8 @@ struct UtataneApp: App {
     private let balloonWindowController: BalloonWindowController
     private let balloonLoader: BalloonLoader
     private let scriptPlayer: SakuraScriptPlayer
+    private let speechHistoryStore: SpeechHistoryStore
+    private let speechHistoryWindowController: SpeechHistoryWindowController
     private let selectionStore: ContentSelectionStore
     private let sstpServer: SSTPServer
     private let statusWindowController: StatusWindowController
@@ -81,6 +84,7 @@ struct UtataneApp: App {
             positionStore: positionStore,
             presentationSession: mainPresentationSession
         )
+        let speechHistoryStore = SpeechHistoryStore()
         let repository = OverlayGhostRepository(repositories: ContentRoot.ghostReadDirectories.map {
             FileSystemGhostRepository(rootDirectory: $0)
         })
@@ -88,6 +92,8 @@ struct UtataneApp: App {
         shellLoader = ShellLoader()
         self.surfaceWindowController = surfaceWindowController
         self.balloonWindowController = balloonWindowController
+        self.speechHistoryStore = speechHistoryStore
+        speechHistoryWindowController = SpeechHistoryWindowController(store: speechHistoryStore)
         balloonLoader = BalloonLoader()
         selectionStore = ContentSelectionStore()
         sstpServer = SSTPServer()
@@ -128,6 +134,8 @@ struct UtataneApp: App {
                 balloonWindowController: balloonWindowController,
                 balloonLoader: balloonLoader,
                 scriptPlayer: scriptPlayer,
+                speechHistoryStore: speechHistoryStore,
+                speechHistoryWindowController: speechHistoryWindowController,
                 selectionStore: selectionStore,
                 sstpServer: sstpServer,
                 statusWindowController: statusWindowController,
@@ -169,6 +177,10 @@ struct UtataneApp: App {
                     NotificationCenter.default.post(name: .restoreUtataneSurfaces, object: nil)
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
+                Button("発話履歴") {
+                    NotificationCenter.default.post(name: .showUtataneSpeechHistory, object: nil)
+                }
+                .keyboardShortcut("h", modifiers: [.command, .shift])
                 Picker("ウィンドウモード", selection: $networkSettings.windowMode) {
                     Text("切").tag(GhostWindowMode.off)
                     Text("全ゴーストをまとめて1枚").tag(GhostWindowMode.shared)
@@ -233,6 +245,8 @@ private struct UtataneRootView: View {
     let balloonWindowController: BalloonWindowController
     let balloonLoader: BalloonLoader
     let scriptPlayer: SakuraScriptPlayer
+    let speechHistoryStore: SpeechHistoryStore
+    let speechHistoryWindowController: SpeechHistoryWindowController
     let selectionStore: ContentSelectionStore
     let sstpServer: SSTPServer
     let statusWindowController: StatusWindowController
@@ -301,6 +315,7 @@ private struct UtataneRootView: View {
     @State private var systemInputMonitor = SystemInputEventMonitor()
     @State private var systemLoadDetector = SystemLoadTransitionDetector()
     @State private var realtimeVoiceWindowController: RealtimeVoiceWindowController?
+    @State private var speechHistoryPresenter: SpeechHistoryPresenter?
     @State private var calendarWindowController = CalendarWindowController(
         storeURL: ContentRoot.calendarSchedulesURL,
         skinDirectories: ContentRoot.calendarSkinReadDirectories
@@ -441,14 +456,30 @@ private struct UtataneRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .restoreUtataneSurfaces)) { _ in
             surfaceWindowController.restoreSurfaces()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showUtataneSpeechHistory)) { _ in
+            showSpeechHistory()
+        }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "display-settings", id: "\(networkSettings.shellScalePercent)-\(networkSettings.automaticallyFitsLargeSurfaces)-\(networkSettings.balloonScalePercent)-\(networkSettings.linksBalloonScale)-\(networkSettings.balloonTextScalePercent)-\(networkSettings.locksShellToDesktopBottom)-\(networkSettings.keepsShellOnScreen)") {
             configureDisplay()
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "appearance", id: networkSettings.appearance) {
             applyAppearance()
         }
-        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "window-mode", id: networkSettings.windowMode) {
+        .applicationRuntimeTask(
+            in: applicationDelegate.runtimeTasks,
+            key: "window-mode",
+            id: "\(networkSettings.windowMode.rawValue)-\(networkSettings.integratesSpeechHistoryInWindowMode)"
+        ) {
+            let integratesHistory = networkSettings.windowMode != .off
+                && networkSettings.integratesSpeechHistoryInWindowMode
+            if !integratesHistory {
+                speechHistoryPresenter?.hide()
+                calledGhosts.values.forEach { $0.setIntegratesSpeechHistory(false) }
+            }
             presentationCoordinator.setMode(networkSettings.windowMode)
+            if integratesHistory {
+                calledGhosts.values.forEach { $0.setIntegratesSpeechHistory(true) }
+            }
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "random-talk", id: networkSettings.randomTalkIntervalMinutes) {
             let interval = networkSettings.randomTalkIntervalMinutes
@@ -1449,6 +1480,9 @@ private struct UtataneRootView: View {
         scriptPlayer.cancel()
         surfaceWindowController.resetContent()
         surfaceWindowController.setStartupPresentationHidden(true)
+        speechHistoryPresenter?.discard()
+        speechHistoryPresenter = nil
+        speechHistoryWindowController.close()
         session = nil
         balloon = nil
         currentGhost = ghost
@@ -1621,6 +1655,10 @@ private struct UtataneRootView: View {
                     calendarWindowController.showCalendar()
                     return
                 }
+                if target.caseInsensitiveCompare("backlogviewer") == .orderedSame {
+                    showSpeechHistory()
+                    return
+                }
                 guard let url = URL(string: target),
                       let scheme = url.scheme?.lowercased(),
                       ["http", "https"].contains(scheme)
@@ -1632,6 +1670,22 @@ private struct UtataneRootView: View {
                 directoryHint: .isDirectory
             ))
             let mainName = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+            let historyContext = SpeechHistoryContext(
+                ghostIdentifier: ghost.id.path,
+                ghostName: ghost.name,
+                speakerNames: Dictionary(uniqueKeysWithValues: ghost.characters.compactMap { character in
+                    character.name.map { (character.scope, $0) }
+                })
+            )
+            scriptPlayer.configureSpeechHistory(
+                store: speechHistoryStore,
+                context: historyContext
+            )
+            speechHistoryPresenter = SpeechHistoryPresenter(
+                store: speechHistoryStore,
+                context: historyContext,
+                presentationSession: mainPresentationSession
+            )
             scriptPlayer.configure(environmentVariables: [
                 "selfname": mainName,
                 "selfname2": mainName,
@@ -2867,6 +2921,9 @@ private struct UtataneRootView: View {
             scriptPlayer.cancel()
             surfaceWindowController.resetContent()
             balloonWindowController.resetContent()
+            speechHistoryPresenter?.discard()
+            speechHistoryPresenter = nil
+            speechHistoryWindowController.close()
             session = nil
             currentGhost = nil
             selectedShell = nil
@@ -2875,6 +2932,23 @@ private struct UtataneRootView: View {
             showGhostPicker(requiresSelection: true)
             configureContextMenu()
         }
+    }
+
+    private func showSpeechHistory() {
+        guard let currentGhost else {
+            NSSound.beep()
+            return
+        }
+        if networkSettings.integratesSpeechHistoryInWindowMode,
+           speechHistoryPresenter?.show() == true
+        {
+            speechHistoryWindowController.close()
+            return
+        }
+        speechHistoryWindowController.show(
+            ghostIdentifier: currentGhost.id.path,
+            ghostName: currentGhost.name
+        )
     }
 
     private func showGhostPicker(requiresSelection: Bool = false) {
@@ -3133,6 +3207,10 @@ private struct UtataneRootView: View {
                 .action(
                     title: String(localized: "カレンダー"),
                     handler: { calendarWindowController.showCalendar() }
+                ),
+                .action(
+                    title: String(localized: "発話履歴"),
+                    handler: { showSpeechHistory() }
                 ),
                 headlineMenu(),
                 pluginMenu(),
@@ -3485,6 +3563,7 @@ private struct UtataneRootView: View {
             ),
             .separator,
             .action(title: String(localized: "ランダムトーク"), handler: { runtime.send(.randomTalk) }),
+            .action(title: String(localized: "発話履歴"), handler: { runtime.showSpeechHistory() }),
             .action(title: String(localized: "ウインドウ位置を初期化"), handler: {
                 runtime.resetWindowPositions()
             }),
@@ -3521,6 +3600,9 @@ private struct UtataneRootView: View {
                     personalityEngine: personalityEngine(for: ghost),
                     characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
                     dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000,
+                    speechHistoryStore: speechHistoryStore,
+                    integratesSpeechHistory: networkSettings.windowMode != .off
+                        && networkSettings.integratesSpeechHistoryInWindowMode,
                     presentationSession: calledPresentationSession
                 )
                 runtime.onError = { showError($0.localizedDescription) }
