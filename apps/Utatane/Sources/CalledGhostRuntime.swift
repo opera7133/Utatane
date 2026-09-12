@@ -22,6 +22,7 @@ final class CalledGhostRuntime {
     private let weatherProvider = CurrentWeatherProvider()
     private let webSocketManager = WebSocketSessionManager()
     private let propertySystem: PropertySystem
+    private let presentationGeometry: any PresentationGeometryProviding
     private let textInputWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
     private var weatherTask: Task<Void, Never>?
@@ -53,15 +54,19 @@ final class CalledGhostRuntime {
         defaultBalloonDirectoryName: String?,
         personalityEngine: any PersonalityEngine,
         characterDelayMilliseconds: Int,
-        dialogueDismissalMilliseconds: Int
+        dialogueDismissalMilliseconds: Int,
+        presentationGeometry: any PresentationGeometryProviding = SystemPresentationGeometryProvider()
     ) throws {
         self.ghost = ghost
         self.shellLoader = shellLoader
         self.selectionStore = selectionStore
+        self.presentationGeometry = presentationGeometry
         propertySystem = PropertySystem(configuration: .init(
             basewareName: "Utatane",
             basewareVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
-            values: Self.propertyValues(for: ghost).merging(MacOSPropertySnapshot.values()) { current, _ in current }
+            values: Self.propertyValues(for: ghost).merging(
+                MacOSPropertySnapshot.values(geometryProvider: presentationGeometry)
+            ) { current, _ in current }
         ))
 
         guard let selectedShell = selectionStore.resolveShell(for: ghost) else {
@@ -79,11 +84,18 @@ final class CalledGhostRuntime {
 
         let positionStore = WindowPositionStore()
         positionStore.setContentID(ghost.id)
-        surfaceController = SurfaceWindowController(positionStore: positionStore)
-        balloonController = BalloonWindowController(positionStore: positionStore)
+        surfaceController = SurfaceWindowController(
+            positionStore: positionStore,
+            geometryProvider: presentationGeometry
+        )
+        balloonController = BalloonWindowController(
+            positionStore: positionStore,
+            geometryProvider: presentationGeometry
+        )
         player = SakuraScriptPlayer(
             surfaceWindowController: surfaceController,
-            balloonWindowController: balloonController
+            balloonWindowController: balloonController,
+            geometryProvider: presentationGeometry
         )
         session = GhostSession(
             personalityEngine: personalityEngine,
@@ -488,12 +500,16 @@ final class CalledGhostRuntime {
         }
         player.onPropertyValue = { [weak self] property in
             guard let self else { return nil }
-            await propertySystem.register(values: MacOSPropertySnapshot.values())
+            await propertySystem.register(values: MacOSPropertySnapshot.values(
+                geometryProvider: presentationGeometry
+            ))
             return try? await propertySystem.value(for: property)
         }
         player.onGetProperties = { [weak self] eventID, properties in
             guard let self else { return nil }
-            await propertySystem.register(values: MacOSPropertySnapshot.values())
+            await propertySystem.register(values: MacOSPropertySnapshot.values(
+                geometryProvider: presentationGeometry
+            ))
             let values = await propertySystem.values(for: properties)
             return try? await session.handle(event: .shiori(
                 id: eventID,

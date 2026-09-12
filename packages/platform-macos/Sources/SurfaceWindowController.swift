@@ -73,6 +73,7 @@ public final class SurfaceWindowController {
     private var shell: ShellDefinition?
     private let positionStore: WindowPositionStore
     private let dressupSelectionStore: DressupSelectionStore
+    private let geometryProvider: any PresentationGeometryProviding
     private var defaultSurfaceIDs: [Int: Int] = [:]
     private var enabledBindGroups: [Int: Set<Int>] = [:]
     private var presentationHidden = false
@@ -101,10 +102,12 @@ public final class SurfaceWindowController {
 
     public init(
         positionStore: WindowPositionStore = WindowPositionStore(),
-        dressupSelectionStore: DressupSelectionStore = DressupSelectionStore()
+        dressupSelectionStore: DressupSelectionStore = DressupSelectionStore(),
+        geometryProvider: any PresentationGeometryProviding = SystemPresentationGeometryProvider()
     ) {
         self.positionStore = positionStore
         self.dressupSelectionStore = dressupSelectionStore
+        self.geometryProvider = geometryProvider
     }
 
     public func setStayOnTop(_ stayOnTop: Bool) {
@@ -525,7 +528,7 @@ public final class SurfaceWindowController {
     }
 
     public func setZOrder(_ order: [String]) {
-        var previousWindowNumber: Int?
+        var previousCharacter: CharacterSurfaceController?
         for item in order {
             let scope: Int?
             if let directScope = Int(item) {
@@ -536,11 +539,11 @@ public final class SurfaceWindowController {
             } else {
                 scope = nil
             }
-            if let scope, let character = characters[scope], let windowNumber = character.windowNumber {
-                if let previousWindowNumber {
-                    character.orderAbove(relativeTo: previousWindowNumber)
+            if let scope, let character = characters[scope] {
+                if let previousCharacter {
+                    character.orderAbove(previousCharacter)
                 }
-                previousWindowNumber = windowNumber
+                previousCharacter = character
             }
         }
     }
@@ -676,6 +679,7 @@ public final class SurfaceWindowController {
         let character = CharacterSurfaceController(
             scope: scope,
             positionStore: positionStore,
+            geometryProvider: geometryProvider,
             displayScale: displayScale,
             automaticallyFitsLargeSurfaces: automaticallyFitsLargeSurfaces,
             locksToDesktopBottom: locksToDesktopBottom,
@@ -729,12 +733,13 @@ public final class SurfaceWindowController {
             for: .surface,
             scope: scope,
             windowSize: frame.size,
+            visibleFrames: geometryProvider.visibleFrames,
             constrainsToVisibleFrame: keepsOnScreen
         ) {
             character.setOrigin(restoredOrigin)
             return
         }
-        guard let visibleFrame = NSScreen.main?.visibleFrame else {
+        guard let visibleFrame = geometryProvider.mainScreen?.visibleFrame else {
             if let previousFrame = nearestVisibleFrame(before: scope) {
                 character.setOrigin(NSPoint(
                     x: previousFrame.minX - frame.width - spacing,
@@ -772,9 +777,10 @@ public final class SurfaceWindowController {
 private final class CharacterSurfaceController {
     private let scope: Int
     private let positionStore: WindowPositionStore
+    private let geometryProvider: any PresentationGeometryProviding
     private let imageLoader = SurfaceImageLoader()
     private let shellLoader = ShellLoader()
-    private var window: NSWindow?
+    private var item: (any PresentationItem)?
     private weak var imageView: SurfaceImageView?
     private weak var nijigenerateView: NSView?
     private var nijigenerateBaseSize: NSSize?
@@ -817,7 +823,7 @@ private final class CharacterSurfaceController {
 
     func setStayOnTop(_ stayOnTop: Bool) {
         self.stayOnTop = stayOnTop
-        window?.level = stayOnTop ? .floating : .normal
+        item?.setStaysOnTop(stayOnTop)
     }
 
     func setCollisionMode(_ enabled: Bool, showsNames: Bool) {
@@ -838,6 +844,7 @@ private final class CharacterSurfaceController {
     init(
         scope: Int,
         positionStore: WindowPositionStore,
+        geometryProvider: any PresentationGeometryProviding,
         displayScale: CGFloat,
         automaticallyFitsLargeSurfaces: Bool,
         locksToDesktopBottom: Bool,
@@ -845,6 +852,7 @@ private final class CharacterSurfaceController {
     ) {
         self.scope = scope
         self.positionStore = positionStore
+        self.geometryProvider = geometryProvider
         self.displayScale = displayScale
         self.automaticallyFitsLargeSurfaces = automaticallyFitsLargeSurfaces
         self.locksToDesktopBottom = locksToDesktopBottom
@@ -852,12 +860,12 @@ private final class CharacterSurfaceController {
     }
 
     var windowFrame: NSRect? {
-        window?.frame
+        item?.frame
     }
 
     var visibleWindowFrame: NSRect? {
-        guard window?.isVisible == true else { return nil }
-        return window?.frame
+        guard item?.isVisible == true else { return nil }
+        return item?.frame
     }
 
     var currentSurfaceID: Int? {
@@ -889,7 +897,7 @@ private final class CharacterSurfaceController {
     func setMovementLocked(_ locked: Bool) {
         isMovementLocked = locked
         imageView?.isMovementLocked = locked
-        (window as? FloatingContentWindow)?.setPlacementPolicy(.init(
+        item?.setPlacementPolicy(.init(
             edge: locked ? nil : effectiveDesktopEdge,
             keepsOnScreen: keepsOnScreen
         ))
@@ -922,16 +930,19 @@ private final class CharacterSurfaceController {
 
         let rendered = try render(surfaceID: surfaceID, shell: shell)
         automaticFitScale = automaticallyFitsLargeSurfaces
-            ? automaticSurfaceFitScale(imageSize: rendered.image.size, visibleSize: NSScreen.main?.visibleFrame.size)
+            ? automaticSurfaceFitScale(
+                imageSize: rendered.image.size,
+                visibleSize: geometryProvider.mainScreen?.visibleFrame.size
+            )
             : 1
         imageView = rendered.view
         updateImageViewCoordinateScale()
-        let window = window ?? makeWindow()
-        window.contentView = rendered.view
-        window.setContentSize(displaySize(for: rendered.image))
-        window.alphaValue = presentationAlpha
-        window.makeKeyAndOrderFront(nil)
-        self.window = window
+        let item = item ?? makePresentationItem()
+        item.contentView = rendered.view
+        item.setContentSize(displaySize(for: rendered.image))
+        item.alphaValue = presentationAlpha
+        item.show(activating: true)
+        self.item = item
         imageView = rendered.view
         nijigenerateView = nil
         nijigenerateBaseSize = nil
@@ -982,19 +993,19 @@ private final class CharacterSurfaceController {
         interactionView.frame = containerView.bounds
         containerView.addSubview(view)
         containerView.addSubview(interactionView)
-        let window = window ?? makeWindow()
-        window.contentView = containerView
-        window.setContentSize(size)
-        window.alphaValue = presentationAlpha
-        window.makeKeyAndOrderFront(nil)
+        let item = item ?? makePresentationItem()
+        item.contentView = containerView
+        item.setContentSize(size)
+        item.alphaValue = presentationAlpha
+        item.show(activating: true)
         if ProcessInfo.processInfo.environment["UTATANE_NIJIGENERATE_DIAGNOSTICS"] != nil {
             DispatchQueue.main.async {
                 NSLog(
                     "Utatane nijigenerate presentation: windowVisible=%d windowAlpha=%.3f windowOpaque=%d content=%@ metalFrame=%@ metalHidden=%d metalAlpha=%.3f layer=%@ superlayer=%@",
-                    window.isVisible,
-                    window.alphaValue,
-                    window.isOpaque,
-                    String(describing: type(of: window.contentView!)),
+                    item.isVisible,
+                    item.alphaValue,
+                    false,
+                    String(describing: type(of: item.contentView!)),
                     NSStringFromRect(view.frame),
                     view.isHidden,
                     view.alphaValue,
@@ -1003,7 +1014,7 @@ private final class CharacterSurfaceController {
                 )
             }
         }
-        self.window = window
+        self.item = item
         nijigenerateView = view
         nijigenerateBaseSize = baseSize
         imageView = interactionView
@@ -1027,13 +1038,13 @@ private final class CharacterSurfaceController {
             }
             return
         }
-        guard redraw, let shell, let baseSurfaceID, let window,
+        guard redraw, let shell, let baseSurfaceID, let item,
               let rendered = try? render(surfaceID: baseSurfaceID, shell: shell)
         else { return }
-        let origin = window.frame.origin
-        window.contentView = rendered.view
-        window.setContentSize(displaySize(for: rendered.image))
-        window.setFrameOrigin(origin)
+        let origin = item.frame.origin
+        item.contentView = rendered.view
+        item.setContentSize(displaySize(for: rendered.image))
+        item.setFrameOrigin(origin)
         imageView = rendered.view
         baseImage = rendered.image
         scheduleAutomaticAnimations()
@@ -1197,7 +1208,7 @@ private final class CharacterSurfaceController {
     }
 
     func changeSurface(to surfaceID: Int) throws {
-        guard let shell, let window else { return }
+        guard let shell, let item else { return }
         animationTask?.cancel()
         schedulerTask?.cancel()
         pausedAnimationIDs.removeAll()
@@ -1209,28 +1220,28 @@ private final class CharacterSurfaceController {
             baseSurfaceID = surfaceID
             applyNijigenerateParameters(for: surfaceID)
             if surfaceID < 0 {
-                window.orderOut(nil)
+                item.hide()
             } else {
                 imageView?.collisions = effectiveCollisions(
                     for: shell.surfaces[surfaceID],
                     shell: shell
                 )
-                window.orderFront(nil)
+                item.show(activating: false)
             }
             return
         }
 
         if surfaceID < 0 {
-            window.orderOut(nil)
+            item.hide()
             return
         }
 
-        let origin = window.frame.origin
+        let origin = item.frame.origin
         let rendered = try render(surfaceID: surfaceID, shell: shell)
-        window.contentView = rendered.view
-        window.setContentSize(displaySize(for: rendered.image))
-        window.setFrameOrigin(origin)
-        window.orderFront(nil)
+        item.contentView = rendered.view
+        item.setContentSize(displaySize(for: rendered.image))
+        item.setFrameOrigin(origin)
+        item.show(activating: false)
         imageView = rendered.view
         baseSurfaceID = surfaceID
         surfaceBaseImage = rendered.image
@@ -1296,11 +1307,11 @@ private final class CharacterSurfaceController {
         if nijigenerateView != nil, let baseSurfaceID {
             applyNijigenerateParameters(for: baseSurfaceID)
         }
-        window?.orderOut(nil)
+        item?.hide()
     }
 
     func restore() {
-        window?.orderFront(nil)
+        item?.show(activating: false)
         setPresentationHidden(false)
     }
 
@@ -1309,7 +1320,7 @@ private final class CharacterSurfaceController {
         if hidden {
             imageView?.cancelDrag()
         }
-        window?.alphaValue = presentationAlpha
+        item?.alphaValue = presentationAlpha
         if nijigenerateView != nil,
            ProcessInfo.processInfo.environment["UTATANE_NIJIGENERATE_DIAGNOSTICS"] != nil
         {
@@ -1318,7 +1329,7 @@ private final class CharacterSurfaceController {
                 hidden,
                 surfaceAlpha,
                 isDragging,
-                window?.alphaValue ?? -1
+                item?.alphaValue ?? -1
             )
         }
     }
@@ -1327,23 +1338,15 @@ private final class CharacterSurfaceController {
         if let alpha {
             surfaceAlpha = min(max(alpha, 0), 1)
         }
-        guard let window else { return }
+        guard let item else { return }
         let target = presentationAlpha
         guard durationMilliseconds > 0 else {
-            window.alphaValue = target
+            item.alphaValue = target
             return
         }
-        await withCheckedContinuation { continuation in
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = Double(durationMilliseconds) / 1000
-                context.timingFunction = CAMediaTimingFunction(name: .linear)
-                window.animator().alphaValue = target
-            } completionHandler: {
-                continuation.resume()
-            }
-        }
+        await item.animateAlphaValue(target, duration: Double(durationMilliseconds) / 1000)
         // Dragging or hiding may have changed while the animation was running.
-        window.alphaValue = presentationAlpha
+        item.alphaValue = presentationAlpha
     }
 
     private var presentationHidden = false
@@ -1355,21 +1358,21 @@ private final class CharacterSurfaceController {
     func setDisplayScale(_ scale: CGFloat) {
         guard displayScale != scale else { return }
         displayScale = scale
-        if let nijigenerateBaseSize, let window {
-            let origin = window.frame.origin
+        if let nijigenerateBaseSize, let item {
+            let origin = item.frame.origin
             let size = displaySize(forNijigenerateBaseSize: nijigenerateBaseSize)
-            window.setContentSize(size)
-            window.setFrameOrigin(origin)
+            item.setContentSize(size)
+            item.setFrameOrigin(origin)
             updateImageViewCoordinateScale()
             updateNijigenerateScale()
             return
         }
-        guard let shell, let baseSurfaceID, let window else { return }
-        let origin = window.frame.origin
+        guard let shell, let baseSurfaceID, let item else { return }
+        let origin = item.frame.origin
         guard let rendered = try? render(surfaceID: baseSurfaceID, shell: shell) else { return }
-        window.contentView = rendered.view
-        window.setContentSize(displaySize(for: rendered.image))
-        window.setFrameOrigin(origin)
+        item.contentView = rendered.view
+        item.setContentSize(displaySize(for: rendered.image))
+        item.setFrameOrigin(origin)
         imageView = rendered.view
         baseImage = rendered.image
         scheduleAutomaticAnimations()
@@ -1379,10 +1382,13 @@ private final class CharacterSurfaceController {
         automaticallyFitsLargeSurfaces = enabled
         guard let baseImage else { return }
         automaticFitScale = enabled
-            ? automaticSurfaceFitScale(imageSize: baseImage.size, visibleSize: NSScreen.main?.visibleFrame.size)
+            ? automaticSurfaceFitScale(
+                imageSize: baseImage.size,
+                visibleSize: geometryProvider.mainScreen?.visibleFrame.size
+            )
             : 1
-        guard let window else { return }
-        window.setContentSize(displaySize(for: baseImage))
+        guard let item else { return }
+        item.setContentSize(displaySize(for: baseImage))
         updateImageViewCoordinateScale()
     }
 
@@ -1393,52 +1399,35 @@ private final class CharacterSurfaceController {
     ) async {
         runtimeScaleX = horizontal
         runtimeScaleY = vertical
-        if let nijigenerateBaseSize, let window {
+        if let nijigenerateBaseSize, let item {
             imageView?.flipsHorizontally = horizontal < 0
             imageView?.flipsVertically = vertical < 0
             updateImageViewCoordinateScale()
             updateNijigenerateScale()
             let targetSize = displaySize(forNijigenerateBaseSize: nijigenerateBaseSize)
             guard durationMilliseconds > 0 else {
-                window.setContentSize(targetSize)
+                item.setContentSize(targetSize)
                 return
             }
-            await withCheckedContinuation { continuation in
-                NSAnimationContext.runAnimationGroup { context in
-                    context.duration = Double(durationMilliseconds) / 1000
-                    context.timingFunction = CAMediaTimingFunction(name: .linear)
-                    window.animator().setContentSize(targetSize)
-                } completionHandler: {
-                    continuation.resume()
-                }
-            }
+            await item.animateContentSize(targetSize, duration: Double(durationMilliseconds) / 1000)
             return
         }
-        guard let shell, let baseSurfaceID, let window,
+        guard let shell, let baseSurfaceID, let item,
               let rendered = try? render(surfaceID: baseSurfaceID, shell: shell)
         else { return }
-        let oldContentSize = window.contentView?.frame.size
-            ?? window.contentRect(forFrameRect: window.frame).size
+        let oldContentSize = item.contentView?.frame.size ?? item.contentSize
         rendered.view.frame = NSRect(origin: .zero, size: oldContentSize)
         rendered.view.autoresizingMask = [.width, .height]
-        window.contentView = rendered.view
+        item.contentView = rendered.view
         imageView = rendered.view
         baseImage = rendered.image
         let targetSize = displaySize(for: rendered.image)
         guard durationMilliseconds > 0 else {
-            window.setContentSize(targetSize)
+            item.setContentSize(targetSize)
             scheduleAutomaticAnimations()
             return
         }
-        await withCheckedContinuation { continuation in
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = Double(durationMilliseconds) / 1000
-                context.timingFunction = CAMediaTimingFunction(name: .linear)
-                window.animator().setContentSize(targetSize)
-            } completionHandler: {
-                continuation.resume()
-            }
-        }
+        await item.animateContentSize(targetSize, duration: Double(durationMilliseconds) / 1000)
         scheduleAutomaticAnimations()
     }
 
@@ -1446,7 +1435,7 @@ private final class CharacterSurfaceController {
         self.locksToDesktopBottom = locksToDesktopBottom
         self.keepsOnScreen = keepsOnScreen
         imageView?.locksVerticalMovement = locksToDesktopBottom
-        (window as? FloatingContentWindow)?.setPlacementPolicy(.init(
+        item?.setPlacementPolicy(.init(
             edge: effectiveDesktopEdge,
             keepsOnScreen: keepsOnScreen
         ))
@@ -1457,7 +1446,7 @@ private final class CharacterSurfaceController {
         imageView?.locksHorizontalMovement = [.left, .right].contains(alignment)
         imageView?.locksVerticalMovement = [.top, .bottom].contains(alignment)
             || (alignment == .defaultValue && locksToDesktopBottom)
-        (window as? FloatingContentWindow)?.setPlacementPolicy(.init(
+        item?.setPlacementPolicy(.init(
             edge: effectiveDesktopEdge,
             keepsOnScreen: keepsOnScreen
         ))
@@ -1704,42 +1693,35 @@ private final class CharacterSurfaceController {
     var onWindowMove: ((NSPoint) -> Void)?
 
     var windowNumber: Int? {
-        window?.windowNumber
+        item?.captureWindowNumber
     }
 
-    func orderAbove(relativeTo otherWindowNumber: Int) {
-        window?.order(.above, relativeTo: otherWindowNumber)
+    func orderAbove(_ other: CharacterSurfaceController) {
+        guard let item, let otherItem = other.item else { return }
+        item.orderAbove(otherItem)
     }
 
     func moveBy(delta: NSPoint) {
-        guard let window else { return }
-        let currentOrigin = window.frame.origin
-        window.setFrameOrigin(NSPoint(x: currentOrigin.x + delta.x, y: currentOrigin.y + delta.y))
+        guard let item else { return }
+        let currentOrigin = item.frame.origin
+        item.setFrameOrigin(NSPoint(x: currentOrigin.x + delta.x, y: currentOrigin.y + delta.y))
     }
 
     func center() {
-        window?.center()
+        item?.center()
     }
 
     func setOrigin(_ origin: NSPoint) {
-        window?.setFrameOrigin(origin)
+        item?.setFrameOrigin(origin)
     }
 
     func moveOrigin(to targetOrigin: NSPoint, durationMilliseconds: Int) async {
-        guard let window else { return }
+        guard let item else { return }
         guard durationMilliseconds > 0 else {
-            window.setFrameOrigin(targetOrigin)
+            item.setFrameOrigin(targetOrigin)
             return
         }
-        await withCheckedContinuation { continuation in
-            NSAnimationContext.runAnimationGroup { context in
-                context.duration = Double(durationMilliseconds) / 1000
-                context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-                window.animator().setFrameOrigin(targetOrigin)
-            } completionHandler: {
-                continuation.resume()
-            }
-        }
+        await item.animateFrameOrigin(targetOrigin, duration: Double(durationMilliseconds) / 1000)
     }
 
     private func render(
@@ -1844,14 +1826,16 @@ private final class CharacterSurfaceController {
         imageView.onWindowDragDelta = { [weak self] delta in
             self?.onWindowDragDelta?(delta)
         }
+        imageView.presentationFrame = { [weak self] in self?.item?.frame }
+        imageView.setPresentationOrigin = { [weak self] origin in self?.item?.setFrameOrigin(origin) }
         imageView.onDragUpdate = { [weak self] startOrigin, pointer in
             guard let self else { return }
             isDragging = startOrigin != nil
-            window?.alphaValue = presentationAlpha
-            if let startOrigin, let pointer, let frame = window?.frame, !presentationHidden {
+            item?.alphaValue = presentationAlpha
+            if let startOrigin, let pointer, let frame = item?.frame, !presentationHidden {
                 dragFeedback.show(SurfaceDragPosition(
                     frame: frame, startOrigin: startOrigin,
-                    desktopTop: NSScreen.screens.first?.frame.maxY ?? 0
+                    desktopTop: geometryProvider.mainScreen?.frame.maxY ?? 0
                 ), near: pointer)
             } else {
                 dragFeedback.hide()
@@ -1945,14 +1929,15 @@ private final class CharacterSurfaceController {
         )
     }
 
-    private func makeWindow() -> NSWindow {
+    private func makePresentationItem() -> any PresentationItem {
         var previousOrigin: NSPoint?
         let window = FloatingContentWindow(
             title: "Ghost Surface \(scope)",
             placementPolicy: .init(
                 edge: effectiveDesktopEdge,
                 keepsOnScreen: keepsOnScreen
-            )
+            ),
+            visibleFrames: { [geometryProvider] in geometryProvider.visibleFrames }
         ) { [weak self, positionStore, scope] origin in
             positionStore.save(origin, for: .surface, scope: scope)
             let oldOrigin = previousOrigin
@@ -1969,7 +1954,7 @@ private final class CharacterSurfaceController {
         window.isReleasedWhenClosed = false
         window.level = stayOnTop ? .floating : .normal
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        return window
+        return DesktopPresentationItem(window: window)
     }
 
     private var currentSurfaceDefinition: SurfaceDefinition? {
@@ -2285,6 +2270,8 @@ private final class SurfaceImageView: NSImageView {
     private var parameterDragStart: (x: Int, y: Int)?
     private var didParameterDrag = false
     private var hoverWorkItem: DispatchWorkItem?
+    var presentationFrame: (() -> NSRect?)?
+    var setPresentationOrigin: ((NSPoint) -> Void)?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -2424,7 +2411,7 @@ private final class SurfaceImageView: NSImageView {
             return
         }
         dragStartMouseLocation = window.convertPoint(toScreen: event.locationInWindow)
-        dragStartWindowOrigin = window.frame.origin
+        dragStartWindowOrigin = presentationFrame?()?.origin ?? window.frame.origin
         didDrag = false
     }
 
@@ -2459,11 +2446,17 @@ private final class SurfaceImageView: NSImageView {
             sendMouseEvent(.dragStart, event: event)
         }
         guard didDrag else { return }
-        let currentOrigin = window.frame.origin
+        let currentOrigin = presentationFrame?()?.origin ?? window.frame.origin
         let newX = locksHorizontalMovement ? startWindowOrigin.x : startWindowOrigin.x + deltaX
         let newY = locksVerticalMovement ? startWindowOrigin.y : startWindowOrigin.y + deltaY
-        window.setFrameOrigin(NSPoint(x: newX, y: newY))
-        let moveDelta = NSPoint(x: window.frame.minX - currentOrigin.x, y: window.frame.minY - currentOrigin.y)
+        let newOrigin = NSPoint(x: newX, y: newY)
+        if let setPresentationOrigin {
+            setPresentationOrigin(newOrigin)
+        } else {
+            window.setFrameOrigin(newOrigin)
+        }
+        let appliedOrigin = presentationFrame?()?.origin ?? window.frame.origin
+        let moveDelta = NSPoint(x: appliedOrigin.x - currentOrigin.x, y: appliedOrigin.y - currentOrigin.y)
         onDragUpdate?(startWindowOrigin, currentMouseLocation)
         if moveDelta.x != 0 || moveDelta.y != 0 {
             onWindowDragDelta?(moveDelta)

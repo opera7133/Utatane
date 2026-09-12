@@ -85,6 +85,7 @@ public final class BalloonWindowController {
     private let balloonLoader = BalloonLoader()
     private let imageLoader = SurfaceImageLoader()
     private let positionStore: WindowPositionStore
+    private let geometryProvider: any PresentationGeometryProviding
     private var presentations: [Int: BalloonPresentation] = [:]
     private var repaintLockedScopes: Set<Int> = []
     private var movementLockedScopes: Set<Int> = []
@@ -104,21 +105,25 @@ public final class BalloonWindowController {
     public var onLinkEnter: (@MainActor (BalloonTextLink?, String?) -> Void)?
     public var onLinkHover: (@MainActor (BalloonTextLink, String) -> Void)?
 
-    public init(positionStore: WindowPositionStore = WindowPositionStore()) {
+    public init(
+        positionStore: WindowPositionStore = WindowPositionStore(),
+        geometryProvider: any PresentationGeometryProviding = SystemPresentationGeometryProvider()
+    ) {
         self.positionStore = positionStore
+        self.geometryProvider = geometryProvider
     }
 
     public func setStayOnTop(_ stayOnTop: Bool) {
         self.stayOnTop = stayOnTop
         for presentation in presentations.values {
-            presentation.window.level = stayOnTop ? .floating : .normal
+            presentation.item.setStaysOnTop(stayOnTop)
         }
     }
 
     public func setPresentationHidden(_ hidden: Bool) {
         presentationHidden = hidden
         for presentation in presentations.values {
-            presentation.window.alphaValue = hidden ? 0 : 1
+            presentation.item.alphaValue = hidden ? 0 : 1
         }
     }
 
@@ -143,16 +148,16 @@ public final class BalloonWindowController {
 
     public var visibleScopes: [Int] {
         presentations.compactMap { scope, presentation in
-            presentation.window.isVisible ? scope : nil
+            presentation.item.isVisible ? scope : nil
         }.sorted()
     }
 
     public var windowNumbers: [Int] {
-        presentations.keys.sorted().map { presentations[$0]!.window.windowNumber }
+        presentations.keys.sorted().compactMap { presentations[$0]?.item.captureWindowNumber }
     }
 
     public func windowFrame(for scope: Int) -> NSRect? {
-        presentations[scope]?.window.frame
+        presentations[scope]?.item.frame
     }
 
     func style(for scope: Int) -> Int? {
@@ -289,25 +294,27 @@ public final class BalloonWindowController {
         contentView.setNumberText(numberTextByScope[scope] ?? "")
         contentView.setPositionedImages(existingPositionedImages)
 
-        let window = existingPresentation?.window ?? makeWindow(scope: scope)
-        let existingOrigin = existingPresentation?.window.frame.origin
-        window.contentView = contentView
-        window.setContentSize(scaledSize)
+        let item = existingPresentation?.item ?? makePresentationItem(scope: scope)
+        let existingOrigin = existingPresentation?.item.frame.origin
+        item.contentView = contentView
+        item.setContentSize(scaledSize)
+        configureDragging(contentView, item: item)
         if let existingOrigin {
-            window.setFrameOrigin(existingOrigin)
+            item.setFrameOrigin(existingOrigin)
         } else if let restoredOrigin = positionStore.restoredOrigin(
             for: .balloon,
             scope: scope,
-            windowSize: scaledSize
+            windowSize: scaledSize,
+            visibleFrames: geometryProvider.visibleFrames
         ) {
-            window.setFrameOrigin(restoredOrigin)
+            item.setFrameOrigin(restoredOrigin)
         } else {
-            place(window, near: surfaceFrame, scope: scope)
+            place(item, near: surfaceFrame, scope: scope)
         }
-        window.makeKeyAndOrderFront(nil)
-        window.alphaValue = presentationHidden ? 0 : 1
+        item.show(activating: true)
+        item.alphaValue = presentationHidden ? 0 : 1
         let presentation = BalloonPresentation(
-            window: window,
+            item: item,
             contentView: contentView,
             balloon: balloon,
             speaker: speaker,
@@ -407,7 +414,7 @@ public final class BalloonWindowController {
             hide(scope: scope)
             return
         }
-        let wasVisible = presentation.window.isVisible
+        let wasVisible = presentation.item.isVisible
         try show(
             balloon: presentation.balloon,
             text: presentation.text,
@@ -488,33 +495,36 @@ public final class BalloonWindowController {
     }
 
     public func hide(scope: Int = 0) {
-        presentations[scope]?.window.orderOut(nil)
+        presentations[scope]?.item.hide()
     }
 
     public func moveWithSurface(by delta: NSPoint, scope: Int) {
         guard let presentation = presentations[scope] else { return }
         presentation.surfaceFrame.origin.x += delta.x
         presentation.surfaceFrame.origin.y += delta.y
-        let origin = presentation.window.frame.origin
-        presentation.window.setFrameOrigin(NSPoint(x: origin.x + delta.x, y: origin.y + delta.y))
+        let origin = presentation.item.frame.origin
+        presentation.item.setFrameOrigin(NSPoint(x: origin.x + delta.x, y: origin.y + delta.y))
     }
 
     public func hideAll() {
         for presentation in presentations.values {
-            presentation.window.orderOut(nil)
+            presentation.item.hide()
         }
     }
 
     public func resetWindowPositions() {
         for (scope, presentation) in presentations {
             positionStore.remove(for: .balloon, scope: scope)
-            place(presentation.window, near: presentation.surfaceFrame, scope: scope)
+            place(presentation.item, near: presentation.surfaceFrame, scope: scope)
             positionStore.remove(for: .balloon, scope: scope)
         }
     }
 
-    private func makeWindow(scope: Int) -> NSWindow {
-        let window = FloatingContentWindow(title: "Ghost Balloon \(scope)") { [positionStore, scope] origin in
+    private func makePresentationItem(scope: Int) -> any PresentationItem {
+        let window = FloatingContentWindow(
+            title: "Ghost Balloon \(scope)",
+            visibleFrames: { [geometryProvider] in geometryProvider.visibleFrames }
+        ) { [positionStore, scope] origin in
             positionStore.save(origin, for: .balloon, scope: scope)
         }
         window.backgroundColor = .clear
@@ -525,17 +535,24 @@ public final class BalloonWindowController {
         window.acceptsMouseMovedEvents = true
         window.level = stayOnTop ? .floating : .normal
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        return window
+        return DesktopPresentationItem(window: window)
     }
 
     private func reposition(scope: Int) {
         guard let presentation = presentations[scope] else { return }
-        place(presentation.window, near: presentation.surfaceFrame, scope: scope)
+        place(presentation.item, near: presentation.surfaceFrame, scope: scope)
     }
 
-    private func place(_ window: NSWindow, near surfaceFrame: NSRect, scope: Int) {
-        guard let visibleFrame = NSScreen.main?.visibleFrame else {
-            window.center()
+    private func configureDragging(_ contentView: BalloonContentView, item: any PresentationItem) {
+        contentView.configurePresentationItem(
+            frame: { [weak item] in item?.frame },
+            setOrigin: { [weak item] origin in item?.setFrameOrigin(origin) }
+        )
+    }
+
+    private func place(_ item: any PresentationItem, near surfaceFrame: NSRect, scope: Int) {
+        guard let visibleFrame = geometryProvider.mainScreen?.visibleFrame else {
+            item.center()
             return
         }
 
@@ -549,28 +566,28 @@ public final class BalloonWindowController {
         var y: CGFloat
         switch alignment {
         case .left:
-            x = surfaceFrame.minX - window.frame.width - spacing
-            y = surfaceFrame.maxY - window.frame.height
+            x = surfaceFrame.minX - item.frame.width - spacing
+            y = surfaceFrame.maxY - item.frame.height
         case .right:
             x = surfaceFrame.maxX + spacing
-            y = surfaceFrame.maxY - window.frame.height
+            y = surfaceFrame.maxY - item.frame.height
         case .center:
-            x = surfaceFrame.midX - window.frame.width / 2
+            x = surfaceFrame.midX - item.frame.width / 2
             y = surfaceFrame.maxY + spacing
         case .bottom:
-            x = surfaceFrame.midX - window.frame.width / 2
-            y = surfaceFrame.minY - window.frame.height - spacing
+            x = surfaceFrame.midX - item.frame.width / 2
+            y = surfaceFrame.minY - item.frame.height - spacing
         case .automatic:
             assertionFailure("automatic alignment must be resolved before placement")
-            x = surfaceFrame.minX - window.frame.width - spacing
-            y = surfaceFrame.maxY - window.frame.height
+            x = surfaceFrame.minX - item.frame.width - spacing
+            y = surfaceFrame.maxY - item.frame.height
         }
         let offset = offsetByScope[scope] ?? .zero
         x += offset.x
         y -= offset.y
-        x = min(max(visibleFrame.minX, x), visibleFrame.maxX - window.frame.width)
-        y = min(max(visibleFrame.minY, y), visibleFrame.maxY - window.frame.height)
-        window.setFrameOrigin(NSPoint(x: x, y: y))
+        x = min(max(visibleFrame.minX, x), visibleFrame.maxX - item.frame.width)
+        y = min(max(visibleFrame.minY, y), visibleFrame.maxY - item.frame.height)
+        item.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
     private func rebuildPresentations() {
@@ -585,7 +602,7 @@ public final class BalloonWindowController {
                 presentation.links,
                 presentation.styles,
                 presentation.isWaitingForClick,
-                presentation.window.isVisible,
+                presentation.item.isVisible,
                 presentation.inlineImages,
                 presentation.positionedImages
             )
@@ -631,7 +648,7 @@ private struct PositionedBalloonImage {
 
 @MainActor
 private final class BalloonPresentation {
-    let window: NSWindow
+    let item: any PresentationItem
     let contentView: BalloonContentView
     let balloon: BalloonDefinition
     let speaker: BalloonSpeaker
@@ -645,14 +662,14 @@ private final class BalloonPresentation {
     var isWaitingForClick = false
 
     init(
-        window: NSWindow,
+        item: any PresentationItem,
         contentView: BalloonContentView,
         balloon: BalloonDefinition,
         speaker: BalloonSpeaker,
         style: Int,
         surfaceFrame: NSRect
     ) {
-        self.window = window
+        self.item = item
         self.contentView = contentView
         self.balloon = balloon
         self.speaker = speaker
@@ -691,6 +708,18 @@ private final class BalloonContentView: NSView {
     var onLinkActivate: ((BalloonTextLink, String) -> Void)?
     var onLinkEnter: ((BalloonTextLink?, String?) -> Void)?
     var onLinkHover: ((BalloonTextLink, String) -> Void)?
+    private var presentationFrame: (() -> NSRect?)?
+    private var setPresentationOrigin: ((NSPoint) -> Void)?
+
+    func configurePresentationItem(
+        frame: @escaping () -> NSRect?,
+        setOrigin: @escaping (NSPoint) -> Void
+    ) {
+        presentationFrame = frame
+        setPresentationOrigin = setOrigin
+        textView.presentationFrame = frame
+        textView.setPresentationOrigin = setOrigin
+    }
 
     var isWaitingForClick: Bool {
         get { arrowView?.isHidden == false }
@@ -988,22 +1017,25 @@ private final class BalloonContentView: NSView {
     override func mouseDown(with event: NSEvent) {
         guard !isMovementLocked else { return }
         dragStartMouseLocation = NSEvent.mouseLocation
-        dragStartWindowOrigin = window?.frame.origin
+        dragStartWindowOrigin = presentationFrame?()?.origin ?? window?.frame.origin
         didDrag = false
     }
 
     override func mouseDragged(with event: NSEvent) {
         guard !isMovementLocked else { return }
-        guard let window, let dragStartMouseLocation, let dragStartWindowOrigin else { return }
+        guard let dragStartMouseLocation, let dragStartWindowOrigin else { return }
         let location = NSEvent.mouseLocation
         let delta = NSPoint(
             x: location.x - dragStartMouseLocation.x,
             y: location.y - dragStartMouseLocation.y
         )
         didDrag = didDrag || abs(delta.x) > 2 || abs(delta.y) > 2
-        window.setFrameOrigin(
-            NSPoint(x: dragStartWindowOrigin.x + delta.x, y: dragStartWindowOrigin.y + delta.y)
-        )
+        let origin = NSPoint(x: dragStartWindowOrigin.x + delta.x, y: dragStartWindowOrigin.y + delta.y)
+        if let setPresentationOrigin {
+            setPresentationOrigin(origin)
+        } else {
+            window?.setFrameOrigin(origin)
+        }
     }
 
     override func mouseUp(with event: NSEvent) {
@@ -1285,6 +1317,8 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
     var onLinkActivate: ((BalloonTextLink, String) -> Void)?
     var onLinkEnter: ((BalloonTextLink?, String?) -> Void)?
     var onLinkHover: ((BalloonTextLink, String) -> Void)?
+    var presentationFrame: (() -> NSRect?)?
+    var setPresentationOrigin: ((NSPoint) -> Void)?
     private var dragStartMouseLocation: NSPoint?
     private var dragStartWindowOrigin: NSPoint?
     private var didDrag = false
@@ -1345,21 +1379,24 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
 
     override func mouseDown(with event: NSEvent) {
         dragStartMouseLocation = NSEvent.mouseLocation
-        dragStartWindowOrigin = window?.frame.origin
+        dragStartWindowOrigin = presentationFrame?()?.origin ?? window?.frame.origin
         didDrag = false
     }
 
     override func mouseDragged(with event: NSEvent) {
-        guard let window, let dragStartMouseLocation, let dragStartWindowOrigin else { return }
+        guard let dragStartMouseLocation, let dragStartWindowOrigin else { return }
         let location = NSEvent.mouseLocation
         let delta = NSPoint(
             x: location.x - dragStartMouseLocation.x,
             y: location.y - dragStartMouseLocation.y
         )
         didDrag = didDrag || abs(delta.x) > 2 || abs(delta.y) > 2
-        window.setFrameOrigin(
-            NSPoint(x: dragStartWindowOrigin.x + delta.x, y: dragStartWindowOrigin.y + delta.y)
-        )
+        let origin = NSPoint(x: dragStartWindowOrigin.x + delta.x, y: dragStartWindowOrigin.y + delta.y)
+        if let setPresentationOrigin {
+            setPresentationOrigin(origin)
+        } else {
+            window?.setFrameOrigin(origin)
+        }
     }
 
     override func mouseUp(with event: NSEvent) {

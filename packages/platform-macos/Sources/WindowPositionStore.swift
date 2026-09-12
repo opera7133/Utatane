@@ -36,6 +36,22 @@ public final class WindowPositionStore {
         screens: [NSScreen] = NSScreen.screens,
         constrainsToVisibleFrame: Bool = true
     ) -> NSPoint? {
+        restoredOrigin(
+            for: kind,
+            scope: scope,
+            windowSize: windowSize,
+            visibleFrames: screens.map(\.visibleFrame),
+            constrainsToVisibleFrame: constrainsToVisibleFrame
+        )
+    }
+
+    func restoredOrigin(
+        for kind: FloatingWindowKind,
+        scope: Int,
+        windowSize: NSSize,
+        visibleFrames: [NSRect],
+        constrainsToVisibleFrame: Bool = true
+    ) -> NSPoint? {
         guard let value = defaults.dictionary(forKey: key(for: kind, scope: scope)),
               let x = value["x"] as? Double,
               let y = value["y"] as? Double
@@ -45,12 +61,12 @@ public final class WindowPositionStore {
 
         let origin = NSPoint(x: x, y: y)
         guard constrainsToVisibleFrame else { return origin }
-        guard let screen = screens.first(where: {
-            $0.visibleFrame.intersects(NSRect(origin: origin, size: windowSize))
-        }) ?? screens.first else {
+        guard let visibleFrame = visibleFrames.first(where: {
+            $0.intersects(NSRect(origin: origin, size: windowSize))
+        }) ?? visibleFrames.first else {
             return origin
         }
-        return constrained(origin, windowSize: windowSize, to: screen.visibleFrame)
+        return constrained(origin, windowSize: windowSize, to: visibleFrame)
     }
 
     private func constrained(_ origin: NSPoint, windowSize: NSSize, to visibleFrame: NSRect) -> NSPoint {
@@ -75,15 +91,18 @@ final class FloatingContentWindow: NSWindow, NSWindowDelegate {
     var onCancel: (() -> Void)?
     private let onMove: (NSPoint) -> Void
     private var placementPolicy: FloatingWindowPlacementPolicy
+    private let visibleFrames: @MainActor () -> [NSRect]
     private var isApplyingConstraint = false
 
     init(
         title: String,
         placementPolicy: FloatingWindowPlacementPolicy = .free,
+        visibleFrames: @escaping @MainActor () -> [NSRect] = { NSScreen.screens.map(\.visibleFrame) },
         onMove: @escaping (NSPoint) -> Void
     ) {
         self.onMove = onMove
         self.placementPolicy = placementPolicy
+        self.visibleFrames = visibleFrames
         super.init(
             contentRect: .zero,
             styleMask: [.borderless],
@@ -125,7 +144,7 @@ final class FloatingContentWindow: NSWindow, NSWindowDelegate {
         guard !isApplyingConstraint,
               let constrainedOrigin = placementPolicy.constrainedOrigin(
                   for: frame,
-                  visibleFrames: NSScreen.screens.map(\.visibleFrame)
+                  visibleFrames: visibleFrames()
               ),
               constrainedOrigin != frame.origin
         else { return }

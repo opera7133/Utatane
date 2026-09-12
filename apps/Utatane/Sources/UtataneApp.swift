@@ -52,15 +52,23 @@ struct UtataneApp: App {
     private let statusWindowController: StatusWindowController
     private let alertController: ApplicationAlertController
     private let updaterController: SPUStandardUpdaterController
+    private let presentationGeometry: any PresentationGeometryProviding
     @StateObject private var networkSettings: UtataneSettingsStore
 
     init() {
         Self.configureApplicationIcon()
         try? ContentRoot.prepareDirectories()
         try? ContentRoot.installBundledContent()
+        let presentationGeometry = SystemPresentationGeometryProvider()
         let positionStore = WindowPositionStore()
-        let surfaceWindowController = SurfaceWindowController(positionStore: positionStore)
-        let balloonWindowController = BalloonWindowController(positionStore: positionStore)
+        let surfaceWindowController = SurfaceWindowController(
+            positionStore: positionStore,
+            geometryProvider: presentationGeometry
+        )
+        let balloonWindowController = BalloonWindowController(
+            positionStore: positionStore,
+            geometryProvider: presentationGeometry
+        )
         let repository = OverlayGhostRepository(repositories: ContentRoot.ghostReadDirectories.map {
             FileSystemGhostRepository(rootDirectory: $0)
         })
@@ -78,10 +86,12 @@ struct UtataneApp: App {
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
+        self.presentationGeometry = presentationGeometry
         _networkSettings = StateObject(wrappedValue: UtataneSettingsStore())
         scriptPlayer = SakuraScriptPlayer(
             surfaceWindowController: surfaceWindowController,
-            balloonWindowController: balloonWindowController
+            balloonWindowController: balloonWindowController,
+            geometryProvider: presentationGeometry
         )
     }
 
@@ -108,6 +118,7 @@ struct UtataneApp: App {
                 sstpServer: sstpServer,
                 statusWindowController: statusWindowController,
                 alertController: alertController,
+                presentationGeometry: presentationGeometry,
                 networkSettings: networkSettings,
                 applicationDelegate: applicationDelegate
             )
@@ -205,6 +216,7 @@ private struct UtataneRootView: View {
     let sstpServer: SSTPServer
     let statusWindowController: StatusWindowController
     let alertController: ApplicationAlertController
+    let presentationGeometry: any PresentationGeometryProviding
     private let weatherProvider = CurrentWeatherProvider()
     private let propertySystem = PropertySystem(configuration: .init(
         basewareName: "Utatane",
@@ -637,7 +649,7 @@ private struct UtataneRootView: View {
     }
 
     private func registerCurrentGhostProperties() async {
-        var values = MacOSPropertySnapshot.values()
+        var values = MacOSPropertySnapshot.values(geometryProvider: presentationGeometry)
         values["ghostlist.count"] = String(model.ghosts.count)
         for (index, ghost) in model.ghosts.enumerated() {
             values["ghostlist.index(\(index)).name"] = ghost.name
@@ -804,7 +816,7 @@ private struct UtataneRootView: View {
     private func dispatchDisplayChangeEvents() {
         broadcastEvent(.shiori(id: "OnDisplayChange", references: displayChangeReferences()))
         var references = [0: "update"]
-        for (index, screen) in NSScreen.screens.enumerated() {
+        for (index, screen) in presentationGeometry.screens.enumerated() {
             references[index + 1] = displayDescription(screen)
         }
         broadcastEvent(.shiori(id: "OnDisplayChangeEx", references: references))
@@ -817,7 +829,7 @@ private struct UtataneRootView: View {
     }
 
     private func dispatchWindowLayoutEvents() {
-        let screenFrames = NSScreen.screens.map(\.visibleFrame)
+        let screenFrames = presentationGeometry.visibleFrames
         var targets: [(
             id: String,
             name: String,
@@ -876,21 +888,18 @@ private struct UtataneRootView: View {
         previousWindowLayoutSnapshot = current
     }
 
-    private func displayDescription(_ screen: NSScreen) -> String {
+    private func displayDescription(_ screen: PresentationScreenGeometry) -> String {
         let frame = screen.frame
-        let bitsPerSample = (screen.deviceDescription[.bitsPerSample] as? NSNumber)?.intValue ?? 8
-        let isPrimary = screen == NSScreen.screens.first ? 1 : 0
         return [
             Int(frame.minX), Int(frame.minY), Int(frame.maxX), Int(frame.maxY),
-            bitsPerSample * 4, isPrimary
+            screen.bitsPerPixel, screen.isPrimary ? 1 : 0
         ].map(String.init).joined(separator: ",") + ",unknown,0"
     }
 
     private func displayChangeReferences() -> [Int: String] {
-        guard let screen = NSScreen.main ?? NSScreen.screens.first else { return [:] }
-        let bitsPerSample = (screen.deviceDescription[.bitsPerSample] as? NSNumber)?.intValue ?? 8
+        guard let screen = presentationGeometry.mainScreen else { return [:] }
         return [
-            0: String(bitsPerSample * 4),
+            0: String(screen.bitsPerPixel),
             1: String(Int(screen.frame.width)),
             2: String(Int(screen.frame.height))
         ]
@@ -1249,7 +1258,7 @@ private struct UtataneRootView: View {
     private func secondChangeReferences(for controller: SurfaceWindowController) -> [Int: String] {
         let frames = controller.visibleScopes.compactMap { controller.windowFrame(for: $0) }
         let isClipped = frames.contains { frame in
-            !NSScreen.screens.contains { $0.visibleFrame.contains(frame) }
+            !presentationGeometry.visibleFrames.contains { $0.contains(frame) }
         }
         let otherControllers = [surfaceWindowController] + calledGhosts.values.map(\.surfaceController)
         let otherFrames = otherControllers.filter { $0 !== controller }.flatMap { other in
@@ -2094,7 +2103,10 @@ private struct UtataneRootView: View {
     private func nativeSaoriRegistry(for masterDirectory: URL) -> NativeSaoriRegistry {
         NativeSaoriRegistry(
             baseDirectoryURL: masterDirectory,
-            windowController: NativeSaoriWindowAdapter(controller: surfaceWindowController),
+            windowController: NativeSaoriWindowAdapter(
+                controller: surfaceWindowController,
+                geometryProvider: presentationGeometry
+            ),
             externalModuleFactory: { moduleURL in
                 switch moduleURL.pathExtension.lowercased() {
                 case "dylib", "so", "bundle":
@@ -2856,7 +2868,8 @@ private struct UtataneRootView: View {
         let links = [BalloonTextLink(range: linkRange, id: "OnBalloonTest", arguments: [])]
 
         for scope in 0 ... 1 {
-            let fallbackFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 100, y: 100, width: 800, height: 600)
+            let fallbackFrame = presentationGeometry.mainScreen?.visibleFrame
+                ?? NSRect(x: 100, y: 100, width: 800, height: 600)
             let surfaceFrame = surfaceWindowController.windowFrame(for: scope) ?? fallbackFrame
             do {
                 try balloonWindowController.show(
@@ -3441,7 +3454,8 @@ private struct UtataneRootView: View {
                     defaultBalloonDirectoryName: networkSettings.defaultBalloonDirectoryName,
                     personalityEngine: personalityEngine(for: ghost),
                     characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
-                    dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000
+                    dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000,
+                    presentationGeometry: presentationGeometry
                 )
                 runtime.onError = { showError($0.localizedDescription) }
                 runtime.onNarDrop = { installNars(from: $0) }

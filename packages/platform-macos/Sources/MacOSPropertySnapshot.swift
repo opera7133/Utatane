@@ -2,22 +2,24 @@ import AppKit
 
 @MainActor
 public enum MacOSPropertySnapshot {
-    public static func values() -> [String: String] {
+    public static func values(
+        geometryProvider: any PresentationGeometryProviding = SystemPresentationGeometryProvider()
+    ) -> [String: String] {
+        let screens = geometryProvider.screens
         var values: [String: String] = [
-            "system.monitor.count": String(NSScreen.screens.count),
-            "system.cursor.pos": point(NSEvent.mouseLocation),
+            "system.monitor.count": String(screens.count),
+            "system.cursor.pos": point(geometryProvider.pointerPosition),
             "system.theme.os.mode": NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
                 ? "dark" : "light"
         ]
 
-        for (index, screen) in NSScreen.screens.enumerated() {
+        for (index, screen) in screens.enumerated() {
             let prefix = "system.monitor.index(\(index))"
             values["\(prefix).rect"] = rect(screen.frame)
             values["\(prefix).work"] = rect(screen.visibleFrame)
-            let bitsPerSample = (screen.deviceDescription[.bitsPerSample] as? NSNumber)?.intValue ?? 8
-            values["\(prefix).bpp"] = String(bitsPerSample * 4)
-            values["\(prefix).dpi"] = String(Int((72 * screen.backingScaleFactor).rounded()))
-            values["\(prefix).primary"] = screen == NSScreen.screens.first ? "1" : "0"
+            values["\(prefix).bpp"] = String(screen.bitsPerPixel)
+            values["\(prefix).dpi"] = String(Int((72 * screen.scale).rounded()))
+            values["\(prefix).primary"] = screen.isPrimary ? "1" : "0"
         }
         return values
     }

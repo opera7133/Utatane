@@ -10,6 +10,7 @@ public final class SakuraScriptPlayer {
     private let imageLoader = SurfaceImageLoader()
     private let surfaceWindowController: SurfaceWindowController
     private let balloonWindowController: BalloonWindowController
+    private let geometryProvider: any PresentationGeometryProviding
     private var characterDelayMilliseconds = 50
     private var postDialogueDismissalMilliseconds: Int
     private var playbackTask: Task<Void, Never>?
@@ -91,11 +92,13 @@ public final class SakuraScriptPlayer {
     public init(
         surfaceWindowController: SurfaceWindowController,
         balloonWindowController: BalloonWindowController,
+        geometryProvider: any PresentationGeometryProviding = SystemPresentationGeometryProvider(),
         postDialogueDismissalMilliseconds: Int = 10000,
         surfaceRestoreDelayMilliseconds: Int = 15000
     ) {
         self.surfaceWindowController = surfaceWindowController
         self.balloonWindowController = balloonWindowController
+        self.geometryProvider = geometryProvider
         surfaceWindowController.onWindowMove = { [weak balloonWindowController] scope, delta in
             balloonWindowController?.moveWithSurface(by: delta, scope: scope)
         }
@@ -1377,8 +1380,8 @@ public final class SakuraScriptPlayer {
         case "minute": return String(calendar.component(.minute, from: now))
         case "second": return String(calendar.component(.second, from: now))
         case "username": return NSFullUserName().isEmpty ? NSUserName() : NSFullUserName()
-        case "screenwidth": return String(Int((NSScreen.main ?? NSScreen.screens.first)?.frame.width ?? 0))
-        case "screenheight": return String(Int((NSScreen.main ?? NSScreen.screens.first)?.frame.height ?? 0))
+        case "screenwidth": return String(Int(geometryProvider.mainScreen?.frame.width ?? 0))
+        case "screenheight": return String(Int(geometryProvider.mainScreen?.frame.height ?? 0))
         case "exh": return String(Int(ProcessInfo.processInfo.systemUptime))
         case "et":
             return ["42年", "150分", "3世紀", "999日", "3000万秒", "一昨日からずっと"].randomElement()!

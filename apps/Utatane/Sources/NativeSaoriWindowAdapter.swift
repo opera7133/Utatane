@@ -4,9 +4,14 @@ import UtatanePlatformMacOS
 
 final class NativeSaoriWindowAdapter: NativeSaoriWindowControlling, @unchecked Sendable {
     private let controller: SurfaceWindowController
+    private let geometryProvider: any PresentationGeometryProviding
 
-    @MainActor init(controller: SurfaceWindowController) {
+    @MainActor init(
+        controller: SurfaceWindowController,
+        geometryProvider: any PresentationGeometryProviding = SystemPresentationGeometryProvider()
+    ) {
         self.controller = controller
+        self.geometryProvider = geometryProvider
     }
 
     func frame(scope: Int) -> NativeSaoriWindowFrame? {
@@ -23,8 +28,8 @@ final class NativeSaoriWindowAdapter: NativeSaoriWindowControlling, @unchecked S
     }
 
     func desktopSize() -> (width: Int, height: Int) {
-        onMain {
-            let frame = NSScreen.main?.visibleFrame ?? .zero
+        onMain { [geometryProvider] in
+            let frame = geometryProvider.mainScreen?.visibleFrame ?? .zero
             return (Int(frame.width), Int(frame.height))
         }
     }

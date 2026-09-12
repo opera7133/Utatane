@@ -1999,9 +1999,21 @@ func `expands environment names and replaces the script after raise`() async thr
     )
     defer { surfaceController.hideAll() }
     let balloonController = BalloonWindowController(positionStore: positionStore)
+    let geometry = MutablePresentationGeometryProvider(
+        screens: [
+            PresentationScreenGeometry(
+                frame: CGRect(x: 0, y: 0, width: 960, height: 540),
+                visibleFrame: CGRect(x: 0, y: 0, width: 960, height: 520),
+                bitsPerPixel: 32,
+                scale: 2,
+                isPrimary: true
+            )
+        ]
+    )
     let player = SakuraScriptPlayer(
         surfaceWindowController: surfaceController,
-        balloonWindowController: balloonController
+        balloonWindowController: balloonController,
+        geometryProvider: geometry
     )
     player.configure(environmentVariables: ["selfname": "さくら"])
     player.onEmbeddedEvent = { id, arguments in
@@ -2011,13 +2023,14 @@ func `expands environment names and replaces the script after raise`() async thr
     }
 
     await player.playAndWait(
-        SakuraScript(rawValue: #"%selfnameと%meから\![raise,OnRaised,arg]捨てる\e"#),
+        SakuraScript(rawValue: #"%selfnameと%me（%screenwidth×%screenheight）から\![raise,OnRaised,arg]捨てる\e"#),
         balloon: makeBalloon(directory: directory),
         characterDelayMilliseconds: 0
     )
 
     let content = try #require(balloonController.textAndLinks(for: 0))
     #expect(content.0.hasPrefix("さくらと"))
+    #expect(content.0.contains("960×540"))
     #expect(content.0.hasSuffix("から応答"))
     #expect(!content.0.contains("%me"))
 }
