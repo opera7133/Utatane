@@ -782,7 +782,8 @@ final class WindowModeStageRootView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
         guard let desktopWallpaper, let context = NSGraphicsContext.current?.cgContext else { return }
-        WindowModeDesktopWallpaperRenderer.draw(desktopWallpaper, in: bounds, context: context)
+        drawDesktopWallpaper(desktopWallpaper, in: context)
+        drawSpeechHistoryBackground(in: context)
     }
 
     func setSolidBackground(_ color: NSColor) {
@@ -799,11 +800,33 @@ final class WindowModeStageRootView: NSView {
 
     func drawStageBackground(in context: CGContext) {
         if let desktopWallpaper {
-            WindowModeDesktopWallpaperRenderer.draw(desktopWallpaper, in: bounds, context: context)
+            drawDesktopWallpaper(desktopWallpaper, in: context)
         } else if let backgroundColor = layer?.backgroundColor {
             context.setFillColor(backgroundColor)
             context.fill(bounds)
         }
+        drawSpeechHistoryBackground(in: context)
+    }
+
+    private func drawDesktopWallpaper(
+        _ desktopWallpaper: WindowModeDesktopWallpaperSnapshot,
+        in context: CGContext
+    ) {
+        context.saveGState()
+        context.clip(to: presentationView.frame)
+        WindowModeDesktopWallpaperRenderer.draw(desktopWallpaper, in: bounds, context: context)
+        context.restoreGState()
+    }
+
+    private func drawSpeechHistoryBackground(in context: CGContext) {
+        guard speechHistoryHeight > 0 else { return }
+        context.setFillColor(NSColor.windowBackgroundColor.cgColor)
+        context.fill(NSRect(
+            x: bounds.minX,
+            y: bounds.minY,
+            width: bounds.width,
+            height: speechHistoryHeight
+        ))
     }
 
     override func updateTrackingAreas() {
@@ -838,6 +861,7 @@ final class WindowModeStageRootView: NSView {
         guard speechHistoryHeight != height else { return }
         speechHistoryHeight = height
         needsLayout = true
+        needsDisplay = true
         layoutSubtreeIfNeeded()
     }
 

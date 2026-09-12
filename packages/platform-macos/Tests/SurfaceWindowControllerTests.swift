@@ -631,6 +631,20 @@ func `opening speech history expands the stage before reserving its panel`() {
 
 @Test
 @MainActor
+func `standalone speech history uses a practical minimum window size`() throws {
+    let controller = SpeechHistoryWindowController(store: SpeechHistoryStore())
+    defer { controller.close() }
+
+    controller.show(ghostIdentifier: "ghost", ghostName: "Ghost")
+
+    let window = try #require(controller.window)
+    #expect(window.contentMinSize == SpeechHistoryWindowController.minimumContentSize)
+    #expect(window.contentLayoutRect.width >= SpeechHistoryWindowController.minimumContentSize.width)
+    #expect(window.contentLayoutRect.height >= SpeechHistoryWindowController.minimumContentSize.height)
+}
+
+@Test
+@MainActor
 func `shared window mode shows only the most recently opened speech history`() {
     let stage = WindowModePresentationHost(
         contentSize: NSSize(width: 640, height: 480),
@@ -988,6 +1002,43 @@ func `desktop wallpaper background follows provider changes and screenshot trans
     #expect(stage.refreshDesktopWallpaper())
     #expect(stage.rootView.desktopWallpaper?.signature == "second")
     #expect(!stage.refreshDesktopWallpaper())
+}
+
+@Test
+@MainActor
+func `desktop wallpaper stays out of the speech history area`() throws {
+    let wallpaper = try #require(NSImage(data: makePNG(
+        width: 4,
+        height: 4,
+        color: NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1)
+    )))
+    let provider = StubDesktopWallpaperProvider(snapshot: WindowModeDesktopWallpaperSnapshot(
+        image: wallpaper,
+        url: URL(fileURLWithPath: "/tmp/wallpaper.png"),
+        scaling: .scaleAxesIndependently,
+        allowsClipping: false,
+        fillColor: .black,
+        signature: "wallpaper"
+    ))
+    let stage = WindowModePresentationHost(
+        contentSize: NSSize(width: 320, height: 240),
+        desktopWallpaperProvider: provider,
+        automaticallyExpandsForSpeechHistory: false
+    )
+    defer { stage.window.orderOut(nil) }
+    stage.rootView.setSpeechHistoryHeight(120)
+
+    let data = try #require(stage.screenshotPNGData(kind: .backgroundIncluded))
+    let bitmap = try #require(NSBitmapImageRep(data: data))
+    let colors = [bitmap.pixelsHigh / 4, bitmap.pixelsHigh * 3 / 4].compactMap {
+        bitmap.colorAt(x: bitmap.pixelsWide / 2, y: $0)?.usingColorSpace(.deviceRGB)
+    }
+    let wallpaperSamples = colors.filter {
+        $0.greenComponent > 0.8 && $0.redComponent < 0.2 && $0.blueComponent < 0.2
+    }
+
+    #expect(colors.count == 2)
+    #expect(wallpaperSamples.count == 1)
 }
 
 @Test

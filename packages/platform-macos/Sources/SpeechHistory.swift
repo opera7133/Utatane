@@ -113,6 +113,7 @@ public struct SpeechHistoryView: View {
     private let background: Color
     private let textScale: CGFloat
     private let onClose: (() -> Void)?
+    @State private var scrollTarget: SpeechHistoryScrollTarget?
 
     public init(
         store: SpeechHistoryStore,
@@ -187,6 +188,7 @@ public struct SpeechHistoryView: View {
                 }
                 .onAppear {
                     if let last = entries.last {
+                        scrollTarget = SpeechHistoryScrollTarget(entry: last)
                         proxy.scrollTo(last.id, anchor: .bottom)
                     }
                 }
@@ -194,8 +196,16 @@ public struct SpeechHistoryView: View {
                     guard let last = updatedEntries.last(where: {
                         $0.ghostIdentifier == ghostIdentifier
                     }) else { return }
+                    let target = SpeechHistoryScrollTarget(entry: last)
+                    guard target != scrollTarget else { return }
+                    let animates = target.id != scrollTarget?.id
+                    scrollTarget = target
                     DispatchQueue.main.async {
-                        withAnimation(.easeOut(duration: 0.15)) {
+                        if animates {
+                            withAnimation(.easeOut(duration: 0.15)) {
+                                proxy.scrollTo(last.id, anchor: .bottom)
+                            }
+                        } else {
                             proxy.scrollTo(last.id, anchor: .bottom)
                         }
                     }
@@ -203,6 +213,16 @@ public struct SpeechHistoryView: View {
             }
         }
         .background(background)
+    }
+}
+
+private struct SpeechHistoryScrollTarget: Equatable {
+    let id: UUID
+    let textCount: Int
+
+    init(entry: SpeechHistoryEntry) {
+        id = entry.id
+        textCount = entry.text.count
     }
 }
 
@@ -298,6 +318,8 @@ struct SpeechHistoryBoundaryShape: Shape {
 
 @MainActor
 public final class SpeechHistoryWindowController: NSWindowController {
+    static let initialContentSize = NSSize(width: 720, height: 640)
+    static let minimumContentSize = NSSize(width: 560, height: 480)
     private let store: SpeechHistoryStore
 
     public init(store: SpeechHistoryStore) {
@@ -322,15 +344,25 @@ public final class SpeechHistoryWindowController: NSWindowController {
             window.contentViewController = NSHostingController(rootView: content)
         } else {
             let window = NSWindow(
-                contentRect: NSRect(x: 0, y: 0, width: 460, height: 560),
+                contentRect: NSRect(origin: .zero, size: Self.initialContentSize),
                 styleMask: [.titled, .closable, .miniaturizable, .resizable],
                 backing: .buffered,
                 defer: false
             )
+            window.contentMinSize = Self.minimumContentSize
             window.title = "\(String(localized: "発話履歴")) — \(ghostName)"
             window.contentViewController = NSHostingController(rootView: content)
             window.isReleasedWhenClosed = false
             window.setFrameAutosaveName("UtataneSpeechHistory")
+            let contentSize = window.contentLayoutRect.size
+            if contentSize.width < Self.minimumContentSize.width
+                || contentSize.height < Self.minimumContentSize.height
+            {
+                window.setContentSize(NSSize(
+                    width: max(contentSize.width, Self.minimumContentSize.width),
+                    height: max(contentSize.height, Self.minimumContentSize.height)
+                ))
+            }
             window.center()
             self.window = window
         }
@@ -372,7 +404,7 @@ public final class SpeechHistoryPresenter {
             store: store,
             ghostIdentifier: context.ghostIdentifier,
             ghostName: context.ghostName,
-            background: Color(nsColor: .windowBackgroundColor).opacity(0.92),
+            background: Color(nsColor: .windowBackgroundColor),
             textScale: textScale,
             onClose: { [weak self] in self?.hide() }
         ))
