@@ -612,7 +612,10 @@ func `speech history is presented only inside a window mode stage and stays dock
 @Test
 @MainActor
 func `opening speech history expands the stage before reserving its panel`() {
-    let stage = WindowModePresentationHost(contentSize: NSSize(width: 640, height: 480))
+    let initialPresentationHeight: CGFloat = 320
+    let stage = WindowModePresentationHost(
+        contentSize: NSSize(width: 640, height: initialPresentationHeight)
+    )
     let item = stage.makeItem(
         kind: .speechHistory,
         title: "history",
@@ -624,8 +627,8 @@ func `opening speech history expands the stage before reserving its panel`() {
 
     item.show(activating: false)
 
-    #expect(stage.rootView.bounds.height > 480)
-    #expect(stage.rootView.presentationView.bounds.height >= 475)
+    #expect(stage.rootView.bounds.height > initialPresentationHeight)
+    #expect(stage.rootView.presentationView.bounds.height >= initialPresentationHeight - 5)
     #expect(item.frame.maxY == stage.rootView.presentationView.frame.minY)
 }
 
