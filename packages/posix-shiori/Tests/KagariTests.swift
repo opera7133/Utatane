@@ -39,7 +39,10 @@ struct KagariResolverTests {
     }
 }
 
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_KAGARI_MODULE"] != nil))
+@Suite(
+    .serialized,
+    .enabled(if: ProcessInfo.processInfo.environment["UTATANE_KAGARI_MODULE"] != nil)
+)
 struct KagariNativeTests {
     private var module: URL {
         URL(filePath: ProcessInfo.processInfo.environment["UTATANE_KAGARI_MODULE"]!)

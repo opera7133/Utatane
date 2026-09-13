@@ -32,6 +32,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+
 jobs:
   test:
     runs-on: macos-26
@@ -44,6 +48,16 @@ jobs:
       - name: Test bundled kagari inputs
         run: python3 tools/native-shiori/test-bundle-kagari.py
 
+      - name: Build kagari runtime for release tests
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          runtime="$RUNNER_TEMP/kagari-runtime"
+          python3 tools/native-shiori/bundle-kagari.py \
+            --output "$runtime" \
+            --archs "$(uname -m)"
+          echo "UTATANE_KAGARI_MODULE=$runtime/libkagari.dylib" >> "$GITHUB_ENV"
+
       - name: Test Swift packages
         run: swift test --package-path packages
 
@@ -55,35 +69,12 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install build tools
-        run: brew install xcodegen zig cmake boost
+      - name: Install Xcode project generator
+        run: brew install xcodegen
 
-      - name: Read pinned nicxlive version
-        id: nicxlive-version
+      - name: Install Windows host build tool
         if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: |
-          source Scripts/nicxlive-runtime-version.env
-          echo "commit=$NICXLIVE_COMMIT" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout pinned nicxlive source
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/checkout@v7
-        with:
-          repository: nijigenerate/nicxlive
-          ref: ${{ steps.nicxlive-version.outputs.commit }}
-          path: build/nicxlive
-
-      - name: Build universal nicxlive runtime
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: |
-          Scripts/build-nicxlive-runtime.sh \
-            build/nicxlive \
-            build/nicxlive-universal \
-            build/nicxlive-runtime
-          echo "UTATANE_NICXLIVE_RUNTIME_LIBRARY=$GITHUB_WORKSPACE/build/nicxlive-runtime/libnicxlive.dylib" >> "$GITHUB_ENV"
-          echo "UTATANE_NICXLIVE_RUNTIME_LICENSE=$GITHUB_WORKSPACE/build/nicxlive-runtime/LICENSE" >> "$GITHUB_ENV"
+        run: brew install zig
 
       - name: Prepare version
         shell: bash
@@ -113,6 +104,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             MARKETING_VERSION="$UTATANE_VERSION" \
             CURRENT_PROJECT_VERSION="$UTATANE_BUILD_NUMBER" \
+            -showBuildTimingSummary \
             build
 
       - name: Build universal app
@@ -130,12 +122,13 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             MARKETING_VERSION="$UTATANE_VERSION" \
             CURRENT_PROJECT_VERSION="$UTATANE_BUILD_NUMBER" \
+            -showBuildTimingSummary \
             build
 
-      - name: Verify bundled kagari
+      - name: Verify bundled kagari files
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          sh tools/native-shiori/test-bundled-kagari.sh \
+          sh tools/native-shiori/verify-bundled-kagari.sh \
             build/Build/Products/Release/Utatane.app arm64 x86_64
 
       - name: Build Windows DLL host
@@ -179,10 +172,95 @@ jobs:
             build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp \
             -verify_arch arm64 x86_64
 
-      - name: Package
+      - name: Prepare release build inputs
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          mkdir -p dist
+          mkdir -p dist/release-inputs
+          ditto -c -k --keepParent \
+            build/Build/Products/Release/Utatane.app \
+            dist/release-inputs/Utatane-unsigned.zip
+          install -m 755 \
+            build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast \
+            dist/release-inputs/generate_appcast
+
+      - name: Upload release build inputs
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: Utatane-release-build-inputs
+          path: dist/release-inputs
+          retention-days: 1
+
+  nicxlive:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install nicxlive build tools
+        run: brew install cmake boost
+
+      - name: Read pinned nicxlive version
+        id: nicxlive-version
+        shell: bash
+        run: |
+          source Scripts/nicxlive-runtime-version.env
+          echo "commit=$NICXLIVE_COMMIT" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout pinned nicxlive source
+        uses: actions/checkout@v7
+        with:
+          repository: nijigenerate/nicxlive
+          ref: ${{ steps.nicxlive-version.outputs.commit }}
+          path: build/nicxlive
+
+      - name: Build universal nicxlive runtime
+        run: |
+          Scripts/build-nicxlive-runtime.sh \
+            build/nicxlive \
+            build/nicxlive-universal \
+            build/nicxlive-runtime
+
+      - name: Upload nicxlive runtime
+        uses: actions/upload-artifact@v4
+        with:
+          name: Utatane-nicxlive-runtime
+          path: build/nicxlive-runtime
+          retention-days: 1
+
+  package:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, nicxlive]
+    runs-on: macos-26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Download release build inputs
+        uses: actions/download-artifact@v5
+        with:
+          name: Utatane-release-build-inputs
+          path: dist/release-inputs
+
+      - name: Download nicxlive runtime
+        uses: actions/download-artifact@v5
+        with:
+          name: Utatane-nicxlive-runtime
+          path: build/nicxlive-runtime
+
+      - name: Assemble and package app
+        run: |
+          mkdir -p build/Build/Products/Release dist
+          ditto -x -k \
+            dist/release-inputs/Utatane-unsigned.zip \
+            build/Build/Products/Release
+          TARGET_BUILD_DIR="$GITHUB_WORKSPACE/build/Build/Products/Release" \
+            FRAMEWORKS_FOLDER_PATH="Utatane.app/Contents/Frameworks" \
+            UNLOCALIZED_RESOURCES_FOLDER_PATH="Utatane.app/Contents/Resources" \
+            UTATANE_NICXLIVE_RUNTIME_LIBRARY="$GITHUB_WORKSPACE/build/nicxlive-runtime/libnicxlive.dylib" \
+            UTATANE_NICXLIVE_RUNTIME_LICENSE="$GITHUB_WORKSPACE/build/nicxlive-runtime/LICENSE" \
+            Scripts/embed-nicxlive-runtime.sh
           codesign --force --sign - --identifier dev.utatane.mcp \
             build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
           codesign --force --deep --sign - --identifier dev.utatane.app \
@@ -194,7 +272,6 @@ jobs:
             dist/Utatane-macOS.zip
 
       - name: Upload build artifact
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: Utatane-macOS
@@ -202,12 +279,12 @@ jobs:
           retention-days: 14
 
       - name: Generate signed appcast
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: |
           test -n "$SPARKLE_PRIVATE_KEY"
-          generator=build/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast
+          generator=dist/release-inputs/generate_appcast
+          chmod 755 "$generator"
           test -x "$generator"
           mkdir -p dist/update-feed
           cp dist/Utatane-macOS.zip dist/update-feed/Utatane-macOS.zip
@@ -220,7 +297,6 @@ jobs:
             dist/update-feed
 
       - name: Upload update feed artifact
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: Utatane-update-feed
@@ -228,7 +304,6 @@ jobs:
           retention-days: 14
 
       - name: Prepare bundled content updates
-        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
           mkdir -p dist/content/ria dist/content/balloon-ria
@@ -250,7 +325,6 @@ jobs:
             dist/content/balloon-ria/updates2.dau
 
       - name: Upload content update artifact
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: Utatane-bundled-content-updates
@@ -259,7 +333,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [test, build]
+    needs: [test, package]
     runs-on: macos-26
     env:
       GH_REPO: ${{ github.repository }}
