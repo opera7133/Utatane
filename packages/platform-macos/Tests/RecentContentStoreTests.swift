@@ -49,3 +49,19 @@ func `recent content ignores corrupted stored data`() throws {
 
     #expect(store.items.isEmpty)
 }
+
+@Test
+@MainActor
+func `recent content limit can change without recreating the store`() throws {
+    let suiteName = "RecentContentStoreDynamicLimitTests.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let store = RecentContentStore(defaults: defaults, key: "test", maximumCount: 3)
+    store.record(kind: .ghost, identifier: "a", name: "A")
+    store.record(kind: .ghost, identifier: "b", name: "B")
+    store.record(kind: .ghost, identifier: "c", name: "C")
+
+    store.setMaximumCount(2)
+
+    #expect(store.items.map(\.identifier) == ["c", "b"])
+}

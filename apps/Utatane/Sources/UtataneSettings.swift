@@ -75,6 +75,7 @@ final class UtataneSettingsStore: ObservableObject {
         static let integratesSpeechHistoryInWindowMode = "general.integratesSpeechHistoryInWindowMode"
         static let appLanguage = "general.appLanguage"
         static let defaultBalloonDirectoryName = "general.defaultBalloonDirectoryName"
+        static let recentContentMaximumCount = "general.recentContentMaximumCount"
         static let characterDelayMilliseconds = "talk.characterDelayMilliseconds"
         static let randomTalkIntervalMinutes = "talk.randomTalkIntervalMinutes"
         static let dialogueDismissalSeconds = "balloon.dialogueDismissalSeconds"
@@ -156,6 +157,10 @@ final class UtataneSettingsStore: ObservableObject {
 
     @Published var defaultBalloonDirectoryName: String {
         didSet { defaults.set(defaultBalloonDirectoryName, forKey: Key.defaultBalloonDirectoryName) }
+    }
+
+    @Published var recentContentMaximumCount: Int {
+        didSet { defaults.set(recentContentMaximumCount, forKey: Key.recentContentMaximumCount) }
     }
 
     @Published var characterDelayMilliseconds: Int {
@@ -315,6 +320,10 @@ final class UtataneSettingsStore: ObservableObject {
         appLanguage = loadedAppLanguage
         launchedAppLanguage = loadedAppLanguage
         defaultBalloonDirectoryName = defaults.string(forKey: Key.defaultBalloonDirectoryName) ?? ""
+        recentContentMaximumCount = Self.positiveValue(
+            defaults.integer(forKey: Key.recentContentMaximumCount),
+            fallback: 12
+        )
         characterDelayMilliseconds = defaults.object(forKey: Key.characterDelayMilliseconds) == nil
             ? 50 : defaults.integer(forKey: Key.characterDelayMilliseconds)
         randomTalkIntervalMinutes = defaults.integer(forKey: Key.randomTalkIntervalMinutes)
@@ -571,6 +580,16 @@ struct UtataneSettingsView: View {
                         }
                     }
                     Text("ゴースト自身にも、ゴーストごとの履歴にも指定がない場合に使う。削除されていた場合は利用可能なバルーンへ切り替わる。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("最近使ったもの") {
+                    Picker("最大件数", selection: $settings.recentContentMaximumCount) {
+                        ForEach([5, 10, 12, 20, 30], id: \.self) { count in
+                            Text("\(count)件").tag(count)
+                        }
+                    }
+                    Text("ゴーストの右クリックメニューに保存する利用履歴の件数。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -23,7 +23,7 @@ public struct RecentContentItem: Codable, Equatable, Sendable {
 public final class RecentContentStore {
     private let defaults: UserDefaults
     private let key: String
-    private let maximumCount: Int
+    private var maximumCount: Int
 
     public init(
         defaults: UserDefaults = .standard,
@@ -53,6 +53,11 @@ public final class RecentContentStore {
 
     public func retain(_ predicate: (RecentContentItem) -> Bool) {
         save(items.filter(predicate))
+    }
+
+    public func setMaximumCount(_ maximumCount: Int) {
+        self.maximumCount = max(maximumCount, 1)
+        save(items)
     }
 
     private func save(_ items: [RecentContentItem]) {

@@ -1,6 +1,35 @@
 {
   "sourceLanguage" : "ja",
   "strings" : {
+    "%lld件" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld items"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld개"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 项"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld 項"
+          }
+        }
+      }
+    },
     "%lld件をインストールした" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4492,6 +4521,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "可透過上方控制項及記錄畫面重新載入 Ghost、慢速播放動畫、推進或停止播放及查看記錄。"
+          }
+        }
+      }
+    },
+    "ゴーストの右クリックメニューに保存する利用履歴の件数。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Number of recent items kept in the ghost context menu."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고스트 우클릭 메뉴에 보관할 최근 사용 항목 수입니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Ghost 右键菜单中保留的最近使用记录数量。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Ghost 右鍵選單中保留的最近使用紀錄數量。"
           }
         }
       }
@@ -9045,6 +9103,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更新間隔"
+          }
+        }
+      }
+    },
+    "最大件数" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maximum Items"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최대 항목 수"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大数量"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大數量"
           }
         }
       }

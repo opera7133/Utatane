@@ -537,6 +537,14 @@ private struct UtataneRootView: View {
         }
         .applicationRuntimeTask(
             in: applicationDelegate.runtimeTasks,
+            key: "recent-content-limit",
+            id: networkSettings.recentContentMaximumCount
+        ) {
+            recentContentStore.setMaximumCount(networkSettings.recentContentMaximumCount)
+            configureContextMenu()
+        }
+        .applicationRuntimeTask(
+            in: applicationDelegate.runtimeTasks,
             key: "window-mode",
             id: "\(networkSettings.windowMode.rawValue)-\(networkSettings.integratesSpeechHistoryInWindowMode)"
         ) {
