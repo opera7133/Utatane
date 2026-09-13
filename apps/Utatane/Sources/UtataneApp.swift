@@ -318,6 +318,7 @@ private struct UtataneRootView: View {
     @State private var teachHistory: [String] = []
     @State private var lastClockMinute: DateComponents?
     @State private var pendingHourTimeSignal = false
+    @State private var developerVirtualTimeOffset: TimeInterval?
     @State private var systemLoadSampler = MacOSSystemLoadSampler()
     private let batterySampler = MacOSBatterySampler()
     @State private var batteryTransitionDetector = BatteryTransitionDetector()
@@ -353,6 +354,7 @@ private struct UtataneRootView: View {
                     selectedGhostID: $selectedGhostID,
                     pane: $developerPalettePane,
                     levelFilter: $developerLogLevelFilter,
+                    virtualTimeOffset: $developerVirtualTimeOffset,
                     lastClickedRegion: lastClickedRegion,
                     isSessionAvailable: session != nil,
                     isReloadDisabled: currentGhost == nil || isTransitioningGhost,
@@ -576,9 +578,10 @@ private struct UtataneRootView: View {
                     )
                     previousDispatchState = dispatchState
                 }
-                sendSecondChange()
+                let date = DeveloperVirtualClock.date(realDate: Date(), offset: developerVirtualTimeOffset)
+                sendSecondChange(at: date)
                 sendPluginSecondChange()
-                sendClockEvents(at: Date())
+                sendClockEvents(at: date)
                 dispatchWindowLayoutEvents()
             }
         }
@@ -1205,8 +1208,8 @@ private struct UtataneRootView: View {
         return scheme == "https" || scheme == "http"
     }
 
-    private func sendSecondChange() {
-        calendarWindowController.checkFiveMinuteReminders(at: Date())
+    private func sendSecondChange(at date: Date) {
+        calendarWindowController.checkFiveMinuteReminders(at: date)
         guard !isTransitioningGhost else { return }
         let references = secondChangeReferences(for: surfaceWindowController)
         if let session {
@@ -1239,6 +1242,15 @@ private struct UtataneRootView: View {
         for runtime in calledGhosts.values {
             runtime.sendSecondChange(references: secondChangeReferences(for: runtime.surfaceController))
         }
+    }
+
+    private func textInputAppearance(style: BalloonInputStyle) -> TextInputWindowController.Appearance? {
+        guard let balloon else { return nil }
+        let effective = balloonLoader.effectiveInputDefinition(for: balloon, style: style)
+        return TextInputWindowController.Appearance(
+            balloon: effective,
+            backgroundImageURL: balloonLoader.inputImageURL(style: style, in: balloon)
+        )
     }
 
     private func readSchedule(_ schedule: UtataneSchedule, eventID: String) {
@@ -1854,6 +1866,7 @@ private struct UtataneRootView: View {
                         from: autocomplete?.rawValue
                     ),
                     actionTitle: String(localized: "OK"),
+                    appearance: textInputAppearance(style: .input),
                     timeoutMilliseconds: timeoutMilliseconds
                 ) else {
                     return try? await activeSession.handle(event: .shiori(
@@ -1887,7 +1900,8 @@ private struct UtataneRootView: View {
                     autocompleteValues: TextInputWindowController.autocompleteValues(
                         from: autocomplete?.rawValue
                     ),
-                    actionTitle: String(localized: "OK")
+                    actionTitle: String(localized: "OK"),
+                    appearance: textInputAppearance(style: .communicate)
                 ) else {
                     return try? await activeSession.handle(event: .shiori(
                         id: "OnCommunicateInputCancel",
@@ -1915,7 +1929,8 @@ private struct UtataneRootView: View {
                     autocompleteValues: TextInputWindowController.autocompleteValues(
                         from: autocomplete?.rawValue
                     ),
-                    actionTitle: String(localized: "OK")
+                    actionTitle: String(localized: "OK"),
+                    appearance: textInputAppearance(style: .teach)
                 ) else {
                     return try? await activeSession.handle(event: .shiori(
                         id: "OnTeachInputCancel",

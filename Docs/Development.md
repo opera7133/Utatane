@@ -30,6 +30,8 @@ mise run build
 mise run check
 ```
 
+`mise run check`には、公開しているUKADOC対応表の構文名が本番コードから消えていないことを確認する検査も含まれる。新しく対応済みと記載する構文は`Scripts/check-ukadoc-compatibility.py`の一覧にも追加する。
+
 SwiftPMやClangがキャッシュへ書けないと言い出したら、書ける場所を指定します。
 
 ```sh
@@ -102,7 +104,7 @@ Internal-Docs/             調査記録、TODO、実装上の補足
 
 ## コンテンツの静的検査
 
-ゴーストのディレクトリを指定すると、必須ファイル、Shellの既定surfaceとelement画像、SHIORIの判定、辞書内の未対応SakuraScriptを確認できる。
+ゴーストのディレクトリを指定すると、必須ファイル、Shellの既定surfaceとelement画像、SHIORIの判定、辞書内の未対応SakuraScriptを確認できる。アプリではコンテンツエクスプローラでゴーストを選び、「互換性を検査」から同じ診断を表示できる。
 
 ```bash
 swift run --package-path packages utatane-validate "/path/to/ghost"
@@ -110,6 +112,8 @@ swift run --package-path packages utatane-validate --json "/path/to/ghost"
 ```
 
 エラーがある場合は終了コード1、警告だけなら0を返す。辞書言語の正規表現やパスを誤検出しないよう、SakuraScript検査は一般的なscope／surface命令を含む行に限定する。静的検査なので、辞書の実行時分岐、外部SHIORI／SAORI、実際の描画までは保証しない。
+
+開発用パレットには、SHIORI Requestの手動送信・ログからの再送、表示中ログのコピー・保存、時計イベントと予定通知を確認する仮想時刻がある。仮想時刻は指定した瞬間から実時間と同じ速さで進み、無効にするとシステム時刻へ戻る。
 
 ## 同梱コンテンツとローカル検証データ
 

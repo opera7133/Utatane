@@ -20,8 +20,8 @@ UKADOCに掲載されているゴースト関連の設定・配布用テキス�
 | ファイル | 状況 | 現在の実装 | 主な不足 |
 | --- | --- | --- | --- |
 | Ghost `descript.txt` | 🟡 | UTF-8／Shift_JIS、基本情報、SHIORI名、キャラクター名、既定surface・balloon、更新URL、README、推奨balloon | 74項目中、配置、SSTP制御、SHIORI詳細設定、カーソル、メニュー、アイコン等が未反映 |
-| Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`、bindgroup／bindoption、初期位置・上下配置、z-order、sticky-window、balloonのoffset／alignment／dontmove／syncscale | 102項目中、画像ベース座標の全用途、メニュー装飾、DPI、透過・crossfade等が未反映 |
-| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、arrow／clickwaitmarker／number、cursor／anchor／anchor.visited、透過方式、windowposition | 162項目中、SSTP／online marker、入力欄、blendmethod、recommended ghost等が未反映 |
+| Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`、bindgroup／bindoption、着せ替えmenuitem、初期位置・上下配置、z-order、sticky-window、balloonのoffset／alignment／dontmove／syncscale | 102項目中、画像ベース座標の全用途、オーナードローメニュー装飾、DPI、透過・crossfade等が未反映 |
+| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、arrow／clickwaitmarker／number、cursor／anchor／anchor.visited、透過方式、windowposition、入力欄 | 162項目中、SSTP／online marker、blendmethod、recommended ghost等が未反映 |
 | Plugin `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、name、id、filename、type、charset、作者、更新URL、README、secondchangeinterval、otherghosttalkを読み込み、SHIORI／dylib／Windows DLLへ分類。メニューから実行、README表示、ネットワーク更新が可能。ネイティブSHIORI型は実体をロードし、OnSecondChange・OnMenuExec・raiseplugin／notifypluginを配送。AKARIの`_create_thread`は独立評価ワーカーで実行し、変更されたグローバル変数を完了時に反映。YAYA製wallet_of_unyuとAKARI製sudohaikuyuは実ファイルでOnMenuExecを確認。macOS dylibは標準`loadu/load`・`unload`・`request`を優先 | dylib実物とWine DLL、AKARIワーカー内の外部通信を伴う長時間処理は未確認 |
 | Headline `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、名前、DLL名、URL、open URL、homeurl、charset、alwaysdisplay、readme、readme.charset。RSS用`type`・`feed`拡張も利用 | UKADOC掲載項目は保持・利用。Windows DLL実行は実行環境依存 |
 | `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストールに加え、refreshとrefreshundeletemaskをバックアップ付き置換で実装 | supplement・languageは未対応 |
@@ -60,10 +60,12 @@ UKADOC掲載は102項目。現在利用するのはかなり限定的。
 | 利用 | `name`、`seriko.use_self_alpha`、`seriko.zorder`、`seriko.sticky-window`、`seriko.alignmenttodesktop` |
 | 利用 | scope別`bindgroup*.name/default/addid` |
 | 利用 | scope別`bindoption*.group`の`mustselect`・`multiple` |
+| 利用 | scope別`menuitem*`／`menuitemex*`の着せ替え順序・区切り・表示名、`menu,hidden` |
 | 利用 | scope別`seriko.alignmenttodesktop`、`defaultleft/top`、balloonの`offsetx/y/xl/xr/yl/yr`・`alignment`・`dontmove`・`syncscale` |
 | 保持 | scope別`defaultx/defaulty` |
 | 別経路で利用 | `readme`、`readme.charset` |
-| 未反映 | 基本メタデータ、menu表示、名前上書き、画像ベース座標の全用途、DPI、menuitem、全メニュー装飾、透過・crossfade、アイコン枠色 |
+| macOS代替 | menuのフォント・色・背景・サイドバー画像は、アクセシビリティとOSテーマに従うmacOS標準メニューを使用するためオーナードローしない |
+| 未反映 | 基本メタデータ、名前上書き、画像ベース座標の全用途、DPI、透過・crossfade、アイコン枠色 |
 
 保存済みの利用者位置がある場合はそちらを優先し、未保存時だけShell `descript.txt`の初期位置を使う。
 
@@ -76,11 +78,13 @@ UKADOC掲載は162項目。現在の実利用項目は以下。
 | 利用 | `type`、`name`、`origin.x/y`、`validrect.left/top/right/bottom`、`wordwrappoint.x/y`、`vertical` |
 | 利用 | `font.name`、`font.height`、`font.color.r/g/b`、`font.shadowcolor.r/g/b`、`font.shadowstyle` |
 | 利用 | `font.bold`、`font.italic`、`font.underline`、`font.strike`、`font.outline`、`arrow0.x/y`、`arrow1.x/y`、`clickwaitmarker.x/y` |
-| 利用 | `number.font.name/height/color`、`number.xr/y`、`use_self_alpha`、`windowposition.x/y/limit` |
+| 利用 | `number.font.name/height/color`、`number.xr/y`、`use_self_alpha`、`windowposition.x`、`windowposition.y`、`windowposition.limit` |
+| 利用 | `communicatebox.font.name/height/color`、`communicatebox.background.color`、`communicatebox.x`、`communicatebox.y`、`communicatebox.width`、`communicatebox.height` |
+| 画像として利用 | `balloonc1.png`／`balloonc2.png`／`balloonc3.png`と対応する`balloonc*s.txt`を、communicatebox／teachbox／inputboxのネイティブ入力パネルへ反映 |
 | 利用 | cursor、cursor.notselect、anchor、anchor.notselect、anchor.visitedの`style`、font／pen／brush RGB。訪問済みアンカーはゴーストの実行中にID単位で保持 |
 | 画像として利用 | balloon画像、marker画像、clickwaitmarker／arrow画像。`balloons*s.txt`等のサーフェス別上書きと`marker.filename`／`clickwaitmarker.filename`／`arrow.filename`を反映 |
 | 別経路で利用 | `readme`、`readme.charset` |
-| 未反映 | disable.font、blendmethod、SSTP／online markerの座標・間隔・文字、communicatebox、`use_self_alpha,full`、recommended ghost |
+| 未反映 | disable.font、blendmethod、SSTP／online markerの座標・間隔・文字、入力画像上のボタン自体のオーナードロー、`use_self_alpha,full`、recommended ghost |
 
 `origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックする。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置する。入力欄は従来どおり横書き。
 
@@ -140,7 +144,7 @@ UKADOC掲載6構文（charset、version、option、group、scope、surface ID行
 
 size／date／charset拡張フィールドとVersion 3の`charset,`・未知行を解析し、sizeとMD5はダウンロード結果の検証にも使う。生成するVersion 2はsize／date、先頭行のcharset、CRLFを出力する。
 
-`delete.txt`はcharset行・コメントを除いたWindows区切りの相対パスを読み、更新後にファイルまたはディレクトリを削除する。絶対パス・空要素・`.`・`..`は拒否する。更新済みファイルの置換と削除処理をまとめた完全なロールバックは今後の課題。
+`delete.txt`はcharset行・コメントを除いたWindows区切りの相対パスを読み、更新後にファイルまたはディレクトリを削除する。絶対パス・空要素・`.`・`..`は拒否し、更新済みファイルの置換と削除処理を同じロールバック境界で扱う。
 
 更新定義生成は`noupdate`とupdate ignore／include、NAR生成は`nonar`とnar ignore／includeを反映する。否定、`*`／`**`／`?`、ルート・フォルダ指定、`include:`に対応するが、文字クラスやエスケープ等のgitignore全細則は今後の課題。
 

@@ -89,6 +89,31 @@ public struct BalloonLoader: Sendable {
         return definition(in: balloon.directory, values: values)
     }
 
+    public func effectiveInputDefinition(
+        for balloon: BalloonDefinition,
+        style: BalloonInputStyle
+    ) -> BalloonDefinition {
+        let descriptURL = balloon.directory.appending(path: "descript.txt", directoryHint: .notDirectory)
+        guard let baseText = try? readText(from: descriptURL) else { return balloon }
+        var values = parser.parse(baseText)
+        let overrideURL = balloon.directory.appending(
+            path: "balloonc\(style.rawValue)s.txt",
+            directoryHint: .notDirectory
+        )
+        if let overrideText = try? readText(from: overrideURL) {
+            values.merge(parser.parse(overrideText)) { _, override in override }
+        }
+        return definition(in: balloon.directory, values: values)
+    }
+
+    public func inputImageURL(style: BalloonInputStyle, in balloon: BalloonDefinition) -> URL? {
+        let url = balloon.directory.appending(
+            path: "balloonc\(style.rawValue).png",
+            directoryHint: .notDirectory
+        )
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
     private func definition(in directory: URL, values: [String: String]) -> BalloonDefinition {
         let isVertical = boolean("vertical", in: values)
         let validRectLeft = integer("validrect.left", in: values, default: 14)
@@ -156,6 +181,18 @@ public struct BalloonLoader: Sendable {
             windowPositionY: integer("windowposition.y", in: values, default: 0),
             limitsWindowPosition: !values.keys.contains("windowposition.limit")
                 || boolean("windowposition.limit", in: values),
+            communicateBoxFontName: values["communicatebox.font.name"],
+            communicateBoxFontHeight: integer("communicatebox.font.height", in: values, default: 13),
+            communicateBoxFontColor: BalloonColor(
+                red: integer("communicatebox.font.color.r", in: values, default: 0),
+                green: integer("communicatebox.font.color.g", in: values, default: 0),
+                blue: integer("communicatebox.font.color.b", in: values, default: 0)
+            ),
+            communicateBoxBackgroundColor: color(prefix: "communicatebox.background.color", in: values),
+            communicateBoxX: integer("communicatebox.x", in: values, default: 20),
+            communicateBoxY: integer("communicatebox.y", in: values, default: 20),
+            communicateBoxWidth: values["communicatebox.width"].flatMap(Int.init),
+            communicateBoxHeight: values["communicatebox.height"].flatMap(Int.init),
             cursorStyle: linkAppearance(prefix: "cursor", in: values, defaultShape: .underline),
             cursorNotSelectedStyle: linkAppearance(prefix: "cursor.notselect", in: values, defaultShape: .none),
             anchorStyle: linkAppearance(prefix: "anchor", in: values, defaultShape: .underline),

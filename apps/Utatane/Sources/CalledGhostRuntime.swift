@@ -708,6 +708,7 @@ final class CalledGhostRuntime {
                     from: autocomplete?.rawValue
                 ),
                 actionTitle: String(localized: "OK"),
+                appearance: textInputAppearance(style: .input),
                 timeoutMilliseconds: timeoutMilliseconds
             ) else {
                 return try? await session.handle(event: .shiori(
@@ -770,7 +771,8 @@ final class CalledGhostRuntime {
                 autocompleteValues: TextInputWindowController.autocompleteValues(
                     from: autocomplete?.rawValue
                 ),
-                actionTitle: String(localized: "OK")
+                actionTitle: String(localized: "OK"),
+                appearance: textInputAppearance(style: .communicate)
             ) else {
                 return try? await session.handle(event: .shiori(
                     id: "OnCommunicateInputCancel",
@@ -795,7 +797,8 @@ final class CalledGhostRuntime {
                 autocompleteValues: TextInputWindowController.autocompleteValues(
                     from: autocomplete?.rawValue
                 ),
-                actionTitle: String(localized: "OK")
+                actionTitle: String(localized: "OK"),
+                appearance: textInputAppearance(style: .teach)
             ) else {
                 return try? await session.handle(event: .shiori(
                     id: "OnTeachInputCancel",
@@ -1286,6 +1289,15 @@ final class CalledGhostRuntime {
                 0: eventID, 1: host, 2: reverse ? "reverse" : "lookup", 3: value
             ]))
         }
+    }
+
+    private func textInputAppearance(style: BalloonInputStyle) -> TextInputWindowController.Appearance {
+        let loader = BalloonLoader()
+        let effective = loader.effectiveInputDefinition(for: balloon, style: style)
+        return TextInputWindowController.Appearance(
+            balloon: effective,
+            backgroundImageURL: loader.inputImageURL(style: style, in: balloon)
+        )
     }
 
     private func handleWebSocket(_ command: SakuraScriptWebSocketCommand) async {

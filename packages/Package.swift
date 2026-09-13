@@ -118,6 +118,7 @@ let package = Package(
             dependencies: [
                 "CNicxliveRenderer",
                 "UtataneBalloon",
+                "UtataneContentValidator",
                 "UtataneCore",
                 "UtataneRuntime",
                 "UtataneSakuraScript",

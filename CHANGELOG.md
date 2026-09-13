@@ -11,12 +11,16 @@
 - `\![vanishbymyself]`と、消滅後に切り替えるゴースト名、確認画面を出す`--option=query`に対応
 - `\![open,developer]`、`\![open,surfacetest]`、`\![open,errorlog]`から既存の開発用パレットを開けるようにした
 - `\![open,shiorirequest]`から、イベントIDとReferenceを指定してSHIORI応答を確認し、必要に応じて応答スクリプトを実行できるようにした
+- コンテンツエクスプローラからゴーストの互換性診断を実行し、欠損ファイル、判定できないSHIORI、未対応SakuraScriptを確認できるようにした
+- 開発用パレットへ、時計イベントと予定通知を任意の日時で確認できる仮想時刻、表示中ログのファイル保存、記録済みSHIORI Requestの再送を追加
 - シェルのAPNGサーフェスを、各フレームの時間・合成・破棄方式に従ってアニメーション表示するようにした。PNAの適用や静止画elementとの合成後も再生情報を維持する
 - SERIKOの`asis`描画をelementとアニメーションで実行し、画像の透過色・PNA・アルファチャンネルを無視して合成するようにした
 - SERIKOアニメーションを複数同時に再生し、`start`／`stop`、alternative／parallel制御、着せ替えの`insert`、小数倍率を含む`scaling`、APNG／GIF／WebPの`import`へ対応
 - SERIKOの`exclusive`／対象指定、`shared-index`、`background`へ対応し、異なるフレーム周期を持つAPNG同士の合成後も双方のタイミングを維持
 - シェル定義の初期位置・上下配置・z-order・sticky-windowと、スコープ別バルーンoffset／alignment／dontmove／syncscaleを実画面へ反映
 - バルーン定義のクリック待ちマーカー座標、カウンタ表示、透過方式、windowpositionと、サーフェス別設定・marker／clickwaitmarker／arrow画像の差し替えへ対応
+- バルーンの`balloonc*.png`、`balloonc*s.txt`とcommunicateboxのフォント・色・座標・サイズをinputbox、communicatebox、teachboxの入力画面へ反映
+- シェルの`menuitem`／`menuitemex`による着せ替え順序・区切り・表示名と、scope別`menu,hidden`をmacOS標準メニューへ反映
 - SSP 2.8.93互換として、起動時とウィンドウモード切り替え時の`OnWindowModeChange`、切り替え後の`OnDisplayChange`、現在の表示方式をnormal・shared・perghostで返す`baseware.windowmode`プロパティに対応
 - カレンダーの「今日の予定」が編集・取り込み・日付変更で変化した時、起動中の全ゴーストへ`OnScheduleTodayNotify`を通知
 - ウィンドウモードで任意の画像を背景に選び、画面いっぱい・全体表示・引き伸ばし・中央から配置方法を選べるようにした。発話履歴の単色背景も自動・白・灰・黒からウィンドウごとに選択でき、履歴の統合設定をウィンドウの操作メニューから切り替えられる
@@ -26,6 +30,8 @@
 - リリースCIでnicxliveとアプリ本体を並列ビルドし、kagariの実動テストによるSwiftパッケージの二重コンパイルを解消
 - ゴースト、バルーン、プラグインの更新処理を、確認・適用・進捗・キャンセルを共通化できる更新ジョブへ接続
 - ネットワーク更新のファイル置換と`delete.txt`を同じトランザクションへまとめ、定義不正や適用失敗時に更新前の内容を維持するようにした
+- UKADOC対応表で実装済みとする構文名が本番コードにも存在することを`mise run check`で検査するようにした
+- 手元の実ゴースト群を互換性診断し、円記号をパス区切りに使うelementと、surfaces.txtを持たない画像のみの旧シェルを読み込めるようにした
 
 ### 修正
 

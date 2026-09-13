@@ -33,9 +33,13 @@ run = "python3 Scripts/generate-localizations.py"
 description = "Check that the generated string catalog is up to date"
 run = "python3 Scripts/generate-localizations.py --check"
 
+[tasks.ukadoc-compatibility-check]
+description = "Check documented UKADOC syntax against production source"
+run = "python3 Scripts/check-ukadoc-compatibility.py"
+
 [tasks.check]
 description = "Run all local checks"
-depends = ["localization-check", "lint", "test", "build"]
+depends = ["localization-check", "ukadoc-compatibility-check", "lint", "test", "build"]
 
 [tasks.build-hosts]
 description = "Build the Windows DLL helper binary with zig"

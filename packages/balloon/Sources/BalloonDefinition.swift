@@ -37,6 +37,14 @@ public struct BalloonDefinition: Sendable, Equatable {
     public let windowPositionX: BalloonWindowPositionX
     public let windowPositionY: Int
     public let limitsWindowPosition: Bool
+    public let communicateBoxFontName: String?
+    public let communicateBoxFontHeight: Int
+    public let communicateBoxFontColor: BalloonColor
+    public let communicateBoxBackgroundColor: BalloonColor?
+    public let communicateBoxX: Int
+    public let communicateBoxY: Int
+    public let communicateBoxWidth: Int?
+    public let communicateBoxHeight: Int?
     public let cursorStyle: BalloonLinkAppearance
     public let cursorNotSelectedStyle: BalloonLinkAppearance
     public let anchorStyle: BalloonLinkAppearance
@@ -80,6 +88,14 @@ public struct BalloonDefinition: Sendable, Equatable {
         windowPositionX: BalloonWindowPositionX = .offset(0),
         windowPositionY: Int = 0,
         limitsWindowPosition: Bool = true,
+        communicateBoxFontName: String? = nil,
+        communicateBoxFontHeight: Int = 13,
+        communicateBoxFontColor: BalloonColor = .init(red: 0, green: 0, blue: 0),
+        communicateBoxBackgroundColor: BalloonColor? = nil,
+        communicateBoxX: Int = 20,
+        communicateBoxY: Int = 20,
+        communicateBoxWidth: Int? = nil,
+        communicateBoxHeight: Int? = nil,
         cursorStyle: BalloonLinkAppearance = .defaultSelected,
         cursorNotSelectedStyle: BalloonLinkAppearance = .defaultNotSelected,
         anchorStyle: BalloonLinkAppearance = .defaultSelected,
@@ -122,12 +138,28 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.windowPositionX = windowPositionX
         self.windowPositionY = windowPositionY
         self.limitsWindowPosition = limitsWindowPosition
+        self.communicateBoxFontName = communicateBoxFontName
+        self.communicateBoxFontHeight = communicateBoxFontHeight
+        self.communicateBoxFontColor = communicateBoxFontColor
+        self.communicateBoxBackgroundColor = communicateBoxBackgroundColor
+        self.communicateBoxX = communicateBoxX
+        self.communicateBoxY = communicateBoxY
+        self.communicateBoxWidth = communicateBoxWidth
+        self.communicateBoxHeight = communicateBoxHeight
         self.cursorStyle = cursorStyle
         self.cursorNotSelectedStyle = cursorNotSelectedStyle
         self.anchorStyle = anchorStyle
         self.anchorNotSelectedStyle = anchorNotSelectedStyle
         self.anchorVisitedStyle = anchorVisitedStyle
     }
+}
+
+public enum BalloonInputStyle: Int, Sendable, Equatable {
+    case send = 0
+    case communicate = 1
+    case teach = 2
+    case input = 3
+    case addressBar = 4
 }
 
 public enum BalloonWindowPositionX: Sendable, Equatable {

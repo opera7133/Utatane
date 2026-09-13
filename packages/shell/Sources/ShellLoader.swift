@@ -46,7 +46,10 @@ public struct ShellLoader: Sendable {
             }
             return $0.url.lastPathComponent < $1.url.lastPathComponent
         }
-        guard !surfacesURLs.isEmpty || !legacySurfaceURLs.isEmpty else {
+        let existingSurfaceIDs = try Set(fileManager.contentsOfDirectory(atPath: shellDirectory.path).compactMap {
+            surfaceID(fromImageFilename: $0)
+        })
+        guard !surfacesURLs.isEmpty || !legacySurfaceURLs.isEmpty || !existingSurfaceIDs.isEmpty else {
             throw ShellError.missingFile(
                 shellDirectory.appending(path: "surfaces.txt", directoryHint: .notDirectory)
             )
@@ -56,13 +59,13 @@ public struct ShellLoader: Sendable {
             try "surface\(entry.surfaceID)\n{\n\(readText(from: entry.url))\n}"
         }
         try sources.append(contentsOf: surfacesURLs.map(readText(from:)))
+        if surfacesURLs.isEmpty, legacySurfaceURLs.isEmpty {
+            sources.append(existingSurfaceIDs.sorted().map { "surface\($0) {}" }.joined(separator: "\n"))
+        }
         let aliasURL = shellDirectory.appending(path: "alias.txt", directoryHint: .notDirectory)
         if fileManager.fileExists(atPath: aliasURL.path) {
             try sources.append(readText(from: aliasURL))
         }
-        let existingSurfaceIDs = try Set(fileManager.contentsOfDirectory(atPath: shellDirectory.path).compactMap {
-            surfaceID(fromImageFilename: $0)
-        })
         let document = parser.parseDocument(
             sources.joined(separator: "\n"),
             existingSurfaceIDs: existingSurfaceIDs
@@ -80,6 +83,8 @@ public struct ShellLoader: Sendable {
             defaultBindGroups: shellMetadata.defaultBindGroups,
             bindGroups: shellMetadata.bindGroups,
             bindOptions: shellMetadata.bindOptions,
+            bindMenuItems: shellMetadata.bindMenuItems,
+            hiddenBindMenuScopes: shellMetadata.hiddenBindMenuScopes,
             surfaceTable: surfaceTable,
             maximumSurfaceWidth: document.maximumSurfaceWidth,
             cursorDefinitions: document.cursorDefinitions,
@@ -117,7 +122,7 @@ public struct ShellLoader: Sendable {
 
     public func loadElement(filename: String, from shellDirectory: URL) throws -> SurfaceAsset {
         let root = shellDirectory.standardizedFileURL.resolvingSymlinksInPath()
-        var normalizedFilename = filename.replacingOccurrences(of: "\\", with: "/")
+        var normalizedFilename = normalizeLegacyPath(filename)
         while normalizedFilename.lowercased().hasSuffix(".png.png") {
             normalizedFilename.removeLast(4)
         }
@@ -142,7 +147,7 @@ public struct ShellLoader: Sendable {
 
     public func loadAnimation(filename: String, from shellDirectory: URL) throws -> URL {
         let root = shellDirectory.standardizedFileURL.resolvingSymlinksInPath()
-        let normalizedFilename = filename.replacingOccurrences(of: "\\", with: "/")
+        let normalizedFilename = normalizeLegacyPath(filename)
         let imageURL = shellDirectory
             .appending(path: normalizedFilename, directoryHint: .notDirectory)
             .standardizedFileURL
@@ -164,6 +169,11 @@ public struct ShellLoader: Sendable {
         return text
     }
 
+    private func normalizeLegacyPath(_ path: String) -> String {
+        path.replacingOccurrences(of: "\\", with: "/")
+            .replacingOccurrences(of: "¥", with: "/")
+    }
+
     private func legacySurfaceID(from filename: String) -> Int? {
         let name = filename.lowercased()
         guard name.hasPrefix("surface"), name.hasSuffix(".txt") else { return nil }
@@ -178,6 +188,8 @@ public struct ShellLoader: Sendable {
         defaultBindGroups: [Int: Set<Int>],
         bindGroups: [Int: [Int: ShellBindGroup]],
         bindOptions: [Int: [String: ShellBindOptions]],
+        bindMenuItems: [Int: [ShellBindMenuItem]],
+        hiddenBindMenuScopes: Set<Int>,
         zOrder: [Int],
         stickyWindowScopes: [Int],
         desktopAlignment: ShellDesktopAlignment?,
@@ -185,13 +197,15 @@ public struct ShellLoader: Sendable {
     ) {
         let url = shellDirectory.appending(path: "descript.txt", directoryHint: .notDirectory)
         guard let text = try? readText(from: url) else {
-            return (false, [:], [:], [:], [], [], nil, [:])
+            return (false, [:], [:], [:], [:], [], [], [], nil, [:])
         }
         var usesSelfAlpha = false
         var defaultBindGroups: [Int: Set<Int>] = [:]
         var groupNames: [Int: [Int: (category: String, part: String, thumbnail: String)]] = [:]
         var groupAddIDs: [Int: [Int: Set<Int>]] = [:]
         var bindOptions: [Int: [String: ShellBindOptions]] = [:]
+        var bindMenuBuilders: [Int: [Int: ShellBindMenuItem]] = [:]
+        var hiddenBindMenuScopes = Set<Int>()
         var zOrder: [Int] = []
         var stickyWindowScopes: [Int] = []
         var desktopAlignment: ShellDesktopAlignment?
@@ -249,6 +263,10 @@ public struct ShellLoader: Sendable {
                     builder.preventsBalloonMovement = boolean(fields[1])
                 case "balloon.syncscale":
                     builder.synchronizesBalloonScale = fields[1].caseInsensitiveCompare("true") == .orderedSame
+                case "menu":
+                    if fields[1].caseInsensitiveCompare("hidden") == .orderedSame {
+                        hiddenBindMenuScopes.insert(scope)
+                    }
                 default:
                     break
                 }
@@ -276,6 +294,26 @@ public struct ShellLoader: Sendable {
                         fields[1].split(separator: ",").compactMap { Int($0) }
                     )
                 }
+                continue
+            }
+            if let (scope, indexText) = scopedMetadataKey(key, marker: "menuitemex"),
+               let index = Int(indexText)
+            {
+                let values = fields[1].split(
+                    separator: ",",
+                    maxSplits: 1,
+                    omittingEmptySubsequences: false
+                ).map(String.init)
+                guard values.count == 2, let groupID = Int(values[1]) else { continue }
+                bindMenuBuilders[scope, default: [:]][index] = .group(id: groupID, title: values[0])
+                continue
+            }
+            if let (scope, indexText) = scopedMetadataKey(key, marker: "menuitem"),
+               let index = Int(indexText)
+            {
+                bindMenuBuilders[scope, default: [:]][index] = fields[1] == "-"
+                    ? .separator
+                    : Int(fields[1]).map { .group(id: $0) }
                 continue
             }
             if let (scope, remainder) = scopedMetadataKey(key, marker: "bindoption"),
@@ -307,6 +345,10 @@ public struct ShellLoader: Sendable {
             defaultBindGroups,
             bindGroups,
             bindOptions,
+            bindMenuBuilders.mapValues { builder in
+                builder.keys.sorted().compactMap { builder[$0] }
+            },
+            hiddenBindMenuScopes,
             zOrder,
             stickyWindowScopes,
             desktopAlignment,

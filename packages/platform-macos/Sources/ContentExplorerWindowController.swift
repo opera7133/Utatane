@@ -1,6 +1,7 @@
 import AppKit
 import Observation
 import SwiftUI
+import UtataneContentValidator
 
 public enum ContentExplorerKind: String, CaseIterable, Identifiable, Sendable {
     case ghost
@@ -105,6 +106,8 @@ final class ContentExplorerModel {
     var selection: Set<String> = []
     var updateStatus: String?
     var isUpdating = false
+    var validatingEntryIDs: Set<String> = []
+    var validationReports: [String: ContentValidationReport] = [:]
     var onActivate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onCheckUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
@@ -140,6 +143,18 @@ final class ContentExplorerModel {
 
     var selectedUpdateEntries: [ContentExplorerEntry] {
         selectedEntries.filter(\.hasUpdateAction)
+    }
+
+    func validate(_ entry: ContentExplorerEntry) {
+        guard entry.kind == .ghost, !validatingEntryIDs.contains(entry.id) else { return }
+        validatingEntryIDs.insert(entry.id)
+        Task { @MainActor in
+            let report = await Task.detached {
+                ContentValidator().validate(ghostRoot: entry.directory)
+            }.value
+            validationReports[entry.id] = report
+            validatingEntryIDs.remove(entry.id)
+        }
     }
 
     func update(
@@ -385,6 +400,10 @@ private struct ContentExplorerView: View {
                 }
                 LabeledContent("フォルダ", value: entry.directory.path)
 
+                if entry.kind == .ghost {
+                    validationView(entry)
+                }
+
                 Spacer()
 
                 HStack {
@@ -405,6 +424,16 @@ private struct ContentExplorerView: View {
                         Button("配布元") {
                             NSWorkspace.shared.open(websiteURL)
                         }
+                    }
+                    if entry.kind == .ghost {
+                        Button(
+                            model.validationReports[entry.id] == nil
+                                ? String(localized: "互換性を検査")
+                                : String(localized: "再検査")
+                        ) {
+                            model.validate(entry)
+                        }
+                        .disabled(model.validatingEntryIDs.contains(entry.id))
                     }
                     Spacer()
                     if entry.hasUpdateAction {
@@ -438,6 +467,48 @@ private struct ContentExplorerView: View {
                 systemImage: "sidebar.left",
                 description: Text("一覧からコンテンツを選ぶと詳細を表示する。")
             )
+        }
+    }
+
+    @ViewBuilder
+    private func validationView(_ entry: ContentExplorerEntry) -> some View {
+        if model.validatingEntryIDs.contains(entry.id) {
+            HStack {
+                ProgressView().controlSize(.small)
+                Text("互換性を検査中…").foregroundStyle(.secondary)
+            }
+        } else if let report = model.validationReports[entry.id] {
+            GroupBox("互換性診断") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("エラー \(report.errorCount)件、警告 \(report.warningCount)件")
+                        .font(.headline)
+                    if report.diagnostics.isEmpty {
+                        Label("既知の問題は見つからなかった", systemImage: "checkmark.circle")
+                            .foregroundStyle(.green)
+                    } else {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 8) {
+                                ForEach(Array(report.diagnostics.enumerated()), id: \.offset) { _, diagnostic in
+                                    HStack(alignment: .top, spacing: 8) {
+                                        Image(systemName: diagnostic.severity == .error
+                                            ? "xmark.octagon.fill"
+                                            : "exclamationmark.triangle.fill")
+                                            .foregroundStyle(diagnostic.severity == .error ? .red : .orange)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(diagnostic.message)
+                                            Text(diagnostic.line.map { "\(diagnostic.path):\($0)" } ?? diagnostic.path)
+                                                .font(.caption.monospaced())
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .frame(maxHeight: 180)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
         }
     }
 }

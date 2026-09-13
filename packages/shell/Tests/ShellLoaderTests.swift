@@ -22,6 +22,22 @@ func `loads an APNG base surface`() throws {
 }
 
 @Test
+func `loads an image only legacy shell`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: UUID().uuidString,
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data().write(to: root.appending(path: "surface0.png"))
+    try Data().write(to: root.appending(path: "surface12.png"))
+
+    let shell = try ShellLoader().load(from: root)
+
+    #expect(shell.surfaces.keys.sorted() == [0, 12])
+}
+
+@Test
 func `loads legacy per-surface animation and collision files`() throws {
     let root = FileManager.default.temporaryDirectory.appending(
         path: UUID().uuidString,
@@ -66,6 +82,23 @@ func `loads an SSP element path containing backslashes`() throws {
         filename: "parts\\21000_CC_2.png",
         from: root
     )
+
+    #expect(asset.imageURL == image)
+}
+
+@Test
+func `loads an SSP element path containing a yen separator`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: UUID().uuidString,
+        directoryHint: .isDirectory
+    )
+    let parts = root.appending(path: "parts", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: parts, withIntermediateDirectories: true)
+    let image = parts.appending(path: "coat.png", directoryHint: .notDirectory)
+    try Data().write(to: image)
+
+    let asset = try ShellLoader().loadElement(filename: "parts¥coat.png", from: root)
 
     #expect(asset.imageURL == image)
 }
@@ -120,6 +153,10 @@ func `parses bind names options defaults and add ids`() throws {
     sakura.bindgroup10.addid,20,21
     sakura.bindgroup11.name,服,パーカー
     sakura.bindoption0.group,服,mustselect+multiple
+    sakura.menuitem0,11
+    sakura.menuitem1,-
+    sakura.menuitemex2,冬のコート,10
+    char2.menu,hidden
     char2.bindgroup30.name,帽子,ニット帽
     """.utf8).write(to: root.appending(path: "descript.txt"))
     try Data("surface0 {}".utf8).write(to: root.appending(path: "surfaces.txt"))
@@ -136,6 +173,12 @@ func `parses bind names options defaults and add ids`() throws {
     ))
     #expect(shell.bindGroups[2]?[30]?.part == "ニット帽")
     #expect(shell.bindOptions[0]?["服"] == ShellBindOptions(mustSelect: true, multiple: true))
+    #expect(shell.bindMenuItems[0] == [
+        .group(id: 11),
+        .separator,
+        .group(id: 10, title: "冬のコート")
+    ])
+    #expect(shell.hiddenBindMenuScopes == [2])
     #expect(shell.effectiveBindGroups(scope: 0, enabled: [10]) == [10, 20, 21])
 }
 

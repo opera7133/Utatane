@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import UtataneBalloon
 @testable import UtatanePlatformMacOS
 
 @MainActor
@@ -86,5 +87,31 @@ struct TextInputWindowControllerTests {
 
         #expect(values == ["apple", "banana", "cherry"])
         #expect(TextInputWindowController.autocompleteValues(from: nil).isEmpty)
+    }
+
+    @Test
+    func `sizes a skinned input panel around the declared field and image`() {
+        let balloon = BalloonDefinition(
+            directory: URL(filePath: "/tmp/balloon"),
+            name: "test",
+            originX: 0,
+            originY: 0,
+            wordWrapPointX: 0,
+            wordWrapPointY: 0,
+            fontHeight: 12,
+            fontColor: BalloonColor(red: 0, green: 0, blue: 0),
+            communicateBoxX: 80,
+            communicateBoxY: 50,
+            communicateBoxWidth: 420,
+            communicateBoxHeight: 32
+        )
+        let appearance = TextInputWindowController.Appearance(balloon: balloon, backgroundImageURL: nil)
+
+        let size = TextInputWindowController.panelSize(
+            for: appearance,
+            backgroundImageSize: NSSize(width: 640, height: 120)
+        )
+
+        #expect(size == NSSize(width: 640, height: 166))
     }
 }

@@ -61,6 +61,41 @@ public enum DeveloperSHIORIResponse: Sendable, Equatable {
     }
 }
 
+public enum DeveloperVirtualClock {
+    public static func date(realDate: Date, offset: TimeInterval?) -> Date {
+        realDate.addingTimeInterval(offset ?? 0)
+    }
+
+    public static func offset(targetDate: Date, realDate: Date) -> TimeInterval {
+        targetDate.timeIntervalSince(realDate)
+    }
+}
+
+struct DeveloperSHIORILogRequest: Equatable {
+    let eventID: String
+    let references: [Int: String]
+
+    init?(entry: LogEntry) {
+        let prefix = "SHIORI request: "
+        guard entry.category == "SHIORI", entry.message.hasPrefix(prefix) else { return nil }
+        let eventID = String(entry.message.dropFirst(prefix.count))
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !eventID.isEmpty else { return nil }
+        self.eventID = eventID
+        references = (entry.details ?? "")
+            .components(separatedBy: .newlines)
+            .compactMap { line -> (Int, String)? in
+                guard line.hasPrefix("Reference"), let separator = line.firstIndex(of: ":"),
+                      let index = Int(line[line.index(line.startIndex, offsetBy: "Reference".count) ..< separator])
+                else { return nil }
+                return (index, line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces))
+            }
+            .reduce(into: [:]) { result, reference in
+                result[reference.0] = reference.1
+            }
+    }
+}
+
 public struct DebugConsoleView: View {
     public enum Pane: String, CaseIterable, Identifiable {
         case logs = "ログ"
@@ -97,6 +132,7 @@ public struct DebugConsoleView: View {
     private let model: GhostListModel
     @Binding private var selectedGhostID: URL?
     @Binding private var pane: Pane
+    @Binding private var virtualTimeOffset: TimeInterval?
     private let lastClickedRegion: String?
     private let isSessionAvailable: Bool
     private let isReloadDisabled: Bool
@@ -138,6 +174,7 @@ public struct DebugConsoleView: View {
         selectedGhostID: Binding<URL?>,
         pane: Binding<Pane>,
         levelFilter: Binding<LevelFilter>,
+        virtualTimeOffset: Binding<TimeInterval?>,
         lastClickedRegion: String?,
         isSessionAvailable: Bool,
         isReloadDisabled: Bool,
@@ -164,6 +201,7 @@ public struct DebugConsoleView: View {
         _selectedGhostID = selectedGhostID
         _pane = pane
         _levelFilter = levelFilter
+        _virtualTimeOffset = virtualTimeOffset
         self.lastClickedRegion = lastClickedRegion
         self.isSessionAvailable = isSessionAvailable
         self.isReloadDisabled = isReloadDisabled
@@ -300,6 +338,34 @@ public struct DebugConsoleView: View {
                     .foregroundStyle(.secondary)
             }
 
+            Section("仮想時刻") {
+                Toggle("仮想時刻を使う", isOn: virtualTimeEnabled)
+                DatePicker(
+                    "現在時刻",
+                    selection: virtualDate,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .disabled(virtualTimeOffset == nil)
+                HStack {
+                    Button("1時間進める") {
+                        virtualTimeOffset = (virtualTimeOffset ?? 0) + 3600
+                    }
+                    .disabled(virtualTimeOffset == nil)
+                    Button("1日進める") {
+                        virtualTimeOffset = (virtualTimeOffset ?? 0) + 86400
+                    }
+                    .disabled(virtualTimeOffset == nil)
+                    Spacer()
+                    Button("実時間に戻す") {
+                        virtualTimeOffset = nil
+                    }
+                    .disabled(virtualTimeOffset == nil)
+                }
+                Text("時計は指定した時刻から実時間と同じ速さで進み、OnMinuteChange、OnHourTimeSignal、予定通知へ反映される。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("サーフィステスト") {
                 Picker("スコープ", selection: $testScope) {
                     ForEach(0 ... 9, id: \.self) { scope in
@@ -387,6 +453,20 @@ public struct DebugConsoleView: View {
     private var selectedSurface: DeveloperSurfaceTestItem? {
         guard let selectedSurfaceID else { return nil }
         return surfaces.first { $0.id == selectedSurfaceID }
+    }
+
+    private var virtualTimeEnabled: Binding<Bool> {
+        Binding(
+            get: { virtualTimeOffset != nil },
+            set: { enabled in virtualTimeOffset = enabled ? 0 : nil }
+        )
+    }
+
+    private var virtualDate: Binding<Date> {
+        Binding(
+            get: { DeveloperVirtualClock.date(realDate: Date(), offset: virtualTimeOffset) },
+            set: { virtualTimeOffset = DeveloperVirtualClock.offset(targetDate: $0, realDate: Date()) }
+        )
     }
 
     private var shioriRequestTool: some View {
@@ -659,6 +739,11 @@ public struct DebugConsoleView: View {
             }
             .help("表示中のログをクリップボードにコピー")
 
+            Button(action: saveFilteredLogs) {
+                Label("保存", systemImage: "square.and.arrow.down")
+            }
+            .help("表示中のログをテキストファイルへ保存")
+
             Button {
                 logStore.clear()
                 logStore.publishSnapshot()
@@ -772,6 +857,14 @@ public struct DebugConsoleView: View {
                     Button(action: { copyEntry(entry) }) {
                         Label("詳細をコピー", systemImage: "doc.on.doc")
                     }
+
+                    if let request = DeveloperSHIORILogRequest(entry: entry) {
+                        Button("再送") {
+                            replay(request)
+                        }
+                        .disabled(!isSessionAvailable || isSendingSHIORIRequest)
+                        .help("このSHIORI Requestを選択中のゴーストへ再送")
+                    }
                 }
 
                 ScrollView(.vertical) {
@@ -853,6 +946,40 @@ public struct DebugConsoleView: View {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
+    private func saveFilteredLogs() {
+        let panel = NSSavePanel()
+        panel.title = "ログを保存"
+        panel.nameFieldStringValue = "Utatane-log.txt"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try AppLogStore.formatText(for: filteredEntries).write(to: url, atomically: true, encoding: .utf8)
+        } catch {
+            logStore.error(
+                "ログを保存できませんでした",
+                category: "Developer",
+                details: error.localizedDescription
+            )
+        }
+    }
+
+    private func replay(_ request: DeveloperSHIORILogRequest) {
+        pane = .shioriRequest
+        shioriEventID = request.eventID
+        shioriReferences = request.references.keys.sorted().map {
+            SHIORIReferenceField(index: $0, value: request.references[$0] ?? "")
+        }
+        isSendingSHIORIRequest = true
+        shioriResponse = nil
+        Task { @MainActor in
+            let response = await onSendSHIORIRequest(request.eventID, request.references)
+            shioriResponse = response
+            isSendingSHIORIRequest = false
+            if executesSHIORIResponse, let script = response.script {
+                onExecuteScript(script)
+            }
+        }
+    }
+
     private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss.SSS"
@@ -868,7 +995,12 @@ public struct DebugConsoleView: View {
 
 private struct SHIORIReferenceField: Identifiable {
     let index: Int
-    var value = ""
+    var value: String
+
+    init(index: Int, value: String = "") {
+        self.index = index
+        self.value = value
+    }
 
     var id: Int {
         index

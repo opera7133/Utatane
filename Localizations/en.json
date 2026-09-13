@@ -366,5 +366,17 @@
   "表示中の全項目の更新を確認" : "Check All Visible Items for Updates",
   "表示中の全項目を更新" : "Update All Visible Items",
   "表示中の全項目を修復" : "Repair All Visible Items",
-  "上の一括操作から確認、更新、修復ができる。" : "Use Batch Actions above to check, update, or repair them."
+  "上の一括操作から確認、更新、修復ができる。" : "Use Batch Actions above to check, update, or repair them.",
+  "互換性を検査中…" : "Inspecting compatibility…",
+  "既知の問題は見つからなかった" : "No known issues found",
+  "互換性を検査" : "Inspect Compatibility",
+  "再検査" : "Inspect Again",
+  "仮想時刻" : "Virtual Time",
+  "仮想時刻を使う" : "Use Virtual Time",
+  "1時間進める" : "Advance 1 Hour",
+  "1日進める" : "Advance 1 Day",
+  "実時間に戻す" : "Return to System Time",
+  "時計は指定した時刻から実時間と同じ速さで進み、OnMinuteChange、OnHourTimeSignal、予定通知へ反映される。" : "The clock advances from the selected time at normal speed and applies to OnMinuteChange, OnHourTimeSignal, and schedule notifications.",
+  "保存" : "Save",
+  "再送" : "Resend"
 }

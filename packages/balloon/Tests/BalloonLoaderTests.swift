@@ -216,6 +216,49 @@ func `loads marker number transparency and window placement settings`() throws {
 }
 
 @Test
+func `loads input appearance and balloonc surface overrides`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    type,balloon
+    name,Input Balloon
+    communicatebox.font.name,Helvetica
+    communicatebox.font.height,15
+    communicatebox.font.color.r,10
+    communicatebox.font.color.g,20
+    communicatebox.font.color.b,30
+    communicatebox.background.color.r,40
+    communicatebox.background.color.g,50
+    communicatebox.background.color.b,60
+    communicatebox.x,24
+    communicatebox.y,18
+    communicatebox.width,260
+    communicatebox.height,28
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+    try Data("""
+    communicatebox.x,32
+    communicatebox.width,280
+    """.utf8).write(to: directory.appending(path: "balloonc1s.txt"))
+    try Data().write(to: directory.appending(path: "balloonc1.png"))
+    let loader = BalloonLoader()
+    let balloon = try loader.load(from: directory)
+
+    let effective = loader.effectiveInputDefinition(for: balloon, style: .communicate)
+
+    #expect(effective.communicateBoxFontName == "Helvetica")
+    #expect(effective.communicateBoxFontHeight == 15)
+    #expect(effective.communicateBoxFontColor == BalloonColor(red: 10, green: 20, blue: 30))
+    #expect(effective.communicateBoxBackgroundColor == BalloonColor(red: 40, green: 50, blue: 60))
+    #expect(effective.communicateBoxX == 32)
+    #expect(effective.communicateBoxY == 18)
+    #expect(effective.communicateBoxWidth == 280)
+    #expect(effective.communicateBoxHeight == 28)
+    #expect(loader.inputImageURL(style: .communicate, in: balloon)?.lastPathComponent == "balloonc1.png")
+}
+
+@Test
 func `applies per surface balloon settings and replacement filenames`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

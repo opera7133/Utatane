@@ -136,3 +136,22 @@ import Testing
     #expect(model.selectedUpdateEntries == [first, second])
     #expect(model.visibleUpdateEntries == [first, second])
 }
+
+@MainActor
+@Test func `content explorer runs ghost compatibility validation`() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let entry = ContentExplorerEntry(kind: .ghost, name: "Broken", directory: directory)
+    let model = ContentExplorerModel()
+    model.update(entries: [entry])
+
+    model.validate(entry)
+    for _ in 0 ..< 100 where model.validationReports[entry.id] == nil {
+        try await Task.sleep(for: .milliseconds(10))
+    }
+
+    #expect(model.validationReports[entry.id]?.errorCount == 1)
+    #expect(!model.validatingEntryIDs.contains(entry.id))
+}

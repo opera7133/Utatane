@@ -8,6 +8,8 @@ public struct ShellDefinition: Sendable, Equatable {
     public let defaultBindGroups: [Int: Set<Int>]
     public let bindGroups: [Int: [Int: ShellBindGroup]]
     public let bindOptions: [Int: [String: ShellBindOptions]]
+    public let bindMenuItems: [Int: [ShellBindMenuItem]]
+    public let hiddenBindMenuScopes: Set<Int>
     public let surfaceTable: SurfaceTable?
     public let maximumSurfaceWidth: Int?
     public let cursorDefinitions: [Int: [SurfaceCursorDefinition]]
@@ -24,7 +26,9 @@ public struct ShellDefinition: Sendable, Equatable {
         usesSelfAlpha: Bool = false,
         defaultBindGroups: [Int: Set<Int>] = [:],
         bindGroups: [Int: [Int: ShellBindGroup]] = [:],
-        bindOptions: [Int: [String: ShellBindOptions]] = [:]
+        bindOptions: [Int: [String: ShellBindOptions]] = [:],
+        bindMenuItems: [Int: [ShellBindMenuItem]] = [:],
+        hiddenBindMenuScopes: Set<Int> = []
     ) {
         self.init(
             directory: directory,
@@ -34,6 +38,8 @@ public struct ShellDefinition: Sendable, Equatable {
             defaultBindGroups: defaultBindGroups,
             bindGroups: bindGroups,
             bindOptions: bindOptions,
+            bindMenuItems: bindMenuItems,
+            hiddenBindMenuScopes: hiddenBindMenuScopes,
             surfaceTable: nil
         )
     }
@@ -46,6 +52,8 @@ public struct ShellDefinition: Sendable, Equatable {
         defaultBindGroups: [Int: Set<Int>] = [:],
         bindGroups: [Int: [Int: ShellBindGroup]] = [:],
         bindOptions: [Int: [String: ShellBindOptions]] = [:],
+        bindMenuItems: [Int: [ShellBindMenuItem]] = [:],
+        hiddenBindMenuScopes: Set<Int> = [],
         surfaceTable: SurfaceTable?
     ) {
         self.init(
@@ -56,6 +64,8 @@ public struct ShellDefinition: Sendable, Equatable {
             defaultBindGroups: defaultBindGroups,
             bindGroups: bindGroups,
             bindOptions: bindOptions,
+            bindMenuItems: bindMenuItems,
+            hiddenBindMenuScopes: hiddenBindMenuScopes,
             surfaceTable: surfaceTable,
             maximumSurfaceWidth: nil
         )
@@ -69,6 +79,8 @@ public struct ShellDefinition: Sendable, Equatable {
         defaultBindGroups: [Int: Set<Int>] = [:],
         bindGroups: [Int: [Int: ShellBindGroup]] = [:],
         bindOptions: [Int: [String: ShellBindOptions]] = [:],
+        bindMenuItems: [Int: [ShellBindMenuItem]] = [:],
+        hiddenBindMenuScopes: Set<Int> = [],
         surfaceTable: SurfaceTable?,
         maximumSurfaceWidth: Int?,
         cursorDefinitions: [Int: [SurfaceCursorDefinition]] = [:],
@@ -85,6 +97,8 @@ public struct ShellDefinition: Sendable, Equatable {
         self.defaultBindGroups = defaultBindGroups
         self.bindGroups = bindGroups
         self.bindOptions = bindOptions
+        self.bindMenuItems = bindMenuItems
+        self.hiddenBindMenuScopes = hiddenBindMenuScopes
         self.surfaceTable = surfaceTable
         self.maximumSurfaceWidth = maximumSurfaceWidth
         self.cursorDefinitions = cursorDefinitions
@@ -112,6 +126,11 @@ public struct ShellDefinition: Sendable, Equatable {
         }
         return result
     }
+}
+
+public enum ShellBindMenuItem: Sendable, Equatable {
+    case group(id: Int, title: String? = nil)
+    case separator
 }
 
 public enum SurfaceCursorTrigger: String, Sendable, Equatable {

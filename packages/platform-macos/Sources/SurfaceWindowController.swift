@@ -215,7 +215,9 @@ public final class SurfaceWindowController {
     }
 
     public func dressupContextMenuItem(title: String) -> SurfaceContextMenuItem? {
-        let infos = dressupInfo()
+        let infos = dressupInfo().filter { info in
+            shell?.hiddenBindMenuScopes.contains(info.scope) != true
+        }
         guard !infos.isEmpty else { return nil }
         let grouped = Dictionary(grouping: infos) { "\($0.scope)\u{0}\($0.group.category)" }
         let categories = grouped.values.sorted {
@@ -223,10 +225,33 @@ public final class SurfaceWindowController {
                 < ($1.first?.scope ?? 0, $1.first?.group.category ?? "")
         }.map { categoryInfos in
             let category = categoryInfos.first?.group.category ?? ""
-            let items = categoryInfos.sorted { $0.group.id < $1.group.id }.map { info in
+            let scope = categoryInfos.first?.scope ?? 0
+            var remaining = Dictionary(uniqueKeysWithValues: categoryInfos.map { ($0.group.id, $0) })
+            var orderedInfos: [(DressupInfo?, String?)] = []
+            var lastWasSeparator = false
+            for menuItem in shell?.bindMenuItems[scope] ?? [] {
+                switch menuItem {
+                case let .group(id, title):
+                    guard let info = remaining.removeValue(forKey: id), info.group.category == category else {
+                        continue
+                    }
+                    orderedInfos.append((info, title))
+                    lastWasSeparator = false
+                case .separator:
+                    guard !orderedInfos.isEmpty, !lastWasSeparator else { continue }
+                    orderedInfos.append((nil, nil))
+                    lastWasSeparator = true
+                }
+            }
+            if lastWasSeparator {
+                orderedInfos.removeLast()
+            }
+            orderedInfos.append(contentsOf: remaining.values.sorted { $0.group.id < $1.group.id }.map { ($0, nil) })
+            let items = orderedInfos.map { info, title -> SurfaceContextMenuItem in
+                guard let info else { return .separator }
                 let selectedCount = categoryInfos.count(where: \.enabled)
                 return SurfaceContextMenuItem.action(
-                    title: info.group.part,
+                    title: title ?? info.group.part,
                     isSelected: info.enabled,
                     isEnabled: !(info.enabled && info.options.mustSelect && selectedCount == 1),
                     handler: { [weak self] in

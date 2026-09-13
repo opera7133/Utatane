@@ -2632,6 +2632,60 @@ func `dressup context menu can remove an optional default part`() throws {
 
 @Test
 @MainActor
+func `dressup context menu follows shell menu item order titles and visibility`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(
+        shell: ShellDefinition(
+            directory: directory,
+            surfaces: [:],
+            bindGroups: [
+                0: [
+                    10: ShellBindGroup(id: 10, category: "服", part: "コート"),
+                    11: ShellBindGroup(id: 11, category: "服", part: "パーカー")
+                ],
+                1: [20: ShellBindGroup(id: 20, category: "帽子", part: "帽子")]
+            ],
+            bindMenuItems: [0: [
+                .group(id: 11, title: "上着"),
+                .separator,
+                .group(id: 10)
+            ]],
+            hiddenBindMenuScopes: [1]
+        ),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { controller.hideAll() }
+
+    let root = try #require(controller.dressupContextMenuItem(title: "着せ替え"))
+    guard case let .submenu(_, categories) = root,
+          case let .submenu(_, items) = try #require(categories.first)
+    else {
+        Issue.record("expected ordered dressup menu")
+        return
+    }
+    #expect(items.count == 3)
+    guard case let .action(firstTitle, _, _, _) = items[0],
+          case .separator = items[1],
+          case let .action(lastTitle, _, _, _) = items[2]
+    else {
+        Issue.record("expected action, separator, action")
+        return
+    }
+    #expect(firstTitle == "上着")
+    #expect(lastTitle == "コート")
+    #expect(categories.count == 1)
+}
+
+@Test
+@MainActor
 func `dressup selection persists per ghost and shell`() throws {
     let suiteName = "DressupSelectionStoreTests-\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))
