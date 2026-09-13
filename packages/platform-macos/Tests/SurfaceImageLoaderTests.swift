@@ -93,6 +93,56 @@ func `preserves APNG frames and timing when the animation uses alpha`() throws {
 }
 
 @Test
+@MainActor
+func `preserves APNG frames and timing after applying a PNA mask`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let imageURL = directory.appending(path: "surface0.apng")
+    let maskURL = directory.appending(path: "surface0.pna")
+    try #require(Data(base64Encoded: animatedPNGBase64)).write(to: imageURL)
+    try makeMaskPNG(width: 4, height: 4, transparentAt: (x: 0, y: 0)).write(to: maskURL)
+
+    let loader = SurfaceImageLoader()
+    let image = try loader.load(SurfaceAsset(id: 0, imageURL: imageURL, alphaMaskURL: maskURL))
+    let representation = try #require(image.representations.first as? NSBitmapImageRep)
+
+    #expect(loader.frameCount(of: image) == 2)
+    #expect(representation.pixelsWide == 4)
+    #expect(representation.pixelsHigh == 4)
+    representation.setProperty(.currentFrame, withValue: 0)
+    #expect(abs((representation.value(forProperty: .currentFrameDuration) as? Double ?? 0) - 0.2) < 0.001)
+    let firstFrame = try #require(representation.currentFrameBitmap)
+    #expect((firstFrame.colorAt(x: 0, y: 0)?.alphaComponent ?? 1) < 0.1)
+}
+
+@Test
+@MainActor
+func `preserves APNG frames and timing while compositing a static element`() throws {
+    let data = try #require(Data(base64Encoded: animatedPNGBase64))
+    let animated = try #require(NSImage(data: data))
+    let overlay = try makeTestImage(colors: [NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1)])
+    let loader = SurfaceImageLoader()
+
+    let image = loader.composite(base: animated, overlay: overlay, x: 0, y: 0)
+    let representation = try #require(image.representations.first as? NSBitmapImageRep)
+
+    #expect(loader.frameCount(of: image) == 2)
+    #expect(representation.pixelsWide == 4)
+    #expect(representation.pixelsHigh == 4)
+    representation.setProperty(.currentFrame, withValue: 0)
+    #expect(abs((representation.value(forProperty: .currentFrameDuration) as? Double ?? 0) - 0.2) < 0.001)
+    let firstFrame = try #require(representation.currentFrameBitmap)
+    #expect(firstFrame.containsOpaqueRedPixel)
+    #expect(firstFrame.containsOpaqueGreenPixel)
+    representation.setProperty(.currentFrame, withValue: 1)
+    let secondFrame = try #require(representation.currentFrameBitmap)
+    #expect(secondFrame.containsOpaqueBluePixel)
+    #expect(secondFrame.containsOpaqueGreenPixel)
+}
+
+@Test
 func `maps both SERIKO overlay fast spellings to source atop`() {
     #expect(surfaceCompositingOperation(for: "overlay") == .sourceOver)
     #expect(surfaceCompositingOperation(for: "overlay-fast") == .sourceAtop)
@@ -229,6 +279,76 @@ private func makeTestImage(colors: [NSColor]) throws -> NSImage {
     let image = NSImage(size: bitmap.size)
     image.addRepresentation(bitmap)
     return image
+}
+
+private func makeMaskPNG(
+    width: Int,
+    height: Int,
+    transparentAt pixel: (x: Int, y: Int)
+) throws -> Data {
+    let bitmap = try #require(NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: width,
+        pixelsHigh: height,
+        bitsPerSample: 8,
+        samplesPerPixel: 3,
+        hasAlpha: false,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: width * 3,
+        bitsPerPixel: 24
+    ))
+    for y in 0 ..< height {
+        for x in 0 ..< width {
+            let color = x == pixel.x && y == pixel.y
+                ? NSColor(deviceWhite: 0, alpha: 1)
+                : NSColor(deviceWhite: 1, alpha: 1)
+            bitmap.setColor(color, atX: x, y: y)
+        }
+    }
+    return try #require(bitmap.representation(using: .png, properties: [:]))
+}
+
+private extension NSBitmapImageRep {
+    var currentFrameBitmap: NSBitmapImageRep? {
+        cgImage.map(NSBitmapImageRep.init(cgImage:))
+    }
+
+    var containsOpaqueRedPixel: Bool {
+        containsOpaquePixel {
+            $0.redComponent > 0.8
+                && $0.redComponent > $0.greenComponent * 3
+                && $0.redComponent > $0.blueComponent * 3
+        }
+    }
+
+    var containsOpaqueGreenPixel: Bool {
+        containsOpaquePixel {
+            $0.greenComponent > 0.8
+                && $0.greenComponent > $0.redComponent * 3
+                && $0.greenComponent > $0.blueComponent * 3
+        }
+    }
+
+    var containsOpaqueBluePixel: Bool {
+        containsOpaquePixel {
+            $0.blueComponent > 0.8
+                && $0.blueComponent > $0.redComponent * 3
+                && $0.blueComponent > $0.greenComponent * 3
+        }
+    }
+
+    private func containsOpaquePixel(matching predicate: (NSColor) -> Bool) -> Bool {
+        for y in 0 ..< pixelsHigh {
+            for x in 0 ..< pixelsWide {
+                guard let color = colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                if color.alphaComponent > 0.9, predicate(color) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
 }
 
 let animatedPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAACXBIWXMAAAAAAAAAAQCEeRdzAAAACGFjVEwAAAACAAAAAPONk3AAAAAaZmNUTAAAAAAAAAAEAAAABAAAAAAAAAAAAAEABQAAXC5E3AAAACRJREFUeJxjfMPF8J8BCKLc7BlBNAsDGmCJcIfI8PzgYcCqAgDqiATS2a3PlwAAABpmY1RMAAAAAQAAAAQAAAAEAAAAAAAAAAAAAQAFAADHXa4IAAAAJGZkQVQAAAACeJxj1BVUZACBt7zfwTQLAxpggcm8fvTkP1YVAB/oB//52BKiAAAAAElFTkSuQmCC"

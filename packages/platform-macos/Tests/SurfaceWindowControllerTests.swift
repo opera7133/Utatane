@@ -126,6 +126,40 @@ import UtataneShell
 }
 
 @MainActor
+@Test func `animates an APNG base after composing a static surface element`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try #require(Data(base64Encoded: animatedPNGBase64))
+        .write(to: directory.appending(path: "body.apng"))
+    try makePNG(width: 1, height: 1, color: .green)
+        .write(to: directory.appending(path: "badge.png"))
+    let definition = SurfaceDefinition(
+        id: 5,
+        elements: [
+            SurfaceElement(id: 0, method: "base", filename: "body.apng", x: 0, y: 0),
+            SurfaceElement(id: 1, method: "overlay", filename: "badge.png", x: 0, y: 0)
+        ],
+        collisions: [],
+        animations: []
+    )
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(
+        shell: ShellDefinition(directory: directory, surfaces: [5: definition], usesSelfAlpha: true),
+        surfaceID: 5
+    )
+    defer { controller.hideAll() }
+
+    let rendered = try #require(controller.renderedImage())
+    let representation = try #require(rendered.representations.first as? NSBitmapImageRep)
+    #expect(representation.value(forProperty: .frameCount) as? Int == 2)
+    #expect(controller.isImageAnimationEnabled())
+}
+
+@MainActor
 @Test func `renders the installed Umaumauma default APNG surfaces`() throws {
     let repositoryRoot = URL(filePath: #filePath)
         .deletingLastPathComponent()

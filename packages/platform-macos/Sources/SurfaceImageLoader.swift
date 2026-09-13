@@ -1,6 +1,7 @@
 import AppKit
 import CoreImage
 import CoreImage.CIFilterBuiltins
+import ImageIO
 import UtataneCore
 
 struct SurfaceImageLoader {
@@ -42,6 +43,34 @@ struct SurfaceImageLoader {
         operation: NSCompositingOperation = .sourceOver,
         clipsToBaseAlpha: Bool = false
     ) -> NSImage {
+        if let animated = compositeAnimated(
+            base: base,
+            overlay: overlay,
+            x: x,
+            y: y,
+            operation: operation,
+            clipsToBaseAlpha: clipsToBaseAlpha
+        ) {
+            return animated
+        }
+        return compositeFrame(
+            base: base,
+            overlay: overlay,
+            x: x,
+            y: y,
+            operation: operation,
+            clipsToBaseAlpha: clipsToBaseAlpha
+        )
+    }
+
+    private func compositeFrame(
+        base: NSImage,
+        overlay: NSImage,
+        x: Int,
+        y: Int,
+        operation: NSCompositingOperation,
+        clipsToBaseAlpha: Bool
+    ) -> NSImage {
         if operation == .multiply, clipsToBaseAlpha,
            let composited = compositeMultiplySourceAtop(base: base, overlay: overlay, x: x, y: y)
         {
@@ -53,23 +82,20 @@ struct SurfaceImageLoader {
             return composited
         }
 
-        let result = NSImage(size: base.size)
-        result.lockFocus()
-        NSGraphicsContext.current?.imageInterpolation = .none
-        base.draw(in: NSRect(origin: .zero, size: base.size))
-        overlay.draw(
-            in: NSRect(
-                x: CGFloat(x),
-                y: base.size.height - CGFloat(y) - overlay.size.height,
-                width: overlay.size.width,
-                height: overlay.size.height
-            ),
-            from: .zero,
-            operation: operation,
-            fraction: 1
-        )
-        result.unlockFocus()
-        return result
+        return rasterizedImage(size: base.size) {
+            base.draw(in: NSRect(origin: .zero, size: base.size))
+            overlay.draw(
+                in: NSRect(
+                    x: CGFloat(x),
+                    y: base.size.height - CGFloat(y) - overlay.size.height,
+                    width: overlay.size.width,
+                    height: overlay.size.height
+                ),
+                from: .zero,
+                operation: operation,
+                fraction: 1
+            )
+        }
     }
 
     private func compositeMultiplySourceAtop(
@@ -101,21 +127,65 @@ struct SurfaceImageLoader {
     }
 
     func translated(_ image: NSImage, x: Int, y: Int) -> NSImage {
-        let result = NSImage(size: image.size)
-        result.lockFocus()
-        NSGraphicsContext.current?.imageInterpolation = .none
-        image.draw(
-            in: NSRect(
-                x: CGFloat(x),
-                y: -CGFloat(y),
-                width: image.size.width,
-                height: image.size.height
-            ),
-            from: .zero,
-            operation: .sourceOver,
-            fraction: 1
-        )
-        result.unlockFocus()
+        if let animation = imageAnimation(from: image),
+           let result = makeAnimatedImage(
+               frames: animation.frames.map { translatedFrame($0, x: x, y: y) },
+               durations: animation.durations,
+               loopCount: animation.loopCount
+           )
+        {
+            return result
+        }
+        return translatedFrame(image, x: x, y: y)
+    }
+
+    private func translatedFrame(_ image: NSImage, x: Int, y: Int) -> NSImage {
+        rasterizedImage(size: image.size) {
+            image.draw(
+                in: NSRect(
+                    x: CGFloat(x),
+                    y: -CGFloat(y),
+                    width: image.size.width,
+                    height: image.size.height
+                ),
+                from: .zero,
+                operation: .sourceOver,
+                fraction: 1
+            )
+        }
+    }
+
+    private func rasterizedImage(size: NSSize, drawing: () -> Void) -> NSImage {
+        let width = max(Int(size.width.rounded(.up)), 1)
+        let height = max(Int(size.height.rounded(.up)), 1)
+        guard let representation = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: width,
+            pixelsHigh: height,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bitmapFormat: [],
+            bytesPerRow: width * 4,
+            bitsPerPixel: 32
+        ),
+            let graphicsContext = NSGraphicsContext(bitmapImageRep: representation)
+        else {
+            return NSImage(size: size)
+        }
+
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = graphicsContext
+        graphicsContext.imageInterpolation = .none
+        drawing()
+        graphicsContext.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+
+        representation.size = size
+        let result = NSImage(size: size)
+        result.addRepresentation(representation)
         return result
     }
 
@@ -170,6 +240,18 @@ struct SurfaceImageLoader {
         to source: NSImage,
         sourceURL: URL = URL(filePath: "surface.png")
     ) throws -> NSImage {
+        if let animation = imageAnimation(from: source) {
+            let frames = try animation.frames.map {
+                try applyingTopLeftTransparency(to: $0, sourceURL: sourceURL)
+            }
+            if let result = makeAnimatedImage(
+                frames: frames,
+                durations: animation.durations,
+                loopCount: animation.loopCount
+            ) {
+                return result
+            }
+        }
         guard let sourceRepresentation = bestBitmapRepresentation(in: source)
             ?? source.cgImage(forProposedRect: nil, context: nil, hints: nil).map({ NSBitmapImageRep(cgImage: $0) })
         else {
@@ -215,12 +297,6 @@ struct SurfaceImageLoader {
             }
         }
         if hasEmbeddedTransparency {
-            if frameCount(of: source) > 1 {
-                sourceRepresentation.size = pixelSize
-                let image = NSImage(size: pixelSize)
-                image.addRepresentation(sourceRepresentation)
-                return image
-            }
             representation.size = pixelSize
             let image = NSImage(size: pixelSize)
             image.addRepresentation(representation)
@@ -267,10 +343,22 @@ struct SurfaceImageLoader {
     }
 
     private func applyingAlphaMask(source: NSImage, mask: NSImage, sourceURL: URL) throws -> NSImage {
-        guard let sourceRepresentation = source.representations
-            .compactMap({ $0 as? NSBitmapImageRep }).first,
-            let maskRepresentation = mask.representations
-            .compactMap({ $0 as? NSBitmapImageRep }).first
+        if let animation = imageAnimation(from: source) {
+            let frames = try animation.frames.map {
+                try applyingAlphaMask(source: $0, mask: mask, sourceURL: sourceURL)
+            }
+            if let result = makeAnimatedImage(
+                frames: frames,
+                durations: animation.durations,
+                loopCount: animation.loopCount
+            ) {
+                return result
+            }
+        }
+        guard let sourceRepresentation = bestBitmapRepresentation(in: source)
+            ?? source.cgImage(forProposedRect: nil, context: nil, hints: nil).map({ NSBitmapImageRep(cgImage: $0) }),
+            let maskRepresentation = bestBitmapRepresentation(in: mask)
+            ?? mask.cgImage(forProposedRect: nil, context: nil, hints: nil).map({ NSBitmapImageRep(cgImage: $0) })
         else {
             throw SurfaceImageError.invalidImage(sourceURL)
         }
@@ -318,6 +406,153 @@ struct SurfaceImageLoader {
         let result = NSImage(size: output.size)
         result.addRepresentation(output)
         return result
+    }
+
+    private func compositeAnimated(
+        base: NSImage,
+        overlay: NSImage,
+        x: Int,
+        y: Int,
+        operation: NSCompositingOperation,
+        clipsToBaseAlpha: Bool
+    ) -> NSImage? {
+        let baseAnimation = imageAnimation(from: base)
+        let overlayAnimation = imageAnimation(from: overlay)
+        let frames: [NSImage]
+        let durations: [TimeInterval]
+        let loopCount: Int
+
+        switch (baseAnimation, overlayAnimation) {
+        case let (baseAnimation?, nil):
+            frames = baseAnimation.frames.map {
+                compositeFrame(
+                    base: $0,
+                    overlay: overlay,
+                    x: x,
+                    y: y,
+                    operation: operation,
+                    clipsToBaseAlpha: clipsToBaseAlpha
+                )
+            }
+            durations = baseAnimation.durations
+            loopCount = baseAnimation.loopCount
+        case let (nil, overlayAnimation?):
+            frames = overlayAnimation.frames.map {
+                compositeFrame(
+                    base: base,
+                    overlay: $0,
+                    x: x,
+                    y: y,
+                    operation: operation,
+                    clipsToBaseAlpha: clipsToBaseAlpha
+                )
+            }
+            durations = overlayAnimation.durations
+            loopCount = overlayAnimation.loopCount
+        case let (baseAnimation?, overlayAnimation?) where baseAnimation.hasSameTimeline(as: overlayAnimation):
+            frames = zip(baseAnimation.frames, overlayAnimation.frames).map { baseFrame, overlayFrame in
+                compositeFrame(
+                    base: baseFrame,
+                    overlay: overlayFrame,
+                    x: x,
+                    y: y,
+                    operation: operation,
+                    clipsToBaseAlpha: clipsToBaseAlpha
+                )
+            }
+            durations = baseAnimation.durations
+            loopCount = combinedLoopCount(baseAnimation.loopCount, overlayAnimation.loopCount)
+        default:
+            return nil
+        }
+
+        return makeAnimatedImage(frames: frames, durations: durations, loopCount: loopCount)
+    }
+
+    private func combinedLoopCount(_ lhs: Int, _ rhs: Int) -> Int {
+        if lhs == 0 {
+            return rhs
+        }
+        if rhs == 0 {
+            return lhs
+        }
+        return min(lhs, rhs)
+    }
+
+    private func imageAnimation(from image: NSImage) -> SurfaceImageAnimation? {
+        guard let representation = bestBitmapRepresentation(in: image),
+              let frameCount = representation.value(forProperty: .frameCount) as? Int,
+              frameCount > 1
+        else { return nil }
+        let currentFrame = representation.value(forProperty: .currentFrame) as? Int ?? 0
+        defer { representation.setProperty(.currentFrame, withValue: currentFrame) }
+
+        var frames: [NSImage] = []
+        var durations: [TimeInterval] = []
+        for index in 0 ..< frameCount {
+            representation.setProperty(.currentFrame, withValue: index)
+            guard let frame = representation.cgImage else { return nil }
+            let size = NSSize(width: frame.width, height: frame.height)
+            frames.append(NSImage(cgImage: frame, size: size))
+            let duration = (representation.value(forProperty: .currentFrameDuration) as? NSNumber)?
+                .doubleValue ?? 0.1
+            durations.append(max(duration, 0.01))
+        }
+        let loopCount = (representation.value(forProperty: .loopCount) as? NSNumber)?.intValue ?? 0
+        return SurfaceImageAnimation(frames: frames, durations: durations, loopCount: loopCount)
+    }
+
+    private func makeAnimatedImage(
+        frames: [NSImage],
+        durations: [TimeInterval],
+        loopCount: Int
+    ) -> NSImage? {
+        guard frames.count > 1, frames.count == durations.count else { return nil }
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            data,
+            "public.png" as CFString,
+            frames.count,
+            nil
+        ) else { return nil }
+        CGImageDestinationSetProperties(destination, [
+            kCGImagePropertyPNGDictionary: [
+                kCGImagePropertyAPNGLoopCount: loopCount
+            ]
+        ] as CFDictionary)
+        for (frame, duration) in zip(frames, durations) {
+            guard let image = frame.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+                return nil
+            }
+            CGImageDestinationAddImage(destination, image, [
+                kCGImagePropertyPNGDictionary: [
+                    kCGImagePropertyAPNGDelayTime: duration,
+                    kCGImagePropertyAPNGUnclampedDelayTime: duration
+                ]
+            ] as CFDictionary)
+        }
+        guard CGImageDestinationFinalize(destination),
+              let decoded = NSImage(data: data as Data),
+              let representation = bestBitmapRepresentation(in: decoded)
+        else { return nil }
+        let size = frames[0].size
+        representation.size = size
+        let result = NSImage(size: size)
+        result.addRepresentation(representation)
+        return result
+    }
+}
+
+private struct SurfaceImageAnimation {
+    let frames: [NSImage]
+    let durations: [TimeInterval]
+    let loopCount: Int
+
+    func hasSameTimeline(as other: SurfaceImageAnimation) -> Bool {
+        guard frames.count == other.frames.count,
+              durations.count == other.durations.count
+        else { return false }
+        return zip(durations, other.durations).allSatisfy { abs($0 - $1) < 0.001 }
     }
 }
 
