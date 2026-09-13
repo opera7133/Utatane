@@ -115,7 +115,7 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | --- | --- | --- |
 | surface選択 | 🟡 | 単一ID、範囲、列挙、除外、`surface.append` |
 | alias | 🟡 | sakura、kero、char scopeの名前→surface ID候補 |
-| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系。`seriko.use_self_alpha,1`でもアルファチャンネルのないPNGは左上色透過へフォールバック。APNGは現在PNG画像として先頭フレームを表示し、APNG自身の時間アニメーションは未対応。全描画オプションは未網羅 |
+| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系。`seriko.use_self_alpha,1`でもアルファチャンネルのないPNGは左上色透過へフォールバック。透過情報を持つAPNGサーフェスはフレーム時間・合成・破棄方式を含めてアニメーション表示する。PNA付きAPNGと全描画オプションは未網羅 |
 | collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用 |
 | animation基本 | 🟡 | name、interval文字列、pattern、wait、座標 |
 | interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能。複数animationの完全な並行実行は未対応 |

@@ -273,6 +273,10 @@ public final class SurfaceWindowController {
         }.sorted()
     }
 
+    func isImageAnimationEnabled(for scope: Int = 0) -> Bool {
+        characters[scope]?.isImageAnimationEnabled ?? false
+    }
+
     public func windowFrame(for scope: Int) -> NSRect? {
         characters[scope]?.windowFrame
     }
@@ -926,6 +930,10 @@ private final class CharacterSurfaceController {
         imageView?.image
     }
 
+    var isImageAnimationEnabled: Bool {
+        imageView?.animates ?? false
+    }
+
     var serikoInspectorSnapshot: SERIKOInspectorSnapshot? {
         guard let baseSurfaceID else { return nil }
         return SERIKOInspectorSnapshot(
@@ -1224,8 +1232,8 @@ private final class CharacterSurfaceController {
     func setRepaintLocked(_ locked: Bool) {
         isRepaintLocked = locked
         guard !locked, let pendingAnimationImage else { return }
-        imageView?.image = pendingAnimationImage
         self.pendingAnimationImage = nil
+        setAnimationImage(pendingAnimationImage)
     }
 
     private func animationID(for identifier: String) -> Int? {
@@ -1821,6 +1829,7 @@ private final class CharacterSurfaceController {
         let scaledSize = displaySize(for: boundImage)
         let imageView = SurfaceImageView(frame: NSRect(origin: .zero, size: scaledSize))
         imageView.image = boundImage
+        imageView.animates = imageLoader.frameCount(of: boundImage) > 1
         imageView.imageAlignment = .alignCenter
         imageView.imageScaling = .scaleAxesIndependently
         configureInteractionView(imageView, definition: definition, shell: shell)
@@ -2228,6 +2237,7 @@ private final class CharacterSurfaceController {
             pendingAnimationImage = image
         } else {
             imageView?.image = image
+            imageView?.animates = imageLoader.frameCount(of: image) > 1
         }
     }
 }

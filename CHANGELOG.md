@@ -10,6 +10,7 @@
 - `\![vanishbymyself]`と、消滅後に切り替えるゴースト名、確認画面を出す`--option=query`に対応
 - `\![open,developer]`、`\![open,surfacetest]`、`\![open,errorlog]`から既存の開発用パレットを開けるようにした
 - `\![open,shiorirequest]`から、イベントIDとReferenceを指定してSHIORI応答を確認し、必要に応じて応答スクリプトを実行できるようにした
+- シェルのAPNGサーフェスを、各フレームの時間・合成・破棄方式に従ってアニメーション表示するようにした
 - SSP 2.8.93互換として、起動時とウィンドウモード切り替え時の`OnWindowModeChange`、切り替え後の`OnDisplayChange`、現在の表示方式をnormal・shared・perghostで返す`baseware.windowmode`プロパティに対応
 - カレンダーの「今日の予定」が編集・取り込み・日付変更で変化した時、起動中の全ゴーストへ`OnScheduleTodayNotify`を通知
 - ウィンドウモードで任意の画像を背景に選び、画面いっぱい・全体表示・引き伸ばし・中央から配置方法を選べるようにした。発話履歴の単色背景も自動・白・灰・黒からウィンドウごとに選択でき、履歴の統合設定をウィンドウの操作メニューから切り替えられる

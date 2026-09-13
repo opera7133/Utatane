@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import Testing
 import UtataneCore
 @testable import UtatanePlatformMacOS
@@ -69,6 +70,26 @@ func `preserves embedded alpha instead of keying opaque pixels with the same dec
     let output = try #require(NSBitmapImageRep(data: tiff))
     #expect((output.colorAt(x: 0, y: 0)?.alphaComponent ?? 1) == 0)
     #expect((output.colorAt(x: 1, y: 0)?.alphaComponent ?? 0) > 0.9)
+}
+
+@Test
+@MainActor
+func `preserves APNG frames and timing when the animation uses alpha`() throws {
+    let data = try #require(Data(base64Encoded: animatedPNGBase64))
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appending(path: "surface0.apng")
+    try data.write(to: url)
+
+    let loader = SurfaceImageLoader()
+    let image = try loader.load(SurfaceAsset(id: 0, imageURL: url, alphaMaskURL: nil))
+    let representation = try #require(image.representations.first as? NSBitmapImageRep)
+    let duration = try #require(representation.value(forProperty: .currentFrameDuration) as? Double)
+
+    #expect(loader.frameCount(of: image) == 2)
+    #expect(abs(duration - 0.2) < 0.001)
 }
 
 @Test
@@ -209,3 +230,5 @@ private func makeTestImage(colors: [NSColor]) throws -> NSImage {
     image.addRepresentation(bitmap)
     return image
 }
+
+let animatedPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAACXBIWXMAAAAAAAAAAQCEeRdzAAAACGFjVEwAAAACAAAAAPONk3AAAAAaZmNUTAAAAAAAAAAEAAAABAAAAAAAAAAAAAEABQAAXC5E3AAAACRJREFUeJxjfMPF8J8BCKLc7BlBNAsDGmCJcIfI8PzgYcCqAgDqiATS2a3PlwAAABpmY1RMAAAAAQAAAAQAAAAEAAAAAAAAAAAAAQAFAADHXa4IAAAAJGZkQVQAAAACeJxj1BVUZACBt7zfwTQLAxpggcm8fvTkP1YVAB/oB//52BKiAAAAAElFTkSuQmCC"

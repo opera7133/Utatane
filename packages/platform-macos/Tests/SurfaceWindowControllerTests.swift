@@ -107,18 +107,22 @@ import UtataneShell
 }
 
 @MainActor
-@Test func `renders a surface stored with the APNG extension`() throws {
+@Test func `animates a surface stored with the APNG extension`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)
     defer { try? FileManager.default.removeItem(at: directory) }
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0.apng"))
+    try #require(Data(base64Encoded: animatedPNGBase64))
+        .write(to: directory.appending(path: "surface0.apng"))
 
     let controller = SurfaceWindowController()
     try controller.show(shell: ShellDefinition(directory: directory, surfaces: [:]), surfaceID: 0)
     defer { controller.hideAll() }
 
-    #expect(controller.renderedImage() != nil)
+    let rendered = try #require(controller.renderedImage())
+    let representation = try #require(rendered.representations.first as? NSBitmapImageRep)
+    #expect(representation.value(forProperty: .frameCount) as? Int == 2)
+    #expect(controller.isImageAnimationEnabled())
 }
 
 @MainActor

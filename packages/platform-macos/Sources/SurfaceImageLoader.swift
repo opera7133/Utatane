@@ -10,9 +10,7 @@ struct SurfaceImageLoader {
         guard let alphaMaskURL = surface.alphaMaskURL else {
             if usesSelfAlpha,
                let source = NSImage(contentsOf: surface.imageURL),
-               let representation = source.representations
-               .compactMap({ $0 as? NSBitmapImageRep })
-               .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh }),
+               let representation = bestBitmapRepresentation(in: source),
                representation.hasAlpha
             {
                 let pixelSize = NSSize(width: representation.pixelsWide, height: representation.pixelsHigh)
@@ -29,6 +27,11 @@ struct SurfaceImageLoader {
             throw SurfaceImageError.invalidImage(alphaMaskURL)
         }
         return try applyingAlphaMask(source: source, mask: mask, sourceURL: surface.imageURL)
+    }
+
+    func frameCount(of image: NSImage) -> Int {
+        guard let representation = bestBitmapRepresentation(in: image) else { return 1 }
+        return max(representation.value(forProperty: .frameCount) as? Int ?? 1, 1)
     }
 
     func composite(
@@ -167,9 +170,7 @@ struct SurfaceImageLoader {
         to source: NSImage,
         sourceURL: URL = URL(filePath: "surface.png")
     ) throws -> NSImage {
-        guard let sourceRepresentation = source.representations
-            .compactMap({ $0 as? NSBitmapImageRep })
-            .max(by: { $0.pixelsWide * $0.pixelsHigh < $1.pixelsWide * $1.pixelsHigh })
+        guard let sourceRepresentation = bestBitmapRepresentation(in: source)
             ?? source.cgImage(forProposedRect: nil, context: nil, hints: nil).map({ NSBitmapImageRep(cgImage: $0) })
         else {
             throw SurfaceImageError.invalidImage(sourceURL)
@@ -214,6 +215,12 @@ struct SurfaceImageLoader {
             }
         }
         if hasEmbeddedTransparency {
+            if frameCount(of: source) > 1 {
+                sourceRepresentation.size = pixelSize
+                let image = NSImage(size: pixelSize)
+                image.addRepresentation(sourceRepresentation)
+                return image
+            }
             representation.size = pixelSize
             let image = NSImage(size: pixelSize)
             image.addRepresentation(representation)
@@ -246,6 +253,17 @@ struct SurfaceImageLoader {
         let image = NSImage(size: pixelSize)
         image.addRepresentation(representation)
         return image
+    }
+
+    private func bestBitmapRepresentation(in image: NSImage) -> NSBitmapImageRep? {
+        image.representations.compactMap { $0 as? NSBitmapImageRep }.max { lhs, rhs in
+            let lhsFrames = lhs.value(forProperty: .frameCount) as? Int ?? 1
+            let rhsFrames = rhs.value(forProperty: .frameCount) as? Int ?? 1
+            if (lhsFrames > 1) != (rhsFrames > 1) {
+                return lhsFrames <= 1
+            }
+            return lhs.pixelsWide * lhs.pixelsHigh < rhs.pixelsWide * rhs.pixelsHigh
+        }
     }
 
     private func applyingAlphaMask(source: NSImage, mask: NSImage, sourceURL: URL) throws -> NSImage {
