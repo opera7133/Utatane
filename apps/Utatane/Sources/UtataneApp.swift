@@ -157,8 +157,9 @@ struct UtataneApp: App {
         Settings {
             UtataneSettingsView(
                 settings: networkSettings,
-                headlinesDirectory: ContentRoot.headlinesDirectory,
-                balloonsDirectory: ContentRoot.balloonsDirectory,
+                contentSources: ContentRoot.contentSourceStore,
+                headlineDirectories: ContentRoot.headlineReadDirectories,
+                balloonDirectories: ContentRoot.balloonReadDirectories,
                 appUpdater: updaterController.updater
             )
         }
@@ -3589,7 +3590,7 @@ private struct UtataneRootView: View {
     private func uninstallMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
         let ghost = menuGhost(for: target)
         let canRemove = ghost.flatMap {
-            removableContentContainer(for: $0.rootDirectory, root: ContentRoot.ghostsDirectory)
+            removableContentContainer(for: $0.rootDirectory, kind: .ghost)
         } != nil
         return .action(
             title: String(localized: "アンインストール"),
@@ -5033,7 +5034,7 @@ private struct UtataneRootView: View {
     }
 
     private func reloadHeadlines() {
-        installedHeadlines = (try? HeadlineCatalog().load(from: ContentRoot.headlinesDirectory)) ?? []
+        installedHeadlines = (try? HeadlineCatalog().load(from: ContentRoot.headlineReadDirectories)) ?? []
         configureContextMenu()
     }
 
@@ -5655,6 +5656,7 @@ private struct UtataneRootView: View {
 
     private func contentExplorerEntries() -> [ContentExplorerEntry] {
         var entries: [ContentExplorerEntry] = []
+        let contentSources = ContentRoot.contentSourceStore.sources
 
         for ghost in model.ghosts {
             let isActive = currentGhost?.id == ghost.id || calledGhosts[ghost.id] != nil
@@ -5663,13 +5665,11 @@ private struct UtataneRootView: View {
                 kind: .ghost,
                 name: ghost.name,
                 detail: ghost.rootDirectory.lastPathComponent,
+                sourceName: contentSourceName(for: ghost.rootDirectory, kind: .ghost, in: contentSources),
                 directory: ghost.rootDirectory,
                 readmeURL: ghostReadme(ghost)?.url,
                 updateURL: updateURL,
-                removalContainer: removableContentContainer(
-                    for: ghost.rootDirectory,
-                    root: ContentRoot.ghostsDirectory
-                ),
+                removalContainer: removableContentContainer(for: ghost.rootDirectory, kind: .ghost),
                 isActive: isActive,
                 canUpdate: !isActive || currentGhost?.id == ghost.id,
                 resolvesUpdateURLDynamically: currentGhost?.id == ghost.id
@@ -5689,14 +5689,13 @@ private struct UtataneRootView: View {
                     kind: .shell,
                     name: shell.name,
                     detail: ghost.name,
+                    sourceName: contentSourceName(for: ghost.rootDirectory, kind: .ghost, in: contentSources),
                     directory: shell.directory,
                     parentDirectory: ghost.rootDirectory,
                     readmeURL: readme?.url,
                     updateURL: updateURL,
-                    removalContainer: removableContentContainer(
-                        for: ghost.rootDirectory,
-                        root: ContentRoot.ghostsDirectory
-                    ) == nil || isActiveShell ? nil : shellContainer,
+                    removalContainer: removableContentContainer(for: ghost.rootDirectory, kind: .ghost) == nil
+                        || isActiveShell ? nil : shellContainer,
                     isActive: isActiveShell,
                     canUpdate: !isActiveShell
                 ))
@@ -5715,12 +5714,13 @@ private struct UtataneRootView: View {
                 kind: .balloon,
                 name: installedBalloon.name,
                 detail: installedBalloon.directory.lastPathComponent,
+                sourceName: contentSourceName(for: installedBalloon.directory, kind: .balloon, in: contentSources),
                 directory: installedBalloon.directory,
                 readmeURL: readme?.url,
                 updateURL: updateURL,
                 removalContainer: isActive ? nil : removableContentContainer(
                     for: installedBalloon.directory,
-                    root: ContentRoot.balloonsDirectory
+                    kind: .balloon
                 ),
                 isActive: isActive,
                 canUpdate: !isActive || balloon?.directory == installedBalloon.directory
@@ -5732,14 +5732,12 @@ private struct UtataneRootView: View {
                 kind: .headline,
                 name: headline.name,
                 detail: headline.id.lastPathComponent,
+                sourceName: contentSourceName(for: headline.id, kind: .headline, in: contentSources),
                 directory: headline.id,
                 readmeURL: headline.readmeURL,
                 websiteURL: headline.openURL ?? headline.siteURL,
                 updateURL: ContentNetworkUpdater.homeURL(in: headline.id),
-                removalContainer: removableContentContainer(
-                    for: headline.id,
-                    root: ContentRoot.headlinesDirectory
-                )
+                removalContainer: removableContentContainer(for: headline.id, kind: .headline)
             )
         })
 
@@ -5748,14 +5746,12 @@ private struct UtataneRootView: View {
                 kind: .plugin,
                 name: plugin.name,
                 detail: plugin.author ?? plugin.id,
+                sourceName: contentSourceName(for: plugin.directory, kind: .plugin, in: contentSources),
                 directory: plugin.directory,
                 readmeURL: plugin.readmeURL,
                 websiteURL: plugin.authorURL,
                 updateURL: plugin.homeURL,
-                removalContainer: removableContentContainer(
-                    for: plugin.directory,
-                    root: ContentRoot.pluginsDirectory
-                ),
+                removalContainer: removableContentContainer(for: plugin.directory, kind: .plugin),
                 canActivate: isNativePlugin(plugin)
             )
         })
@@ -5770,8 +5766,29 @@ private struct UtataneRootView: View {
         }
     }
 
+    private func contentSourceName(
+        for directory: URL,
+        kind: ContentSourceKind,
+        in sources: [ContentSource]
+    ) -> String? {
+        let path = directory.standardizedFileURL.path
+        return sources
+            .filter { $0.kind == kind }
+            .sorted { $0.priority < $1.priority }
+            .first { source in
+                let rootPath = source.directory.standardizedFileURL.path
+                return path == rootPath || path.hasPrefix(rootPath + "/")
+            }?.name
+    }
+
     private func removableContentContainer(for directory: URL, root: URL) -> URL? {
         SafeContentTrash.isDirectChild(directory, of: root) ? root : nil
+    }
+
+    private func removableContentContainer(for directory: URL, kind: ContentSourceKind) -> URL? {
+        ContentRoot.contentSourceStore.enabledDirectories(for: kind).first {
+            removableContentContainer(for: directory, root: $0) != nil
+        }
     }
 
     private func activateContentExplorerEntry(_ entry: ContentExplorerEntry) {
@@ -6168,10 +6185,7 @@ private struct UtataneRootView: View {
         asksConfirmation: Bool
     ) {
         guard let ghost = calledRuntime?.ghost ?? currentGhost,
-              let removalContainer = removableContentContainer(
-                  for: ghost.rootDirectory,
-                  root: ContentRoot.ghostsDirectory
-              )
+              let removalContainer = removableContentContainer(for: ghost.rootDirectory, kind: .ghost)
         else {
             showError("このゴーストはUtataneが管理する削除可能な場所にないため、アンインストールできない。")
             return
@@ -6568,7 +6582,7 @@ func startupInformationEvents(
         ("installedheadlinename", indexed(installedHeadlines.map(\.name).sorted())),
         ("ghostpathlist", indexed(ContentRoot.ghostReadDirectories.map(\.path))),
         ("balloonpathlist", indexed(ContentRoot.balloonReadDirectories.map(\.path))),
-        ("headlinepathlist", [0: ContentRoot.headlinesDirectory.path]),
+        ("headlinepathlist", indexed(ContentRoot.headlineReadDirectories.map(\.path))),
         ("installedplugin", indexed(installedPlugins.map { [$0.name, $0.id].joined(separator: "\u{1}") })),
         ("configuredbiffname", [:]),
         ("pluginpathlist", indexed(ContentRoot.pluginReadDirectories.map(\.path))),
@@ -7218,9 +7232,9 @@ enum ContentRoot {
     static var ghostReadDirectories: [URL] {
         #if DEBUG
             let bundled = repositoryRoot.appending(path: "Content/Bundled/Ghosts", directoryHint: .isDirectory)
-            return [bundled, ghostsDirectory]
+            return [bundled] + contentSourceStore.enabledDirectories(for: .ghost)
         #else
-            return [ghostsDirectory]
+            return contentSourceStore.enabledDirectories(for: .ghost)
         #endif
     }
 
@@ -7245,9 +7259,9 @@ enum ContentRoot {
     static var balloonReadDirectories: [URL] {
         #if DEBUG
             let bundled = repositoryRoot.appending(path: "Content/Bundled/Balloons", directoryHint: .isDirectory)
-            return [bundled, balloonsDirectory]
+            return [bundled] + contentSourceStore.enabledDirectories(for: .balloon)
         #else
-            return [balloonsDirectory]
+            return contentSourceStore.enabledDirectories(for: .balloon)
         #endif
     }
 
@@ -7267,6 +7281,10 @@ enum ContentRoot {
         #endif
 
         return contentDirectory.appending(path: "Headline", directoryHint: .isDirectory)
+    }
+
+    static var headlineReadDirectories: [URL] {
+        contentSourceStore.enabledDirectories(for: .headline)
     }
 
     static var pluginsDirectory: URL {
@@ -7299,10 +7317,43 @@ enum ContentRoot {
     static var pluginReadDirectories: [URL] {
         #if DEBUG
             let local = repositoryRoot.appending(path: "Content/Local/Plugins", directoryHint: .isDirectory)
-            return [local, pluginsDirectory]
+            return [local] + contentSourceStore.enabledDirectories(for: .plugin)
         #else
-            return [pluginsDirectory]
+            return contentSourceStore.enabledDirectories(for: .plugin)
         #endif
+    }
+
+    static var contentSourceStore: ContentSourceStore {
+        ContentSourceStore(defaultSources: [
+            ContentSource(
+                id: "standard.ghost",
+                kind: .ghost,
+                name: String(localized: "ゴースト"),
+                directory: ghostsDirectory,
+                isBuiltIn: true
+            ),
+            ContentSource(
+                id: "standard.balloon",
+                kind: .balloon,
+                name: String(localized: "バルーン"),
+                directory: balloonsDirectory,
+                isBuiltIn: true
+            ),
+            ContentSource(
+                id: "standard.headline",
+                kind: .headline,
+                name: String(localized: "ヘッドライン"),
+                directory: headlinesDirectory,
+                isBuiltIn: true
+            ),
+            ContentSource(
+                id: "standard.plugin",
+                kind: .plugin,
+                name: String(localized: "プラグイン"),
+                directory: pluginsDirectory,
+                isBuiltIn: true
+            )
+        ])
     }
 
     static var repositoryRoot: URL {

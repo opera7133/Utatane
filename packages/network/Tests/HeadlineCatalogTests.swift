@@ -54,3 +54,20 @@ import Testing
 
     #expect(try HeadlineCatalog().load(from: root).isEmpty)
 }
+
+@Test func `multiple headline roots keep the first directory name`() throws {
+    let temporary = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let firstRoot = temporary.appending(path: "first")
+    let secondRoot = temporary.appending(path: "second")
+    for root in [firstRoot, secondRoot] {
+        let directory = root.appending(path: "news")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data("type,rss\nname,\(root.lastPathComponent)\nfeed,https://example.test/feed.xml\n".utf8)
+            .write(to: directory.appending(path: "descript.txt"))
+    }
+
+    let entries = try HeadlineCatalog().load(from: [firstRoot, secondRoot])
+
+    #expect(entries.map(\.name) == ["first"])
+}

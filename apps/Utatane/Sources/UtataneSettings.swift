@@ -53,6 +53,7 @@ final class UtataneSettingsStore: ObservableObject {
 
     enum Pane: Hashable {
         case general
+        case content
         case ghost
         case talkAndBalloon
         case shiori
@@ -481,14 +482,16 @@ final class UtataneSettingsStore: ObservableObject {
 
 struct UtataneSettingsView: View {
     @ObservedObject var settings: UtataneSettingsStore
+    @ObservedObject var contentSources: ContentSourceStore
     @ObservedObject private var relauncher = ApplicationRelauncher.shared
-    let headlinesDirectory: URL
-    let balloonsDirectory: URL
+    let headlineDirectories: [URL]
+    let balloonDirectories: [URL]
     let appUpdater: SPUUpdater
     @State private var headlines: [InstalledHeadline] = []
     @State private var balloons: [BalloonDefinition] = []
     @State private var loadError: String?
     @State private var restartError: String?
+    @State private var contentSourcesRequireRestart = false
 
     var body: some View {
         TabView(selection: $settings.selectedPane) {
@@ -574,6 +577,28 @@ struct UtataneSettingsView: View {
             }
             .tabItem { Label("一般", systemImage: "gearshape") }
             .tag(UtataneSettingsStore.Pane.general)
+
+            SettingsPage(
+                title: "コンテンツフォルダ",
+                description: "ゴーストなどを種類ごとに複数のフォルダから読み込む。"
+            ) {
+                ContentSourcesSettingsView(
+                    store: contentSources,
+                    requiresRestart: $contentSourcesRequireRestart
+                )
+                if contentSourcesRequireRestart {
+                    Section {
+                        Text("変更はUtataneの再起動後に反映される。")
+                            .foregroundStyle(.secondary)
+                        Button("今すぐ再起動") {
+                            restartApplication()
+                        }
+                        .disabled(relauncher.isRestarting)
+                    }
+                }
+            }
+            .tabItem { Label("コンテンツ", systemImage: "folder") }
+            .tag(UtataneSettingsStore.Pane.content)
 
             SettingsPage(
                 title: "ゴーストごとの設定",
@@ -798,7 +823,7 @@ struct UtataneSettingsView: View {
     }
 
     private func reload() {
-        balloons = (try? BalloonLoader().loadInstalled(from: balloonsDirectory)) ?? []
+        balloons = (try? BalloonLoader().loadInstalled(from: balloonDirectories)) ?? []
         if !settings.defaultBalloonDirectoryName.isEmpty,
            !balloons.contains(where: {
                $0.directory.lastPathComponent == settings.defaultBalloonDirectoryName
@@ -807,7 +832,7 @@ struct UtataneSettingsView: View {
             settings.defaultBalloonDirectoryName = ""
         }
         do {
-            headlines = try HeadlineCatalog().load(from: headlinesDirectory)
+            headlines = try HeadlineCatalog().load(from: headlineDirectories)
             loadError = nil
         } catch {
             headlines = []
@@ -828,6 +853,119 @@ struct UtataneSettingsView: View {
         case .rss: "RSS / Atom"
         case .legacyDLL:
             ConfigHeadlineSensor.canLoad(headline) ? "HEADLINE設定" : "HEADLINE DLL（Wine）"
+        }
+    }
+}
+
+private struct ContentSourcesSettingsView: View {
+    @ObservedObject var store: ContentSourceStore
+    @Binding var requiresRestart: Bool
+
+    var body: some View {
+        ForEach(ContentSourceKind.allCases) { kind in
+            Section(kind.title) {
+                let sources = store.orderedSources(for: kind)
+                ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+                    HStack(alignment: .center, spacing: 10) {
+                        Toggle("", isOn: enabledBinding(for: source))
+                            .labelsHidden()
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(source.name)
+                            Text(source.directory.path)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        }
+                        Spacer()
+                        Button {
+                            NSWorkspace.shared.activateFileViewerSelecting([source.directory])
+                        } label: {
+                            Image(systemName: "folder")
+                        }
+                        .buttonStyle(.borderless)
+                        .help("Finderで表示")
+                        Button {
+                            store.move(
+                                kind: kind,
+                                fromOffsets: IndexSet(integer: index),
+                                toOffset: index - 1
+                            )
+                            requiresRestart = true
+                        } label: {
+                            Image(systemName: "chevron.up")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(index == 0)
+                        .help("優先順位を上げる")
+                        Button {
+                            store.move(
+                                kind: kind,
+                                fromOffsets: IndexSet(integer: index),
+                                toOffset: index + 2
+                            )
+                            requiresRestart = true
+                        } label: {
+                            Image(systemName: "chevron.down")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(index == sources.count - 1)
+                        .help("優先順位を下げる")
+                        Button(role: .destructive) {
+                            store.remove(id: source.id)
+                            requiresRestart = true
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.borderless)
+                        .disabled(source.isBuiltIn)
+                        .help(source.isBuiltIn ? "標準フォルダは削除できない" : "一覧から削除")
+                    }
+                }
+                Button("フォルダを追加…") {
+                    addDirectory(for: kind)
+                }
+            }
+        }
+        Section {
+            Text("上にあるフォルダほど優先される。同じフォルダ名のコンテンツが複数ある場合は、優先順位が高いほうだけを読み込む。フォルダを一覧から外しても、中のファイルは削除されない。")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func enabledBinding(for source: ContentSource) -> Binding<Bool> {
+        Binding(
+            get: { store.sources.first(where: { $0.id == source.id })?.isEnabled ?? false },
+            set: { isEnabled in
+                var updated = source
+                updated.isEnabled = isEnabled
+                store.update(updated)
+                requiresRestart = true
+            }
+        )
+    }
+
+    private func addDirectory(for kind: ContentSourceKind) {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.prompt = String(localized: "追加")
+        panel.message = String(localized: "読み込むコンテンツフォルダを選択")
+        guard panel.runModal() == .OK, let directory = panel.url else { return }
+        _ = store.add(kind: kind, name: directory.lastPathComponent, directory: directory)
+        requiresRestart = true
+    }
+}
+
+private extension ContentSourceKind {
+    var title: LocalizedStringKey {
+        switch self {
+        case .ghost: "ゴースト"
+        case .balloon: "バルーン"
+        case .headline: "ヘッドライン"
+        case .plugin: "プラグイン"
         }
     }
 }

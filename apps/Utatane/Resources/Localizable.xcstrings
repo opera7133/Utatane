@@ -4090,6 +4090,35 @@
         }
       }
     },
+    "コンテンツ" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Content"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "콘텐츠"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内容"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "內容"
+          }
+        }
+      }
+    },
     "コンテンツの保存場所を安全に確認できないため、削除しなかった。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4144,6 +4173,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "刪除內容？"
+          }
+        }
+      }
+    },
+    "コンテンツフォルダ" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Content Folders"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "콘텐츠 폴더"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内容文件夹"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "內容資料夾"
           }
         }
       }
@@ -4376,6 +4434,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "將 Ghost 與氣泡顯示在一個普通視窗中，方便直播或螢幕錄影時依視窗擷取。"
+          }
+        }
+      }
+    },
+    "ゴーストなどを種類ごとに複数のフォルダから読み込む。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Load each type of content from multiple folders."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고스트 등의 콘텐츠를 종류별로 여러 폴더에서 불러옵니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按类型从多个文件夹加载 Ghost 等内容。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "依類型從多個資料夾載入 Ghost 等內容。"
           }
         }
       }
@@ -5453,6 +5540,35 @@
         }
       }
     },
+    "フォルダを追加…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add Folder…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "폴더 추가…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "添加文件夹…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "新增資料夾…"
+          }
+        }
+      }
+    },
     "プラグイン" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5536,6 +5652,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "供應商"
+          }
+        }
+      }
+    },
+    "ヘッドライン" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Headline"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "헤드라인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Headline"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Headline"
           }
         }
       }
@@ -6029,6 +6174,64 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "從列表選擇內容以顯示詳細資訊。"
+          }
+        }
+      }
+    },
+    "一覧から削除" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Remove from List"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "목록에서 제거"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从列表中移除"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "從列表移除"
+          }
+        }
+      }
+    },
+    "上にあるフォルダほど優先される。同じフォルダ名のコンテンツが複数ある場合は、優先順位が高いほうだけを読み込む。フォルダを一覧から外しても、中のファイルは削除されない。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folders higher in the list take priority. If content with the same folder name appears more than once, only the higher-priority copy is loaded. Removing a folder from the list does not delete its files."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "목록 위쪽의 폴더가 우선됩니다. 같은 폴더 이름의 콘텐츠가 여러 곳에 있으면 우선순위가 높은 항목만 불러옵니다. 목록에서 폴더를 제거해도 내부 파일은 삭제되지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "列表中位置越靠上的文件夹优先级越高。如果多个位置存在同名文件夹的内容，只加载优先级较高的一份。从列表中移除文件夹不会删除其中的文件。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "列表中越上方的資料夾優先順序越高。如果多處有相同資料夾名稱的內容，只會載入優先順序較高的一份。從列表移除資料夾不會刪除其中的檔案。"
           }
         }
       }
@@ -6729,6 +6932,64 @@
         }
       }
     },
+    "優先順位を上げる" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Increase Priority"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "우선순위 올리기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提高优先级"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "提高優先順序"
+          }
+        }
+      }
+    },
+    "優先順位を下げる" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Decrease Priority"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "우선순위 내리기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "降低优先级"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "降低優先順序"
+          }
+        }
+      }
+    },
     "入力" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7392,6 +7653,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "文字顯示速度"
+          }
+        }
+      }
+    },
+    "変更はUtataneの再起動後に反映される。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Changes take effect after restarting Utatane."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "변경 사항은 Utatane을 다시 시작한 후 적용됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更改将在重新启动 Utatane 后生效。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "變更將在重新啟動 Utatane 後生效。"
           }
         }
       }
@@ -9020,6 +9310,35 @@
         }
       }
     },
+    "標準フォルダは削除できない" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The default folder cannot be removed"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기본 폴더는 제거할 수 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法移除默认文件夹"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法移除預設資料夾"
+          }
+        }
+      }
+    },
     "機能" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10611,6 +10930,64 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "沒有已載入的表面。"
+          }
+        }
+      }
+    },
+    "読み込み元" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Source"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "불러온 위치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加载来源"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "載入來源"
+          }
+        }
+      }
+    },
+    "読み込むコンテンツフォルダを選択" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose a content folder to load"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "불러올 콘텐츠 폴더 선택"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择要加载的内容文件夹"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇要載入的內容資料夾"
           }
         }
       }

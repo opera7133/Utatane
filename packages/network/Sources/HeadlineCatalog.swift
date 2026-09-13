@@ -42,6 +42,18 @@ public struct InstalledHeadline: Identifiable, Sendable, Equatable {
 public struct HeadlineCatalog: Sendable {
     public init() {}
 
+    public func load(from roots: [URL]) throws -> [InstalledHeadline] {
+        var seenDirectoryNames = Set<String>()
+        var headlines: [InstalledHeadline] = []
+        for root in roots {
+            for headline in try load(from: root) {
+                guard seenDirectoryNames.insert(headline.id.lastPathComponent).inserted else { continue }
+                headlines.append(headline)
+            }
+        }
+        return headlines.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
     public func load(from root: URL) throws -> [InstalledHeadline] {
         guard FileManager.default.fileExists(atPath: root.path) else { return [] }
         let directories = try FileManager.default.contentsOfDirectory(

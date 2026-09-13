@@ -39,6 +39,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
     public let kind: ContentExplorerKind
     public let name: String
     public let detail: String?
+    public let sourceName: String?
     public let directory: URL
     public let parentDirectory: URL?
     public let readmeURL: URL?
@@ -58,6 +59,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         kind: ContentExplorerKind,
         name: String,
         detail: String? = nil,
+        sourceName: String? = nil,
         directory: URL,
         parentDirectory: URL? = nil,
         readmeURL: URL? = nil,
@@ -72,6 +74,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         self.kind = kind
         self.name = name
         self.detail = detail
+        self.sourceName = sourceName
         self.directory = directory
         self.parentDirectory = parentDirectory
         self.readmeURL = readmeURL
@@ -124,6 +127,7 @@ final class ContentExplorerModel {
             let query = searchText.lowercased()
             return entry.name.lowercased().contains(query)
                 || (entry.detail?.lowercased().contains(query) ?? false)
+                || (entry.sourceName?.lowercased().contains(query) ?? false)
                 || entry.directory.lastPathComponent.lowercased().contains(query)
         }
     }
@@ -359,6 +363,11 @@ private struct ContentExplorerView: View {
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
                                     }
+                                    if let sourceName = entry.sourceName, !sourceName.isEmpty {
+                                        Text(sourceName)
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
                                 }
                                 Spacer()
                                 if entry.isActive {
@@ -397,6 +406,9 @@ private struct ContentExplorerView: View {
 
                 if let detail = entry.detail, !detail.isEmpty {
                     LabeledContent("詳細", value: detail)
+                }
+                if let sourceName = entry.sourceName, !sourceName.isEmpty {
+                    LabeledContent("読み込み元", value: sourceName)
                 }
                 LabeledContent("フォルダ", value: entry.directory.path)
 
