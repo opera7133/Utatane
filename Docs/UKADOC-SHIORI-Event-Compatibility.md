@@ -444,10 +444,10 @@ UKADOC掲載イベント数: 290
 | [`installedheadlinename`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#installedheadlinename) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に全インストール済みRSS・ヘッドライン名をReference列へNOTIFY |
 | [`installedplugin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#installedplugin) | ✅ | 実装＋自動テスト | 低 | 起動時に認識済みプラグインの「名前、ID」をバイト値1で結合し、Reference列へNOTIFY。ネイティブSHIORI型のロード、定期イベント、メニュー・SakuraScript明示呼び出しを接続 |
 | [`configuredbiffname`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#configuredbiffname) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に空のNOTIFYを送り、設定済みメールアカウントがない状態を通知。メールチェック機能自体は未実装 |
-| [`ghostpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#ghostpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にUtataneが参照するゴースト格納フォルダの絶対パスをNOTIFY。DebugではBundledとLocalの双方を含む |
-| [`balloonpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#balloonpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にUtataneが参照するバルーン格納フォルダの絶対パスをNOTIFY。DebugではBundledとLocalの双方を含む |
-| [`headlinepathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#headlinepathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にヘッドライン格納フォルダの絶対パスをReference0へNOTIFY |
-| [`pluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#pluginpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時にUtataneが参照するプラグイン格納フォルダの絶対パスをNOTIFY。DebugではLocalとApplication Supportの双方を含む |
+| [`ghostpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#ghostpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に有効な全ゴーストフォルダの絶対パスを優先順でNOTIFY。DebugではBundledも含む |
+| [`balloonpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#balloonpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に有効な全バルーンフォルダの絶対パスを優先順でNOTIFY。DebugではBundledも含む |
+| [`headlinepathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#headlinepathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に有効な全ヘッドラインフォルダの絶対パスを優先順でNOTIFY |
+| [`pluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#pluginpathlist) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動時に有効な全プラグインフォルダの絶対パスを優先順でNOTIFY。DebugではLocalも含む |
 | [`calendarskinpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#calendarskinpathlist) | ✅ | 通知経路のUKADOC照合 | 低 | 起動時にカレンダースキン格納パスをNOTIFY |
 | [`calendarpluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#calendarpluginpathlist) | ✅ | 通知経路のUKADOC照合 | 低 | 起動時にカレンダープラグイン格納パスをNOTIFY |
 | [`rateofusegraph`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#rateofusegraph) | 🟡 | 通知経路のUKADOC照合 | 低 | 起動中ゴーストをboot状態の1レコードとしてNOTIFY。起動回数・時間・割合は0固定で履歴集計は未実装 |

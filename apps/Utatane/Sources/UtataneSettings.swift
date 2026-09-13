@@ -884,61 +884,84 @@ private struct ContentSourcesSettingsView: View {
         ForEach(ContentSourceKind.allCases) { kind in
             Section(kind.title) {
                 let sources = store.orderedSources(for: kind)
+                let enabledSources = sources.filter(\.isEnabled)
+                if let installationSource = store.installationSource(for: kind) {
+                    Picker("インストール先", selection: installationSourceBinding(
+                        for: kind,
+                        fallback: installationSource.id
+                    )) {
+                        ForEach(enabledSources) { source in
+                            Text(source.name).tag(source.id)
+                        }
+                    }
+                }
                 ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
-                    HStack(alignment: .center, spacing: 10) {
-                        Toggle("", isOn: enabledBinding(for: source))
-                            .labelsHidden()
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(source.name)
-                            Text(source.directory.path)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .center, spacing: 10) {
+                            Toggle("", isOn: enabledBinding(for: source))
+                                .labelsHidden()
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(source.name)
+                                Text(source.directory.path)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                            }
+                            Spacer()
+                            Button {
+                                NSWorkspace.shared.activateFileViewerSelecting([source.directory])
+                            } label: {
+                                Image(systemName: "folder")
+                            }
+                            .buttonStyle(.borderless)
+                            .help("Finderで表示")
+                            Button {
+                                store.move(
+                                    kind: kind,
+                                    fromOffsets: IndexSet(integer: index),
+                                    toOffset: index - 1
+                                )
+                                requiresRestart = true
+                            } label: {
+                                Image(systemName: "chevron.up")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(index == 0)
+                            .help("優先順位を上げる")
+                            Button {
+                                store.move(
+                                    kind: kind,
+                                    fromOffsets: IndexSet(integer: index),
+                                    toOffset: index + 2
+                                )
+                                requiresRestart = true
+                            } label: {
+                                Image(systemName: "chevron.down")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(index == sources.count - 1)
+                            .help("優先順位を下げる")
+                            Button(role: .destructive) {
+                                store.remove(id: source.id)
+                                requiresRestart = true
+                            } label: {
+                                Image(systemName: "minus.circle")
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(source.isBuiltIn)
+                            .help(source.isBuiltIn ? "標準フォルダは削除できない" : "一覧から削除")
                         }
-                        Spacer()
-                        Button {
-                            NSWorkspace.shared.activateFileViewerSelecting([source.directory])
-                        } label: {
-                            Image(systemName: "folder")
+                        if kind == .ghost {
+                            HStack(spacing: 18) {
+                                Toggle("ランダム切り替えの対象", isOn: automaticSwitchingBinding(for: source))
+                                Toggle("自動更新の対象", isOn: automaticUpdatesBinding(for: source))
+                            }
+                            .toggleStyle(.checkbox)
+                            .font(.caption)
+                            .padding(.leading, 26)
+                            .disabled(!source.isEnabled)
                         }
-                        .buttonStyle(.borderless)
-                        .help("Finderで表示")
-                        Button {
-                            store.move(
-                                kind: kind,
-                                fromOffsets: IndexSet(integer: index),
-                                toOffset: index - 1
-                            )
-                            requiresRestart = true
-                        } label: {
-                            Image(systemName: "chevron.up")
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(index == 0)
-                        .help("優先順位を上げる")
-                        Button {
-                            store.move(
-                                kind: kind,
-                                fromOffsets: IndexSet(integer: index),
-                                toOffset: index + 2
-                            )
-                            requiresRestart = true
-                        } label: {
-                            Image(systemName: "chevron.down")
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(index == sources.count - 1)
-                        .help("優先順位を下げる")
-                        Button(role: .destructive) {
-                            store.remove(id: source.id)
-                            requiresRestart = true
-                        } label: {
-                            Image(systemName: "minus.circle")
-                        }
-                        .buttonStyle(.borderless)
-                        .disabled(source.isBuiltIn)
-                        .help(source.isBuiltIn ? "標準フォルダは削除できない" : "一覧から削除")
                     }
                 }
                 Button("フォルダを追加…") {
@@ -961,6 +984,37 @@ private struct ContentSourcesSettingsView: View {
                 updated.isEnabled = isEnabled
                 store.update(updated)
                 requiresRestart = true
+            }
+        )
+    }
+
+    private func installationSourceBinding(for kind: ContentSourceKind, fallback: String) -> Binding<String> {
+        Binding(
+            get: { store.installationSource(for: kind)?.id ?? fallback },
+            set: { store.setInstallationSource(id: $0, for: kind) }
+        )
+    }
+
+    private func automaticSwitchingBinding(for source: ContentSource) -> Binding<Bool> {
+        Binding(
+            get: {
+                store.sources.first(where: { $0.id == source.id })?.allowsAutomaticSwitching ?? true
+            },
+            set: { isAllowed in
+                var updated = source
+                updated.allowsAutomaticSwitching = isAllowed
+                store.update(updated)
+            }
+        )
+    }
+
+    private func automaticUpdatesBinding(for source: ContentSource) -> Binding<Bool> {
+        Binding(
+            get: { store.sources.first(where: { $0.id == source.id })?.allowsAutomaticUpdates ?? true },
+            set: { isAllowed in
+                var updated = source
+                updated.allowsAutomaticUpdates = isAllowed
+                store.update(updated)
             }
         )
     }

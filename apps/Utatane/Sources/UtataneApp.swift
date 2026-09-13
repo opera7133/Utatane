@@ -151,6 +151,7 @@ struct UtataneApp: App {
                 mainPresentationSession: mainPresentationSession,
                 presentationGeometry: presentationGeometry,
                 networkSettings: networkSettings,
+                appUpdater: updaterController.updater,
                 applicationDelegate: applicationDelegate
             )
         }
@@ -287,6 +288,7 @@ private struct UtataneRootView: View {
         basewareVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
     ))
     @ObservedObject var networkSettings: UtataneSettingsStore
+    let appUpdater: SPUUpdater
     let applicationDelegate: UtataneApplicationDelegate
 
     @Environment(\.openSettings) private var openSettings
@@ -471,7 +473,8 @@ private struct UtataneRootView: View {
                     showGhostPicker(requiresSelection: true)
                 }
             case .random:
-                selectedGhostID = model.ghosts.randomElement()?.id
+                selectedGhostID = ghostsAllowedForAutomaticSwitching(in: model.ghosts).randomElement()?.id
+                    ?? model.ghosts.first?.id
             }
             configurePlayback()
             calendarWindowController.onRead = { schedule, eventID in
@@ -692,6 +695,7 @@ private struct UtataneRootView: View {
             try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled else { return }
             if let ghost = currentGhost,
+               allowsAutomaticUpdates(for: ghost),
                networkSettings.shouldAutomaticallyUpdateContent(
                    kind: .ghost,
                    directoryName: ghost.rootDirectory.lastPathComponent
@@ -2905,7 +2909,9 @@ private struct UtataneRootView: View {
     ) {
         switch action {
         case .randomGhost:
-            let candidates = model.ghosts.filter { $0.id != currentGhost?.id }
+            let candidates = ghostsAllowedForAutomaticSwitching(
+                in: model.ghosts.filter { $0.id != currentGhost?.id }
+            )
             if let ghost = candidates.randomElement() {
                 selectedGhostID = ghost.id
             }
@@ -2928,7 +2934,7 @@ private struct UtataneRootView: View {
         case let .callGhost(target):
             let available = model.ghosts.filter { $0.id != currentGhost?.id && calledGhosts[$0.id] == nil }
             let ghost = target.caseInsensitiveCompare("random") == .orderedSame
-                ? available.randomElement()
+                ? ghostsAllowedForAutomaticSwitching(in: available).randomElement()
                 : available.first(where: { matches(target, name: $0.name, directory: $0.rootDirectory) })
             guard let ghost
             else { return }
@@ -3427,6 +3433,11 @@ private struct UtataneRootView: View {
         }
         items.append(functionMenu(for: target))
         items.append(settingsMenu(for: target))
+        items.append(.action(
+            title: String(localized: "アプリアップデートを確認…"),
+            isEnabled: appUpdater.canCheckForUpdates,
+            handler: { appUpdater.checkForUpdates() }
+        ))
         items.append(.separator)
         if case .primary = target {
             items.append(ghostSwitchMenu())
@@ -4569,6 +4580,19 @@ private struct UtataneRootView: View {
         }
     }
 
+    private func ghostsAllowedForAutomaticSwitching(in ghosts: [InstalledGhost]) -> [InstalledGhost] {
+        let sources = ContentRoot.contentSourceStore
+        return ghosts.filter { ghost in
+            sources.source(containing: ghost.rootDirectory, kind: .ghost)?.allowsAutomaticSwitching ?? true
+        }
+    }
+
+    private func allowsAutomaticUpdates(for ghost: InstalledGhost) -> Bool {
+        ContentRoot.contentSourceStore
+            .source(containing: ghost.rootDirectory, kind: .ghost)?
+            .allowsAutomaticUpdates ?? true
+    }
+
     private func playUpdateResult(
         checkOnly: Bool,
         name: String,
@@ -5437,10 +5461,10 @@ private struct UtataneRootView: View {
     private func installNars(from urls: [URL]) {
         guard !urls.isEmpty else { return }
         let roots = NarInstallationRoots(
-            ghostsDirectory: ContentRoot.ghostsDirectory,
-            balloonsDirectory: ContentRoot.balloonsDirectory,
-            headlinesDirectory: ContentRoot.headlinesDirectory,
-            pluginsDirectory: ContentRoot.pluginsDirectory,
+            ghostsDirectory: ContentRoot.ghostInstallationDirectory,
+            balloonsDirectory: ContentRoot.balloonInstallationDirectory,
+            headlinesDirectory: ContentRoot.headlineInstallationDirectory,
+            pluginsDirectory: ContentRoot.pluginInstallationDirectory,
             calendarSkinsDirectory: ContentRoot.calendarSkinsDirectory,
             calendarPluginsDirectory: ContentRoot.calendarPluginsDirectory
         )
@@ -5625,8 +5649,8 @@ private struct UtataneRootView: View {
                 _ = try await Task.detached {
                     try SSPContentImporter().importContents(
                         from: url,
-                        ghostsDirectory: ContentRoot.ghostsDirectory,
-                        balloonsDirectory: ContentRoot.balloonsDirectory
+                        ghostsDirectory: ContentRoot.ghostInstallationDirectory,
+                        balloonsDirectory: ContentRoot.balloonInstallationDirectory
                     )
                 }.value
                 await model.load()
@@ -7246,6 +7270,10 @@ enum ContentRoot {
         #endif
     }
 
+    static var ghostInstallationDirectory: URL {
+        contentSourceStore.installationDirectory(for: .ghost) ?? ghostsDirectory
+    }
+
     static var balloonsDirectory: URL {
         if let override = ProcessInfo.processInfo.environment["UTATANE_BALLOONS_ROOT"] {
             return URL(filePath: override, directoryHint: .isDirectory)
@@ -7273,6 +7301,10 @@ enum ContentRoot {
         #endif
     }
 
+    static var balloonInstallationDirectory: URL {
+        contentSourceStore.installationDirectory(for: .balloon) ?? balloonsDirectory
+    }
+
     static var headlinesDirectory: URL {
         if let override = ProcessInfo.processInfo.environment["UTATANE_HEADLINES_ROOT"] {
             return URL(filePath: override, directoryHint: .isDirectory)
@@ -7293,6 +7325,10 @@ enum ContentRoot {
 
     static var headlineReadDirectories: [URL] {
         contentSourceStore.enabledDirectories(for: .headline)
+    }
+
+    static var headlineInstallationDirectory: URL {
+        contentSourceStore.installationDirectory(for: .headline) ?? headlinesDirectory
     }
 
     static var pluginsDirectory: URL {
@@ -7329,6 +7365,10 @@ enum ContentRoot {
         #else
             return contentSourceStore.enabledDirectories(for: .plugin)
         #endif
+    }
+
+    static var pluginInstallationDirectory: URL {
+        contentSourceStore.installationDirectory(for: .plugin) ?? pluginsDirectory
     }
 
     static var contentSourceStore: ContentSourceStore {

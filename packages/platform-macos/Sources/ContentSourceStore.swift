@@ -48,9 +48,11 @@ public struct ContentSource: Codable, Identifiable, Equatable, Sendable {
 
 public final class ContentSourceStore: ObservableObject {
     @Published public private(set) var sources: [ContentSource]
+    @Published public private(set) var installationSourceIDs: [ContentSourceKind: String]
 
     private let defaults: UserDefaults
     private let key: String
+    private let installationTargetsKey: String
 
     public init(
         defaultSources: [ContentSource],
@@ -59,8 +61,15 @@ public final class ContentSourceStore: ObservableObject {
     ) {
         self.defaults = defaults
         self.key = key
+        installationTargetsKey = "\(key).installation-targets"
         let stored = defaults.data(forKey: key).flatMap { try? JSONDecoder().decode([ContentSource].self, from: $0) }
         sources = Self.merging(defaultSources: defaultSources, storedSources: stored ?? [])
+        let storedInstallationTargets = defaults.data(forKey: installationTargetsKey)
+            .flatMap { try? JSONDecoder().decode([String: String].self, from: $0) } ?? [:]
+        installationSourceIDs = Dictionary(uniqueKeysWithValues: storedInstallationTargets.compactMap { key, value in
+            guard let kind = ContentSourceKind(rawValue: key) else { return nil }
+            return (kind, value)
+        })
         save()
     }
 
@@ -84,6 +93,36 @@ public final class ContentSourceStore: ObservableObject {
             .sorted { lhs, rhs in
                 lhs.priority == rhs.priority ? lhs.id < rhs.id : lhs.priority < rhs.priority
             }
+    }
+
+    public func source(containing directory: URL, kind: ContentSourceKind) -> ContentSource? {
+        let path = directory.standardizedFileURL.path
+        return orderedSources(for: kind)
+            .filter(\.isEnabled)
+            .first { source in
+                let rootPath = source.directory.standardizedFileURL.path
+                return path == rootPath || path.hasPrefix(rootPath + "/")
+            }
+    }
+
+    public func installationSource(for kind: ContentSourceKind) -> ContentSource? {
+        let enabled = orderedSources(for: kind).filter(\.isEnabled)
+        if let selectedID = installationSourceIDs[kind],
+           let selected = enabled.first(where: { $0.id == selectedID })
+        {
+            return selected
+        }
+        return enabled.first
+    }
+
+    public func installationDirectory(for kind: ContentSourceKind) -> URL? {
+        installationSource(for: kind)?.directory.standardizedFileURL
+    }
+
+    public func setInstallationSource(id: String, for kind: ContentSourceKind) {
+        guard sources.contains(where: { $0.id == id && $0.kind == kind && $0.isEnabled }) else { return }
+        installationSourceIDs[kind] = id
+        saveInstallationTargets()
     }
 
     @discardableResult
@@ -148,6 +187,12 @@ public final class ContentSourceStore: ObservableObject {
     private func save() {
         guard let data = try? JSONEncoder().encode(sources) else { return }
         defaults.set(data, forKey: key)
+    }
+
+    private func saveInstallationTargets() {
+        let stored = Dictionary(uniqueKeysWithValues: installationSourceIDs.map { ($0.key.rawValue, $0.value) })
+        guard let data = try? JSONEncoder().encode(stored) else { return }
+        defaults.set(data, forKey: installationTargetsKey)
     }
 
     private static func merging(

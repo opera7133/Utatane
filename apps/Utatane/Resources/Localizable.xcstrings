@@ -3684,6 +3684,35 @@
         }
       }
     },
+    "インストール先" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install Destination"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치 위치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安装位置"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "安裝位置"
+          }
+        }
+      }
+    },
     "インストール済みの先頭" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5971,6 +6000,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "隨機對話"
+          }
+        }
+      }
+    },
+    "ランダム切り替えの対象" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Include in Random Switching"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "무작위 전환 대상에 포함"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "包含在随机切换中"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "包含在隨機切換中"
           }
         }
       }
@@ -10350,6 +10408,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "啟用自動巡檢"
+          }
+        }
+      }
+    },
+    "自動更新の対象" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Include in Automatic Updates"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동 업데이트 대상에 포함"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "包含在自动更新中"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "包含在自動更新中"
           }
         }
       }

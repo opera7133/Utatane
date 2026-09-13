@@ -89,3 +89,59 @@ func `built in content sources cannot be removed`() throws {
 
     #expect(store.sources == [source])
 }
+
+@Test
+@MainActor
+func `content source install destination persists and falls back when disabled`() throws {
+    let suiteName = "ContentSourceInstallationTests.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let standard = ContentSource(
+        id: "standard.ghost",
+        kind: .ghost,
+        name: "Ghosts",
+        directory: URL(filePath: "/ghosts"),
+        isBuiltIn: true
+    )
+    let store = ContentSourceStore(defaultSources: [standard], defaults: defaults)
+    let external = store.add(
+        kind: .ghost,
+        name: "External",
+        directory: URL(filePath: "/external")
+    )
+    store.setInstallationSource(id: external.id, for: .ghost)
+
+    let restored = ContentSourceStore(defaultSources: [standard], defaults: defaults)
+    #expect(restored.installationDirectory(for: .ghost) == external.directory.standardizedFileURL)
+
+    var disabled = try #require(restored.sources.first(where: { $0.id == external.id }))
+    disabled.isEnabled = false
+    restored.update(disabled)
+    #expect(restored.installationDirectory(for: .ghost) == standard.directory.standardizedFileURL)
+}
+
+@Test
+@MainActor
+func `content source policy follows the source containing a ghost`() throws {
+    let suiteName = "ContentSourcePolicyTests.\(UUID().uuidString)"
+    let defaults = try #require(UserDefaults(suiteName: suiteName))
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    let source = ContentSource(
+        id: "external.ghost",
+        kind: .ghost,
+        name: "External",
+        directory: URL(filePath: "/external", directoryHint: .isDirectory),
+        allowsAutomaticSwitching: false,
+        allowsAutomaticUpdates: false
+    )
+    let store = ContentSourceStore(defaultSources: [source], defaults: defaults)
+
+    let matched = store.source(
+        containing: URL(filePath: "/external/example", directoryHint: .isDirectory),
+        kind: .ghost
+    )
+    #expect(matched?.id == source.id)
+    #expect(matched?.allowsAutomaticSwitching == false)
+    #expect(matched?.allowsAutomaticUpdates == false)
+    #expect(store.source(containing: URL(filePath: "/other/example"), kind: .ghost) == nil)
+}
