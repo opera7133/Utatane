@@ -3644,25 +3644,33 @@ private struct UtataneRootView: View {
     }
 
     private func headlineMenu() -> SurfaceContextMenuItem {
-        .submenu(
+        let contentItems = contentSourceMenuItems(
+            installedHeadlines,
+            kind: .headline,
+            directory: \.id
+        ) { headline in
+            .action(
+                title: headline.name,
+                isEnabled: canActivate(headline),
+                handler: { activate(headline) }
+            )
+        }
+        return .submenu(
             title: String(localized: "RSS / ヘッドライン"),
-            items: installedHeadlines.map { headline in
-                .action(
-                    title: headline.name,
-                    isEnabled: canActivate(headline),
-                    handler: { activate(headline) }
-                )
-            } + [
-                .separator,
-                .action(title: String(localized: "URLを指定して取得…"), handler: showRSSInput)
-            ]
+            items: contentItems
+                + (contentItems.isEmpty ? [] : [.separator])
+                + [.action(title: String(localized: "URLを指定して取得…"), handler: showRSSInput)]
         )
     }
 
     private func pluginMenu() -> SurfaceContextMenuItem {
         .submenu(
             title: String(localized: "プラグイン"),
-            items: installedPlugins.map { plugin in
+            items: contentSourceMenuItems(
+                installedPlugins,
+                kind: .plugin,
+                directory: \.directory
+            ) { plugin in
                 .submenu(title: plugin.name, items: pluginMenuItems(for: plugin))
             }
         )
@@ -3940,7 +3948,11 @@ private struct UtataneRootView: View {
     private func ghostSwitchMenu() -> SurfaceContextMenuItem {
         .submenu(
             title: String(localized: "ゴースト切り替え"),
-            items: model.ghosts.map { ghost in
+            items: contentSourceMenuItems(
+                model.ghosts,
+                kind: .ghost,
+                directory: \.rootDirectory
+            ) { ghost in
                 .action(
                     title: ghost.name,
                     isSelected: ghost.id == selectedGhostID,
@@ -4055,11 +4067,16 @@ private struct UtataneRootView: View {
     }
 
     private func callGhostMenu() -> SurfaceContextMenuItem {
-        .submenu(
+        let available = model.ghosts.filter { ghost in
+            ghost.id != currentGhost?.id && calledGhosts[ghost.id] == nil
+        }
+        return .submenu(
             title: String(localized: "ゴーストを呼ぶ"),
-            items: model.ghosts.filter { ghost in
-                ghost.id != currentGhost?.id && calledGhosts[ghost.id] == nil
-            }.map { ghost in
+            items: contentSourceMenuItems(
+                available,
+                kind: .ghost,
+                directory: \.rootDirectory
+            ) { ghost in
                 .action(title: ghost.name, handler: { call(ghost) })
             }
         )
@@ -4092,7 +4109,11 @@ private struct UtataneRootView: View {
         let selected = menuBalloon(for: target)
         return .submenu(
             title: String(localized: "バルーン"),
-            items: installedBalloons.map { balloon in
+            items: contentSourceMenuItems(
+                installedBalloons,
+                kind: .balloon,
+                directory: \.directory
+            ) { balloon in
                 .action(
                     title: balloon.name,
                     isSelected: balloon.directory == selected?.directory,
@@ -4108,6 +4129,35 @@ private struct UtataneRootView: View {
                 )
             }
         )
+    }
+
+    private func contentSourceMenuItems<Value>(
+        _ values: [Value],
+        kind: ContentSourceKind,
+        directory: KeyPath<Value, URL>,
+        item: (Value) -> SurfaceContextMenuItem
+    ) -> [SurfaceContextMenuItem] {
+        let store = ContentRoot.contentSourceStore
+        let sources = store.orderedSources(for: kind).filter(\.isEnabled)
+        guard sources.count > 1 else { return values.map(item) }
+
+        var grouped: [String: [SurfaceContextMenuItem]] = [:]
+        var ungrouped: [SurfaceContextMenuItem] = []
+        for value in values {
+            if let source = store.source(containing: value[keyPath: directory], kind: kind) {
+                grouped[source.id, default: []].append(item(value))
+            } else {
+                ungrouped.append(item(value))
+            }
+        }
+        var result = sources.compactMap { source -> SurfaceContextMenuItem? in
+            guard let items = grouped[source.id], !items.isEmpty else { return nil }
+            return .submenu(title: source.name, items: items)
+        }
+        if !ungrouped.isEmpty {
+            result.append(.submenu(title: String(localized: "Utatane標準"), items: ungrouped))
+        }
+        return result
     }
 
     private func closeGhostMenuItem(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
