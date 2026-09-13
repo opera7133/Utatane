@@ -404,7 +404,7 @@ public final class SpeechHistoryPresenter {
             store: store,
             ghostIdentifier: context.ghostIdentifier,
             ghostName: context.ghostName,
-            background: Color(nsColor: .windowBackgroundColor),
+            background: .clear,
             textScale: textScale,
             onClose: { [weak self] in self?.hide() }
         ))

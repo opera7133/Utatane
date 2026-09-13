@@ -73,6 +73,12 @@ struct UtataneApp: App {
         presentationCoordinator.onModeRequest = { [weak settings] mode in
             settings?.windowMode = mode
         }
+        presentationCoordinator.onSpeechHistoryIntegrationRequest = { [weak settings] integrates in
+            settings?.integratesSpeechHistoryInWindowMode = integrates
+        }
+        presentationCoordinator.setIntegratesSpeechHistory(
+            settings.integratesSpeechHistoryInWindowMode
+        )
         let mainPresentationSession = presentationCoordinator.makeSession(title: "Utatane")
         let presentationGeometry = mainPresentationSession.geometryProvider
         let positionStore = WindowPositionStore()
@@ -486,6 +492,9 @@ private struct UtataneRootView: View {
             // Compare overlap/offscreen state only after the new host settles.
             previousWindowLayoutSnapshot = nil
             presentationCoordinator.setMode(mode)
+            presentationCoordinator.setIntegratesSpeechHistory(
+                networkSettings.integratesSpeechHistoryInWindowMode
+            )
             await propertySystem.register(values: ["baseware.windowmode": mode.sspIdentifier])
             for runtime in calledGhosts.values {
                 await runtime.setWindowMode(mode)

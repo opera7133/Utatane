@@ -384,6 +384,22 @@ func `window mode hosts a surface and balloon in one capturable window`() throws
     let modeMenu = try #require(operationMenu.items.first?.submenu)
     #expect(modeMenu.items.count == GhostWindowMode.allCases.count)
     #expect(modeMenu.items.filter { $0.state == NSControl.StateValue.on }.count == 1)
+    let backgroundMenu = try #require(operationMenu.items.first {
+        $0.title == String(localized: "背景")
+    }?.submenu)
+    #expect(backgroundMenu.items.contains { $0.title == String(localized: "画像を選択...") })
+    #expect(operationMenu.items.contains {
+        $0.title == String(localized: "発話履歴の背景")
+    })
+    let integratesHistory = try #require(operationMenu.items.first {
+        $0.title == String(localized: "発話履歴をウィンドウ内に表示")
+    })
+    #expect(integratesHistory.state == .on)
+    host.setIntegratesSpeechHistory(false)
+    let updatedIntegration = try #require(host.makeOperationMenu().items.first {
+        $0.title == String(localized: "発話履歴をウィンドウ内に表示")
+    })
+    #expect(updatedIntegration.state == .off)
     #expect(operationMenu.items.contains { $0.title == String(localized: "スクリーンショット...") })
     let closeItem = try #require(operationMenu.items.first { $0.title == String(localized: "閉じる") })
     #expect(closeItem.keyEquivalent == "w")
@@ -1009,6 +1025,48 @@ func `desktop wallpaper background follows provider changes and screenshot trans
 
 @Test
 @MainActor
+func `custom image background supports layout and keeps speech history on a solid background`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let imageURL = directory.appending(path: "background.png")
+    try makePNG(
+        width: 8,
+        height: 4,
+        color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    ).write(to: imageURL)
+
+    let stage = WindowModePresentationHost(
+        contentSize: NSSize(width: 40, height: 40),
+        automaticallyExpandsForSpeechHistory: false
+    )
+    defer { stage.window.orderOut(nil) }
+
+    #expect(stage.setBackgroundImage(imageURL))
+    stage.setBackgroundImageLayout(.stretch)
+    stage.setSpeechHistoryBackground(.black)
+    stage.rootView.setSpeechHistoryHeight(20)
+
+    #expect(stage.background == .image)
+    #expect(stage.backgroundImageURL == imageURL.standardizedFileURL)
+    #expect(stage.backgroundImageLayout == .stretch)
+    #expect(stage.speechHistoryBackground == .black)
+
+    let data = try #require(stage.screenshotPNGData(kind: .backgroundIncluded))
+    let bitmap = try #require(NSBitmapImageRep(data: data))
+    let samples = [bitmap.pixelsHigh / 4, bitmap.pixelsHigh * 3 / 4].compactMap {
+        bitmap.colorAt(x: bitmap.pixelsWide / 2, y: $0)?.usingColorSpace(.deviceRGB)
+    }
+    #expect(samples.count == 2)
+    #expect(samples.contains { $0.redComponent > 0.8 && $0.greenComponent < 0.2 })
+    #expect(samples.contains {
+        $0.redComponent < 0.2 && $0.greenComponent < 0.2 && $0.blueComponent < 0.2
+    })
+}
+
+@Test
+@MainActor
 func `desktop wallpaper stays out of history and scales to the presentation area`() throws {
     let wallpaper = try #require(NSImage(data: makePNG(
         width: 4,
@@ -1165,8 +1223,11 @@ func `window mode stage appearance is persisted per stage identifier`() throws {
     let shared = WindowModeStageState(
         contentSize: NSSize(width: 800, height: 600),
         origin: NSPoint(x: 120, y: 90),
-        background: .black,
-        showsWindowFrame: false
+        background: .image,
+        showsWindowFrame: false,
+        backgroundImagePath: "/tmp/stage.png",
+        backgroundImageLayout: .fit,
+        speechHistoryBackground: .black
     )
     let perGhost = WindowModeStageState(
         contentSize: NSSize(width: 640, height: 480),
@@ -1182,12 +1243,18 @@ func `window mode stage appearance is persisted per stage identifier`() throws {
     let restoredPerGhost = try #require(store.load(identifier: "per-ghost:/ghosts/a"))
     #expect(restoredShared.contentSize == shared.contentSize)
     #expect(restoredShared.origin == shared.origin)
-    #expect(restoredShared.background == .black)
+    #expect(restoredShared.background == .image)
     #expect(!restoredShared.showsWindowFrame)
+    #expect(restoredShared.backgroundImagePath == "/tmp/stage.png")
+    #expect(restoredShared.backgroundImageLayout == .fit)
+    #expect(restoredShared.speechHistoryBackground == .black)
     #expect(restoredPerGhost.contentSize == perGhost.contentSize)
     #expect(restoredPerGhost.origin == nil)
     #expect(restoredPerGhost.background == .white)
     #expect(restoredPerGhost.showsWindowFrame)
+    #expect(restoredPerGhost.backgroundImagePath == nil)
+    #expect(restoredPerGhost.backgroundImageLayout == .fill)
+    #expect(restoredPerGhost.speechHistoryBackground == .automatic)
 }
 
 @Test(arguments: ["master", "master2nd"])

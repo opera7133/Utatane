@@ -242,6 +242,21 @@ public enum WindowModeStageBackground: String, CaseIterable, Sendable {
     case gray
     case black
     case desktop
+    case image
+}
+
+public enum WindowModeStageImageLayout: String, CaseIterable, Sendable {
+    case fill
+    case fit
+    case stretch
+    case center
+}
+
+public enum WindowModeSpeechHistoryBackground: String, CaseIterable, Sendable {
+    case automatic
+    case white
+    case gray
+    case black
 }
 
 struct WindowModeStageState {
@@ -249,6 +264,27 @@ struct WindowModeStageState {
     let origin: NSPoint?
     let background: WindowModeStageBackground
     let showsWindowFrame: Bool
+    let backgroundImagePath: String?
+    let backgroundImageLayout: WindowModeStageImageLayout
+    let speechHistoryBackground: WindowModeSpeechHistoryBackground
+
+    init(
+        contentSize: NSSize,
+        origin: NSPoint?,
+        background: WindowModeStageBackground,
+        showsWindowFrame: Bool,
+        backgroundImagePath: String? = nil,
+        backgroundImageLayout: WindowModeStageImageLayout = .fill,
+        speechHistoryBackground: WindowModeSpeechHistoryBackground = .automatic
+    ) {
+        self.contentSize = contentSize
+        self.origin = origin
+        self.background = background
+        self.showsWindowFrame = showsWindowFrame
+        self.backgroundImagePath = backgroundImagePath
+        self.backgroundImageLayout = backgroundImageLayout
+        self.speechHistoryBackground = speechHistoryBackground
+    }
 }
 
 final class WindowModeStageStateStore {
@@ -280,7 +316,12 @@ final class WindowModeStageStateStore {
             contentSize: NSSize(width: width, height: height),
             origin: origin,
             background: background,
-            showsWindowFrame: showsWindowFrame
+            showsWindowFrame: showsWindowFrame,
+            backgroundImagePath: value["backgroundImagePath"] as? String,
+            backgroundImageLayout: (value["backgroundImageLayout"] as? String)
+                .flatMap(WindowModeStageImageLayout.init(rawValue:)) ?? .fill,
+            speechHistoryBackground: (value["speechHistoryBackground"] as? String)
+                .flatMap(WindowModeSpeechHistoryBackground.init(rawValue:)) ?? .automatic
         )
     }
 
@@ -289,8 +330,13 @@ final class WindowModeStageStateStore {
             "width": Double(state.contentSize.width),
             "height": Double(state.contentSize.height),
             "background": state.background.rawValue,
-            "showsWindowFrame": state.showsWindowFrame
+            "showsWindowFrame": state.showsWindowFrame,
+            "backgroundImageLayout": state.backgroundImageLayout.rawValue,
+            "speechHistoryBackground": state.speechHistoryBackground.rawValue
         ]
+        if let backgroundImagePath = state.backgroundImagePath {
+            value["backgroundImagePath"] = backgroundImagePath
+        }
         if let origin = state.origin {
             value["x"] = Double(origin.x)
             value["y"] = Double(origin.y)
@@ -313,6 +359,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     private var items: [WindowModePresentationItem] = []
     private let onModeRequest: (GhostWindowMode) -> Void
     private let onCloseRequest: () -> Void
+    private let onSpeechHistoryIntegrationRequest: (Bool) -> Void
     private let stateStore: WindowModeStageStateStore?
     private let stateIdentifier: String
     private let desktopWallpaperProvider: any WindowModeDesktopWallpaperProviding
@@ -320,6 +367,10 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     private var desktopWallpaperSignature: String?
     private var didEnsureSpeechHistoryRoom = false
     private(set) var background: WindowModeStageBackground = .desktop
+    private(set) var backgroundImageLayout: WindowModeStageImageLayout = .fill
+    private(set) var speechHistoryBackground: WindowModeSpeechHistoryBackground = .automatic
+    private(set) var backgroundImageURL: URL?
+    private(set) var integratesSpeechHistory: Bool
     private(set) var showsWindowFrame = true
 
     init(
@@ -328,6 +379,8 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         mode: GhostWindowMode = .perGhost,
         onModeRequest: @escaping (GhostWindowMode) -> Void = { _ in },
         onCloseRequest: @escaping () -> Void = {},
+        integratesSpeechHistory: Bool = true,
+        onSpeechHistoryIntegrationRequest: @escaping (Bool) -> Void = { _ in },
         stateStore: WindowModeStageStateStore? = nil,
         stateIdentifier: String = "",
         desktopWallpaperProvider: any WindowModeDesktopWallpaperProviding = SystemWindowModeDesktopWallpaperProvider(),
@@ -352,6 +405,8 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         self.mode = mode
         self.onModeRequest = onModeRequest
         self.onCloseRequest = onCloseRequest
+        self.integratesSpeechHistory = integratesSpeechHistory
+        self.onSpeechHistoryIntegrationRequest = onSpeechHistoryIntegrationRequest
         self.stateStore = stateStore
         self.stateIdentifier = stateIdentifier
         self.desktopWallpaperProvider = desktopWallpaperProvider
@@ -368,7 +423,11 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         if let origin = restoredState?.origin {
             window.setFrameOrigin(origin)
         }
+        backgroundImageLayout = restoredState?.backgroundImageLayout ?? .fill
+        speechHistoryBackground = restoredState?.speechHistoryBackground ?? .automatic
+        backgroundImageURL = restoredState?.backgroundImagePath.map(URL.init(fileURLWithPath:))
         setBackground(restoredState?.background ?? .desktop)
+        applySpeechHistoryBackground()
         setShowsWindowFrame(restoredState?.showsWindowFrame ?? true)
     }
 
@@ -382,6 +441,10 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
 
     func setTitle(_ title: String) {
         window.title = title
+    }
+
+    func setIntegratesSpeechHistory(_ integrates: Bool) {
+        integratesSpeechHistory = integrates
     }
 
     func setBackground(_ background: WindowModeStageBackground) {
@@ -398,8 +461,69 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
             rootView.setSolidBackground(.black)
         case .desktop:
             refreshDesktopWallpaper()
+        case .image:
+            if !refreshBackgroundImage() {
+                rootView.setSolidBackground(NSColor(calibratedWhite: 0.25, alpha: 1))
+            }
+        }
+        applySpeechHistoryBackground()
+        persistState()
+    }
+
+    @discardableResult
+    func setBackgroundImage(_ url: URL) -> Bool {
+        let url = url.standardizedFileURL
+        guard NSImage(contentsOf: url) != nil else { return false }
+        backgroundImageURL = url
+        background = .image
+        desktopWallpaperSignature = nil
+        _ = refreshBackgroundImage()
+        applySpeechHistoryBackground()
+        persistState()
+        return true
+    }
+
+    func setBackgroundImageLayout(_ layout: WindowModeStageImageLayout) {
+        guard backgroundImageLayout != layout else { return }
+        backgroundImageLayout = layout
+        if background == .image {
+            _ = refreshBackgroundImage()
         }
         persistState()
+    }
+
+    func setSpeechHistoryBackground(_ background: WindowModeSpeechHistoryBackground) {
+        guard speechHistoryBackground != background else { return }
+        speechHistoryBackground = background
+        applySpeechHistoryBackground()
+        persistState()
+    }
+
+    @discardableResult
+    private func refreshBackgroundImage() -> Bool {
+        guard let url = backgroundImageURL, let image = NSImage(contentsOf: url) else { return false }
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
+        let fileSize = (attributes?[.size] as? NSNumber)?.uint64Value ?? 0
+        let layout = backgroundImageLayout
+        let scaling: NSImageScaling = switch layout {
+        case .fill, .fit:
+            .scaleProportionallyUpOrDown
+        case .stretch:
+            .scaleAxesIndependently
+        case .center:
+            .scaleNone
+        }
+        rootView.setDesktopWallpaper(WindowModeDesktopWallpaperSnapshot(
+            image: image,
+            url: url,
+            scaling: scaling,
+            allowsClipping: layout == .fill,
+            fillColor: .black,
+            signature: [url.path, String(modified), String(fileSize), layout.rawValue]
+                .joined(separator: "|")
+        ))
+        return true
     }
 
     @discardableResult
@@ -469,14 +593,62 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         frame.state = showsWindowFrame ? .on : .off
         menu.addItem(frame)
 
+        let speechHistoryIntegration = NSMenuItem(
+            title: String(localized: "発話履歴をウィンドウ内に表示"),
+            action: #selector(toggleSpeechHistoryIntegrationFromMenu),
+            keyEquivalent: ""
+        )
+        speechHistoryIntegration.target = self
+        speechHistoryIntegration.state = integratesSpeechHistory ? .on : .off
+        menu.addItem(speechHistoryIntegration)
+
         let backgroundItem = NSMenuItem(title: String(localized: "背景"), action: nil, keyEquivalent: "")
         let backgroundMenu = NSMenu(title: String(localized: "背景"))
         addBackgroundItem(String(localized: "白"), background: .white, to: backgroundMenu)
         addBackgroundItem(String(localized: "灰"), background: .gray, to: backgroundMenu)
         addBackgroundItem(String(localized: "黒"), background: .black, to: backgroundMenu)
         addBackgroundItem(String(localized: "デスクトップ"), background: .desktop, to: backgroundMenu)
+        backgroundMenu.addItem(.separator())
+        let backgroundImage = NSMenuItem(
+            title: String(localized: "画像を選択..."),
+            action: #selector(selectBackgroundImageFromMenu),
+            keyEquivalent: ""
+        )
+        backgroundImage.target = self
+        backgroundImage.state = background == .image ? .on : .off
+        backgroundMenu.addItem(backgroundImage)
+        let imageLayoutItem = NSMenuItem(
+            title: String(localized: "画像の配置"),
+            action: nil,
+            keyEquivalent: ""
+        )
+        let imageLayoutMenu = NSMenu(title: String(localized: "画像の配置"))
+        addBackgroundImageLayoutItem(String(localized: "画面いっぱい"), layout: .fill, to: imageLayoutMenu)
+        addBackgroundImageLayoutItem(String(localized: "全体を表示"), layout: .fit, to: imageLayoutMenu)
+        addBackgroundImageLayoutItem(String(localized: "引き伸ばす"), layout: .stretch, to: imageLayoutMenu)
+        addBackgroundImageLayoutItem(String(localized: "中央"), layout: .center, to: imageLayoutMenu)
+        imageLayoutItem.submenu = imageLayoutMenu
+        imageLayoutItem.isEnabled = backgroundImageURL != nil
+        backgroundMenu.addItem(imageLayoutItem)
         backgroundItem.submenu = backgroundMenu
         menu.addItem(backgroundItem)
+
+        let historyBackgroundItem = NSMenuItem(
+            title: String(localized: "発話履歴の背景"),
+            action: nil,
+            keyEquivalent: ""
+        )
+        let historyBackgroundMenu = NSMenu(title: String(localized: "発話履歴の背景"))
+        addSpeechHistoryBackgroundItem(
+            String(localized: "自動"),
+            background: .automatic,
+            to: historyBackgroundMenu
+        )
+        addSpeechHistoryBackgroundItem(String(localized: "白"), background: .white, to: historyBackgroundMenu)
+        addSpeechHistoryBackgroundItem(String(localized: "灰"), background: .gray, to: historyBackgroundMenu)
+        addSpeechHistoryBackgroundItem(String(localized: "黒"), background: .black, to: historyBackgroundMenu)
+        historyBackgroundItem.submenu = historyBackgroundMenu
+        menu.addItem(historyBackgroundItem)
 
         let screenshot = NSMenuItem(
             title: String(localized: "スクリーンショット..."),
@@ -518,6 +690,38 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         menu.addItem(item)
     }
 
+    private func addBackgroundImageLayoutItem(
+        _ title: String,
+        layout: WindowModeStageImageLayout,
+        to menu: NSMenu
+    ) {
+        let item = NSMenuItem(
+            title: title,
+            action: #selector(selectBackgroundImageLayoutFromMenu(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.representedObject = layout.rawValue
+        item.state = backgroundImageLayout == layout ? .on : .off
+        menu.addItem(item)
+    }
+
+    private func addSpeechHistoryBackgroundItem(
+        _ title: String,
+        background: WindowModeSpeechHistoryBackground,
+        to menu: NSMenu
+    ) {
+        let item = NSMenuItem(
+            title: title,
+            action: #selector(selectSpeechHistoryBackgroundFromMenu(_:)),
+            keyEquivalent: ""
+        )
+        item.target = self
+        item.representedObject = background.rawValue
+        item.state = speechHistoryBackground == background ? .on : .off
+        menu.addItem(item)
+    }
+
     @objc private func selectModeFromMenu(_ sender: NSMenuItem) {
         guard let rawValue = sender.representedObject as? String,
               let mode = GhostWindowMode(rawValue: rawValue)
@@ -533,11 +737,50 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         setShowsWindowFrame(!showsWindowFrame)
     }
 
+    @objc private func toggleSpeechHistoryIntegrationFromMenu() {
+        onSpeechHistoryIntegrationRequest(!integratesSpeechHistory)
+    }
+
     @objc private func selectBackgroundFromMenu(_ sender: NSMenuItem) {
         guard let rawValue = sender.representedObject as? String,
               let background = WindowModeStageBackground(rawValue: rawValue)
         else { return }
         setBackground(background)
+    }
+
+    @objc private func selectBackgroundImageFromMenu() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.image]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = String(localized: "ウィンドウの背景に使う画像を選択")
+        if let backgroundImageURL {
+            panel.directoryURL = backgroundImageURL.deletingLastPathComponent()
+            panel.nameFieldStringValue = backgroundImageURL.lastPathComponent
+        }
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        guard setBackgroundImage(url) else {
+            NSApp.presentError(NSError(
+                domain: "UtataneWindowModeBackground",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "背景画像を読み込めなかった")]
+            ))
+            return
+        }
+    }
+
+    @objc private func selectBackgroundImageLayoutFromMenu(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let layout = WindowModeStageImageLayout(rawValue: rawValue)
+        else { return }
+        setBackgroundImageLayout(layout)
+    }
+
+    @objc private func selectSpeechHistoryBackgroundFromMenu(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let background = WindowModeSpeechHistoryBackground(rawValue: rawValue)
+        else { return }
+        setSpeechHistoryBackground(background)
     }
 
     @objc private func saveScreenshotFromMenu() {
@@ -617,7 +860,10 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
                 contentSize: window.contentView?.bounds.size ?? window.frame.size,
                 origin: window.frame.origin,
                 background: background,
-                showsWindowFrame: showsWindowFrame
+                showsWindowFrame: showsWindowFrame,
+                backgroundImagePath: backgroundImageURL?.path,
+                backgroundImageLayout: backgroundImageLayout,
+                speechHistoryBackground: speechHistoryBackground
             ),
             identifier: stateIdentifier
         )
@@ -634,6 +880,37 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         for item in items where item.kind == .speechHistory {
             item.setContentSize(NSSize(width: bounds.width, height: min(height, bounds.height)))
             item.setFrameOrigin(bounds.origin)
+        }
+    }
+
+    private func applySpeechHistoryBackground() {
+        let color: NSColor = switch speechHistoryBackground {
+        case .automatic:
+            switch background {
+            case .white:
+                .white
+            case .gray:
+                NSColor(calibratedWhite: 0.25, alpha: 1)
+            case .black:
+                .black
+            case .desktop, .image:
+                .windowBackgroundColor
+            }
+        case .white:
+            .white
+        case .gray:
+            NSColor(calibratedWhite: 0.25, alpha: 1)
+        case .black:
+            .black
+        }
+        rootView.setSpeechHistoryBackground(color)
+        let rgb = color.usingColorSpace(.deviceRGB)
+        let luminance = rgb.map {
+            0.2126 * $0.redComponent + 0.7152 * $0.greenComponent + 0.0722 * $0.blueComponent
+        } ?? 1
+        let appearance = NSAppearance(named: luminance < 0.5 ? .darkAqua : .aqua)
+        for item in items where item.kind == .speechHistory {
+            item.contentView?.appearance = appearance
         }
     }
 
@@ -697,6 +974,9 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         if item.containerView.superview !== parentView {
             parentView.addSubview(item.containerView)
         }
+        if item.kind == .speechHistory {
+            applySpeechHistoryBackground()
+        }
         rootView.bringTransientControlsToFront()
         item.containerView.isHidden = false
         layoutSpeechHistoryItems()
@@ -738,6 +1018,7 @@ final class WindowModeStageRootView: NSView {
     private var pointerTrackingArea: NSTrackingArea?
     private(set) var transientControlsAreEnabled = false
     private var speechHistoryHeight: CGFloat = 0
+    private var speechHistoryBackground = NSColor.windowBackgroundColor
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -781,8 +1062,10 @@ final class WindowModeStageRootView: NSView {
 
     override func draw(_ dirtyRect: NSRect) {
         super.draw(dirtyRect)
-        guard let desktopWallpaper, let context = NSGraphicsContext.current?.cgContext else { return }
-        drawDesktopWallpaper(desktopWallpaper, in: context)
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        if let desktopWallpaper {
+            drawDesktopWallpaper(desktopWallpaper, in: context)
+        }
         drawSpeechHistoryBackground(in: context)
     }
 
@@ -824,7 +1107,7 @@ final class WindowModeStageRootView: NSView {
 
     private func drawSpeechHistoryBackground(in context: CGContext) {
         guard speechHistoryHeight > 0 else { return }
-        context.setFillColor(NSColor.windowBackgroundColor.cgColor)
+        context.setFillColor(speechHistoryBackground.cgColor)
         context.fill(NSRect(
             x: bounds.minX,
             y: bounds.minY,
@@ -867,6 +1150,11 @@ final class WindowModeStageRootView: NSView {
         needsLayout = true
         needsDisplay = true
         layoutSubtreeIfNeeded()
+    }
+
+    func setSpeechHistoryBackground(_ color: NSColor) {
+        speechHistoryBackground = color
+        needsDisplay = true
     }
 
     func setPointerInside(_ pointerInside: Bool) {
@@ -1226,6 +1514,10 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
         (activeHost as? WindowModePresentationHost)?.refreshDesktopWallpaper()
     }
 
+    func setIntegratesSpeechHistory(_ integrates: Bool) {
+        (activeHost as? WindowModePresentationHost)?.setIntegratesSpeechHistory(integrates)
+    }
+
     private final class PresentationItemHandle: PresentationItem {
         private let descriptor: ItemDescriptor
         private var backing: (any PresentationItem)?
@@ -1529,10 +1821,12 @@ public final class PresentationCoordinator {
     public private(set) var mode: GhostWindowMode
     public var onModeRequest: (@MainActor (GhostWindowMode) -> Void)?
     public var onCloseRequest: (@MainActor (GhostWindowMode, String?) -> Void)?
+    public var onSpeechHistoryIntegrationRequest: (@MainActor (Bool) -> Void)?
     private let systemGeometry: any PresentationGeometryProviding
     private let stageStateStore: WindowModeStageStateStore
     private var sharedHost: WindowModePresentationHost?
     private var sessions: [WeakSession] = []
+    private var integratesSpeechHistory = true
 
     public init(
         mode: GhostWindowMode = .off,
@@ -1574,6 +1868,15 @@ public final class PresentationCoordinator {
         }
     }
 
+    public func setIntegratesSpeechHistory(_ integrates: Bool) {
+        integratesSpeechHistory = integrates
+        sharedHost?.setIntegratesSpeechHistory(integrates)
+        sessions = sessions.filter { $0.value != nil }
+        for session in sessions.compactMap(\.value) {
+            session.presentationHost.setIntegratesSpeechHistory(integrates)
+        }
+    }
+
     public func refreshDesktopWallpapers() {
         sessions = sessions.filter { $0.value != nil }
         for session in sessions.compactMap(\.value) {
@@ -1606,6 +1909,10 @@ public final class PresentationCoordinator {
                 mode: .perGhost,
                 onModeRequest: { [weak self] mode in self?.requestMode(mode) },
                 onCloseRequest: { [weak self] in self?.requestClose(identifier: identifier) },
+                integratesSpeechHistory: integratesSpeechHistory,
+                onSpeechHistoryIntegrationRequest: { [weak self] integrates in
+                    self?.requestSpeechHistoryIntegration(integrates)
+                },
                 stateStore: stageStateStore,
                 stateIdentifier: "per-ghost:\(identifier)"
             )
@@ -1621,6 +1928,10 @@ public final class PresentationCoordinator {
             mode: .shared,
             onModeRequest: { [weak self] mode in self?.requestMode(mode) },
             onCloseRequest: { [weak self] in self?.requestClose(identifier: nil) },
+            integratesSpeechHistory: integratesSpeechHistory,
+            onSpeechHistoryIntegrationRequest: { [weak self] integrates in
+                self?.requestSpeechHistoryIntegration(integrates)
+            },
             stateStore: stageStateStore,
             stateIdentifier: "shared"
         )
@@ -1638,5 +1949,13 @@ public final class PresentationCoordinator {
 
     private func requestClose(identifier: String?) {
         onCloseRequest?(mode, identifier)
+    }
+
+    private func requestSpeechHistoryIntegration(_ integrates: Bool) {
+        if let onSpeechHistoryIntegrationRequest {
+            onSpeechHistoryIntegrationRequest(integrates)
+        } else {
+            setIntegratesSpeechHistory(integrates)
+        }
     }
 }
