@@ -142,6 +142,10 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         window?.isVisible == true
     }
 
+    var contentSize: NSSize? {
+        window?.contentView?.bounds.size
+    }
+
     override public init() {
         super.init()
     }
@@ -168,9 +172,12 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
             defer: false
         )
         panel.title = "エクスプローラ"
-        panel.contentViewController = NSHostingController(rootView: ContentExplorerView(model: model))
+        let hostingController = NSHostingController(rootView: ContentExplorerView(model: model))
+        hostingController.sizingOptions = []
+        panel.contentViewController = hostingController
         panel.isReleasedWhenClosed = false
         panel.contentMinSize = Self.minimumContentSize
+        panel.setContentSize(Self.initialContentSize)
         panel.delegate = self
         panel.center()
         panel.makeKeyAndOrderFront(nil)
@@ -181,6 +188,10 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
     public func update(entries: [ContentExplorerEntry]) {
         guard window != nil else { return }
         model.update(entries: entries)
+    }
+
+    public func close() {
+        window?.close()
     }
 
     public func windowWillClose(_: Notification) {

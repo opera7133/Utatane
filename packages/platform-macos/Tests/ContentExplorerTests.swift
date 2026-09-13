@@ -46,8 +46,17 @@ import Testing
 
 @MainActor
 @Test func `content explorer opens at a practical browsing size`() {
-    #expect(ContentExplorerWindowController.initialContentSize.width >= 1000)
-    #expect(ContentExplorerWindowController.initialContentSize.height >= 680)
+    let controller = ContentExplorerWindowController()
+    let entry = ContentExplorerEntry(
+        kind: .ghost,
+        name: "Emily",
+        directory: URL(filePath: "/tmp/Ghosts/emily4", directoryHint: .isDirectory)
+    )
+    controller.show(entries: [entry], onActivate: { _ in }, onRemove: { _ in })
+    defer { controller.close() }
+
+    #expect(controller.contentSize?.width == 1120)
+    #expect(controller.contentSize?.height == 720)
     #expect(ContentExplorerWindowController.minimumContentSize.width < ContentExplorerWindowController.initialContentSize.width)
     #expect(ContentExplorerWindowController.minimumContentSize.height < ContentExplorerWindowController.initialContentSize.height)
 }
