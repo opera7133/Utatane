@@ -247,6 +247,7 @@ private enum UtataneHelp {
 private enum GhostStartup {
     case boot
     case changed(from: InstalledGhost, script: String)
+    case vanished(from: InstalledGhost, script: String)
 }
 
 private struct UtataneRootView: View {
@@ -2006,42 +2007,56 @@ private struct UtataneRootView: View {
             }
             let bootEvent = GhostEvent.shiori(id: "OnBoot", references: [0: shellChoice.name])
             let startupScript: SakuraScript?
-            let arrivedByGhostChange = if case .changed = startup {
-                true
-            } else {
-                false
-            }
-            switch ghostStartupEventKind(
-                hasBooted: hasBooted(ghost),
-                arrivedByGhostChange: arrivedByGhostChange
-            ) {
-            case .firstBoot:
-                let firstBootScript = try await ghostSession.handle(event: .shiori(
-                    id: "OnFirstBoot", references: [0: "0"]
-                ))
-                startupScript = if let firstBootScript {
-                    firstBootScript
-                } else {
-                    try await ghostSession.handle(event: bootEvent)
-                }
-            case .boot:
-                startupScript = try await ghostSession.handle(event: bootEvent)
-            case .ghostChanged:
-                guard case let .changed(previous, changeScript) = startup else {
-                    startupScript = try await ghostSession.handle(event: bootEvent)
-                    break
-                }
-                let changedScript = try await ghostSession.handle(event: .shiori(id: "OnGhostChanged", references: [
+            if case let .vanished(previous, vanishScript) = startup {
+                let vanishedScript = try await ghostSession.handle(event: .shiori(id: "OnVanished", references: [
                     0: previous.characters.first(where: { $0.scope == 0 })?.name ?? previous.name,
-                    1: changeScript,
+                    1: vanishScript,
                     2: previous.name,
-                    3: previous.rootDirectory.path,
                     7: shellChoice.name
                 ]))
-                startupScript = if let changedScript {
-                    changedScript
+                startupScript = if let vanishedScript {
+                    vanishedScript
                 } else {
                     try await ghostSession.handle(event: bootEvent)
+                }
+            } else {
+                let arrivedByGhostChange = if case .changed = startup {
+                    true
+                } else {
+                    false
+                }
+                switch ghostStartupEventKind(
+                    hasBooted: hasBooted(ghost),
+                    arrivedByGhostChange: arrivedByGhostChange
+                ) {
+                case .firstBoot:
+                    let firstBootScript = try await ghostSession.handle(event: .shiori(
+                        id: "OnFirstBoot", references: [0: "0"]
+                    ))
+                    startupScript = if let firstBootScript {
+                        firstBootScript
+                    } else {
+                        try await ghostSession.handle(event: bootEvent)
+                    }
+                case .boot:
+                    startupScript = try await ghostSession.handle(event: bootEvent)
+                case .ghostChanged:
+                    guard case let .changed(previous, changeScript) = startup else {
+                        startupScript = try await ghostSession.handle(event: bootEvent)
+                        break
+                    }
+                    let changedScript = try await ghostSession.handle(event: .shiori(id: "OnGhostChanged", references: [
+                        0: previous.characters.first(where: { $0.scope == 0 })?.name ?? previous.name,
+                        1: changeScript,
+                        2: previous.name,
+                        3: previous.rootDirectory.path,
+                        7: shellChoice.name
+                    ]))
+                    startupScript = if let changedScript {
+                        changedScript
+                    } else {
+                        try await ghostSession.handle(event: bootEvent)
+                    }
                 }
             }
             markBooted(ghost)
@@ -2868,6 +2883,12 @@ private struct UtataneRootView: View {
             Task { await updateCurrentGhost(reason: "script") }
         case .updateBalloon:
             Task { await updateCurrentBalloon() }
+        case let .vanishByMyself(replacement, asksConfirmation):
+            requestSelfVanish(
+                calledRuntime: calledRuntime,
+                replacement: replacement,
+                asksConfirmation: asksConfirmation
+            )
         case let .headline(target):
             let headline = target.caseInsensitiveCompare("random") == .orderedSame
                 ? installedHeadlines.randomElement()
@@ -5146,7 +5167,8 @@ private struct UtataneRootView: View {
         contentExplorerController.show(
             entries: contentExplorerEntries(),
             preferredKind: preferredKind,
-            onActivate: activateContentExplorerEntry
+            onActivate: activateContentExplorerEntry,
+            onRemove: requestContentExplorerRemoval
         )
     }
 
@@ -5167,6 +5189,10 @@ private struct UtataneRootView: View {
                 directory: ghost.rootDirectory,
                 readmeURL: ghostReadme(ghost)?.url,
                 homeURL: ContentNetworkUpdater.homeURL(in: ghost.rootDirectory),
+                removalContainer: removableContentContainer(
+                    for: ghost.rootDirectory,
+                    root: ContentRoot.ghostsDirectory
+                ),
                 isActive: isActive
             ))
             for shell in ghost.shells {
@@ -5174,6 +5200,11 @@ private struct UtataneRootView: View {
                     contentDirectory: shell.directory,
                     descriptorURL: shell.directory.appending(path: "descript.txt")
                 )
+                let isActiveShell = (currentGhost?.id == ghost.id && selectedShell?.id == shell.id)
+                    || calledGhosts.values.contains {
+                        $0.ghost.id == ghost.id && $0.shell.id == shell.id
+                    }
+                let shellContainer = ghost.rootDirectory.appending(path: "shell", directoryHint: .isDirectory)
                 entries.append(ContentExplorerEntry(
                     kind: .shell,
                     name: shell.name,
@@ -5182,7 +5213,11 @@ private struct UtataneRootView: View {
                     parentDirectory: ghost.rootDirectory,
                     readmeURL: readme?.url,
                     homeURL: ContentNetworkUpdater.homeURL(in: shell.directory),
-                    isActive: currentGhost?.id == ghost.id && selectedShell?.id == shell.id
+                    removalContainer: removableContentContainer(
+                        for: ghost.rootDirectory,
+                        root: ContentRoot.ghostsDirectory
+                    ) == nil || isActiveShell ? nil : shellContainer,
+                    isActive: isActiveShell
                 ))
             }
         }
@@ -5192,6 +5227,8 @@ private struct UtataneRootView: View {
                 contentDirectory: installedBalloon.directory,
                 descriptorURL: installedBalloon.directory.appending(path: "descript.txt")
             )
+            let isActive = balloon?.directory == installedBalloon.directory
+                || calledGhosts.values.contains { $0.balloon.directory == installedBalloon.directory }
             return ContentExplorerEntry(
                 kind: .balloon,
                 name: installedBalloon.name,
@@ -5199,7 +5236,11 @@ private struct UtataneRootView: View {
                 directory: installedBalloon.directory,
                 readmeURL: readme?.url,
                 homeURL: ContentNetworkUpdater.homeURL(in: installedBalloon.directory),
-                isActive: balloon?.directory == installedBalloon.directory
+                removalContainer: isActive ? nil : removableContentContainer(
+                    for: installedBalloon.directory,
+                    root: ContentRoot.balloonsDirectory
+                ),
+                isActive: isActive
             )
         })
 
@@ -5210,7 +5251,11 @@ private struct UtataneRootView: View {
                 detail: headline.id.lastPathComponent,
                 directory: headline.id,
                 readmeURL: headline.readmeURL,
-                homeURL: headline.openURL ?? headline.siteURL
+                homeURL: headline.openURL ?? headline.siteURL,
+                removalContainer: removableContentContainer(
+                    for: headline.id,
+                    root: ContentRoot.headlinesDirectory
+                )
             )
         })
 
@@ -5222,6 +5267,10 @@ private struct UtataneRootView: View {
                 directory: plugin.directory,
                 readmeURL: plugin.readmeURL,
                 homeURL: plugin.homeURL ?? plugin.authorURL,
+                removalContainer: removableContentContainer(
+                    for: plugin.directory,
+                    root: ContentRoot.pluginsDirectory
+                ),
                 canActivate: isNativePlugin(plugin)
             )
         })
@@ -5234,6 +5283,10 @@ private struct UtataneRootView: View {
             }
             return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
         }
+    }
+
+    private func removableContentContainer(for directory: URL, root: URL) -> URL? {
+        SafeContentTrash.isDirectChild(directory, of: root) ? root : nil
     }
 
     private func activateContentExplorerEntry(_ entry: ContentExplorerEntry) {
@@ -5276,6 +5329,227 @@ private struct UtataneRootView: View {
                     scriptPlayer.play(script, balloon: balloon)
                 }
             }
+        }
+    }
+
+    private func requestContentExplorerRemoval(_ entry: ContentExplorerEntry) {
+        Task { await removeContentExplorerEntry(entry, asksConfirmation: true) }
+    }
+
+    private func requestSelfVanish(
+        calledRuntime: CalledGhostRuntime?,
+        replacement: String?,
+        asksConfirmation: Bool
+    ) {
+        guard let ghost = calledRuntime?.ghost ?? currentGhost,
+              let removalContainer = removableContentContainer(
+                  for: ghost.rootDirectory,
+                  root: ContentRoot.ghostsDirectory
+              )
+        else {
+            showError("このゴーストはUtataneが管理する削除可能な場所にないため、アンインストールできない。")
+            return
+        }
+        let entry = ContentExplorerEntry(
+            kind: .ghost,
+            name: ghost.name,
+            detail: ghost.rootDirectory.lastPathComponent,
+            directory: ghost.rootDirectory,
+            removalContainer: removalContainer,
+            isActive: true
+        )
+        Task {
+            await removeContentExplorerEntry(
+                entry,
+                asksConfirmation: asksConfirmation,
+                preferredReplacement: replacement,
+                calledRuntime: calledRuntime
+            )
+        }
+    }
+
+    private func removeContentExplorerEntry(
+        _ entry: ContentExplorerEntry,
+        asksConfirmation: Bool,
+        preferredReplacement: String? = nil,
+        calledRuntime explicitCalledRuntime: CalledGhostRuntime? = nil
+    ) async {
+        guard let removalContainer = entry.removalContainer else { return }
+        guard entry.kind != .ghost || !isTransitioningGhost else { return }
+        let ghost = entry.kind == .ghost
+            ? model.ghosts.first(where: { $0.rootDirectory == entry.directory })
+            : nil
+        let calledRuntime = explicitCalledRuntime
+            ?? ghost.flatMap { calledGhosts[$0.id] }
+        let isCurrentGhost = ghost?.id == currentGhost?.id && calledRuntime == nil
+
+        if entry.kind == .ghost, asksConfirmation {
+            if let calledRuntime {
+                calledRuntime.player.cancel()
+                await calledRuntime.prepareVanish()
+            } else if isCurrentGhost {
+                scriptPlayer.cancel()
+                await playCurrentVanishEvent("OnVanishSelecting")
+            }
+        }
+
+        if asksConfirmation, !alertController.confirmContentRemoval(
+            name: entry.name,
+            kind: entry.kind.title
+        ) {
+            if entry.kind == .ghost {
+                if let calledRuntime {
+                    await calledRuntime.cancelVanish()
+                } else if isCurrentGhost {
+                    await playCurrentVanishEvent("OnVanishCancel")
+                }
+            }
+            return
+        }
+
+        do {
+            if let ghost, isCurrentGhost {
+                try await vanishCurrentGhost(
+                    ghost,
+                    removalContainer: removalContainer,
+                    preferredReplacement: preferredReplacement
+                )
+            } else if let ghost, let calledRuntime {
+                try await vanishCalledGhost(
+                    ghost,
+                    runtime: calledRuntime,
+                    removalContainer: removalContainer
+                )
+            } else {
+                try SafeContentTrash().moveToTrash(entry.directory, directChildOf: removalContainer)
+                await reloadContentAfterRemoval(kind: entry.kind)
+            }
+            AppLogStore.shared.info(
+                "「\(entry.name)」をゴミ箱へ移動しました",
+                category: "Content"
+            )
+        } catch {
+            showError(error.localizedDescription)
+        }
+        configureContextMenu()
+        refreshContentExplorer()
+    }
+
+    private func playCurrentVanishEvent(_ eventID: String) async {
+        guard let session, let balloon,
+              let script = try? await session.handle(event: .shiori(id: eventID, references: [:]))
+        else { return }
+        await scriptPlayer.playAndWait(script, balloon: balloon)
+    }
+
+    private func vanishCurrentGhost(
+        _ ghost: InstalledGhost,
+        removalContainer: URL,
+        preferredReplacement: String?
+    ) async throws {
+        guard !isTransitioningGhost else { return }
+        isTransitioningGhost = true
+        defer { isTransitioningGhost = false }
+
+        let vanishScript = await closeCurrentGhost(reason: .vanish)
+        clearCurrentGhostPresentation()
+        do {
+            try SafeContentTrash().moveToTrash(ghost.rootDirectory, directChildOf: removalContainer)
+        } catch {
+            _ = await activate(ghost, startup: .boot)
+            selectedGhostID = ghost.id
+            throw error
+        }
+
+        await model.load()
+        showsOnboarding = model.ghosts.isEmpty
+        let replacement = preferredReplacement.flatMap { target in
+            model.ghosts.first { matches(target, name: $0.name, directory: $0.rootDirectory) }
+        } ?? model.ghosts.first
+        guard let replacement else {
+            selectedGhostID = nil
+            showGhostPicker(requiresSelection: true)
+            return
+        }
+        switch await activate(replacement, startup: .vanished(from: ghost, script: vanishScript)) {
+        case .success:
+            selectedGhostID = replacement.id
+        case let .failure(error):
+            selectedGhostID = nil
+            throw error
+        }
+    }
+
+    private func vanishCalledGhost(
+        _ ghost: InstalledGhost,
+        runtime: CalledGhostRuntime,
+        removalContainer: URL
+    ) async throws {
+        calledGhosts[ghost.id] = nil
+        let vanishScript = await runtime.stopForVanish()
+        do {
+            try SafeContentTrash().moveToTrash(ghost.rootDirectory, directChildOf: removalContainer)
+        } catch {
+            call(ghost)
+            throw error
+        }
+        await model.load()
+        await notifyOtherGhostVanished(ghost, vanishScript: vanishScript)
+    }
+
+    private func notifyOtherGhostVanished(_ ghost: InstalledGhost, vanishScript: String) async {
+        let references = [
+            0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+            1: vanishScript,
+            2: ghost.name
+        ]
+        if let session, let balloon {
+            var mainReferences = references
+            mainReferences[7] = selectedShell?.name ?? ""
+            let otherScript = try? await session.handle(event: .shiori(
+                id: "OnOtherGhostVanished",
+                references: mainReferences
+            ))
+            if let otherScript {
+                scriptPlayer.play(otherScript, balloon: balloon)
+            } else if let fallback = try? await session.handle(event: .shiori(
+                id: "OnVanished",
+                references: mainReferences
+            )) {
+                scriptPlayer.play(fallback, balloon: balloon)
+            }
+        }
+        for runtime in calledGhosts.values {
+            await runtime.notifyOtherGhostVanished(references: references)
+        }
+    }
+
+    private func clearCurrentGhostPresentation() {
+        scriptPlayer.cancel()
+        surfaceWindowController.resetContent()
+        balloonWindowController.resetContent()
+        speechHistoryPresenter?.discard()
+        speechHistoryPresenter = nil
+        speechHistoryWindowController.close()
+        session = nil
+        currentGhost = nil
+        selectedShell = nil
+        balloon = nil
+        selectedGhostID = nil
+    }
+
+    private func reloadContentAfterRemoval(kind: ContentExplorerKind) async {
+        switch kind {
+        case .ghost, .shell:
+            await model.load()
+        case .balloon:
+            installedBalloons = (try? balloonLoader.loadInstalled(
+                from: ContentRoot.balloonReadDirectories
+            )) ?? []
+        case .headline:
+            reloadHeadlines()
+        case .plugin:
+            await reloadPlugins()
         }
     }
 

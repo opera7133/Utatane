@@ -358,12 +358,47 @@ final class CalledGhostRuntime {
         _ = try? await session.handle(event: event)
     }
 
+    func prepareVanish() async {
+        await playAndWait(eventID: "OnVanishSelecting")
+    }
+
+    func cancelVanish() async {
+        await playAndWait(eventID: "OnVanishCancel")
+    }
+
+    func notifyOtherGhostVanished(references: [Int: String]) async {
+        var references = references
+        references[7] = shell.name
+        let otherScript = try? await session.handle(event: .shiori(
+            id: "OnOtherGhostVanished",
+            references: references
+        ))
+        if let otherScript {
+            player.play(otherScript, balloon: balloon)
+            return
+        }
+        if let fallback = try? await session.handle(event: .shiori(
+            id: "OnVanished",
+            references: references
+        )) {
+            player.play(fallback, balloon: balloon)
+        }
+    }
+
     func stop() async -> String {
+        await stop(reason: .close)
+    }
+
+    func stopForVanish() async -> String {
+        await stop(reason: .vanish)
+    }
+
+    private func stop(reason: GhostStopReason) async -> String {
         await webSocketManager.cancelAll()
         cancelHTTP(url: nil)
         var finalScript = ""
         _ = try? await session.handle(event: .shiori(id: "OnDestroy", references: [:]))
-        if let script = try? await session.stop(reason: .close) {
+        if let script = try? await session.stop(reason: reason) {
             finalScript = script.rawValue
             await player.playAndWait(script, balloon: balloon)
         }
@@ -373,6 +408,13 @@ final class CalledGhostRuntime {
         speechHistoryPresenter?.discard()
         speechHistoryWindowController.close()
         return finalScript
+    }
+
+    private func playAndWait(eventID: String) async {
+        guard let script = try? await session.handle(event: .shiori(id: eventID, references: [:])) else {
+            return
+        }
+        await player.playAndWait(script, balloon: balloon)
     }
 
     func setIntegratesSpeechHistory(_ integrates: Bool) {

@@ -42,6 +42,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
     public let parentDirectory: URL?
     public let readmeURL: URL?
     public let homeURL: URL?
+    public let removalContainer: URL?
     public let isActive: Bool
     public let canActivate: Bool
 
@@ -57,6 +58,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         parentDirectory: URL? = nil,
         readmeURL: URL? = nil,
         homeURL: URL? = nil,
+        removalContainer: URL? = nil,
         isActive: Bool = false,
         canActivate: Bool = true
     ) {
@@ -67,6 +69,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         self.parentDirectory = parentDirectory
         self.readmeURL = readmeURL
         self.homeURL = homeURL
+        self.removalContainer = removalContainer
         self.isActive = isActive
         self.canActivate = canActivate
     }
@@ -88,6 +91,7 @@ final class ContentExplorerModel {
     var searchText = ""
     var selection: String?
     var onActivate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
+    var onRemove: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
 
     var filteredEntries: [ContentExplorerEntry] {
         entries.filter { entry in
@@ -145,9 +149,11 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
     public func show(
         entries: [ContentExplorerEntry],
         preferredKind: ContentExplorerKind? = nil,
-        onActivate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void
+        onActivate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
+        onRemove: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void
     ) {
         model.onActivate = onActivate
+        model.onRemove = onRemove
         model.update(entries: entries, preferredKind: preferredKind)
         if let window {
             window.makeKeyAndOrderFront(nil)
@@ -272,6 +278,11 @@ private struct ContentExplorerView: View {
                 Spacer()
 
                 HStack {
+                    if entry.removalContainer != nil {
+                        Button("削除…", role: .destructive) {
+                            model.onRemove?(entry)
+                        }
+                    }
                     Button("Finderで表示") {
                         NSWorkspace.shared.activateFileViewerSelecting([entry.directory])
                     }

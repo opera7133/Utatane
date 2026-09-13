@@ -234,6 +234,17 @@ func `parses SSP content explorer commands`() {
 }
 
 @Test
+func `parses SSP self vanish commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![vanishbymyself]\![vanishbymyself,Emily]\![vanishbymyself,--option=query]"#
+    ) == [
+        .contentAction(.vanishByMyself(replacement: nil, asksConfirmation: false)),
+        .contentAction(.vanishByMyself(replacement: "Emily", asksConfirmation: false)),
+        .contentAction(.vanishByMyself(replacement: nil, asksConfirmation: true))
+    ])
+}
+
+@Test
 func `parses implemented SSP developer tool commands`() {
     #expect(SakuraScriptParser().parse(
         #"\![open,developer]\![open,surfacetest]\![open,errorlog]"#

@@ -58,6 +58,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\![set/reset,zorder...]` | ✅ | `\![set,zorder,スコープ...]` によるサーフェス・バルーンウィンドウの重なり順序（Z-Order）指定と、`\![reset,zorder]` による解除に対応 |
 | `\![set/reset,sticky-window...]` | ✅ | `\![set,sticky-window,スコープ...]` による複数キャラクターウィンドウの連動ドラッグ移動と、`\![reset,sticky-window]` による解除に対応 |
 | `\![execute,resetwindowpos]` | ✅ | 保存済みの全scopeのサーフェス・バルーン位置を消去し、表示中ウィンドウを初期配置へ戻す |
+| `\![vanishbymyself]` | ✅ | 現在のゴーストを安全に終了してmacOSのゴミ箱へ移動。切り替え先ゴースト名と`--option=query`による確認画面にも対応 |
 
 ### バルーンとテキスト
 

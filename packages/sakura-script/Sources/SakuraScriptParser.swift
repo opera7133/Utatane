@@ -934,6 +934,16 @@ public struct SakuraScriptParser: Sendable {
                         tokens.append(.contentAction(.callGhost(arguments[2])))
                     } else if arguments[0].lowercased() == "updatebymyself" {
                         tokens.append(.contentAction(.updateGhost))
+                    } else if arguments[0].lowercased() == "vanishbymyself" {
+                        let values = Array(arguments.dropFirst())
+                        let replacement = values.first { !$0.lowercased().hasPrefix("--option=") }
+                        let asksConfirmation = values.contains {
+                            $0.caseInsensitiveCompare("--option=query") == .orderedSame
+                        }
+                        tokens.append(.contentAction(.vanishByMyself(
+                            replacement: replacement,
+                            asksConfirmation: asksConfirmation
+                        )))
                     } else if arguments.count >= 2, arguments[0].lowercased() == "update" {
                         switch arguments[1].lowercased() {
                         case "ghost": tokens.append(.contentAction(.updateGhost))

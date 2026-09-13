@@ -24,6 +24,20 @@ public final class ApplicationAlertController {
         alert.addButton(withTitle: "OK")
         alert.runModal()
     }
+
+    public func confirmContentRemoval(name: String, kind: String) -> Bool {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.icon = NSApplication.shared.applicationIconImage
+        alert.messageText = String(localized: "コンテンツを削除しますか？")
+        alert.informativeText = String(
+            format: String(localized: "「%@」をmacOSのゴミ箱へ移動します。あとから戻すこともできます。"),
+            name
+        ) + "\n\n\(String(localized: "種類")): \(kind)"
+        alert.addButton(withTitle: String(localized: "ゴミ箱へ移動"))
+        alert.addButton(withTitle: String(localized: "キャンセル"))
+        return alert.runModal() == .alertFirstButtonReturn
+    }
 }
 
 public struct ApplicationErrorPresentation: Equatable, Sendable {

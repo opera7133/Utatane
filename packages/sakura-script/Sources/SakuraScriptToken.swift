@@ -286,6 +286,7 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case changeBalloon(String)
     case updateGhost
     case updateBalloon
+    case vanishByMyself(replacement: String?, asksConfirmation: Bool)
     case headline(String)
     case closeGhost
     case install(SakuraScriptInstallSource)

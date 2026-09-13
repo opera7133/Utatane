@@ -56,6 +56,8 @@ public actor GhostSession {
         let event: GhostEvent = switch reason {
         case .close:
             .close
+        case .vanish:
+            .shiori(id: "OnVanishSelected", references: [:])
         case let .ghostChanging(name):
             .ghostChanging(name: name)
         case let .ghostChangingDetailed(name, mode, ghostName, path):
