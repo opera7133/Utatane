@@ -20,18 +20,18 @@ UKADOCに掲載されているゴースト関連の設定・配布用テキス�
 | ファイル | 状況 | 現在の実装 | 主な不足 |
 | --- | --- | --- | --- |
 | Ghost `descript.txt` | 🟡 | UTF-8／Shift_JIS、基本情報、SHIORI名、キャラクター名、既定surface・balloon、更新URL、README、推奨balloon | 74項目中、配置、SSTP制御、SHIORI詳細設定、カーソル、メニュー、アイコン等が未反映 |
-| Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`、bindgroup／bindoption | 102項目中、初期配置、balloon offset、メニュー装飾、z-order、sticky-window等が未反映 |
-| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、arrow座標、cursor／anchor／anchor.visitedのstyle・色 | 162項目中、marker配置、入力欄、透過方式、ウインドウ位置等が未反映 |
+| Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`、bindgroup／bindoption、初期位置・上下配置、z-order、sticky-window、balloonのoffset／alignment／dontmove／syncscale | 102項目中、画像ベース座標の全用途、メニュー装飾、DPI、透過・crossfade等が未反映 |
+| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、arrow／clickwaitmarker／number、cursor／anchor／anchor.visited、透過方式、windowposition | 162項目中、SSTP／online marker、入力欄、blendmethod、recommended ghost等が未反映 |
 | Plugin `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、name、id、filename、type、charset、作者、更新URL、README、secondchangeinterval、otherghosttalkを読み込み、SHIORI／dylib／Windows DLLへ分類。メニューから実行、README表示、ネットワーク更新が可能。ネイティブSHIORI型は実体をロードし、OnSecondChange・OnMenuExec・raiseplugin／notifypluginを配送。AKARIの`_create_thread`は独立評価ワーカーで実行し、変更されたグローバル変数を完了時に反映。YAYA製wallet_of_unyuとAKARI製sudohaikuyuは実ファイルでOnMenuExecを確認。macOS dylibは標準`loadu/load`・`unload`・`request`を優先 | dylib実物とWine DLL、AKARIワーカー内の外部通信を伴う長時間処理は未確認 |
 | Headline `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、名前、DLL名、URL、open URL、homeurl、charset、alwaysdisplay、readme、readme.charset。RSS用`type`・`feed`拡張も利用 | UKADOC掲載項目は保持・利用。Windows DLL実行は実行環境依存 |
 | `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストールに加え、refreshとrefreshundeletemaskをバックアップ付き置換で実装 | supplement・languageは未対応 |
-| `delete.txt` | 🟡 | UTF-8／Shift_JIS、charset行、Windows区切りの相対ファイル・ディレクトリを更新後に安全確認して削除 | 更新本体と削除を合わせた完全なロールバックは未対応 |
+| `delete.txt` | ✅ | UTF-8／Shift_JIS、charset行、Windows区切りの相対ファイル・ディレクトリを事前検証し、更新ファイルの置換と同じロールバック境界で安全に削除 | — |
 | `developer_options.txt` | 🟡 | `noupdate`／`nonar`に加え、`.narignore`／`.updateignore`／`.narinclude`／`.updateinclude`の主要gitignore構文と`include:`を各生成処理へ反映 | 文字クラス・エスケープ等、gitignoreの全細則は未対応 |
 | `surfaces.txt`／`surfaces*.txt` | 🟡 | 複数ファイル結合、surface selector、append、alias、element、rect／polygon collision、主要animation | 後述のSERIKO構文・描画メソッド・surface属性が多数未対応 |
 | `surfaces2.txt` | 🟡 | `surfaces`で始まるため読み込む | SSP用上書きではなく、他のsurfacesファイルとファイル名順で単純結合する |
 | `alias.txt` | 🟡 | surfaces文書として追加読込し、sakura／kero／char scope aliasを利用 | alias以外の互換挙動は未照合 |
 | `surfacetable.txt` | ✅ | charset、version、option、group、scope、surface IDと名前を解析。`DisableNoDefineSurfaces`、`__disabled`、`__parts`も利用 | 実機UIでの全表示差は未確認 |
-| `updates2.dau` | 🟡 | path・MD5・size・date・charsetを解析し、取得・サイズ／MD5検証・ロールバック更新。生成はCRLFで拡張フィールドも出力 | date・charsetは保持のみ。削除を含めた完全なトランザクションは未対応 |
+| `updates2.dau` | 🟡 | path・MD5・size・date・charsetを解析し、取得・サイズ／MD5検証・`delete.txt`を含むロールバック更新。生成はCRLFで拡張フィールドも出力 | date・charsetは保持のみ |
 | `updates.txt` | 🟡 | `charset,`と`file,`行、path・MD5・拡張フィールド、未知行の無視に対応 | Version 3形式の生成は未対応 |
 | `readme.txt`／`readme.md` | 🟡 | Ghost／選択中Shell／Balloon／Headlineのdescript.txtにあるreadme指定と既定候補を安全に解決し、macOSの関連アプリで開く。readme.charsetも保持 | Markdownの独自表示はせず、文字コードの最終的な解釈は関連アプリに依存 |
 
@@ -57,13 +57,15 @@ UKADOC掲載は102項目。現在利用するのはかなり限定的。
 
 | 状況 | 項目 |
 | --- | --- |
-| 利用 | `name`、`seriko.use_self_alpha` |
+| 利用 | `name`、`seriko.use_self_alpha`、`seriko.zorder`、`seriko.sticky-window`、`seriko.alignmenttodesktop` |
 | 利用 | scope別`bindgroup*.name/default/addid` |
 | 利用 | scope別`bindoption*.group`の`mustselect`・`multiple` |
+| 利用 | scope別`seriko.alignmenttodesktop`、`defaultleft/top`、balloonの`offsetx/y/xl/xr/yl/yr`・`alignment`・`dontmove`・`syncscale` |
+| 保持 | scope別`defaultx/defaulty` |
 | 別経路で利用 | `readme`、`readme.charset` |
-| 未反映 | 基本メタデータ、menu表示、名前上書き、z-order、sticky-window、DPI、初期配置、balloon offset/alignment/dontmove/syncscale、menuitem、全メニュー装飾、透過・crossfade、アイコン枠色 |
+| 未反映 | 基本メタデータ、menu表示、名前上書き、画像ベース座標の全用途、DPI、menuitem、全メニュー装飾、透過・crossfade、アイコン枠色 |
 
-SakuraScriptからのz-orderやsticky-window操作は実装済みだが、Shell `descript.txt`の初期値は読んでいない。
+保存済みの利用者位置がある場合はそちらを優先し、未保存時だけShell `descript.txt`の初期位置を使う。
 
 ## Balloon descript.txt
 
@@ -73,11 +75,12 @@ UKADOC掲載は162項目。現在の実利用項目は以下。
 | --- | --- |
 | 利用 | `type`、`name`、`origin.x/y`、`validrect.left/top/right/bottom`、`wordwrappoint.x/y`、`vertical` |
 | 利用 | `font.name`、`font.height`、`font.color.r/g/b`、`font.shadowcolor.r/g/b`、`font.shadowstyle` |
-| 利用 | `font.bold`、`font.italic`、`font.underline`、`font.strike`、`font.outline`、`arrow0.x/y`、`arrow1.x/y` |
+| 利用 | `font.bold`、`font.italic`、`font.underline`、`font.strike`、`font.outline`、`arrow0.x/y`、`arrow1.x/y`、`clickwaitmarker.x/y` |
+| 利用 | `number.font.name/height/color`、`number.xr/y`、`use_self_alpha`、`windowposition.x/y/limit` |
 | 利用 | cursor、cursor.notselect、anchor、anchor.notselect、anchor.visitedの`style`、font／pen／brush RGB。訪問済みアンカーはゴーストの実行中にID単位で保持 |
-| 画像として利用 | balloon画像、marker画像、arrow画像。ただしfilename指定ではなく既定ファイル名を探索 |
+| 画像として利用 | balloon画像、marker画像、clickwaitmarker／arrow画像。`balloons*s.txt`等のサーフェス別上書きと`marker.filename`／`clickwaitmarker.filename`／`arrow.filename`を反映 |
 | 別経路で利用 | `readme`、`readme.charset` |
-| 未反映 | disable.font、blendmethod、各marker座標・間隔・文字、number書式、communicatebox、透過方式、windowposition、filename差替え、recommended ghost |
+| 未反映 | disable.font、blendmethod、SSTP／online markerの座標・間隔・文字、communicatebox、`use_self_alpha,full`、recommended ghost |
 
 `origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックする。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置する。入力欄は従来どおり横書き。
 
@@ -115,12 +118,12 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | --- | --- | --- |
 | surface選択 | 🟡 | 単一ID、範囲、列挙、除外、`surface.append` |
 | alias | 🟡 | sakura、kero、char scopeの名前→surface ID候補 |
-| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱う。`seriko.use_self_alpha,1`でもアルファチャンネルのないPNGは左上色透過へフォールバック。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後と、単一のAPNGを含むelement合成後も再生情報を維持する。異なるタイムラインを持つ複数APNGの同時合成と全描画オプションは未網羅 |
+| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱う。`seriko.use_self_alpha,1`でもアルファチャンネルのないPNGは左上色透過へフォールバック。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つAPNG同士の合成後も再生情報を維持する。極端に長い最小公倍周期と全描画オプションは未網羅 |
 | collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用 |
 | animation基本 | 🟡 | name、interval文字列、pattern、wait、座標。複数animationを独立したTaskとレイヤー状態で並行再生し、base・overlay系・asis・moveと各種制御を反映 |
-| interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能。exclusiveとshared-indexの完全な挙動は未対応 |
+| interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能 |
 | pattern method | 🟡 | base、overlay、overlay-fast、replace、interpolate、reduce、bind、add、auto、asis、move、scaling、insert、start／stop、alternative／parallel系、APNG／GIF／WebPのimportに加え、multiply／screen／overlay／add／soft-light／hard-light／color-dodge／color-burn／color／luminosity／hue／saturation／darken／lighten／difference／exclusion系と旧名・fast名を実装。alternative／parallelの括弧・角括弧とカンマ・ピリオド区切り、scalingの小数倍率に対応。`overlaymultiply`／`blend-multiply-fast`はベースの不透明度でクリップ。AppKitに同一演算がないvivid-light等の一部は近似 |
-| animation option／collision | 🟡 | exclusive、background、shared-indexを保持。animation固有のrect／ellipse／circle／polygon collisionをbind中・アニメーション実行中のマウス判定に利用。optionの描画順・インデックス継続・限定exclusiveの完全な挙動は未実装 |
+| animation option／collision | 🟡 | exclusive（全体・対象ID指定）、background、shared-indexを再生へ反映。animation固有のrect／ellipse／circle／polygon collisionをbind中・アニメーション実行中のマウス判定に利用。bindとexclusiveの併用はUKADOC同様に未定義 |
 | surface属性 | 🟡 | surface name、共通／sakura／kero balloon offset、center／kinoko.center／basepos point、icon.rect、maxwidthを保持。balloon offsetは倍率を含め実配置へ反映。collision-sortは当たり判定優先順、animation-sortは初期合成順へ反映。maxwidthの表示制約とpoint・offsetの全用途は未対応 |
 | cursor定義 | 🟡 | sakura／kero／char scopeのmouseup、mousedown、mouserightdown、mousewheel、mousehoverをcollision名ごとに反映。system cursor 10種と、AppKitで画像として読めるカーソルファイルに対応。system:wait／move／helpはmacOSの近似表示 |
 | tooltip定義 | ✅ | sakura／kero／char scopeのcollision別テキストをmacOS標準ツールチップとして表示 |

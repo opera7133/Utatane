@@ -1874,6 +1874,94 @@ func `renders both installed twin characters with default bindings`() throws {
 
 @Test
 @MainActor
+func `shell presentation defaults place and align a surface`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 100, height: 200).write(to: directory.appending(path: "surface0000.png"))
+    let geometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 100, y: 50, width: 1000, height: 700),
+            visibleFrame: NSRect(x: 100, y: 50, width: 1000, height: 700),
+            bitsPerPixel: 32,
+            scale: 2,
+            isPrimary: true
+        )
+    ])
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [0: SurfaceDefinition(id: 0, collisions: [], animations: [])],
+        surfaceTable: nil,
+        maximumSurfaceWidth: nil,
+        desktopAlignment: .bottom,
+        presentationSettings: [
+            0: ShellScopePresentationSettings(
+                desktopAlignment: .free,
+                defaultLeft: 30,
+                defaultTop: 40
+            )
+        ]
+    )
+    let controller = SurfaceWindowController(positionStore: positionStore, geometryProvider: geometry)
+    defer { controller.hideAll() }
+
+    try controller.show(shell: shell, surfaceID: 0)
+
+    #expect(controller.windowFrame?.origin == NSPoint(x: 130, y: 510))
+}
+
+@Test
+@MainActor
+func `shell defaults configure balloon alignment movement and synchronized scale`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 100, height: 80).write(to: directory.appending(path: "balloons0.png"))
+    let geometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            visibleFrame: NSRect(x: 0, y: 0, width: 1200, height: 800),
+            bitsPerPixel: 32,
+            scale: 2,
+            isPrimary: true
+        )
+    ])
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [:],
+        surfaceTable: nil,
+        maximumSurfaceWidth: nil,
+        presentationSettings: [
+            0: ShellScopePresentationSettings(
+                balloonOffsets: ShellBalloonOffsets(leftX: 10, leftY: 20),
+                balloonAlignment: .left,
+                preventsBalloonMovement: true,
+                synchronizesBalloonScale: true
+            )
+        ]
+    )
+    let controller = BalloonWindowController(positionStore: positionStore, geometryProvider: geometry)
+    controller.setDisplayScale(1, textScale: 1, surfaceScale: 1.5)
+    controller.configure(shell: shell)
+    let surfaceFrame = NSRect(x: 600, y: 200, width: 100, height: 300)
+
+    try controller.show(balloon: makeBalloon(directory: directory), text: "test", near: surfaceFrame)
+    defer { controller.hideAll() }
+
+    #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 150, height: 120))
+    #expect(controller.windowFrame(for: 0)?.origin == NSPoint(x: 457, y: 350))
+    #expect(controller.alignment(scope: 0) == .left)
+    #expect(controller.isMovementLocked(scope: 0))
+}
+
+@Test
+@MainActor
 func `renders a virtual surface from ordered elements`() throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

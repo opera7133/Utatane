@@ -175,6 +175,81 @@ func `loads default balloon font decoration`() throws {
 }
 
 @Test
+func `loads marker number transparency and window placement settings`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    type,balloon
+    name,Presentation Balloon
+    arrow1.x,-20
+    arrow1.y,-10
+    clickwaitmarker.x,-40
+    clickwaitmarker.y,-30
+    number.font.name,Helvetica
+    number.font.height,14
+    number.font.color.r,10
+    number.font.color.g,20
+    number.font.color.b,30
+    number.xr,-32
+    number.y,-18
+    use_self_alpha,true
+    windowposition.x,center
+    windowposition.y,-12
+    windowposition.limit,0
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+
+    let balloon = try BalloonLoader().load(from: directory)
+
+    #expect(balloon.clickWaitMarkerX == -40)
+    #expect(balloon.clickWaitMarkerY == -30)
+    #expect(balloon.numberFontName == "Helvetica")
+    #expect(balloon.numberFontHeight == 14)
+    #expect(balloon.numberFontColor == BalloonColor(red: 10, green: 20, blue: 30))
+    #expect(balloon.numberRightX == -32)
+    #expect(balloon.numberY == -18)
+    #expect(balloon.usesSelfAlpha)
+    #expect(balloon.windowPositionX == .center)
+    #expect(balloon.windowPositionY == -12)
+    #expect(!balloon.limitsWindowPosition)
+}
+
+@Test
+func `applies per surface balloon settings and replacement filenames`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    type,balloon
+    name,Variant Balloon
+    font.height,12
+    arrow1.x,-10
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+    try Data("""
+    font.height,18
+    clickwaitmarker.x,-44
+    marker.filename,custom-marker
+    clickwaitmarker.filename,custom-click
+    arrow.filename,custom-arrow
+    """.utf8).write(to: directory.appending(path: "balloons2s.txt"))
+    for filename in ["custom-marker.png", "custom-click.png", "custom-arrow1.png"] {
+        try Data().write(to: directory.appending(path: filename))
+    }
+    let loader = BalloonLoader()
+    let balloon = try loader.load(from: directory)
+
+    let effective = loader.effectiveDefinition(for: balloon, speaker: .sakura, style: 2)
+
+    #expect(effective.fontHeight == 18)
+    #expect(effective.clickWaitMarkerX == -44)
+    #expect(loader.markerImageURL(speaker: .sakura, style: 2, in: balloon)?.lastPathComponent == "custom-marker.png")
+    #expect(loader.clickWaitMarkerImageURL(speaker: .sakura, style: 2, in: balloon)?.lastPathComponent == "custom-click.png")
+    #expect(loader.arrowImageURL(index: 1, speaker: .sakura, style: 2, in: balloon)?.lastPathComponent == "custom-arrow1.png")
+}
+
+@Test
 func `uses scope specific marker and falls back to common marker`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

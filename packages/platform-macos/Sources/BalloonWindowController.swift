@@ -1,5 +1,7 @@
 import AppKit
 import UtataneBalloon
+import UtataneCore
+import UtataneShell
 
 public struct BalloonTextLink: Sendable, Equatable {
     public enum Kind: Sendable, Hashable {
@@ -78,6 +80,14 @@ public enum BalloonWindowAlignment: Sendable, Equatable {
     case right
     case bottom
     case automatic
+
+    init(_ alignment: ShellBalloonAlignment) {
+        self = switch alignment {
+        case .none: .automatic
+        case .left: .left
+        case .right: .right
+        }
+    }
 }
 
 @MainActor
@@ -94,7 +104,9 @@ public final class BalloonWindowController {
     private var numberTextByScope: [Int: String] = [:]
     private var offsetByScope: [Int: NSPoint] = [:]
     private var alignmentByScope: [Int: BalloonWindowAlignment] = [:]
+    private var shellPresentationSettings: [Int: ShellScopePresentationSettings] = [:]
     private var displayScale: CGFloat = 1
+    private var surfaceDisplayScale: CGFloat = 1
     private var textScale: CGFloat = 1
     private var stayOnTop = true
     private var presentationHidden = false
@@ -164,12 +176,27 @@ public final class BalloonWindowController {
         visitedAnchorIDs.removeAll()
         offsetByScope.removeAll()
         alignmentByScope.removeAll()
+        shellPresentationSettings.removeAll()
     }
 
-    public func setDisplayScale(_ scale: Double, textScale: Double) {
+    public func setDisplayScale(_ scale: Double, textScale: Double, surfaceScale: Double? = nil) {
         displayScale = CGFloat(min(max(scale, 0.5), 2))
+        if let surfaceScale {
+            surfaceDisplayScale = CGFloat(min(max(surfaceScale, 0.5), 2))
+        }
         self.textScale = CGFloat(min(max(textScale, 0.5), 2))
         rebuildPresentations()
+    }
+
+    public func configure(shell: ShellDefinition) {
+        shellPresentationSettings = shell.presentationSettings
+        for (scope, presentation) in presentations {
+            presentation.contentView.isMovementLocked = effectiveMovementLock(scope: scope)
+        }
+        rebuildPresentations()
+        for scope in presentations.keys {
+            reposition(scope: scope)
+        }
     }
 
     public var visibleScopes: [Int] {
@@ -232,6 +259,7 @@ public final class BalloonWindowController {
 
     func alignment(scope: Int) -> BalloonWindowAlignment? {
         alignmentByScope[scope]
+            ?? shellPresentationSettings[scope]?.balloonAlignment.map(BalloonWindowAlignment.init)
     }
 
     func markAnchorVisited(_ id: String) {
@@ -267,7 +295,7 @@ public final class BalloonWindowController {
     }
 
     func isMovementLocked(scope: Int) -> Bool {
-        movementLockedScopes.contains(scope)
+        effectiveMovementLock(scope: scope)
     }
 
     public func show(
@@ -278,15 +306,20 @@ public final class BalloonWindowController {
         style: Int = 0,
         near surfaceFrame: NSRect
     ) throws {
-        let imageURL = try balloonLoader.imageURL(speaker: speaker, style: style, in: balloon)
-        let image = try imageLoader.loadUsingTopLeftTransparency(imageURL)
-        let arrowImage = balloonLoader.arrowImageURL(index: 1, in: balloon)
-            .flatMap { try? imageLoader.loadUsingTopLeftTransparency($0) }
-        let markerImage = balloonLoader.markerImageURL(speaker: speaker, in: balloon)
-            .flatMap { try? imageLoader.loadUsingTopLeftTransparency($0) }
+        let effectiveBalloon = balloonLoader.effectiveDefinition(for: balloon, speaker: speaker, style: style)
+        let imageURL = try balloonLoader.imageURL(speaker: speaker, style: style, in: effectiveBalloon)
+        let image = try loadImage(imageURL, balloon: effectiveBalloon)
+        let arrowImage = balloonLoader.clickWaitMarkerImageURL(
+            speaker: speaker,
+            style: style,
+            in: effectiveBalloon
+        ).flatMap { try? loadImage($0, balloon: effectiveBalloon) }
+        let markerImage = balloonLoader.markerImageURL(speaker: speaker, style: style, in: effectiveBalloon)
+            .flatMap { try? loadImage($0, balloon: effectiveBalloon) }
+        let scopeDisplayScale = effectiveDisplayScale(scope: scope)
         let scaledSize = NSSize(
-            width: image.size.width * displayScale,
-            height: image.size.height * displayScale
+            width: image.size.width * scopeDisplayScale,
+            height: image.size.height * scopeDisplayScale
         )
         let existingPresentation = presentations[scope]
         let existingPositionedImages = existingPresentation?.positionedImages ?? []
@@ -295,9 +328,9 @@ public final class BalloonWindowController {
             image: image,
             arrowImage: arrowImage,
             markerImage: markerImage,
-            balloon: balloon,
+            balloon: effectiveBalloon,
             text: repaintLockedScopes.contains(scope) ? existingPresentation?.contentView.text ?? "" : text,
-            displayScale: displayScale,
+            displayScale: scopeDisplayScale,
             textScale: textScale
         )
         contentView.visitedAnchorIDs = visitedAnchorIDs
@@ -315,7 +348,7 @@ public final class BalloonWindowController {
         }
         contentView.onLinkEnter = { [weak self] link, label in self?.onLinkEnter?(link, label) }
         contentView.onLinkHover = { [weak self] link, label in self?.onLinkHover?(link, label) }
-        contentView.isMovementLocked = movementLockedScopes.contains(scope)
+        contentView.isMovementLocked = effectiveMovementLock(scope: scope)
         contentView.setMarkerText(markerTextByScope[scope] ?? "")
         contentView.setNumberText(numberTextByScope[scope] ?? "")
         contentView.setPositionedImages(existingPositionedImages)
@@ -336,14 +369,14 @@ public final class BalloonWindowController {
         ) {
             item.setFrameOrigin(restoredOrigin)
         } else {
-            place(item, near: surfaceFrame, scope: scope)
+            place(item, near: surfaceFrame, scope: scope, balloon: effectiveBalloon)
         }
         item.show(activating: true)
         item.alphaValue = presentationHidden ? 0 : 1
         let presentation = BalloonPresentation(
             item: item,
             contentView: contentView,
-            balloon: balloon,
+            balloon: effectiveBalloon,
             speaker: speaker,
             style: style,
             surfaceFrame: surfaceFrame
@@ -432,7 +465,7 @@ public final class BalloonWindowController {
         } else {
             movementLockedScopes.remove(scope)
         }
-        presentations[scope]?.contentView.isMovementLocked = locked
+        presentations[scope]?.contentView.isMovementLocked = effectiveMovementLock(scope: scope)
     }
 
     public func changeStyle(_ style: Int, scope: Int = 0) throws {
@@ -557,7 +590,7 @@ public final class BalloonWindowController {
                 scope: scope,
                 coordinateSpace: geometryProvider.coordinateSpace
             )
-            place(presentation.item, near: presentation.surfaceFrame, scope: scope)
+            place(presentation.item, near: presentation.surfaceFrame, scope: scope, balloon: presentation.balloon)
             positionStore.remove(
                 for: .balloon,
                 scope: scope,
@@ -597,7 +630,12 @@ public final class BalloonWindowController {
 
     private func reposition(scope: Int) {
         guard let presentation = presentations[scope] else { return }
-        place(presentation.item, near: presentation.surfaceFrame, scope: scope)
+        place(
+            presentation.item,
+            near: presentation.surfaceFrame,
+            scope: scope,
+            balloon: presentation.balloon
+        )
     }
 
     private func configureDragging(_ contentView: BalloonContentView, item: any PresentationItem) {
@@ -609,7 +647,12 @@ public final class BalloonWindowController {
         )
     }
 
-    private func place(_ item: any PresentationItem, near surfaceFrame: NSRect, scope: Int) {
+    private func place(
+        _ item: any PresentationItem,
+        near surfaceFrame: NSRect,
+        scope: Int,
+        balloon: BalloonDefinition
+    ) {
         guard let visibleFrame = geometryProvider.mainScreen?.visibleFrame else {
             item.center()
             return
@@ -619,7 +662,14 @@ public final class BalloonWindowController {
         let automaticAlignment: BalloonWindowAlignment = surfaceFrame.midX < visibleFrame.midX
             ? .right
             : .left
-        let requestedAlignment = alignmentByScope[scope] ?? .automatic
+        let requestedAlignment: BalloonWindowAlignment = switch balloon.windowPositionX {
+        case .center: .center
+        case .bottom: .bottom
+        case .offset:
+            alignmentByScope[scope]
+                ?? shellPresentationSettings[scope]?.balloonAlignment.map(BalloonWindowAlignment.init)
+                ?? .automatic
+        }
         let alignment = requestedAlignment == .automatic ? automaticAlignment : requestedAlignment
         var x: CGFloat
         var y: CGFloat
@@ -641,12 +691,65 @@ public final class BalloonWindowController {
             x = surfaceFrame.minX - item.frame.width - spacing
             y = surfaceFrame.maxY - item.frame.height
         }
-        let offset = offsetByScope[scope] ?? .zero
-        x += offset.x
-        y -= offset.y
-        x = min(max(visibleFrame.minX, x), visibleFrame.maxX - item.frame.width)
-        y = min(max(visibleFrame.minY, y), visibleFrame.maxY - item.frame.height)
+        let runtimeOffset = offsetByScope[scope] ?? .zero
+        let shellOffset = effectiveShellOffset(scope: scope, alignment: alignment)
+        let balloonOffsetX: CGFloat = switch balloon.windowPositionX {
+        case let .offset(value): CGFloat(value) * effectiveDisplayScale(scope: scope)
+        case .center, .bottom: 0
+        }
+        x += runtimeOffset.x + shellOffset.x
+        if alignment == .left {
+            x += balloonOffsetX
+        } else if alignment == .right {
+            x -= balloonOffsetX
+        }
+        y -= runtimeOffset.y + shellOffset.y
+            + CGFloat(balloon.windowPositionY) * effectiveDisplayScale(scope: scope)
+        if balloon.limitsWindowPosition {
+            x = min(max(visibleFrame.minX, x), visibleFrame.maxX - item.frame.width)
+            y = min(max(visibleFrame.minY, y), visibleFrame.maxY - item.frame.height)
+        }
         item.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func loadImage(_ url: URL, balloon: BalloonDefinition) throws -> NSImage {
+        let maskURL = url.deletingPathExtension().appendingPathExtension("pna")
+        let asset = SurfaceAsset(
+            id: -1,
+            imageURL: url,
+            alphaMaskURL: FileManager.default.fileExists(atPath: maskURL.path) ? maskURL : nil
+        )
+        return try imageLoader.load(asset, usesSelfAlpha: balloon.usesSelfAlpha)
+    }
+
+    private func effectiveDisplayScale(scope: Int) -> CGFloat {
+        shellPresentationSettings[scope]?.synchronizesBalloonScale == true
+            ? surfaceDisplayScale
+            : displayScale
+    }
+
+    private func effectiveMovementLock(scope: Int) -> Bool {
+        movementLockedScopes.contains(scope)
+            || shellPresentationSettings[scope]?.preventsBalloonMovement == true
+    }
+
+    private func effectiveShellOffset(scope: Int, alignment: BalloonWindowAlignment) -> NSPoint {
+        guard let offsets = shellPresentationSettings[scope]?.balloonOffsets else { return .zero }
+        let x: Int?
+        let y: Int?
+        switch alignment {
+        case .left:
+            x = offsets.leftX ?? offsets.x
+            y = offsets.leftY ?? offsets.y
+        case .right:
+            x = offsets.rightX.map(-) ?? offsets.x
+            y = offsets.rightY ?? offsets.y
+        case .center, .bottom, .automatic:
+            x = offsets.x
+            y = offsets.y
+        }
+        let scale = effectiveDisplayScale(scope: scope)
+        return NSPoint(x: CGFloat(x ?? 0) * scale, y: CGFloat(y ?? 0) * scale)
     }
 
     private func rebuildPresentations() {
@@ -1021,14 +1124,20 @@ private final class BalloonContentView: NSView {
         addSubview(markerTextField)
 
         numberTextField.alignment = .center
-        numberTextField.font = markerTextField.font
-        numberTextField.textColor = textColor
+        numberTextField.font = ghostDialogueFont(
+            named: balloon.numberFontName,
+            size: CGFloat(balloon.numberFontHeight) * displayScale
+        )
+        numberTextField.textColor = NSColor(balloonColor: balloon.numberFontColor)
         numberTextField.drawsBackground = false
         numberTextField.isBordered = false
         numberTextField.isHidden = true
-        numberTextField.frame = markerTextField.frame.offsetBy(
-            dx: 0,
-            dy: -markerTextField.intrinsicContentSize.height
+        let numberRight = scaledCoordinate(balloon.numberRightX, extent: bounds.width)
+        numberTextField.frame = NSRect(
+            x: textFrame.minX,
+            y: scaledCoordinate(balloon.numberY, extent: bounds.height),
+            width: max(1, numberRight - textFrame.minX),
+            height: numberTextField.intrinsicContentSize.height
         )
         addSubview(numberTextField)
 
@@ -1041,11 +1150,11 @@ private final class BalloonContentView: NSView {
             )
             arrowView.frame = NSRect(
                 x: scaledCoordinate(
-                    balloon.arrow1X,
+                    balloon.clickWaitMarkerX,
                     extent: bounds.width
                 ),
                 y: scaledCoordinate(
-                    balloon.arrow1Y,
+                    balloon.clickWaitMarkerY,
                     extent: bounds.height
                 ),
                 width: arrowSize.width,

@@ -26,6 +26,17 @@ public struct BalloonDefinition: Sendable, Equatable {
     public let arrow0Y: Int
     public let arrow1X: Int
     public let arrow1Y: Int
+    public let clickWaitMarkerX: Int
+    public let clickWaitMarkerY: Int
+    public let numberFontName: String?
+    public let numberFontHeight: Int
+    public let numberFontColor: BalloonColor
+    public let numberRightX: Int
+    public let numberY: Int
+    public let usesSelfAlpha: Bool
+    public let windowPositionX: BalloonWindowPositionX
+    public let windowPositionY: Int
+    public let limitsWindowPosition: Bool
     public let cursorStyle: BalloonLinkAppearance
     public let cursorNotSelectedStyle: BalloonLinkAppearance
     public let anchorStyle: BalloonLinkAppearance
@@ -58,6 +69,17 @@ public struct BalloonDefinition: Sendable, Equatable {
         arrow0Y: Int = 0,
         arrow1X: Int = 0,
         arrow1Y: Int = 0,
+        clickWaitMarkerX: Int? = nil,
+        clickWaitMarkerY: Int? = nil,
+        numberFontName: String? = nil,
+        numberFontHeight: Int = 10,
+        numberFontColor: BalloonColor = .init(red: 0, green: 0, blue: 0),
+        numberRightX: Int = -28,
+        numberY: Int = -24,
+        usesSelfAlpha: Bool = false,
+        windowPositionX: BalloonWindowPositionX = .offset(0),
+        windowPositionY: Int = 0,
+        limitsWindowPosition: Bool = true,
         cursorStyle: BalloonLinkAppearance = .defaultSelected,
         cursorNotSelectedStyle: BalloonLinkAppearance = .defaultNotSelected,
         anchorStyle: BalloonLinkAppearance = .defaultSelected,
@@ -89,12 +111,29 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.arrow0Y = arrow0Y
         self.arrow1X = arrow1X
         self.arrow1Y = arrow1Y
+        self.clickWaitMarkerX = clickWaitMarkerX ?? arrow1X
+        self.clickWaitMarkerY = clickWaitMarkerY ?? arrow1Y
+        self.numberFontName = numberFontName
+        self.numberFontHeight = numberFontHeight
+        self.numberFontColor = numberFontColor
+        self.numberRightX = numberRightX
+        self.numberY = numberY
+        self.usesSelfAlpha = usesSelfAlpha
+        self.windowPositionX = windowPositionX
+        self.windowPositionY = windowPositionY
+        self.limitsWindowPosition = limitsWindowPosition
         self.cursorStyle = cursorStyle
         self.cursorNotSelectedStyle = cursorNotSelectedStyle
         self.anchorStyle = anchorStyle
         self.anchorNotSelectedStyle = anchorNotSelectedStyle
         self.anchorVisitedStyle = anchorVisitedStyle
     }
+}
+
+public enum BalloonWindowPositionX: Sendable, Equatable {
+    case offset(Int)
+    case center
+    case bottom
 }
 
 public struct BalloonLinkAppearance: Sendable, Equatable {

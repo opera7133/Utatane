@@ -140,6 +140,53 @@ func `parses bind names options defaults and add ids`() throws {
 }
 
 @Test
+func `parses shell window and balloon presentation defaults`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: UUID().uuidString,
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data("""
+    charset,UTF-8
+    seriko.zorder,1,0,2
+    seriko.sticky-window,0,1
+    seriko.alignmenttodesktop,bottom
+    sakura.seriko.alignmenttodesktop,free
+    sakura.defaultx,120
+    sakura.defaulty,450
+    sakura.defaultleft,32
+    sakura.defaulttop,48
+    sakura.balloon.offsetx,10
+    sakura.balloon.offsety,20
+    sakura.balloon.offsetxl,30
+    sakura.balloon.offsetyr,40
+    sakura.balloon.alignment,left
+    sakura.balloon.dontmove,true
+    sakura.balloon.syncscale,true
+    char2.seriko.alignmenttodesktop,top
+    """.utf8).write(to: root.appending(path: "descript.txt"))
+    try Data("surface0 {}".utf8).write(to: root.appending(path: "surfaces.txt"))
+
+    let shell = try ShellLoader().load(from: root)
+    let sakura = try #require(shell.presentationSettings[0])
+
+    #expect(shell.zOrder == [1, 0, 2])
+    #expect(shell.stickyWindowScopes == [0, 1])
+    #expect(shell.desktopAlignment == .bottom)
+    #expect(sakura.desktopAlignment == .free)
+    #expect(sakura.defaultX == 120)
+    #expect(sakura.defaultY == 450)
+    #expect(sakura.defaultLeft == 32)
+    #expect(sakura.defaultTop == 48)
+    #expect(sakura.balloonOffsets == ShellBalloonOffsets(x: 10, y: 20, leftX: 30, rightY: 40))
+    #expect(sakura.balloonAlignment == .left)
+    #expect(sakura.preventsBalloonMovement)
+    #expect(sakura.synchronizesBalloonScale)
+    #expect(shell.presentationSettings[2]?.desktopAlignment == .top)
+}
+
+@Test
 func `loads surfacetable development metadata without treating names as aliases`() throws {
     let root = FileManager.default.temporaryDirectory.appending(
         path: UUID().uuidString,

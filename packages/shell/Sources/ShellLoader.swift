@@ -83,7 +83,11 @@ public struct ShellLoader: Sendable {
             surfaceTable: surfaceTable,
             maximumSurfaceWidth: document.maximumSurfaceWidth,
             cursorDefinitions: document.cursorDefinitions,
-            tooltips: document.tooltips
+            tooltips: document.tooltips,
+            zOrder: shellMetadata.zOrder,
+            stickyWindowScopes: shellMetadata.stickyWindowScopes,
+            desktopAlignment: shellMetadata.desktopAlignment,
+            presentationSettings: shellMetadata.presentationSettings
         )
     }
 
@@ -173,15 +177,25 @@ public struct ShellLoader: Sendable {
         usesSelfAlpha: Bool,
         defaultBindGroups: [Int: Set<Int>],
         bindGroups: [Int: [Int: ShellBindGroup]],
-        bindOptions: [Int: [String: ShellBindOptions]]
+        bindOptions: [Int: [String: ShellBindOptions]],
+        zOrder: [Int],
+        stickyWindowScopes: [Int],
+        desktopAlignment: ShellDesktopAlignment?,
+        presentationSettings: [Int: ShellScopePresentationSettings]
     ) {
         let url = shellDirectory.appending(path: "descript.txt", directoryHint: .notDirectory)
-        guard let text = try? readText(from: url) else { return (false, [:], [:], [:]) }
+        guard let text = try? readText(from: url) else {
+            return (false, [:], [:], [:], [], [], nil, [:])
+        }
         var usesSelfAlpha = false
         var defaultBindGroups: [Int: Set<Int>] = [:]
         var groupNames: [Int: [Int: (category: String, part: String, thumbnail: String)]] = [:]
         var groupAddIDs: [Int: [Int: Set<Int>]] = [:]
         var bindOptions: [Int: [String: ShellBindOptions]] = [:]
+        var zOrder: [Int] = []
+        var stickyWindowScopes: [Int] = []
+        var desktopAlignment: ShellDesktopAlignment?
+        var presentationBuilders: [Int: ShellScopePresentationBuilder] = [:]
         for line in text.split(whereSeparator: \ .isNewline) {
             let fields = line.split(separator: ",", maxSplits: 1).map {
                 $0.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -192,6 +206,54 @@ public struct ShellLoader: Sendable {
                 continue
             }
             let key = fields[0].lowercased()
+            if key == "seriko.zorder" {
+                zOrder = integerList(fields[1])
+                continue
+            }
+            if key == "seriko.sticky-window" {
+                stickyWindowScopes = integerList(fields[1])
+                continue
+            }
+            if key == "seriko.alignmenttodesktop" {
+                desktopAlignment = ShellDesktopAlignment(rawValue: fields[1].lowercased())
+                continue
+            }
+            if let (scope, property) = scopedKey(key) {
+                var builder = presentationBuilders[scope] ?? .init()
+                switch property {
+                case "seriko.alignmenttodesktop":
+                    builder.desktopAlignment = ShellDesktopAlignment(rawValue: fields[1].lowercased())
+                case "defaultx":
+                    builder.defaultX = Int(fields[1])
+                case "defaulty":
+                    builder.defaultY = Int(fields[1])
+                case "defaultleft":
+                    builder.defaultLeft = Int(fields[1])
+                case "defaulttop":
+                    builder.defaultTop = Int(fields[1])
+                case "balloon.offsetx":
+                    builder.balloonOffsetX = Int(fields[1])
+                case "balloon.offsety":
+                    builder.balloonOffsetY = Int(fields[1])
+                case "balloon.offsetxl":
+                    builder.balloonOffsetLeftX = Int(fields[1])
+                case "balloon.offsetyl":
+                    builder.balloonOffsetLeftY = Int(fields[1])
+                case "balloon.offsetxr":
+                    builder.balloonOffsetRightX = Int(fields[1])
+                case "balloon.offsetyr":
+                    builder.balloonOffsetRightY = Int(fields[1])
+                case "balloon.alignment":
+                    builder.balloonAlignment = ShellBalloonAlignment(rawValue: fields[1].lowercased())
+                case "balloon.dontmove":
+                    builder.preventsBalloonMovement = boolean(fields[1])
+                case "balloon.syncscale":
+                    builder.synchronizesBalloonScale = fields[1].caseInsensitiveCompare("true") == .orderedSame
+                default:
+                    break
+                }
+                presentationBuilders[scope] = builder
+            }
             if let (scope, remainder) = scopedMetadataKey(key, marker: "bindgroup"),
                let separator = remainder.firstIndex(of: "."),
                let groupID = Int(remainder[..<separator])
@@ -240,7 +302,39 @@ public struct ShellLoader: Sendable {
                 ))
             })
         }
-        return (usesSelfAlpha, defaultBindGroups, bindGroups, bindOptions)
+        return (
+            usesSelfAlpha,
+            defaultBindGroups,
+            bindGroups,
+            bindOptions,
+            zOrder,
+            stickyWindowScopes,
+            desktopAlignment,
+            presentationBuilders.mapValues(\.settings)
+        )
+    }
+
+    private func integerList(_ value: String) -> [Int] {
+        value.split(separator: ",").compactMap {
+            Int($0.trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+    }
+
+    private func boolean(_ value: String) -> Bool {
+        ["1", "true", "on"].contains(value.lowercased())
+    }
+
+    private func scopedKey(_ key: String) -> (scope: Int, property: Substring)? {
+        if key.hasPrefix("sakura.") {
+            return (0, key.dropFirst("sakura.".count))
+        }
+        if key.hasPrefix("kero.") {
+            return (1, key.dropFirst("kero.".count))
+        }
+        guard key.hasPrefix("char"), let separator = key.firstIndex(of: "."),
+              let scope = Int(key[key.index(key.startIndex, offsetBy: 4) ..< separator])
+        else { return nil }
+        return (scope, key[key.index(after: separator)...])
     }
 
     private func scopedMetadataKey(_ key: String, marker: String) -> (Int, Substring)? {
@@ -264,5 +358,43 @@ public struct ShellLoader: Sendable {
         let extensions = [".png", ".apng"]
         guard let suffix = extensions.first(where: lowercased.hasSuffix) else { return nil }
         return Int(lowercased.dropFirst("surface".count).dropLast(suffix.count))
+    }
+}
+
+private struct ShellScopePresentationBuilder {
+    var desktopAlignment: ShellDesktopAlignment?
+    var defaultX: Int?
+    var defaultY: Int?
+    var defaultLeft: Int?
+    var defaultTop: Int?
+    var balloonOffsetX: Int?
+    var balloonOffsetY: Int?
+    var balloonOffsetLeftX: Int?
+    var balloonOffsetLeftY: Int?
+    var balloonOffsetRightX: Int?
+    var balloonOffsetRightY: Int?
+    var balloonAlignment: ShellBalloonAlignment?
+    var preventsBalloonMovement = false
+    var synchronizesBalloonScale = false
+
+    var settings: ShellScopePresentationSettings {
+        ShellScopePresentationSettings(
+            desktopAlignment: desktopAlignment,
+            defaultX: defaultX,
+            defaultY: defaultY,
+            defaultLeft: defaultLeft,
+            defaultTop: defaultTop,
+            balloonOffsets: ShellBalloonOffsets(
+                x: balloonOffsetX,
+                y: balloonOffsetY,
+                leftX: balloonOffsetLeftX,
+                leftY: balloonOffsetLeftY,
+                rightX: balloonOffsetRightX,
+                rightY: balloonOffsetRightY
+            ),
+            balloonAlignment: balloonAlignment,
+            preventsBalloonMovement: preventsBalloonMovement,
+            synchronizesBalloonScale: synchronizesBalloonScale
+        )
     }
 }

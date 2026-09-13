@@ -12,6 +12,10 @@ public struct ShellDefinition: Sendable, Equatable {
     public let maximumSurfaceWidth: Int?
     public let cursorDefinitions: [Int: [SurfaceCursorDefinition]]
     public let tooltips: [Int: [String: String]]
+    public let zOrder: [Int]
+    public let stickyWindowScopes: [Int]
+    public let desktopAlignment: ShellDesktopAlignment?
+    public let presentationSettings: [Int: ShellScopePresentationSettings]
 
     public init(
         directory: URL,
@@ -68,7 +72,11 @@ public struct ShellDefinition: Sendable, Equatable {
         surfaceTable: SurfaceTable?,
         maximumSurfaceWidth: Int?,
         cursorDefinitions: [Int: [SurfaceCursorDefinition]] = [:],
-        tooltips: [Int: [String: String]] = [:]
+        tooltips: [Int: [String: String]] = [:],
+        zOrder: [Int] = [],
+        stickyWindowScopes: [Int] = [],
+        desktopAlignment: ShellDesktopAlignment? = nil,
+        presentationSettings: [Int: ShellScopePresentationSettings] = [:]
     ) {
         self.directory = directory
         self.surfaces = surfaces
@@ -81,6 +89,10 @@ public struct ShellDefinition: Sendable, Equatable {
         self.maximumSurfaceWidth = maximumSurfaceWidth
         self.cursorDefinitions = cursorDefinitions
         self.tooltips = tooltips
+        self.zOrder = zOrder
+        self.stickyWindowScopes = stickyWindowScopes
+        self.desktopAlignment = desktopAlignment
+        self.presentationSettings = presentationSettings
     }
 
     public func resolveSurface(_ identifier: String, scope: Int) -> Int? {

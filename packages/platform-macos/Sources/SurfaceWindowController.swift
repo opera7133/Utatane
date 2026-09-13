@@ -320,6 +320,7 @@ public final class SurfaceWindowController {
     public func show(shell: ShellDefinition, defaultSurfaceIDs: [Int: Int], restoring presentation: ReloadPresentation? = nil) throws {
         hideAll()
         self.shell = shell
+        stickyGroups = shell.stickyWindowScopes.isEmpty ? [] : [Set(shell.stickyWindowScopes)]
         self.defaultSurfaceIDs = defaultSurfaceIDs
         enabledBindGroups = presentation?.bindings
             ?? dressupSelectionStore.restore(for: shell)
@@ -329,6 +330,7 @@ public final class SurfaceWindowController {
         for (scope, surfaceID) in surfaces.sorted(by: { $0.key < $1.key }) {
             do {
                 let character = characterController(for: scope)
+                character.setDesktopAlignment(desktopAlignment(for: scope, in: shell))
                 character.setPresentationHidden(presentationHidden || startupPresentationHidden)
                 character.setBindGroups(enabledBindGroups[scope] ?? [], redraw: false)
                 try character.show(shell: shell, surfaceID: surfaceID < 0 ? (defaultSurfaceIDs[scope] ?? 0) : surfaceID)
@@ -341,6 +343,9 @@ public final class SurfaceWindowController {
                 continue
             }
         }
+        if !shell.zOrder.isEmpty {
+            setZOrder(shell.zOrder.map(String.init))
+        }
     }
 
     public func show(shell: ShellDefinition, scope: Int, surfaceID: Int) throws {
@@ -352,6 +357,7 @@ public final class SurfaceWindowController {
                 ?? []
         }
         let character = characterController(for: scope)
+        character.setDesktopAlignment(desktopAlignment(for: scope, in: shell))
         character.setBindGroups(enabledBindGroups[scope] ?? [], redraw: false)
         try character.show(shell: shell, surfaceID: surfaceID)
         placeInitialWindow(for: scope)
@@ -610,6 +616,7 @@ public final class SurfaceWindowController {
 
         guard resolvedSurfaceID >= 0, let shell else { return }
         let character = characterController(for: scope)
+        character.setDesktopAlignment(desktopAlignment(for: scope, in: shell))
         try character.show(shell: shell, surfaceID: resolvedSurfaceID)
         placeInitialWindow(for: scope)
         onSurfaceChange?(scope, previousSurfaceID, resolvedSurfaceID)
@@ -800,20 +807,36 @@ public final class SurfaceWindowController {
             }
             return
         }
-        let x: CGFloat = if scope == 0 {
+        let automaticX: CGFloat = if scope == 0 {
             visibleFrame.maxX - frame.width - margin
         } else if let previousFrame = nearestVisibleFrame(before: scope) {
             previousFrame.minX - frame.width - spacing
         } else {
             visibleFrame.maxX - frame.width - margin
         }
+        let settings = shell?.presentationSettings[scope]
+        let x = settings?.defaultLeft.map { visibleFrame.minX + CGFloat($0) } ?? automaticX
+        let automaticY: CGFloat = switch settings?.desktopAlignment ?? shell?.desktopAlignment {
+        case .top: visibleFrame.maxY - frame.height
+        case .bottom, .free, nil: visibleFrame.minY
+        }
+        let y = settings?.defaultTop.map { visibleFrame.maxY - CGFloat($0) - frame.height } ?? automaticY
 
         character.setOrigin(
             NSPoint(
-                x: max(visibleFrame.minX, x),
-                y: visibleFrame.minY
+                x: min(max(visibleFrame.minX, x), visibleFrame.maxX - frame.width),
+                y: min(max(visibleFrame.minY, y), visibleFrame.maxY - frame.height)
             )
         )
+    }
+
+    private func desktopAlignment(for scope: Int, in shell: ShellDefinition) -> SurfaceDesktopAlignment {
+        switch shell.presentationSettings[scope]?.desktopAlignment ?? shell.desktopAlignment {
+        case .top: .top
+        case .bottom: .bottom
+        case .free: .free
+        case nil: .defaultValue
+        }
     }
 
     private func nearestVisibleFrame(before scope: Int) -> NSRect? {

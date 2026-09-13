@@ -500,7 +500,11 @@ final class CalledGhostRuntime {
     ) {
         surfaceController.setDisplayScale(Double(shellPercent) / 100)
         surfaceController.setAutomaticallyFitsLargeSurfaces(automaticallyFitsLargeSurfaces)
-        balloonController.setDisplayScale(Double(balloonPercent) / 100, textScale: Double(textPercent) / 100)
+        balloonController.setDisplayScale(
+            Double(balloonPercent) / 100,
+            textScale: Double(textPercent) / 100,
+            surfaceScale: Double(shellPercent) / 100
+        )
         speechHistoryTextScale = CGFloat(textPercent) / 100
         speechHistoryPresenter?.setTextScale(speechHistoryTextScale)
     }
@@ -514,6 +518,7 @@ final class CalledGhostRuntime {
     private func show(shell newShell: InstalledShell) throws {
         player.cancel()
         let definition = try shellLoader.load(from: newShell.directory)
+        balloonController.configure(shell: definition)
         try surfaceController.show(
             shell: definition,
             defaultSurfaceIDs: Dictionary(uniqueKeysWithValues: ghost.characters.map {

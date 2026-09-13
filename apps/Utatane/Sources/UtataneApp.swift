@@ -2767,6 +2767,7 @@ private struct UtataneRootView: View {
         scriptPlayer.cancel()
         let shell = try shellLoader.load(from: installedShell.directory)
         currentShellDefinition = shell
+        balloonWindowController.configure(shell: shell)
         let characters = currentGhost?.characters ?? []
         try surfaceWindowController.show(
             shell: shell,
@@ -3891,7 +3892,8 @@ private struct UtataneRootView: View {
         )
         balloonWindowController.setDisplayScale(
             Double(balloonScalePercent) / 100,
-            textScale: Double(networkSettings.balloonTextScalePercent) / 100
+            textScale: Double(networkSettings.balloonTextScalePercent) / 100,
+            surfaceScale: shellScale
         )
         speechHistoryPresenter?.setTextScale(CGFloat(networkSettings.balloonTextScalePercent) / 100)
         for runtime in calledGhosts.values {
