@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 @testable import UtatanePlatformMacOS
@@ -45,7 +46,7 @@ import Testing
 }
 
 @MainActor
-@Test func `content explorer opens at a practical browsing size`() {
+@Test func `content explorer opens at a practical browsing size`() throws {
     let controller = ContentExplorerWindowController()
     let entry = ContentExplorerEntry(
         kind: .ghost,
@@ -61,8 +62,22 @@ import Testing
     )
     defer { controller.close() }
 
-    #expect(controller.contentSize?.width == 1120)
-    #expect(controller.contentSize?.height == 720)
+    let contentSize = try #require(controller.contentSize)
+    let desiredFrameSize = NSWindow.frameRect(
+        forContentRect: NSRect(origin: .zero, size: ContentExplorerWindowController.initialContentSize),
+        styleMask: [.titled, .closable, .resizable, .miniaturizable]
+    ).size
+    if let visibleSize = NSScreen.main?.visibleFrame.size,
+       visibleSize.width >= desiredFrameSize.width,
+       visibleSize.height >= desiredFrameSize.height
+    {
+        #expect(contentSize == ContentExplorerWindowController.initialContentSize)
+    } else {
+        #expect(contentSize.width <= ContentExplorerWindowController.initialContentSize.width)
+        #expect(contentSize.height <= ContentExplorerWindowController.initialContentSize.height)
+        #expect(contentSize.width >= ContentExplorerWindowController.minimumContentSize.width)
+        #expect(contentSize.height >= ContentExplorerWindowController.minimumContentSize.height)
+    }
     #expect(ContentExplorerWindowController.minimumContentSize.width < ContentExplorerWindowController.initialContentSize.width)
     #expect(ContentExplorerWindowController.minimumContentSize.height < ContentExplorerWindowController.initialContentSize.height)
 }
