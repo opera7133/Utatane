@@ -7,7 +7,17 @@ import UtataneCore
 struct SurfaceImageLoader {
     private let context = CIContext()
 
-    func load(_ surface: SurfaceAsset, usesSelfAlpha: Bool = false) throws -> NSImage {
+    func load(
+        _ surface: SurfaceAsset,
+        usesSelfAlpha: Bool = false,
+        ignoresTransparency: Bool = false
+    ) throws -> NSImage {
+        if ignoresTransparency {
+            guard let source = NSImage(contentsOf: surface.imageURL) else {
+                throw SurfaceImageError.invalidImage(surface.imageURL)
+            }
+            return try applyingOpaqueAlpha(to: source, sourceURL: surface.imageURL)
+        }
         guard let alphaMaskURL = surface.alphaMaskURL else {
             if usesSelfAlpha,
                let source = NSImage(contentsOf: surface.imageURL),
@@ -28,6 +38,50 @@ struct SurfaceImageLoader {
             throw SurfaceImageError.invalidImage(alphaMaskURL)
         }
         return try applyingAlphaMask(source: source, mask: mask, sourceURL: surface.imageURL)
+    }
+
+    func applyingOpaqueAlpha(
+        to source: NSImage,
+        sourceURL: URL = URL(filePath: "surface.png")
+    ) throws -> NSImage {
+        if let animation = imageAnimation(from: source) {
+            let frames = try animation.frames.map {
+                try applyingOpaqueAlpha(to: $0, sourceURL: sourceURL)
+            }
+            if let result = makeAnimatedImage(
+                frames: frames,
+                durations: animation.durations,
+                loopCount: animation.loopCount
+            ) {
+                return result
+            }
+        }
+        guard let sourceRepresentation = bestBitmapRepresentation(in: source)
+            ?? source.cgImage(forProposedRect: nil, context: nil, hints: nil).map({ NSBitmapImageRep(cgImage: $0) })
+        else {
+            throw SurfaceImageError.invalidImage(sourceURL)
+        }
+        let width = sourceRepresentation.pixelsWide
+        let height = sourceRepresentation.pixelsHigh
+        guard let output = makeBitmapRepresentation(width: width, height: height) else {
+            throw SurfaceImageError.compositionFailed(sourceURL)
+        }
+        for y in 0 ..< height {
+            for x in 0 ..< width {
+                let color = sourceRepresentation.colorAt(x: x, y: y)?
+                    .usingColorSpace(.deviceRGB) ?? .black
+                output.setColor(NSColor(
+                    deviceRed: color.redComponent,
+                    green: color.greenComponent,
+                    blue: color.blueComponent,
+                    alpha: 1
+                ), atX: x, y: y)
+            }
+        }
+        output.size = NSSize(width: width, height: height)
+        let result = NSImage(size: output.size)
+        result.addRepresentation(output)
+        return result
     }
 
     func frameCount(of image: NSImage) -> Int {
@@ -158,20 +212,8 @@ struct SurfaceImageLoader {
     private func rasterizedImage(size: NSSize, drawing: () -> Void) -> NSImage {
         let width = max(Int(size.width.rounded(.up)), 1)
         let height = max(Int(size.height.rounded(.up)), 1)
-        guard let representation = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: width,
-            pixelsHigh: height,
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bitmapFormat: [],
-            bytesPerRow: width * 4,
-            bitsPerPixel: 32
-        ),
-            let graphicsContext = NSGraphicsContext(bitmapImageRep: representation)
+        guard let representation = makeBitmapRepresentation(width: width, height: height),
+              let graphicsContext = NSGraphicsContext(bitmapImageRep: representation)
         else {
             return NSImage(size: size)
         }
@@ -187,6 +229,22 @@ struct SurfaceImageLoader {
         let result = NSImage(size: size)
         result.addRepresentation(representation)
         return result
+    }
+
+    private func makeBitmapRepresentation(width: Int, height: Int) -> NSBitmapImageRep? {
+        NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: width,
+            pixelsHigh: height,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bitmapFormat: [],
+            bytesPerRow: width * 4,
+            bitsPerPixel: 32
+        )
     }
 
     private func compositeSourceAtop(

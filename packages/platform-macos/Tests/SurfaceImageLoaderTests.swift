@@ -143,10 +143,43 @@ func `preserves APNG frames and timing while compositing a static element`() thr
 }
 
 @Test
+@MainActor
+func `asis loading ignores embedded alpha and PNA`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let imageURL = directory.appending(path: "surface0.png")
+    let maskURL = directory.appending(path: "surface0.pna")
+    let source = try makeTestImage(colors: [
+        NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 0),
+        NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 0.5)
+    ])
+    let sourceRepresentation = try #require(source.representations.first as? NSBitmapImageRep)
+    try #require(sourceRepresentation.representation(using: .png, properties: [:])).write(to: imageURL)
+    try makeMaskPNG(width: 2, height: 1, transparentAt: (x: 0, y: 0)).write(to: maskURL)
+
+    let image = try SurfaceImageLoader().load(
+        SurfaceAsset(id: 0, imageURL: imageURL, alphaMaskURL: maskURL),
+        ignoresTransparency: true
+    )
+    let output = try #require(image.representations.first as? NSBitmapImageRep)
+
+    #expect((output.colorAt(x: 0, y: 0)?.alphaComponent ?? 0) > 0.9)
+    #expect((output.colorAt(x: 1, y: 0)?.alphaComponent ?? 0) > 0.9)
+}
+
+@Test
 func `maps both SERIKO overlay fast spellings to source atop`() {
     #expect(surfaceCompositingOperation(for: "overlay") == .sourceOver)
     #expect(surfaceCompositingOperation(for: "overlay-fast") == .sourceAtop)
     #expect(surfaceCompositingOperation(for: "overlayfast") == .sourceAtop)
+}
+
+@Test
+func `maps asis animation drawing to an overlay operation`() {
+    #expect(surfaceCompositingOperation(for: "asis") == nil)
+    #expect(animationCompositingOperation(for: "asis") == .sourceOver)
 }
 
 @Test

@@ -160,6 +160,72 @@ import UtataneShell
 }
 
 @MainActor
+@Test func `renders an asis element without applying its transparency`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try makePNG(width: 4, height: 4, color: .clear).write(to: directory.appending(path: "body.png"))
+    let definition = SurfaceDefinition(
+        id: 5,
+        elements: [SurfaceElement(id: 0, method: "asis", filename: "body.png", x: 0, y: 0)],
+        collisions: [],
+        animations: []
+    )
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(
+        shell: ShellDefinition(directory: directory, surfaces: [5: definition], usesSelfAlpha: true),
+        surfaceID: 5
+    )
+    defer { controller.hideAll() }
+
+    #expect(try #require(controller.renderedImage()).transparentPixelRatio == 0)
+}
+
+@MainActor
+@Test func `renders an asis bind pattern without applying its transparency`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try makePNG(width: 4, height: 4, color: .clear).write(to: directory.appending(path: "surface0.png"))
+    try makePNG(width: 4, height: 4, color: .clear).write(to: directory.appending(path: "surface1.png"))
+    let definition = SurfaceDefinition(
+        id: 0,
+        collisions: [],
+        animations: [SurfaceAnimation(
+            id: 1,
+            interval: "bind",
+            patterns: [SurfaceAnimationPattern(
+                order: 0,
+                method: "asis",
+                surfaceID: 1,
+                waitMilliseconds: 0,
+                x: 0,
+                y: 0
+            )]
+        )]
+    )
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(
+        shell: ShellDefinition(
+            directory: directory,
+            surfaces: [0: definition],
+            usesSelfAlpha: true,
+            defaultBindGroups: [0: [1]]
+        ),
+        surfaceID: 0
+    )
+    defer { controller.hideAll() }
+
+    #expect(try #require(controller.renderedImage()).transparentPixelRatio == 0)
+}
+
+@MainActor
 @Test func `renders the installed Umaumauma default APNG surfaces`() throws {
     let repositoryRoot = URL(filePath: #filePath)
         .deletingLastPathComponent()

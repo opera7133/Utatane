@@ -847,6 +847,7 @@ private final class CharacterSurfaceController {
     private var surfaceBaseImage: NSImage?
     private var baseImage: NSImage?
     private var renderedLayerCache: [Int: NSImage] = [:]
+    private var opaqueRenderedLayerCache: [Int: NSImage] = [:]
     private var persistentAnimationLayers: [Int: PersistentAnimationLayer] = [:]
     private var enabledBindGroups: Set<Int> = []
     private var animationTask: Task<Void, Never>?
@@ -975,6 +976,7 @@ private final class CharacterSurfaceController {
         isRepaintLocked = false
         pendingAnimationImage = nil
         renderedLayerCache.removeAll()
+        opaqueRenderedLayerCache.removeAll()
 
         if scope == 0,
            let runtime = NijigenerateShellRuntime.locate(shellDirectory: shell.directory)
@@ -1090,6 +1092,7 @@ private final class CharacterSurfaceController {
         enabledBindGroups = groups
         schedulerTask?.cancel()
         renderedLayerCache.removeAll()
+        opaqueRenderedLayerCache.removeAll()
         if nijigenerateView != nil {
             if let shell, let baseSurfaceID {
                 imageView?.collisions = effectiveCollisions(
@@ -1321,8 +1324,13 @@ private final class CharacterSurfaceController {
               let pattern = animation.patterns.first,
               pattern.waitMilliseconds == 0,
               pattern.surfaceID >= 0,
-              let operation = surfaceCompositingOperation(for: pattern.method),
-              let overlay = try? renderLayer(surfaceID: pattern.surfaceID, shell: shell, visited: [])
+              let operation = animationCompositingOperation(for: pattern.method),
+              let overlay = try? renderLayer(
+                  surfaceID: pattern.surfaceID,
+                  shell: shell,
+                  visited: [],
+                  ignoresTransparency: pattern.method.caseInsensitiveCompare("asis") == .orderedSame
+              )
         else { return false }
         let offset = animationOffsets[id] ?? SurfacePoint(x: 0, y: 0)
         persistentAnimationLayers[id] = PersistentAnimationLayer(
@@ -1927,13 +1935,18 @@ private final class CharacterSurfaceController {
         }
         var result = try imageLoader.load(
             shellLoader.loadElement(filename: first.filename, from: shell.directory),
-            usesSelfAlpha: shell.usesSelfAlpha
+            usesSelfAlpha: shell.usesSelfAlpha,
+            ignoresTransparency: first.method.caseInsensitiveCompare("asis") == .orderedSame
         )
         for element in elements.dropFirst() {
-            guard let operation = surfaceCompositingOperation(for: element.method) else { continue }
+            let ignoresTransparency = element.method.caseInsensitiveCompare("asis") == .orderedSame
+            // SSP treats drawing methods that do not apply to element definitions
+            // as overlay. `asis` is also overlay, but loads its pixels without alpha.
+            let operation = surfaceCompositingOperation(for: element.method) ?? .sourceOver
             let overlay = try imageLoader.load(
                 shellLoader.loadElement(filename: element.filename, from: shell.directory),
-                usesSelfAlpha: shell.usesSelfAlpha
+                usesSelfAlpha: shell.usesSelfAlpha,
+                ignoresTransparency: ignoresTransparency
             )
             result = imageLoader.composite(
                 base: result,
@@ -1968,12 +1981,13 @@ private final class CharacterSurfaceController {
             for pattern in animation.patterns.sorted(by: { $0.order < $1.order }) {
                 guard pattern.waitMilliseconds == 0,
                       pattern.surfaceID >= 0,
-                      let operation = surfaceCompositingOperation(for: pattern.method)
+                      let operation = animationCompositingOperation(for: pattern.method)
                 else { continue }
                 let overlay = try renderLayer(
                     surfaceID: pattern.surfaceID,
                     shell: shell,
-                    visited: visited
+                    visited: visited,
+                    ignoresTransparency: pattern.method.caseInsensitiveCompare("asis") == .orderedSame
                 )
                 result = imageLoader.composite(
                     base: result,
@@ -1988,29 +2002,46 @@ private final class CharacterSurfaceController {
         return result
     }
 
-    private func renderLayer(surfaceID: Int, shell: ShellDefinition, visited: Set<Int>) throws -> NSImage {
+    private func renderLayer(
+        surfaceID: Int,
+        shell: ShellDefinition,
+        visited: Set<Int>,
+        ignoresTransparency: Bool = false
+    ) throws -> NSImage {
         guard !visited.contains(surfaceID) else {
             throw ShellError.missingSurface(id: surfaceID, directory: shell.directory)
         }
-        if let cached = renderedLayerCache[surfaceID] {
+        let cache = ignoresTransparency ? opaqueRenderedLayerCache : renderedLayerCache
+        if let cached = cache[surfaceID] {
             return cached
         }
         let image: NSImage
         if let asset = try? shellLoader.loadSurface(id: surfaceID, from: shell.directory) {
-            image = try imageLoader.load(asset, usesSelfAlpha: shell.usesSelfAlpha)
+            image = try imageLoader.load(
+                asset,
+                usesSelfAlpha: shell.usesSelfAlpha,
+                ignoresTransparency: ignoresTransparency
+            )
         } else {
             guard let definition = shell.surfaces[surfaceID], !definition.elements.isEmpty else {
                 throw ShellError.missingSurface(id: surfaceID, directory: shell.directory)
             }
             let base = try render(elements: definition.elements, shell: shell)
-            image = try applyInitialAnimations(
+            let rendered = try applyInitialAnimations(
                 to: base,
                 definition: definition,
                 shell: shell,
                 visited: visited.union([surfaceID])
             )
+            image = ignoresTransparency
+                ? try imageLoader.applyingOpaqueAlpha(to: rendered)
+                : rendered
         }
-        renderedLayerCache[surfaceID] = image
+        if ignoresTransparency {
+            opaqueRenderedLayerCache[surfaceID] = image
+        } else {
+            renderedLayerCache[surfaceID] = image
+        }
         return image
     }
 
@@ -2177,12 +2208,13 @@ private final class CharacterSurfaceController {
                 } catch {
                     continue
                 }
-            } else if let operation = surfaceCompositingOperation(for: pattern.method) {
+            } else if let operation = animationCompositingOperation(for: pattern.method) {
                 do {
                     let overlay = try renderLayer(
                         surfaceID: pattern.surfaceID,
                         shell: shell,
-                        visited: []
+                        visited: [],
+                        ignoresTransparency: pattern.method.caseInsensitiveCompare("asis") == .orderedSame
                     )
                     setAnimationImage(imageLoader.composite(
                         base: frameBase,
@@ -2293,6 +2325,13 @@ func surfaceCompositingOperation(for method: String) -> NSCompositingOperation? 
     default:
         nil
     }
+}
+
+func animationCompositingOperation(for method: String) -> NSCompositingOperation? {
+    if method.caseInsensitiveCompare("asis") == .orderedSame {
+        return .sourceOver
+    }
+    return surfaceCompositingOperation(for: method)
 }
 
 func surfaceCompositingClipsToBaseAlpha(_ method: String) -> Bool {

@@ -115,9 +115,9 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | --- | --- | --- |
 | surface選択 | 🟡 | 単一ID、範囲、列挙、除外、`surface.append` |
 | alias | 🟡 | sakura、kero、char scopeの名前→surface ID候補 |
-| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系。`seriko.use_self_alpha,1`でもアルファチャンネルのないPNGは左上色透過へフォールバック。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後と、単一のAPNGを含むelement合成後も再生情報を維持する。異なるタイムラインを持つ複数APNGの同時合成と全描画オプションは未網羅 |
+| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱う。`seriko.use_self_alpha,1`でもアルファチャンネルのないPNGは左上色透過へフォールバック。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後と、単一のAPNGを含むelement合成後も再生情報を維持する。異なるタイムラインを持つ複数APNGの同時合成と全描画オプションは未網羅 |
 | collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用 |
-| animation基本 | 🟡 | name、interval文字列、pattern、wait、座標 |
+| animation基本 | 🟡 | name、interval文字列、pattern、wait、座標。base・overlay系・asis・move・stopを描画または制御へ反映 |
 | interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能。複数animationの完全な並行実行は未対応 |
 | pattern method | 🟡 | base、overlay、overlay-fast、replace、interpolate、reduce、bind、add、auto、move、stopに加え、multiply／screen／overlay／add／soft-light／hard-light／color-dodge／color-burn／color／luminosity／hue／saturation／darken／lighten／difference／exclusion系と旧名・fast名を実装。`overlaymultiply`／`blend-multiply-fast`はベースの不透明度でクリップ。AppKitに同一演算がないvivid-light等の一部は近似。asis、scaling、import、insert、start／parallel系は未実装 |
 | animation option／collision | 🟡 | exclusive、background、shared-indexを保持。animation固有のrect／ellipse／circle／polygon collisionをbind中・アニメーション実行中のマウス判定に利用。optionの描画順・インデックス継続・限定exclusiveの完全な挙動は未実装 |
