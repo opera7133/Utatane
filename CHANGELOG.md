@@ -14,6 +14,7 @@
 - シェルのAPNGサーフェスを、各フレームの時間・合成・破棄方式に従ってアニメーション表示するようにした。PNAの適用や静止画elementとの合成後も再生情報を維持する
 - SERIKOの`asis`描画をelementとアニメーションで実行し、画像の透過色・PNA・アルファチャンネルを無視して合成するようにした
 - SERIKOアニメーションを複数同時に再生し、`start`／`stop`、alternative／parallel制御、着せ替えの`insert`、小数倍率を含む`scaling`、APNG／GIF／WebPの`import`へ対応
+- SERIKOの`exclusive`／対象指定、`shared-index`、`background`へ対応し、異なるフレーム周期を持つAPNG同士の合成後も双方のタイミングを維持
 - SSP 2.8.93互換として、起動時とウィンドウモード切り替え時の`OnWindowModeChange`、切り替え後の`OnDisplayChange`、現在の表示方式をnormal・shared・perghostで返す`baseware.windowmode`プロパティに対応
 - カレンダーの「今日の予定」が編集・取り込み・日付変更で変化した時、起動中の全ゴーストへ`OnScheduleTodayNotify`を通知
 - ウィンドウモードで任意の画像を背景に選び、画面いっぱい・全体表示・引き伸ばし・中央から配置方法を選べるようにした。発話履歴の単色背景も自動・白・灰・黒からウィンドウごとに選択でき、履歴の統合設定をウィンドウの操作メニューから切り替えられる

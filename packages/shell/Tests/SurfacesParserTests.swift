@@ -210,7 +210,7 @@ func `parses curved and animation specific collisions and options`() throws {
     collisionex0,face,ellipse,0,0,20,10
     collisionex1,button,circle,30,30,5
     animation2.interval,sometimes
-    animation2.option,exclusive+background+shared-index
+    animation2.option,exclusive+background+shared-index,(1,3,5)
     animation2.collision0,1,2,11,12,hand
     animation2.collisionex1,effect,ellipse,20,20,40,30
     animation2.pattern0,overlay,100,50,0,0
@@ -225,6 +225,7 @@ func `parses curved and animation specific collisions and options`() throws {
     #expect(button.contains(x: 33, y: 33))
     #expect(!button.contains(x: 36, y: 30))
     #expect(animation.options == ["exclusive", "background", "shared-index"])
+    #expect(animation.exclusiveAnimationIDs == [1, 3, 5])
     #expect(animation.collisions.map(\.name) == ["hand", "effect"])
 }
 

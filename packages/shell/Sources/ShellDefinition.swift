@@ -337,6 +337,7 @@ public struct SurfaceAnimation: Sendable, Equatable {
     public let interval: String?
     public let intervalParameter: Int?
     public let options: Set<String>
+    public let exclusiveAnimationIDs: Set<Int>?
     public let collisions: [SurfaceCollision]
     public let patterns: [SurfaceAnimationPattern]
 
@@ -345,6 +346,7 @@ public struct SurfaceAnimation: Sendable, Equatable {
         name: String? = nil,
         interval: String?,
         options: Set<String> = [],
+        exclusiveAnimationIDs: Set<Int>? = nil,
         collisions: [SurfaceCollision] = [],
         patterns: [SurfaceAnimationPattern]
     ) {
@@ -354,6 +356,7 @@ public struct SurfaceAnimation: Sendable, Equatable {
             interval: interval,
             intervalParameter: nil,
             options: options,
+            exclusiveAnimationIDs: exclusiveAnimationIDs,
             collisions: collisions,
             patterns: patterns
         )
@@ -365,6 +368,7 @@ public struct SurfaceAnimation: Sendable, Equatable {
         interval: String?,
         intervalParameter: Int?,
         options: Set<String> = [],
+        exclusiveAnimationIDs: Set<Int>? = nil,
         collisions: [SurfaceCollision] = [],
         patterns: [SurfaceAnimationPattern]
     ) {
@@ -373,6 +377,7 @@ public struct SurfaceAnimation: Sendable, Equatable {
         self.interval = interval
         self.intervalParameter = intervalParameter
         self.options = options
+        self.exclusiveAnimationIDs = exclusiveAnimationIDs
         self.collisions = collisions
         self.patterns = patterns
     }

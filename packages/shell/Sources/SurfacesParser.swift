@@ -410,6 +410,10 @@ public struct SurfacesParser: Sendable {
             animation.intervalParameter = values.dropFirst().first.flatMap(Int.init)
         } else if directive == "option" {
             animation.options.formUnion(values.first?.lowercased().split(separator: "+").map(String.init) ?? [])
+            let exclusiveIDs = values.dropFirst().flatMap(parseAnimationIDs)
+            if animation.options.contains("exclusive"), !exclusiveIDs.isEmpty {
+                animation.exclusiveAnimationIDs = Set(exclusiveIDs)
+            }
         } else if directive.hasPrefix("collisionex"),
                   let collisionID = Int(directive.dropFirst("collisionex".count)),
                   values.count >= 4
@@ -613,6 +617,7 @@ private struct AnimationBuilder {
     var interval: String?
     var intervalParameter: Int?
     var options: Set<String> = []
+    var exclusiveAnimationIDs: Set<Int>?
     var collisions: [Int: SurfaceCollision] = [:]
     var patterns: [Int: SurfaceAnimationPattern] = [:]
 
@@ -623,6 +628,7 @@ private struct AnimationBuilder {
             interval: interval,
             intervalParameter: intervalParameter,
             options: options,
+            exclusiveAnimationIDs: exclusiveAnimationIDs,
             collisions: collisions.values.sorted { $0.id < $1.id },
             patterns: patterns.values.sorted { $0.order < $1.order }
         )

@@ -454,6 +454,159 @@ private extension NSImage {
 }
 
 @MainActor
+@Test func `exclusive SERIKO animation stops and blocks only its configured targets`() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 9, height: 3, color: .clear).write(to: directory.appending(path: "surface0.png"))
+    let colors: [NSColor] = [
+        NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1),
+        NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1),
+        NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1)
+    ]
+    for (index, color) in colors.enumerated() {
+        try makePNG(width: 3, height: 3, color: color)
+            .write(to: directory.appending(path: "surface\(index + 1).png"))
+    }
+    func animation(_ id: Int, x: Int, exclusiveIDs: Set<Int>? = nil) -> SurfaceAnimation {
+        SurfaceAnimation(
+            id: id,
+            interval: "never",
+            options: exclusiveIDs == nil ? [] : ["exclusive"],
+            exclusiveAnimationIDs: exclusiveIDs,
+            patterns: [SurfaceAnimationPattern(
+                order: 0, method: "overlay", surfaceID: id,
+                waitMilliseconds: 1000, x: x, y: 0
+            )]
+        )
+    }
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [0: SurfaceDefinition(
+            id: 0,
+            collisions: [],
+            animations: [
+                animation(1, x: 0, exclusiveIDs: [2]),
+                animation(2, x: 3),
+                animation(3, x: 6)
+            ]
+        )],
+        usesSelfAlpha: true
+    )
+    let controller = SurfaceWindowController()
+    try controller.show(shell: shell, scope: 0, surfaceID: 0)
+    defer { controller.hideAll() }
+
+    controller.playAnimation(id: 2, scope: 0)
+    controller.playAnimation(id: 3, scope: 0)
+    controller.playAnimation(id: 1, scope: 0)
+    try await Task.sleep(for: .milliseconds(80))
+    controller.playAnimation(id: 2, scope: 0)
+    try await Task.sleep(for: .milliseconds(40))
+
+    let image = try #require(controller.renderedImage(for: 0))
+    #expect(image.containsColor { $0.redComponent > 0.8 && $0.blueComponent < 0.2 })
+    #expect(!image.containsColor { $0.blueComponent > 0.8 && $0.redComponent < 0.2 })
+    #expect(image.containsColor { $0.greenComponent > 0.8 && $0.redComponent < 0.2 })
+}
+
+@MainActor
+@Test func `shared index resumes the current pattern across a surface change`() async throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 4, height: 4, color: .clear).write(to: directory.appending(path: "surface0.png"))
+    try makePNG(width: 4, height: 4, color: .clear).write(to: directory.appending(path: "surface10.png"))
+    try makePNG(
+        width: 4, height: 4,
+        color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    ).write(to: directory.appending(path: "surface1.png"))
+    try makePNG(
+        width: 4, height: 4,
+        color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    ).write(to: directory.appending(path: "surface2.png"))
+    let shared = SurfaceAnimation(
+        id: 5,
+        interval: "never",
+        options: ["shared-index"],
+        patterns: [
+            SurfaceAnimationPattern(
+                order: 0, method: "overlay", surfaceID: 1,
+                waitMilliseconds: 20, x: 0, y: 0
+            ),
+            SurfaceAnimationPattern(
+                order: 1, method: "overlay", surfaceID: 2,
+                waitMilliseconds: 1000, x: 0, y: 0
+            )
+        ]
+    )
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [
+            0: SurfaceDefinition(id: 0, collisions: [], animations: [shared]),
+            10: SurfaceDefinition(id: 10, collisions: [], animations: [shared])
+        ],
+        usesSelfAlpha: true
+    )
+    let controller = SurfaceWindowController()
+    try controller.show(shell: shell, scope: 0, surfaceID: 0)
+    defer { controller.hideAll() }
+
+    controller.playAnimation(id: 5, scope: 0)
+    for _ in 0 ..< 30 {
+        if controller.renderedImage(for: 0)?.containsColor({ $0.blueComponent > 0.8 }) == true {
+            break
+        }
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    try controller.changeSurface(scope: 0, to: 10)
+    try await Task.sleep(for: .milliseconds(40))
+
+    let image = try #require(controller.renderedImage(for: 0))
+    #expect(image.containsColor { $0.blueComponent > 0.8 && $0.redComponent < 0.2 })
+    #expect(!image.containsColor { $0.redComponent > 0.8 && $0.blueComponent < 0.2 })
+}
+
+@MainActor
+@Test func `background SERIKO animation stays behind the base surface`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(
+        width: 4, height: 4,
+        color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    ).write(to: directory.appending(path: "surface0.png"))
+    try makePNG(
+        width: 4, height: 4,
+        color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    ).write(to: directory.appending(path: "surface1.png"))
+    let background = SurfaceAnimation(
+        id: 1,
+        interval: "runonce",
+        options: ["background"],
+        patterns: [SurfaceAnimationPattern(
+            order: 0, method: "overlay", surfaceID: 1,
+            waitMilliseconds: 0, x: 0, y: 0
+        )]
+    )
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [0: SurfaceDefinition(id: 0, collisions: [], animations: [background])],
+        usesSelfAlpha: true
+    )
+    let controller = SurfaceWindowController()
+    try controller.show(shell: shell, scope: 0, surfaceID: 0)
+    defer { controller.hideAll() }
+
+    let color = try #require(controller.renderedImage(for: 0)?.colorAtCenter())
+    #expect(color.redComponent > 0.8)
+    #expect(color.blueComponent < 0.2)
+}
+
+@MainActor
 @Test func `SERIKO control patterns start and stop animations in parallel`() async throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

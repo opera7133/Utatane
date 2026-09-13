@@ -855,6 +855,8 @@ private final class CharacterSurfaceController {
     private var activeAnimationFrames: [Int: ActiveAnimationFrame] = [:]
     private var animationBaseExclusions: [Int: Set<Int>] = [:]
     private var activeAnimationScales: [Int: (x: CGFloat, y: CGFloat)] = [:]
+    private var activeAnimationPatternOrders: [Int: Int] = [:]
+    private var sharedAnimationStartOrders: [Int: Int] = [:]
     private var currentAnimationID: Int?
     private var pausedAnimationIDs: Set<Int> = []
     private var animationOffsets: [Int: SurfacePoint] = [:]
@@ -1153,6 +1155,7 @@ private final class CharacterSurfaceController {
         let enabled = shell.map { $0.effectiveBindGroups(scope: scope, enabled: enabledBindGroups) } ?? []
         let animations = currentSurfaceDefinition?.animations.filter { animation in
             guard animationTasks[animation.id] == nil else { return false }
+            guard !isBlockedByExclusiveAnimation(animation.id) else { return false }
             let components = Set((animation.interval ?? "").lowercased().split(separator: "+").map(String.init))
             guard components.contains("talk") else { return false }
             guard talkCharacterCount.isMultiple(of: max(animation.intervalParameter ?? 1, 1)) else { return false }
@@ -1169,7 +1172,7 @@ private final class CharacterSurfaceController {
             talkCharacterCount = 0
         }
         guard let animation = animations(forInterval: trigger)
-            .filter({ animationTasks[$0.id] == nil })
+            .filter({ animationTasks[$0.id] == nil && !isBlockedByExclusiveAnimation($0.id) })
             .randomElement()
         else { return false }
         return startAnimation(id: animation.id, minimumFrameDurationMilliseconds: 0) != nil
@@ -1272,6 +1275,13 @@ private final class CharacterSurfaceController {
         guard let animation = currentSurfaceDefinition?.animations.first(where: { $0.id == id }) else {
             return nil
         }
+        guard !isBlockedByExclusiveAnimation(id) else { return nil }
+        if isExclusive(animation) {
+            for activeID in animationTasks.keys where activeID != id {
+                guard animation.exclusiveAnimationIDs?.contains(activeID) ?? true else { continue }
+                animationTasks[activeID]?.cancel()
+            }
+        }
         animationTasks[id]?.cancel()
         activeAnimationFrames[id] = nil
         animationBaseExclusions[id] = nil
@@ -1289,6 +1299,7 @@ private final class CharacterSurfaceController {
             activeAnimationFrames[id] = nil
             animationBaseExclusions[id] = nil
             activeAnimationScales[id] = nil
+            activeAnimationPatternOrders[id] = nil
             animationTasks[id] = nil
             animationGenerations[id] = nil
             if currentAnimationID == id {
@@ -1303,6 +1314,11 @@ private final class CharacterSurfaceController {
 
     func changeSurface(to surfaceID: Int) throws {
         guard let shell, let item else { return }
+        let sharedResumePoints = Dictionary(uniqueKeysWithValues: (currentSurfaceDefinition?.animations ?? [])
+            .filter { $0.options.contains("shared-index") && animationTasks[$0.id] != nil }
+            .compactMap { animation in
+                activeAnimationPatternOrders[animation.id].map { (animation.id, $0) }
+            })
         cancelAllAnimations()
         schedulerTask?.cancel()
         pausedAnimationIDs.removeAll()
@@ -1342,7 +1358,20 @@ private final class CharacterSurfaceController {
         baseImage = rendered.image
         renderedLayerCache[surfaceID] = rendered.image
         persistentAnimationLayers.removeAll()
+        resumeSharedAnimations(from: sharedResumePoints)
         scheduleAutomaticAnimations()
+    }
+
+    private func resumeSharedAnimations(from patternOrders: [Int: Int]) {
+        guard let definition = currentSurfaceDefinition else { return }
+        for (animationID, patternOrder) in patternOrders {
+            guard let animation = definition.animations.first(where: { $0.id == animationID }),
+                  animation.options.contains("shared-index"),
+                  animation.patterns.contains(where: { $0.order == patternOrder })
+            else { continue }
+            sharedAnimationStartOrders[animationID] = patternOrder
+            _ = startAnimation(id: animationID, minimumFrameDurationMilliseconds: 0)
+        }
     }
 
     private func applyInstantPersistentAnimation(id: Int) -> Bool {
@@ -1409,6 +1438,8 @@ private final class CharacterSurfaceController {
         activeAnimationFrames.removeAll()
         animationBaseExclusions.removeAll()
         activeAnimationScales.removeAll()
+        activeAnimationPatternOrders.removeAll()
+        sharedAnimationStartOrders.removeAll()
         currentAnimationID = nil
         pausedAnimationIDs.removeAll()
         refreshAnimationScale()
@@ -1438,11 +1469,15 @@ private final class CharacterSurfaceController {
                     overlay: layer.image,
                     x: layer.x,
                     y: layer.y,
-                    operation: layer.operation,
-                    clipsToBaseAlpha: layer.clipsToBaseAlpha
+                    operation: animation.options.contains("background") ? .destinationOver : layer.operation,
+                    clipsToBaseAlpha: animation.options.contains("background") ? false : layer.clipsToBaseAlpha
                 )
             case let .base(image):
-                result = image
+                if animation.options.contains("background") {
+                    result = imageLoader.composite(base: result, overlay: image, x: 0, y: 0, operation: .destinationOver)
+                } else {
+                    result = image
+                }
             case let .move(x, y):
                 result = imageLoader.translated(result, x: x, y: y)
             }
@@ -2099,6 +2134,7 @@ private final class CharacterSurfaceController {
         ) throws -> NSImage {
             guard !ancestry.contains(animation.id) else { return image }
             var result = image
+            let isBackground = animation.options.contains("background")
             let patterns = animation.patterns.sorted(by: { $0.order < $1.order })
             for (index, pattern) in patterns.enumerated() where pattern.waitMilliseconds == 0 {
                 let method = pattern.method.lowercased()
@@ -2116,9 +2152,9 @@ private final class CharacterSurfaceController {
                 guard pattern.surfaceID >= 0 else { continue }
                 let operation: NSCompositingOperation
                 if method == "base", index == 0 {
-                    operation = .copy
+                    operation = isBackground ? .destinationOver : .copy
                 } else if let compositingOperation = animationCompositingOperation(for: method) {
-                    operation = compositingOperation
+                    operation = isBackground ? .destinationOver : compositingOperation
                 } else {
                     continue
                 }
@@ -2128,7 +2164,7 @@ private final class CharacterSurfaceController {
                     visited: visited,
                     ignoresTransparency: method == "asis"
                 )
-                if method == "base", index == 0 {
+                if method == "base", index == 0, !isBackground {
                     result = overlay
                     continue
                 }
@@ -2138,7 +2174,7 @@ private final class CharacterSurfaceController {
                     x: pattern.x,
                     y: pattern.y,
                     operation: operation,
-                    clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(method)
+                    clipsToBaseAlpha: isBackground ? false : surfaceCompositingClipsToBaseAlpha(method)
                 )
             }
             return result
@@ -2323,8 +2359,17 @@ private final class CharacterSurfaceController {
         animationBaseExclusions[animation.id] = stoppedAnimationIDs.isEmpty && !isInitiallyComposited
             ? []
             : excludedAnimationIDs
-        for pattern in animation.patterns {
+        let startOrder = sharedAnimationStartOrders.removeValue(forKey: animation.id)
+        let patterns = if let startOrder,
+                          let startIndex = animation.patterns.firstIndex(where: { $0.order == startOrder })
+        {
+            Array(animation.patterns[startIndex...])
+        } else {
+            animation.patterns
+        }
+        for pattern in patterns {
             guard !Task.isCancelled else { return }
+            activeAnimationPatternOrders[animation.id] = pattern.order
             let offset = animationOffsets[animation.id] ?? SurfacePoint(x: 0, y: 0)
             let method = pattern.method.lowercased()
 
@@ -2452,6 +2497,21 @@ private final class CharacterSurfaceController {
     private func startControlledAnimations(_ ids: some Sequence<Int>, sourceID: Int) {
         for id in Set(ids) where id != sourceID && animationTasks[id] == nil {
             _ = startAnimation(id: id, minimumFrameDurationMilliseconds: 0)
+        }
+    }
+
+    private func isExclusive(_ animation: SurfaceAnimation) -> Bool {
+        animation.options.contains("exclusive")
+            && !(animation.interval ?? "").lowercased().split(separator: "+").contains("bind")
+    }
+
+    private func isBlockedByExclusiveAnimation(_ animationID: Int) -> Bool {
+        animationTasks.keys.contains { activeID in
+            guard activeID != animationID,
+                  let active = currentSurfaceDefinition?.animations.first(where: { $0.id == activeID }),
+                  isExclusive(active)
+            else { return false }
+            return active.exclusiveAnimationIDs?.contains(animationID) ?? true
         }
     }
 

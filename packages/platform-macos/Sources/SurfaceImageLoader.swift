@@ -536,11 +536,94 @@ struct SurfaceImageLoader {
             }
             durations = baseAnimation.durations
             loopCount = combinedLoopCount(baseAnimation.loopCount, overlayAnimation.loopCount)
+        case let (baseAnimation?, overlayAnimation?):
+            guard let merged = mergedTimeline(baseAnimation, overlayAnimation) else { return nil }
+            frames = merged.map { sample in
+                compositeFrame(
+                    base: baseAnimation.frames[sample.baseFrame],
+                    overlay: overlayAnimation.frames[sample.overlayFrame],
+                    x: x,
+                    y: y,
+                    operation: operation,
+                    clipsToBaseAlpha: clipsToBaseAlpha
+                )
+            }
+            durations = merged.map(\.duration)
+            loopCount = combinedLoopCount(baseAnimation.loopCount, overlayAnimation.loopCount)
         default:
             return nil
         }
 
         return makeAnimatedImage(frames: frames, durations: durations, loopCount: loopCount)
+    }
+
+    private func mergedTimeline(
+        _ base: SurfaceImageAnimation,
+        _ overlay: SurfaceImageAnimation
+    ) -> [(baseFrame: Int, overlayFrame: Int, duration: TimeInterval)]? {
+        let baseDurations = base.durations.map(Self.durationMilliseconds)
+        let overlayDurations = overlay.durations.map(Self.durationMilliseconds)
+        let baseCycle = baseDurations.reduce(0, +)
+        let overlayCycle = overlayDurations.reduce(0, +)
+        guard baseCycle > 0, overlayCycle > 0 else { return nil }
+        let divisor = greatestCommonDivisor(baseCycle, overlayCycle)
+        guard baseCycle / divisor <= 120_000 / overlayCycle else { return nil }
+        let duration = baseCycle / divisor * overlayCycle
+        guard duration <= 120_000 else { return nil }
+
+        var boundaries: Set<Int> = [0, duration]
+        addBoundaries(for: baseDurations, through: duration, to: &boundaries)
+        addBoundaries(for: overlayDurations, through: duration, to: &boundaries)
+        let ordered = boundaries.sorted()
+        guard ordered.count <= 10001 else { return nil }
+        return zip(ordered, ordered.dropFirst()).map { start, end in
+            (
+                baseFrame: frameIndex(at: start, durations: baseDurations),
+                overlayFrame: frameIndex(at: start, durations: overlayDurations),
+                duration: TimeInterval(end - start) / 1000
+            )
+        }
+    }
+
+    private static func durationMilliseconds(_ duration: TimeInterval) -> Int {
+        max(Int((duration * 1000).rounded()), 10)
+    }
+
+    private func addBoundaries(for durations: [Int], through end: Int, to boundaries: inout Set<Int>) {
+        let cycle = durations.reduce(0, +)
+        var cycleStart = 0
+        while cycleStart < end {
+            var boundary = cycleStart
+            for duration in durations {
+                boundary += duration
+                if boundary < end {
+                    boundaries.insert(boundary)
+                }
+            }
+            cycleStart += cycle
+        }
+    }
+
+    private func frameIndex(at time: Int, durations: [Int]) -> Int {
+        let cycle = durations.reduce(0, +)
+        let offset = time % cycle
+        var boundary = 0
+        for (index, duration) in durations.enumerated() {
+            boundary += duration
+            if offset < boundary {
+                return index
+            }
+        }
+        return max(durations.count - 1, 0)
+    }
+
+    private func greatestCommonDivisor(_ lhs: Int, _ rhs: Int) -> Int {
+        var a = lhs
+        var b = rhs
+        while b != 0 {
+            (a, b) = (b, a % b)
+        }
+        return max(a, 1)
     }
 
     private func combinedLoopCount(_ lhs: Int, _ rhs: Int) -> Int {

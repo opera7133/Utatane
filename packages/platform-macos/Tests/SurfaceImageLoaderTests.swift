@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import ImageIO
 import Testing
 import UtataneCore
 @testable import UtatanePlatformMacOS
@@ -140,6 +141,24 @@ func `preserves APNG frames and timing while compositing a static element`() thr
     let secondFrame = try #require(representation.currentFrameBitmap)
     #expect(secondFrame.containsOpaqueBluePixel)
     #expect(secondFrame.containsOpaqueGreenPixel)
+}
+
+@Test
+@MainActor
+func `merges APNG layers that use different frame timelines`() throws {
+    let base = try makeAnimatedTestImage(durations: [0.1, 0.2])
+    let overlay = try makeAnimatedTestImage(durations: [0.15, 0.15])
+
+    let loader = SurfaceImageLoader()
+    let image = loader.composite(base: base, overlay: overlay, x: 0, y: 0)
+    let representation = try #require(image.representations.first as? NSBitmapImageRep)
+
+    let frameCount = loader.frameCount(of: image)
+    #expect(frameCount > 2)
+    for index in 0 ..< frameCount {
+        representation.setProperty(.currentFrame, withValue: index)
+        #expect((representation.value(forProperty: .currentFrameDuration) as? Double ?? 0) > 0)
+    }
 }
 
 @Test
@@ -312,6 +331,32 @@ private func makeTestImage(colors: [NSColor]) throws -> NSImage {
     let image = NSImage(size: bitmap.size)
     image.addRepresentation(bitmap)
     return image
+}
+
+private func makeAnimatedTestImage(durations: [TimeInterval]) throws -> NSImage {
+    let data = NSMutableData()
+    let destination = try #require(CGImageDestinationCreateWithData(
+        data,
+        "public.png" as CFString,
+        durations.count,
+        nil
+    ))
+    CGImageDestinationSetProperties(destination, [
+        kCGImagePropertyPNGDictionary: [kCGImagePropertyAPNGLoopCount: 0]
+    ] as CFDictionary)
+    let colors: [NSColor] = [.red, .blue]
+    for (index, duration) in durations.enumerated() {
+        let frame = try makeTestImage(colors: [colors[index % colors.count]])
+        let image = try #require(frame.cgImage(forProposedRect: nil, context: nil, hints: nil))
+        CGImageDestinationAddImage(destination, image, [
+            kCGImagePropertyPNGDictionary: [
+                kCGImagePropertyAPNGDelayTime: duration,
+                kCGImagePropertyAPNGUnclampedDelayTime: duration
+            ]
+        ] as CFDictionary)
+    }
+    #expect(CGImageDestinationFinalize(destination))
+    return try #require(NSImage(data: data as Data))
 }
 
 private func makeMaskPNG(
