@@ -128,6 +128,9 @@ final class ContentExplorerModel {
 
 @MainActor
 public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
+    static let initialContentSize = NSSize(width: 1120, height: 720)
+    static let minimumContentSize = NSSize(width: 760, height: 500)
+
     private let model = ContentExplorerModel()
     private var window: NSWindow?
 
@@ -153,7 +156,7 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         }
 
         let panel = NSPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 860, height: 560),
+            contentRect: NSRect(origin: .zero, size: Self.initialContentSize),
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false
@@ -161,7 +164,7 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         panel.title = "エクスプローラ"
         panel.contentViewController = NSHostingController(rootView: ContentExplorerView(model: model))
         panel.isReleasedWhenClosed = false
-        panel.minSize = NSSize(width: 680, height: 420)
+        panel.contentMinSize = Self.minimumContentSize
         panel.delegate = self
         panel.center()
         panel.makeKeyAndOrderFront(nil)

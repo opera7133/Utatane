@@ -43,3 +43,11 @@ import Testing
     #expect(model.selectedKind == .plugin)
     #expect(model.selectedEntry == plugin)
 }
+
+@MainActor
+@Test func `content explorer opens at a practical browsing size`() {
+    #expect(ContentExplorerWindowController.initialContentSize.width >= 1000)
+    #expect(ContentExplorerWindowController.initialContentSize.height >= 680)
+    #expect(ContentExplorerWindowController.minimumContentSize.width < ContentExplorerWindowController.initialContentSize.width)
+    #expect(ContentExplorerWindowController.minimumContentSize.height < ContentExplorerWindowController.initialContentSize.height)
+}
