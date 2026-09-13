@@ -529,6 +529,13 @@ private struct UtataneRootView: View {
         }
         .applicationRuntimeTask(
             in: applicationDelegate.runtimeTasks,
+            key: "window-level",
+            id: networkSettings.windowLevelBehavior
+        ) {
+            configureWindowLevels()
+        }
+        .applicationRuntimeTask(
+            in: applicationDelegate.runtimeTasks,
             key: "window-mode",
             id: "\(networkSettings.windowMode.rawValue)-\(networkSettings.integratesSpeechHistoryInWindowMode)"
         ) {
@@ -1696,9 +1703,11 @@ private struct UtataneRootView: View {
             }
             scriptPlayer.onDialogueContent = {
                 surfaceWindowController.setPresentationHidden(false)
+                applyWindowLevel(isTalking: true)
             }
             scriptPlayer.onPlaybackFinished = {
                 surfaceWindowController.setPresentationHidden(false)
+                applyWindowLevel(isTalking: false)
             }
             scriptPlayer.onSurfaceRestore = {
                 sendEvent(.shiori(
@@ -4164,7 +4173,8 @@ private struct UtataneRootView: View {
                     balloonPercent: networkSettings.linksBalloonScale
                         ? networkSettings.shellScalePercent
                         : networkSettings.balloonScalePercent,
-                    textPercent: networkSettings.balloonTextScalePercent
+                    textPercent: networkSettings.balloonTextScalePercent,
+                    windowLevelBehavior: networkSettings.windowLevelBehavior
                 )
                 calledGhosts[ghost.id] = runtime
                 configureContextMenu()
@@ -4296,9 +4306,23 @@ private struct UtataneRootView: View {
                 shellPercent: shellPercent,
                 automaticallyFitsLargeSurfaces: networkSettings.automaticallyFitsLargeSurfaces,
                 balloonPercent: balloonScalePercent,
-                textPercent: networkSettings.balloonTextScalePercent
+                textPercent: networkSettings.balloonTextScalePercent,
+                windowLevelBehavior: networkSettings.windowLevelBehavior
             )
         }
+    }
+
+    private func configureWindowLevels() {
+        applyWindowLevel(isTalking: scriptPlayer.isDialogueActive)
+        for runtime in calledGhosts.values {
+            runtime.configureWindowLevel(networkSettings.windowLevelBehavior)
+        }
+    }
+
+    private func applyWindowLevel(isTalking: Bool) {
+        let staysOnTop = networkSettings.windowLevelBehavior.staysOnTop(isTalking: isTalking)
+        surfaceWindowController.setStayOnTop(staysOnTop)
+        balloonWindowController.setStayOnTop(staysOnTop)
     }
 
     private func applyAppearance() {

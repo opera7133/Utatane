@@ -37,6 +37,7 @@ final class CalledGhostRuntime {
     private var teachHistory: [String] = []
     private var pendingHourTimeSignal = false
     private var windowMode: GhostWindowMode
+    private var windowLevelBehavior: GhostWindowLevelBehavior = .always
     private(set) var shell: InstalledShell
     private(set) var balloon: BalloonDefinition
 
@@ -496,7 +497,8 @@ final class CalledGhostRuntime {
         shellPercent: Int,
         automaticallyFitsLargeSurfaces: Bool,
         balloonPercent: Int,
-        textPercent: Int
+        textPercent: Int,
+        windowLevelBehavior: GhostWindowLevelBehavior
     ) {
         surfaceController.setDisplayScale(Double(shellPercent) / 100)
         surfaceController.setAutomaticallyFitsLargeSurfaces(automaticallyFitsLargeSurfaces)
@@ -507,6 +509,19 @@ final class CalledGhostRuntime {
         )
         speechHistoryTextScale = CGFloat(textPercent) / 100
         speechHistoryPresenter?.setTextScale(speechHistoryTextScale)
+        self.windowLevelBehavior = windowLevelBehavior
+        applyWindowLevel(isTalking: player.isDialogueActive)
+    }
+
+    func configureWindowLevel(_ behavior: GhostWindowLevelBehavior) {
+        windowLevelBehavior = behavior
+        applyWindowLevel(isTalking: player.isDialogueActive)
+    }
+
+    private func applyWindowLevel(isTalking: Bool) {
+        let staysOnTop = windowLevelBehavior.staysOnTop(isTalking: isTalking)
+        surfaceController.setStayOnTop(staysOnTop)
+        balloonController.setStayOnTop(staysOnTop)
     }
 
     func resetWindowPositions() {
@@ -577,8 +592,14 @@ final class CalledGhostRuntime {
             )
             onError?(error)
         }
-        player.onDialogueContent = { [weak self] in self?.surfaceController.setPresentationHidden(false) }
-        player.onPlaybackFinished = { [weak self] in self?.surfaceController.setPresentationHidden(false) }
+        player.onDialogueContent = { [weak self] in
+            self?.surfaceController.setPresentationHidden(false)
+            self?.applyWindowLevel(isTalking: true)
+        }
+        player.onPlaybackFinished = { [weak self] in
+            self?.surfaceController.setPresentationHidden(false)
+            self?.applyWindowLevel(isTalking: false)
+        }
         player.onSurfaceRestore = { [weak self] in
             guard let self else { return }
             send(.shiori(id: "OnSurfaceRestore", references: currentSurfaceReferences()))

@@ -68,6 +68,7 @@ final class UtataneSettingsStore: ObservableObject {
         static let contentUpdateIntervalDays = "network.ghostUpdateIntervalDays"
         static let startupBehavior = "general.startupBehavior"
         static let appearance = "general.appearance"
+        static let windowLevelBehavior = "general.windowLevelBehavior"
         static let windowMode = "general.windowMode"
         static let lastWindowModeLayout = "general.lastWindowModeLayout"
         static let integratesSpeechHistoryInWindowMode = "general.integratesSpeechHistoryInWindowMode"
@@ -118,6 +119,10 @@ final class UtataneSettingsStore: ObservableObject {
 
     @Published var appearance: Appearance {
         didSet { defaults.set(appearance.rawValue, forKey: Key.appearance) }
+    }
+
+    @Published var windowLevelBehavior: GhostWindowLevelBehavior {
+        didSet { defaults.set(windowLevelBehavior.rawValue, forKey: Key.windowLevelBehavior) }
     }
 
     @Published var windowMode: GhostWindowMode {
@@ -280,6 +285,9 @@ final class UtataneSettingsStore: ObservableObject {
         appearance = Appearance(
             rawValue: defaults.string(forKey: Key.appearance) ?? ""
         ) ?? .system
+        windowLevelBehavior = GhostWindowLevelBehavior(
+            rawValue: defaults.string(forKey: Key.windowLevelBehavior) ?? ""
+        ) ?? .always
         let storedWindowMode = GhostWindowMode(
             rawValue: defaults.string(forKey: Key.windowMode) ?? ""
         ) ?? .off
@@ -514,6 +522,16 @@ struct UtataneSettingsView: View {
                     )
                     .disabled(settings.windowMode == .off)
                     Text("ゴーストとバルーンを通常の1枚のウィンドウ内に表示する。配信や画面収録でウィンドウ単位に取り込みやすくなる。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section("ウィンドウ表示") {
+                    Picker("手前に表示", selection: $settings.windowLevelBehavior) {
+                        Text("常に").tag(GhostWindowLevelBehavior.always)
+                        Text("発話中だけ").tag(GhostWindowLevelBehavior.whileTalking)
+                        Text("通常のウィンドウと同じ").tag(GhostWindowLevelBehavior.normal)
+                    }
+                    Text("サーフェスとバルーンをほかのウィンドウより手前に表示するタイミングを選ぶ。")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
