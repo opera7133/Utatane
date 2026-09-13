@@ -250,6 +250,11 @@ private enum GhostStartup {
     case vanished(from: InstalledGhost, script: String)
 }
 
+private enum GhostContextMenuTarget {
+    case primary
+    case called(CalledGhostRuntime)
+}
+
 private struct UtataneRootView: View {
     let model: GhostListModel
     let shellLoader: ShellLoader
@@ -260,6 +265,7 @@ private struct UtataneRootView: View {
     let speechHistoryStore: SpeechHistoryStore
     let speechHistoryWindowController: SpeechHistoryWindowController
     let selectionStore: ContentSelectionStore
+    private let recentContentStore = RecentContentStore()
     let sstpServer: SSTPServer
     let statusWindowController: StatusWindowController
     let alertController: ApplicationAlertController
@@ -1485,6 +1491,15 @@ private struct UtataneRootView: View {
         }
         switch await activate(ghost, startup: startup, reloadPresentation: reloadPresentation) {
         case .success:
+            recentContentStore.record(kind: .ghost, identifier: ghost.rootDirectory.path, name: ghost.name)
+            if let balloon {
+                recentContentStore.record(
+                    kind: .balloon,
+                    identifier: balloon.directory.path,
+                    name: balloon.name
+                )
+            }
+            configureContextMenu()
             AppLogStore.shared.info("「\(ghost.name)」の起動が完了しました", category: "Ghost", ghostName: ghost.name)
             return
         case let .failure(error):
@@ -2836,6 +2851,11 @@ private struct UtataneRootView: View {
     private func select(balloon selectedBalloon: BalloonDefinition) {
         scriptPlayer.cancel()
         balloon = selectedBalloon
+        recentContentStore.record(
+            kind: .balloon,
+            identifier: selectedBalloon.directory.path,
+            name: selectedBalloon.name
+        )
         if let currentGhost {
             selectionStore.setBalloonDirectoryName(
                 selectedBalloon.directory.lastPathComponent,
@@ -3314,20 +3334,47 @@ private struct UtataneRootView: View {
         )
     }
 
-    private func readmeMenuItems() -> [SurfaceContextMenuItem] {
-        var items: [SurfaceContextMenuItem] = []
-        if let currentGhost, let document = ghostReadme(currentGhost) {
-            items.append(.action(title: currentGhost.name, handler: { NSWorkspace.shared.open(document.url) }))
+    private func menuGhost(for target: GhostContextMenuTarget) -> InstalledGhost? {
+        switch target {
+        case .primary:
+            currentGhost
+        case let .called(runtime):
+            runtime.ghost
         }
-        if let selectedShell,
+    }
+
+    private func menuShell(for target: GhostContextMenuTarget) -> InstalledShell? {
+        switch target {
+        case .primary:
+            selectedShell
+        case let .called(runtime):
+            runtime.shell
+        }
+    }
+
+    private func menuBalloon(for target: GhostContextMenuTarget) -> BalloonDefinition? {
+        switch target {
+        case .primary:
+            balloon
+        case let .called(runtime):
+            runtime.balloon
+        }
+    }
+
+    private func readmeMenuItems(for target: GhostContextMenuTarget) -> [SurfaceContextMenuItem] {
+        var items: [SurfaceContextMenuItem] = []
+        if let ghost = menuGhost(for: target), let document = ghostReadme(ghost) {
+            items.append(.action(title: ghost.name, handler: { NSWorkspace.shared.open(document.url) }))
+        }
+        if let shell = menuShell(for: target),
            let document = ReadmeResolver().resolve(
-               contentDirectory: selectedShell.directory,
-               descriptorURL: selectedShell.directory.appending(path: "descript.txt")
+               contentDirectory: shell.directory,
+               descriptorURL: shell.directory.appending(path: "descript.txt")
            )
         {
-            items.append(.action(title: selectedShell.name, handler: { NSWorkspace.shared.open(document.url) }))
+            items.append(.action(title: shell.name, handler: { NSWorkspace.shared.open(document.url) }))
         }
-        if let balloon,
+        if let balloon = menuBalloon(for: target),
            let document = ReadmeResolver().resolve(
                contentDirectory: balloon.directory,
                descriptorURL: balloon.directory.appending(path: "descript.txt")
@@ -3338,69 +3385,74 @@ private struct UtataneRootView: View {
         return items
     }
 
+    private func contextMenuItems(for target: GhostContextMenuTarget) -> [SurfaceContextMenuItem] {
+        var items: [SurfaceContextMenuItem] = []
+        if case .primary = target {
+            items.append(networkUpdateMenu())
+        }
+        items.append(uninstallMenu(for: target))
+        if case .primary = target {
+            items.append(contentsOf: [headlineMenu(), pluginMenu(), shellScaleMenu()])
+        }
+        items.append(functionMenu(for: target))
+        items.append(settingsMenu(for: target))
+        items.append(.separator)
+        if case .primary = target {
+            items.append(ghostSwitchMenu())
+        }
+        items.append(callGhostMenu())
+        items.append(shellMenu(for: target))
+        let surfaceController = switch target {
+        case .primary: surfaceWindowController
+        case let .called(runtime): runtime.surfaceController
+        }
+        if let dressup = surfaceController.dressupContextMenuItem(title: String(localized: "着せ替え")) {
+            items.append(dressup)
+        }
+        items.append(balloonMenu(for: target))
+        if case .primary = target {
+            items.append(recentContentMenu())
+        }
+        items.append(informationMenu(for: target))
+        items.append(.separator)
+        items.append(closeGhostMenuItem(for: target))
+        items.append(.action(
+            title: String(localized: "すべて終了"),
+            handler: { NSApplication.shared.terminate(nil) }
+        ))
+        return items
+    }
+
     private func configureContextMenu() {
         refreshContentExplorer()
         surfaceWindowController.onUserDressupChange = { changes in
             Task { await scriptPlayer.notifyDressupChanges(changes, source: "user") }
         }
         surfaceWindowController.contextMenuItems = {
-            [
-                networkUpdateMenu(),
-                .action(
-                    title: String(localized: "カレンダー"),
-                    handler: { calendarWindowController.showCalendar() }
-                ),
-                .action(
-                    title: String(localized: "発話履歴"),
-                    handler: { showSpeechHistory() }
-                ),
-                headlineMenu(),
-                pluginMenu(),
-                functionMenu()
-            ] + (surfaceWindowController.dressupContextMenuItem(
-                title: String(localized: "着せ替え")
-            ).map { [$0] } ?? []) + [
-                settingsMenu(),
-                .separator,
-                .submenu(
-                    title: String(localized: "ゴースト切り替え"),
-                    items: model.ghosts.map { ghost in
-                        .action(
-                            title: ghost.name,
-                            isSelected: ghost.id == selectedGhostID,
-                            handler: { selectedGhostID = ghost.id }
-                        )
-                    }
-                ),
-                callGhostMenu(),
-                .submenu(
-                    title: String(localized: "Shell"),
-                    items: (currentGhost?.shells ?? []).map { shell in
-                        .action(
-                            title: shell.name,
-                            isSelected: shell.id == selectedShell?.id,
-                            handler: { select(shell: shell) }
-                        )
-                    }
-                ),
-                .submenu(
-                    title: String(localized: "バルーン"),
-                    items: installedBalloons.map { candidate in
-                        .action(
-                            title: candidate.name,
-                            isSelected: candidate.directory == balloon?.directory,
-                            handler: { select(balloon: candidate) }
-                        )
-                    }
-                ),
-                informationMenu(),
-                .separator,
-                .action(title: String(localized: "Utataneを終了"), handler: { NSApplication.shared.terminate(nil) })
-            ]
+            contextMenuItems(for: .primary)
         }
         for runtime in calledGhosts.values {
-            runtime.contextMenuItems = { calledGhostContextMenu(for: runtime) }
+            runtime.contextMenuItems = { contextMenuItems(for: .called(runtime)) }
         }
+    }
+
+    private func uninstallMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
+        let ghost = menuGhost(for: target)
+        let canRemove = ghost.flatMap {
+            removableContentContainer(for: $0.rootDirectory, root: ContentRoot.ghostsDirectory)
+        } != nil
+        return .action(
+            title: String(localized: "アンインストール"),
+            isEnabled: canRemove && !isTransitioningGhost,
+            handler: {
+                switch target {
+                case .primary:
+                    requestSelfVanish(calledRuntime: nil, replacement: nil, asksConfirmation: true)
+                case let .called(runtime):
+                    requestSelfVanish(calledRuntime: runtime, replacement: nil, asksConfirmation: true)
+                }
+            }
+        )
     }
 
     private func networkUpdateMenu() -> SurfaceContextMenuItem {
@@ -3425,20 +3477,11 @@ private struct UtataneRootView: View {
         .submenu(
             title: String(localized: "RSS / ヘッドライン"),
             items: installedHeadlines.map { headline in
-                switch headline.kind {
-                case let .rss(feedURL):
-                    .action(title: headline.name, handler: {
-                        Task { await fetchRSS(url: feedURL) }
-                    })
-                case .legacyDLL:
-                    .action(
-                        title: headline.name,
-                        isEnabled: headline.siteURL != nil
-                            && (ConfigHeadlineSensor.canLoad(headline)
-                                || ContentRoot.windowsHeadlineConfiguration() != nil),
-                        handler: { Task { await fetchLegacyHeadline(headline) } }
-                    )
-                }
+                .action(
+                    title: headline.name,
+                    isEnabled: canActivate(headline),
+                    handler: { activate(headline) }
+                )
             } + [
                 .separator,
                 .action(title: String(localized: "URLを指定して取得…"), handler: showRSSInput)
@@ -3460,19 +3503,7 @@ private struct UtataneRootView: View {
             .action(
                 title: String(localized: "実行"),
                 isEnabled: isNativePlugin(plugin),
-                handler: {
-                    Task {
-                        let script = await invokePlugin(
-                            target: plugin.id,
-                            event: "OnMenuExec",
-                            arguments: pluginMenuReferences(),
-                            reflectsResponse: true
-                        )
-                        if let script, let balloon {
-                            scriptPlayer.play(script, balloon: balloon)
-                        }
-                    }
-                }
+                handler: { activate(plugin) }
             )
         ]
         if let readmeURL = plugin.readmeURL {
@@ -3504,6 +3535,20 @@ private struct UtataneRootView: View {
         ]
     }
 
+    private func shellScaleMenu() -> SurfaceContextMenuItem {
+        .submenu(
+            title: String(localized: "シェル倍率"),
+            items: [25, 50, 75, 100, 125, 150, 200].map { percent in
+                .action(
+                    title: "\(percent)%",
+                    isSelected: networkSettings.shellScalePercent == percent,
+                    isEnabled: currentGhost != nil,
+                    handler: { networkSettings.shellScalePercent = percent }
+                )
+            }
+        )
+    }
+
     private func isNativePlugin(_ plugin: InstalledPlugin) -> Bool {
         switch plugin.runtime {
         case .nativeSHIORI, .dynamicLibrary:
@@ -3515,38 +3560,89 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func functionMenu() -> SurfaceContextMenuItem {
-        .submenu(
+    private func functionMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
+        var items: [SurfaceContextMenuItem] = [
+            .action(
+                title: String(localized: "カレンダー"),
+                handler: { calendarWindowController.showCalendar() }
+            ),
+            .action(
+                title: String(localized: "発話履歴"),
+                handler: {
+                    switch target {
+                    case .primary:
+                        showSpeechHistory()
+                    case let .called(runtime):
+                        runtime.showSpeechHistory()
+                    }
+                }
+            ),
+            .action(
+                title: String(localized: "エクスプローラ"),
+                handler: { showContentExplorer() }
+            )
+        ]
+        if case .primary = target {
+            items.append(.action(
+                title: String(localized: "リアルタイム音声会話…"),
+                handler: showRealtimeVoice
+            ))
+        }
+        let canPlayRandomTalk: Bool = switch target {
+        case .primary: session != nil
+        case .called: true
+        }
+        items.append(contentsOf: [
+            .action(
+                title: String(localized: "ランダムトーク"),
+                isEnabled: canPlayRandomTalk,
+                handler: {
+                    switch target {
+                    case .primary:
+                        sendEvent(.randomTalk)
+                    case let .called(runtime):
+                        runtime.send(.randomTalk)
+                    }
+                }
+            ),
+            .action(
+                title: String(localized: "バルーンを閉じる"),
+                handler: {
+                    switch target {
+                    case .primary:
+                        scriptPlayer.cancel()
+                    case let .called(runtime):
+                        runtime.player.cancel()
+                    }
+                }
+            ),
+            .action(
+                title: String(localized: "ウインドウ位置を初期化"),
+                handler: {
+                    switch target {
+                    case .primary:
+                        sendEvent(.shiori(id: "OnResetWindowPos", references: [:]))
+                        surfaceWindowController.resetWindowPositions()
+                        balloonWindowController.resetWindowPositions()
+                    case let .called(runtime):
+                        runtime.resetWindowPositions()
+                    }
+                }
+            )
+        ])
+        if case .primary = target {
+            items.append(.submenu(
+                title: String(localized: "コンテンツ管理"),
+                items: [
+                    .action(title: String(localized: "NARをインストール…"), handler: selectAndInstallNar),
+                    .action(title: String(localized: "SSPフォルダから取り込む…"), handler: selectAndImportSSPDirectory),
+                    .action(title: String(localized: "Finderで表示"), handler: showContentFolder)
+                ]
+            ))
+        }
+        return .submenu(
             title: String(localized: "機能"),
-            items: [
-                .action(
-                    title: String(localized: "リアルタイム音声会話…"),
-                    handler: showRealtimeVoice
-                ),
-                .action(
-                    title: String(localized: "エクスプローラ"),
-                    handler: { showContentExplorer() }
-                ),
-                .action(
-                    title: String(localized: "ランダムトーク"),
-                    isEnabled: session != nil,
-                    handler: { sendEvent(.randomTalk) }
-                ),
-                .action(title: String(localized: "バルーンを閉じる"), handler: { scriptPlayer.cancel() }),
-                .action(title: String(localized: "ウインドウ位置を初期化"), handler: {
-                    sendEvent(.shiori(id: "OnResetWindowPos", references: [:]))
-                    surfaceWindowController.resetWindowPositions()
-                    balloonWindowController.resetWindowPositions()
-                }),
-                .submenu(
-                    title: String(localized: "コンテンツ管理"),
-                    items: [
-                        .action(title: String(localized: "NARをインストール…"), handler: selectAndInstallNar),
-                        .action(title: String(localized: "SSPフォルダから取り込む…"), handler: selectAndImportSSPDirectory),
-                        .action(title: String(localized: "Finderで表示"), handler: showContentFolder)
-                    ]
-                )
-            ]
+            items: items
         )
     }
 
@@ -3619,39 +3715,173 @@ private struct UtataneRootView: View {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
-    private func settingsMenu() -> SurfaceContextMenuItem {
+    private func showSettingsPane(_ pane: UtataneSettingsStore.Pane) {
+        networkSettings.selectedPane = pane
+        openSettings()
+    }
+
+    private func settingsMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
+        var items: [SurfaceContextMenuItem] = [
+            .action(title: String(localized: "本体設定"), handler: {
+                showSettingsPane(.general)
+            }),
+            .action(title: String(localized: "喋り / バルーン"), handler: {
+                showSettingsPane(.talkAndBalloon)
+            }),
+            .action(title: String(localized: "ネットワーク設定"), handler: {
+                showSettingsPane(.network)
+            }),
+            .action(title: String(localized: "詳細設定"), handler: {
+                showSettingsPane(.advanced)
+            }),
+            .separator,
+            .action(
+                title: String(localized: "開発用パレットを表示"),
+                isSelected: networkSettings.showsDebugWindow,
+                handler: {
+                    networkSettings.showsDebugWindow.toggle()
+                    updateDebugWindowVisibility(bringForward: networkSettings.showsDebugWindow)
+                }
+            )
+        ]
+        if case .primary = target {
+            items.insert(.action(title: String(localized: "ゴーストごとの設定"), handler: {
+                showSettingsPane(.ghost)
+            }), at: 1)
+            items.append(.action(
+                title: String(localized: "現在のゴーストを再読み込み"),
+                isEnabled: currentGhost != nil && !isTransitioningGhost,
+                handler: { reloadCurrentGhost() }
+            ))
+        }
+        return .submenu(title: String(localized: "設定"), items: items)
+    }
+
+    private func informationMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
         .submenu(
-            title: String(localized: "設定"),
+            title: String(localized: "情報"),
             items: [
-                .action(title: String(localized: "設定"), handler: {
-                    networkSettings.selectedPane = .general
-                    openSettings()
-                }),
-                .action(
-                    title: String(localized: "開発用パレットを表示"),
-                    isSelected: networkSettings.showsDebugWindow,
-                    handler: {
-                        networkSettings.showsDebugWindow.toggle()
-                        updateDebugWindowVisibility(bringForward: networkSettings.showsDebugWindow)
-                    }
-                ),
-                .action(
-                    title: String(localized: "現在のゴーストを再読み込み"),
-                    isEnabled: currentGhost != nil && !isTransitioningGhost,
-                    handler: { reloadCurrentGhost() }
-                )
+                .submenu(title: "README", items: readmeMenuItems(for: target)),
+                .action(title: String(localized: "Utataneヘルプ"), handler: { UtataneHelp.open() })
             ]
         )
     }
 
-    private func informationMenu() -> SurfaceContextMenuItem {
+    private func ghostSwitchMenu() -> SurfaceContextMenuItem {
         .submenu(
-            title: String(localized: "情報"),
-            items: [
-                .submenu(title: "README", items: readmeMenuItems()),
-                .action(title: String(localized: "Utataneヘルプ"), handler: { UtataneHelp.open() })
-            ]
+            title: String(localized: "ゴースト切り替え"),
+            items: model.ghosts.map { ghost in
+                .action(
+                    title: ghost.name,
+                    isSelected: ghost.id == selectedGhostID,
+                    handler: { selectedGhostID = ghost.id }
+                )
+            }
         )
+    }
+
+    private func recentContentMenu() -> SurfaceContextMenuItem {
+        let sections = RecentContentKind.allCases.compactMap { kind -> SurfaceContextMenuItem? in
+            let items = recentContentStore.items.compactMap { item in
+                item.kind == kind ? recentContentMenuItem(item) : nil
+            }
+            guard !items.isEmpty else { return nil }
+            return .submenu(title: recentContentKindTitle(kind), items: items)
+        }
+        return .submenu(
+            title: String(localized: "最近使ったもの"),
+            items: sections.isEmpty
+                ? [.action(title: String(localized: "履歴はありません"), isEnabled: false, handler: {})]
+                : sections
+        )
+    }
+
+    private func recentContentKindTitle(_ kind: RecentContentKind) -> String {
+        switch kind {
+        case .ghost: String(localized: "ゴースト")
+        case .balloon: String(localized: "バルーン")
+        case .headline: String(localized: "RSS / ヘッドライン")
+        case .plugin: String(localized: "プラグイン")
+        }
+    }
+
+    private func recentContentMenuItem(_ item: RecentContentItem) -> SurfaceContextMenuItem? {
+        switch item.kind {
+        case .ghost:
+            guard let ghost = model.ghosts.first(where: { $0.rootDirectory.path == item.identifier }) else {
+                return nil
+            }
+            return .action(
+                title: ghost.name,
+                isSelected: ghost.id == currentGhost?.id,
+                handler: { selectedGhostID = ghost.id }
+            )
+        case .balloon:
+            guard let balloon = installedBalloons.first(where: { $0.directory.path == item.identifier }) else {
+                return nil
+            }
+            return .action(
+                title: balloon.name,
+                isSelected: balloon.directory == self.balloon?.directory,
+                handler: { select(balloon: balloon) }
+            )
+        case .headline:
+            guard let headline = installedHeadlines.first(where: { $0.id.path == item.identifier }) else {
+                return nil
+            }
+            return .action(
+                title: headline.name,
+                isEnabled: canActivate(headline),
+                handler: { activate(headline) }
+            )
+        case .plugin:
+            guard let plugin = installedPlugins.first(where: { $0.id == item.identifier }) else {
+                return nil
+            }
+            return .action(
+                title: plugin.name,
+                isEnabled: isNativePlugin(plugin),
+                handler: { activate(plugin) }
+            )
+        }
+    }
+
+    private func canActivate(_ headline: InstalledHeadline) -> Bool {
+        switch headline.kind {
+        case .rss:
+            true
+        case .legacyDLL:
+            headline.siteURL != nil
+                && (ConfigHeadlineSensor.canLoad(headline)
+                    || ContentRoot.windowsHeadlineConfiguration() != nil)
+        }
+    }
+
+    private func activate(_ headline: InstalledHeadline) {
+        recentContentStore.record(kind: .headline, identifier: headline.id.path, name: headline.name)
+        configureContextMenu()
+        Task {
+            switch headline.kind {
+            case let .rss(feedURL): await fetchRSS(url: feedURL)
+            case .legacyDLL: await fetchLegacyHeadline(headline)
+            }
+        }
+    }
+
+    private func activate(_ plugin: InstalledPlugin) {
+        recentContentStore.record(kind: .plugin, identifier: plugin.id, name: plugin.name)
+        configureContextMenu()
+        Task {
+            let script = await invokePlugin(
+                target: plugin.id,
+                event: "OnMenuExec",
+                arguments: pluginMenuReferences(),
+                reflectsResponse: true
+            )
+            if let script, let balloon {
+                scriptPlayer.play(script, balloon: balloon)
+            }
+        }
     }
 
     private func callGhostMenu() -> SurfaceContextMenuItem {
@@ -3665,62 +3895,64 @@ private struct UtataneRootView: View {
         )
     }
 
-    private func calledGhostContextMenu(for runtime: CalledGhostRuntime) -> [SurfaceContextMenuItem] {
-        [
-            .submenu(
-                title: String(localized: "ゴースト切り替え"),
-                items: model.ghosts.map { ghost in
-                    .action(
-                        title: ghost.name,
-                        isSelected: ghost.id == selectedGhostID,
-                        handler: { selectedGhostID = ghost.id }
-                    )
-                }
-            ),
-            callGhostMenu(),
-            .submenu(
-                title: String(localized: "Shell"),
-                items: runtime.ghost.shells.map { shell in
-                    .action(
-                        title: shell.name,
-                        isSelected: shell.id == runtime.shell.id,
-                        handler: {
+    private func shellMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
+        let ghost = menuGhost(for: target)
+        let selected = menuShell(for: target)
+        return .submenu(
+            title: String(localized: "Shell"),
+            items: (ghost?.shells ?? []).map { shell in
+                .action(
+                    title: shell.name,
+                    isSelected: shell.id == selected?.id,
+                    handler: {
+                        switch target {
+                        case .primary:
+                            select(shell: shell)
+                        case let .called(runtime):
                             runtime.select(shell: shell)
                             configureContextMenu()
                         }
-                    )
-                }
-            )
-        ] + (runtime.surfaceController.dressupContextMenuItem(
-            title: String(localized: "着せ替え")
-        ).map { [$0] } ?? []) + [
-            .submenu(
-                title: String(localized: "バルーン"),
-                items: installedBalloons.map { balloon in
-                    .action(
-                        title: balloon.name,
-                        isSelected: balloon.directory == runtime.balloon.directory,
-                        handler: {
+                    }
+                )
+            }
+        )
+    }
+
+    private func balloonMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
+        let selected = menuBalloon(for: target)
+        return .submenu(
+            title: String(localized: "バルーン"),
+            items: installedBalloons.map { balloon in
+                .action(
+                    title: balloon.name,
+                    isSelected: balloon.directory == selected?.directory,
+                    handler: {
+                        switch target {
+                        case .primary:
+                            select(balloon: balloon)
+                        case let .called(runtime):
                             runtime.select(balloon: balloon)
                             configureContextMenu()
                         }
-                    )
+                    }
+                )
+            }
+        )
+    }
+
+    private func closeGhostMenuItem(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
+        .action(
+            title: String(localized: "このゴーストを閉じる"),
+            isEnabled: !isTransitioningGhost && !isClosingCurrentGhost,
+            handler: {
+                switch target {
+                case .primary:
+                    dismissCurrentGhost()
+                case let .called(runtime):
+                    dismissCalledGhost(runtime.ghost)
                 }
-            ),
-            .separator,
-            .action(title: String(localized: "ランダムトーク"), handler: { runtime.send(.randomTalk) }),
-            .action(title: String(localized: "発話履歴"), handler: { runtime.showSpeechHistory() }),
-            .action(title: String(localized: "ウインドウ位置を初期化"), handler: {
-                runtime.resetWindowPositions()
-            }),
-            .action(title: String(localized: "このゴーストを閉じる"), handler: { dismissCalledGhost(runtime.ghost) }),
-            .action(title: String(localized: "設定"), handler: {
-                networkSettings.selectedPane = .general
-                openSettings()
-            }),
-            .separator,
-            .action(title: String(localized: "Utataneを終了"), handler: { NSApplication.shared.terminate(nil) })
-        ]
+            }
+        )
     }
 
     private func call(_ ghost: InstalledGhost) {
@@ -3799,6 +4031,12 @@ private struct UtataneRootView: View {
                     caller: caller,
                     desktopWallpaperEvent: desktopWallpaperSampler.sample()?.initialEvent()
                 ) ?? ""
+                recentContentStore.record(
+                    kind: .ghost,
+                    identifier: ghost.rootDirectory.path,
+                    name: ghost.name
+                )
+                configureContextMenu()
                 sendEvent(.shiori(id: "OnGhostCallComplete", references: [
                     0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
                     1: startupScript,
@@ -5391,25 +5629,10 @@ private struct UtataneRootView: View {
             select(balloon: selectedBalloon)
         case .headline:
             guard let headline = installedHeadlines.first(where: { $0.id == entry.directory }) else { return }
-            Task {
-                switch headline.kind {
-                case let .rss(feedURL): await fetchRSS(url: feedURL)
-                case .legacyDLL: await fetchLegacyHeadline(headline)
-                }
-            }
+            activate(headline)
         case .plugin:
             guard let plugin = installedPlugins.first(where: { $0.directory == entry.directory }) else { return }
-            Task {
-                let script = await invokePlugin(
-                    target: plugin.id,
-                    event: "OnMenuExec",
-                    arguments: pluginMenuReferences(),
-                    reflectsResponse: true
-                )
-                if let script, let balloon {
-                    scriptPlayer.play(script, balloon: balloon)
-                }
-            }
+            activate(plugin)
         }
     }
 
