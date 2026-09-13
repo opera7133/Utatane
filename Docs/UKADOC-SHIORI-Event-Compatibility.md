@@ -393,9 +393,9 @@ UKADOC掲載イベント数: 290
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnSpeechSynthesisStatus`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSpeechSynthesisStatus) | ❌ | 音声認識・音声合成機能 | 高 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnVoiceRecognitionStatus`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVoiceRecognitionStatus) | ❌ | 音声認識・音声合成機能 | 高 | 本番コードにベースウェアからの自動発行経路なし |
-| [`OnVoiceRecognitionWord`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVoiceRecognitionWord) | ❌ | 音声認識・音声合成機能 | 高 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnSpeechSynthesisStatus`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSpeechSynthesisStatus) | ✅ | 音声認識・音声合成機能 | 高 | 起動時と音声合成のON/OFF時に有効状態を通知 |
+| [`OnVoiceRecognitionStatus`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVoiceRecognitionStatus) | ✅ | 音声認識・音声合成機能 | 高 | 起動時とmacOS音声認識のON/OFF時に有効状態を通知 |
+| [`OnVoiceRecognitionWord`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVoiceRecognitionWord) | ✅ | 音声認識・音声合成機能 | 高 | 確定した認識結果だけを通知。キャラクター名と完全一致した場合は対応scopeをReference0に設定 |
 
 ## その他イベント
 

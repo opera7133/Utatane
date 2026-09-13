@@ -352,6 +352,11 @@ private struct UtataneRootView: View {
     @State private var systemLoadDetector = SystemLoadTransitionDetector()
     @State private var realtimeVoiceWindowController: RealtimeVoiceWindowController?
     @State private var speechHistoryPresenter: SpeechHistoryPresenter?
+    @State private var localSpeechSynthesizer = MacOSSpeechSynthesizer()
+    @State private var localSpeechRecognizer = MacOSSpeechRecognizer()
+    @State private var configuredSpeechSynthesisEnabled: Bool?
+    @State private var configuredSpeechRecognitionEnabled: Bool?
+    @State private var activeSpeechSynthesisCount = 0
     @State private var calendarWindowController = CalendarWindowController(
         storeURL: ContentRoot.calendarSchedulesURL,
         skinDirectories: ContentRoot.calendarSkinReadDirectories
@@ -509,6 +514,20 @@ private struct UtataneRootView: View {
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "playback-settings", id: "\(networkSettings.characterDelayMilliseconds)-\(networkSettings.dialogueDismissalSeconds)") {
             configurePlayback()
+        }
+        .applicationRuntimeTask(
+            in: applicationDelegate.runtimeTasks,
+            key: "speech-synthesis-settings",
+            id: "\(networkSettings.speechSynthesisEnabled)-\(networkSettings.speechVoiceSettingsByScope)"
+        ) {
+            configureSpeechSynthesis(notifiesStatusChange: true)
+        }
+        .applicationRuntimeTask(
+            in: applicationDelegate.runtimeTasks,
+            key: "speech-recognition-settings",
+            id: "\(networkSettings.speechRecognitionEnabled)-\(networkSettings.speechRecognitionLocaleIdentifier)-\(networkSettings.prefersOnDeviceSpeechRecognition)"
+        ) {
+            await configureSpeechRecognition(notifiesStatusChange: true)
         }
         .onReceive(NotificationCenter.default.publisher(for: .showUtataneGhostPicker)) { _ in
             showGhostPicker()
@@ -2061,6 +2080,8 @@ private struct UtataneRootView: View {
                 installedHeadlines: installedHeadlines,
                 installedPlugins: installedPlugins,
                 windowMode: networkSettings.windowMode,
+                speechSynthesisEnabled: networkSettings.speechSynthesisEnabled,
+                speechRecognitionEnabled: networkSettings.speechRecognitionEnabled,
                 surfaceWindowNumbers: surfaceWindowController.windowNumbers,
                 balloonWindowNumbers: balloonWindowController.windowNumbers,
                 otherGhosts: calledGhosts.values.map { runtime in
@@ -3762,6 +3783,26 @@ private struct UtataneRootView: View {
             )
         ]
         if case .primary = target {
+            items.append(contentsOf: [
+                .action(
+                    title: String(localized: "音声合成"),
+                    isSelected: networkSettings.speechSynthesisEnabled,
+                    handler: {
+                        networkSettings.speechSynthesisEnabled.toggle()
+                    }
+                ),
+                .action(
+                    title: String(localized: "音声認識"),
+                    isSelected: networkSettings.speechRecognitionEnabled,
+                    handler: {
+                        networkSettings.speechRecognitionEnabled.toggle()
+                    }
+                ),
+                .action(
+                    title: String(localized: "音声設定…"),
+                    handler: { showSettingsPane(.voice) }
+                )
+            ])
             items.append(.action(
                 title: String(localized: "リアルタイム音声会話…"),
                 handler: showRealtimeVoice
@@ -4223,6 +4264,9 @@ private struct UtataneRootView: View {
                     personalityEngine: personalityEngine(for: ghost),
                     characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
                     dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000,
+                    speechSynthesisEnabled: networkSettings.speechSynthesisEnabled,
+                    speechVoiceSettingsByScope: networkSettings.speechVoiceSettingsByScope,
+                    speechRecognitionEnabled: networkSettings.speechRecognitionEnabled,
                     speechHistoryStore: speechHistoryStore,
                     integratesSpeechHistory: networkSettings.windowMode != .off
                         && networkSettings.integratesSpeechHistoryInWindowMode,
@@ -4261,6 +4305,9 @@ private struct UtataneRootView: View {
                         current: current,
                         excluding: ghost.id
                     )
+                }
+                runtime.onSpeechSynthesisActivity = { active in
+                    updateSpeechSynthesisActivity(active)
                 }
                 runtime.configureDisplay(
                     shellPercent: networkSettings.shellScalePercent,
@@ -4362,6 +4409,113 @@ private struct UtataneRootView: View {
                 dismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000
             )
         }
+    }
+
+    private func configureSpeechSynthesis(notifiesStatusChange: Bool) {
+        let enabled = networkSettings.speechSynthesisEnabled
+        scriptPlayer.onSpeechSynthesisActivity = { active in
+            updateSpeechSynthesisActivity(active)
+        }
+        scriptPlayer.configureSpeechSynthesis(
+            synthesizer: enabled ? localSpeechSynthesizer : nil,
+            configuration: enabled ? { scope in
+                networkSettings.speechVoiceSettings(for: scope).synthesisConfiguration
+            } : nil
+        )
+        for runtime in calledGhosts.values {
+            runtime.configureSpeechSynthesis(
+                enabled: enabled,
+                settingsByScope: networkSettings.speechVoiceSettingsByScope
+            )
+        }
+        if notifiesStatusChange,
+           let previous = configuredSpeechSynthesisEnabled,
+           previous != enabled
+        {
+            broadcastEvent(.notification(
+                id: "OnSpeechSynthesisStatus",
+                references: [0: enabled ? "1" : "0"]
+            ))
+        }
+        configuredSpeechSynthesisEnabled = enabled
+        configureContextMenu()
+    }
+
+    private func updateSpeechSynthesisActivity(_ active: Bool) {
+        activeSpeechSynthesisCount = max(0, activeSpeechSynthesisCount + (active ? 1 : -1))
+        localSpeechRecognizer.setInputSuppressed(activeSpeechSynthesisCount > 0)
+    }
+
+    private func configureSpeechRecognition(notifiesStatusChange: Bool) async {
+        localSpeechRecognizer.onFinalResult = { word in
+            deliverRecognizedWord(word)
+        }
+        localSpeechRecognizer.onError = { error in
+            networkSettings.speechRecognitionEnabled = false
+            showError(error.localizedDescription)
+        }
+        let enabled = networkSettings.speechRecognitionEnabled
+        if enabled {
+            do {
+                try await localSpeechRecognizer.start(configuration: SpeechRecognitionConfiguration(
+                    localeIdentifier: networkSettings.speechRecognitionLocaleIdentifier,
+                    prefersOnDeviceRecognition: networkSettings.prefersOnDeviceSpeechRecognition,
+                    contextualStrings: speechRecognitionVocabulary
+                ))
+                localSpeechRecognizer.setInputSuppressed(activeSpeechSynthesisCount > 0)
+            } catch {
+                networkSettings.speechRecognitionEnabled = false
+                configuredSpeechRecognitionEnabled = false
+                showError(error.localizedDescription)
+                configureContextMenu()
+                return
+            }
+        } else {
+            localSpeechRecognizer.stop()
+        }
+        if notifiesStatusChange,
+           let previous = configuredSpeechRecognitionEnabled,
+           previous != enabled
+        {
+            broadcastEvent(.notification(
+                id: "OnVoiceRecognitionStatus",
+                references: [0: enabled ? "1" : "0"]
+            ))
+        }
+        configuredSpeechRecognitionEnabled = enabled
+        configureContextMenu()
+    }
+
+    private var speechRecognitionVocabulary: [String] {
+        var words = ["メニュー", "閉じる", "更新", "ランダムトーク"]
+        for ghost in [currentGhost].compactMap(\.self) + calledGhosts.values.map(\.ghost) {
+            words.append(ghost.name)
+            words.append(contentsOf: ghost.characters.compactMap(\.name))
+        }
+        return Array(Set(words)).sorted()
+    }
+
+    private func deliverRecognizedWord(_ word: String) {
+        if let currentGhost {
+            sendEvent(.shiori(id: "OnVoiceRecognitionWord", references: [
+                0: String(recognitionScope(for: word, ghost: currentGhost)),
+                1: word
+            ]))
+        }
+        for runtime in calledGhosts.values {
+            runtime.send(.shiori(id: "OnVoiceRecognitionWord", references: [
+                0: String(recognitionScope(for: word, ghost: runtime.ghost)),
+                1: word
+            ]))
+        }
+    }
+
+    private func recognitionScope(for word: String, ghost: InstalledGhost) -> Int {
+        let normalized = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ghost.characters.first(where: {
+            guard let name = $0.name else { return false }
+            return normalized.compare(name, options: [.caseInsensitive, .widthInsensitive]) == .orderedSame
+        })?.scope ?? 0
     }
 
     private func configureDisplay() {
@@ -6639,6 +6793,8 @@ func startupInformationEvents(
     installedHeadlines: [InstalledHeadline] = [],
     installedPlugins: [InstalledPlugin] = [],
     windowMode: GhostWindowMode,
+    speechSynthesisEnabled: Bool = false,
+    speechRecognitionEnabled: Bool = false,
     surfaceWindowNumbers: [Int] = [],
     balloonWindowNumbers: [Int] = [],
     otherGhosts: [String] = []
@@ -6665,6 +6821,8 @@ func startupInformationEvents(
     return [
         ("basewareversion", [0: version, 1: "Utatane", 2: build]),
         ("OnWindowModeChange", windowMode.startupChangeReferences),
+        ("OnSpeechSynthesisStatus", [0: speechSynthesisEnabled ? "1" : "0"]),
+        ("OnVoiceRecognitionStatus", [0: speechRecognitionEnabled ? "1" : "0"]),
         ("uniqueid", [0: ghost.rootDirectory.lastPathComponent]),
         ("capability", indexed([
             "request.charset", "request.sender", "request.securitylevel", "request.id",

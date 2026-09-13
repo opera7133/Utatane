@@ -29,7 +29,9 @@ final class CalledGhostRuntime {
     private let speechHistoryStore: SpeechHistoryStore
     private let speechHistoryWindowController: SpeechHistoryWindowController
     private let speechHistoryPresenter: SpeechHistoryPresenter?
+    private let localSpeechSynthesizer = MacOSSpeechSynthesizer()
     private var integratesSpeechHistory: Bool
+    private let speechRecognitionEnabled: Bool
     private var speechHistoryTextScale: CGFloat = 1
     private var weatherTask: Task<Void, Never>?
     private var sntpCoordinator: SNTPEventCoordinator?
@@ -53,6 +55,9 @@ final class CalledGhostRuntime {
     var onOtherGhostTalk: ((String, String) -> Void)?
     var onOtherSurfaceChange: ((String, Int, Int) -> Void)?
     var onSurfaceChanged: ((Int, Int?, Int) -> Void)?
+    var onSpeechSynthesisActivity: (@MainActor @Sendable (Bool) -> Void)? {
+        didSet { player.onSpeechSynthesisActivity = onSpeechSynthesisActivity }
+    }
 
     init(
         ghost: InstalledGhost,
@@ -63,6 +68,9 @@ final class CalledGhostRuntime {
         personalityEngine: any PersonalityEngine,
         characterDelayMilliseconds: Int,
         dialogueDismissalMilliseconds: Int,
+        speechSynthesisEnabled: Bool,
+        speechVoiceSettingsByScope: [Int: UtataneSettingsStore.SpeechVoiceSettings],
+        speechRecognitionEnabled: Bool,
         speechHistoryStore: SpeechHistoryStore,
         integratesSpeechHistory: Bool,
         windowMode: GhostWindowMode,
@@ -90,6 +98,7 @@ final class CalledGhostRuntime {
             )
         }
         self.integratesSpeechHistory = integratesSpeechHistory
+        self.speechRecognitionEnabled = speechRecognitionEnabled
         self.windowMode = windowMode
         self.presentationSession = presentationSession
         self.presentationGeometry = effectivePresentationGeometry
@@ -152,6 +161,12 @@ final class CalledGhostRuntime {
             characterDelayMilliseconds: characterDelayMilliseconds,
             postDialogueDismissalMilliseconds: dialogueDismissalMilliseconds
         )
+        player.configureSpeechSynthesis(
+            synthesizer: speechSynthesisEnabled ? localSpeechSynthesizer : nil,
+            configuration: speechSynthesisEnabled ? { scope in
+                (speechVoiceSettingsByScope[scope] ?? .init()).synthesisConfiguration
+            } : nil
+        )
         player.configure(resourceBaseDirectory: ghost.rootDirectory.appending(
             path: "ghost/master",
             directoryHint: .isDirectory
@@ -185,7 +200,9 @@ final class CalledGhostRuntime {
                 shell: shell,
                 balloon: balloon,
                 shellDefinition: definition,
-                windowMode: windowMode
+                windowMode: windowMode,
+                speechSynthesisEnabled: player.isSpeechSynthesisEnabled,
+                speechRecognitionEnabled: speechRecognitionEnabled
             ) {
                 _ = try? await session.handle(event: .notification(
                     id: event.id,
@@ -490,6 +507,18 @@ final class CalledGhostRuntime {
         player.configurePlayback(
             characterDelayMilliseconds: characterDelayMilliseconds,
             postDialogueDismissalMilliseconds: dismissalMilliseconds
+        )
+    }
+
+    func configureSpeechSynthesis(
+        enabled: Bool,
+        settingsByScope: [Int: UtataneSettingsStore.SpeechVoiceSettings]
+    ) {
+        player.configureSpeechSynthesis(
+            synthesizer: enabled ? localSpeechSynthesizer : nil,
+            configuration: enabled ? { scope in
+                (settingsByScope[scope] ?? .init()).synthesisConfiguration
+            } : nil
         )
     }
 

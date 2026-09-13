@@ -9,6 +9,22 @@ import UtataneRealtime
 
 @MainActor
 final class UtataneSettingsStore: ObservableObject {
+    struct SpeechVoiceSettings: Codable, Equatable {
+        var voiceIdentifier = ""
+        var rate = 0.5
+        var volume = 1.0
+        var pitch = 1.0
+
+        var synthesisConfiguration: SpeechSynthesisConfiguration {
+            SpeechSynthesisConfiguration(
+                voiceIdentifier: voiceIdentifier.isEmpty ? nil : voiceIdentifier,
+                rate: Float(rate),
+                volume: Float(volume),
+                pitchMultiplier: Float(pitch)
+            )
+        }
+    }
+
     enum ContentUpdateKind: String {
         case ghost
         case balloon
@@ -56,6 +72,7 @@ final class UtataneSettingsStore: ObservableObject {
         case content
         case ghost
         case talkAndBalloon
+        case voice
         case shiori
         case network
         case advanced
@@ -79,6 +96,11 @@ final class UtataneSettingsStore: ObservableObject {
         static let characterDelayMilliseconds = "talk.characterDelayMilliseconds"
         static let randomTalkIntervalMinutes = "talk.randomTalkIntervalMinutes"
         static let dialogueDismissalSeconds = "balloon.dialogueDismissalSeconds"
+        static let speechSynthesisEnabled = "speech.synthesisEnabled"
+        static let speechRecognitionEnabled = "speech.recognitionEnabled"
+        static let speechRecognitionLocaleIdentifier = "speech.recognitionLocaleIdentifier"
+        static let prefersOnDeviceSpeechRecognition = "speech.prefersOnDeviceRecognition"
+        static let speechVoiceSettings = "speech.voiceSettings"
         static let shellScalePercent = "display.shellScalePercent"
         static let automaticallyFitsLargeSurfaces = "display.automaticallyFitsLargeSurfaces"
         static let balloonScalePercent = "display.balloonScalePercent"
@@ -183,6 +205,31 @@ final class UtataneSettingsStore: ObservableObject {
 
     @Published var dialogueDismissalSeconds: Int {
         didSet { defaults.set(dialogueDismissalSeconds, forKey: Key.dialogueDismissalSeconds) }
+    }
+
+    @Published var speechSynthesisEnabled: Bool {
+        didSet { defaults.set(speechSynthesisEnabled, forKey: Key.speechSynthesisEnabled) }
+    }
+
+    @Published var speechRecognitionEnabled: Bool {
+        didSet { defaults.set(speechRecognitionEnabled, forKey: Key.speechRecognitionEnabled) }
+    }
+
+    @Published var speechRecognitionLocaleIdentifier: String {
+        didSet { defaults.set(speechRecognitionLocaleIdentifier, forKey: Key.speechRecognitionLocaleIdentifier) }
+    }
+
+    @Published var prefersOnDeviceSpeechRecognition: Bool {
+        didSet {
+            defaults.set(prefersOnDeviceSpeechRecognition, forKey: Key.prefersOnDeviceSpeechRecognition)
+        }
+    }
+
+    @Published private(set) var speechVoiceSettingsByScope: [Int: SpeechVoiceSettings] {
+        didSet {
+            guard let data = try? JSONEncoder().encode(speechVoiceSettingsByScope) else { return }
+            defaults.set(data, forKey: Key.speechVoiceSettings)
+        }
     }
 
     @Published var shellScalePercent: Int {
@@ -331,6 +378,21 @@ final class UtataneSettingsStore: ObservableObject {
             defaults.integer(forKey: Key.dialogueDismissalSeconds),
             fallback: 10
         )
+        speechSynthesisEnabled = defaults.bool(forKey: Key.speechSynthesisEnabled)
+        speechRecognitionEnabled = defaults.bool(forKey: Key.speechRecognitionEnabled)
+        speechRecognitionLocaleIdentifier = defaults.string(
+            forKey: Key.speechRecognitionLocaleIdentifier
+        ) ?? Self.defaultSpeechRecognitionLocaleIdentifier
+        prefersOnDeviceSpeechRecognition = defaults.object(
+            forKey: Key.prefersOnDeviceSpeechRecognition
+        ) as? Bool ?? true
+        if let data = defaults.data(forKey: Key.speechVoiceSettings),
+           let settings = try? JSONDecoder().decode([Int: SpeechVoiceSettings].self, from: data)
+        {
+            speechVoiceSettingsByScope = settings
+        } else {
+            speechVoiceSettingsByScope = [0: SpeechVoiceSettings(), 1: SpeechVoiceSettings()]
+        }
         shellScalePercent = 100
         automaticallyFitsLargeSurfaces = true
         balloonScalePercent = 100
@@ -356,11 +418,28 @@ final class UtataneSettingsStore: ObservableObject {
         Self.apply(appLanguage, to: defaults)
     }
 
+    func speechVoiceSettings(for scope: Int) -> SpeechVoiceSettings {
+        speechVoiceSettingsByScope[scope] ?? SpeechVoiceSettings()
+    }
+
+    func setSpeechVoiceSettings(_ settings: SpeechVoiceSettings, for scope: Int) {
+        speechVoiceSettingsByScope[scope] = settings
+    }
+
     private static func apply(_ language: AppLanguage, to defaults: UserDefaults) {
         if let languageCode = language.languageCode {
             defaults.set([languageCode], forKey: "AppleLanguages")
         } else {
             defaults.removeObject(forKey: "AppleLanguages")
+        }
+    }
+
+    private static var defaultSpeechRecognitionLocaleIdentifier: String {
+        switch Locale.current.language.languageCode?.identifier {
+        case "en": "en-US"
+        case "zh": Locale.current.scriptCode == "Hant" ? "zh-TW" : "zh-CN"
+        case "ko": "ko-KR"
+        default: "ja-JP"
         }
     }
 
@@ -703,6 +782,49 @@ struct UtataneSettingsView: View {
             .tag(UtataneSettingsStore.Pane.talkAndBalloon)
 
             SettingsPage(
+                title: "音声",
+                description: "macOS標準の音声合成と音声認識を設定する。"
+            ) {
+                Section("音声合成") {
+                    Toggle("ゴーストの発話を読み上げる", isOn: $settings.speechSynthesisEnabled)
+                    ForEach([0, 1], id: \.self) { scope in
+                        SpeechVoiceSettingsEditor(
+                            title: scope == 0 ? "本体（スコープ0）" : "相方（スコープ1）",
+                            voices: MacOSSpeechSynthesizer.availableVoices,
+                            settings: Binding(
+                                get: { settings.speechVoiceSettings(for: scope) },
+                                set: { settings.setSpeechVoiceSettings($0, for: scope) }
+                            )
+                        )
+                    }
+                    Text("SakuraScriptの\\__v[disable]と\\__v[alternate,...]にも対応する。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section("音声認識") {
+                    Toggle("マイクから音声を認識する", isOn: $settings.speechRecognitionEnabled)
+                    Picker("認識言語", selection: $settings.speechRecognitionLocaleIdentifier) {
+                        Text("日本語").tag("ja-JP")
+                        Text("English (US)").tag("en-US")
+                        Text("English (UK)").tag("en-GB")
+                        Text("简体中文").tag("zh-CN")
+                        Text("繁體中文").tag("zh-TW")
+                        Text("한국어").tag("ko-KR")
+                    }
+                    Toggle(
+                        "利用できる場合はデバイス上で認識",
+                        isOn: $settings.prefersOnDeviceSpeechRecognition
+                    )
+                    Text("初回にマイクと音声認識の許可を求める。確定した認識結果だけをゴーストへ通知する。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .tabItem { Label("音声", systemImage: "waveform") }
+            .tag(UtataneSettingsStore.Pane.voice)
+
+            SettingsPage(
                 title: "SHIORI対応状況",
                 description: "Utataneが認識するSHIORIの実行方式を確認する。"
             ) {
@@ -872,6 +994,41 @@ struct UtataneSettingsView: View {
         case .rss: "RSS / Atom"
         case .legacyDLL:
             ConfigHeadlineSensor.canLoad(headline) ? "HEADLINE設定" : "HEADLINE DLL（Wine）"
+        }
+    }
+}
+
+private struct SpeechVoiceSettingsEditor: View {
+    let title: String
+    let voices: [SpeechSynthesisVoice]
+    @Binding var settings: UtataneSettingsStore.SpeechVoiceSettings
+
+    var body: some View {
+        GroupBox(title) {
+            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
+                GridRow {
+                    Text("声")
+                    Picker("", selection: $settings.voiceIdentifier) {
+                        Text("システム標準").tag("")
+                        ForEach(voices) { voice in
+                            Text("\(voice.name) — \(voice.language)").tag(voice.identifier)
+                        }
+                    }
+                    .labelsHidden()
+                }
+                GridRow {
+                    Text("速さ")
+                    Slider(value: $settings.rate, in: 0.1 ... 1)
+                }
+                GridRow {
+                    Text("音量")
+                    Slider(value: $settings.volume, in: 0 ... 1)
+                }
+                GridRow {
+                    Text("高さ")
+                    Slider(value: $settings.pitch, in: 0.5 ... 2)
+                }
+            }
         }
     }
 }

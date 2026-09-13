@@ -124,7 +124,11 @@ let package = Package(
                 "UtataneSakuraScript",
                 "UtataneShell"
             ],
-            path: "platform-macos/Sources"
+            path: "platform-macos/Sources",
+            linkerSettings: [
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("Speech")
+            ]
         ),
         .target(
             name: "UtataneShiori",

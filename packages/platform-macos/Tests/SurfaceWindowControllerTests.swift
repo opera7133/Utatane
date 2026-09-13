@@ -2381,6 +2381,56 @@ func `speech history keeps its newest entries within capacity`() {
 
 @Test
 @MainActor
+func `speech synthesis follows scope and voice mode sections`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0001.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloonk0.png"))
+
+    let surfaces = SurfaceWindowController(positionStore: positionStore)
+    try surfaces.show(shell: ShellDefinition(directory: directory, surfaces: [:]), defaultSurfaceIDs: [0: 0, 1: 1])
+    defer { surfaces.resetContent() }
+    let balloons = BalloonWindowController(positionStore: positionStore)
+    defer { balloons.resetContent() }
+    let synthesizer = RecordingSpeechSynthesizer()
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaces,
+        balloonWindowController: balloons
+    )
+    player.configureSpeechSynthesis(synthesizer: synthesizer) { scope in
+        SpeechSynthesisConfiguration(voiceIdentifier: "voice-\(scope)", rate: 0.6)
+    }
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\0読む\__v[disable]読まない\__v\__v[alternate,だいたい]代替\__v\1相方\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+
+    #expect(synthesizer.requests.map(\.text) == ["読む", "だいたい", "相方"])
+    #expect(synthesizer.requests.map(\.scope) == [0, 0, 1])
+    #expect(synthesizer.requests.map(\.configuration.voiceIdentifier) == ["voice-0", "voice-0", "voice-1"])
+}
+
+@MainActor
+private final class RecordingSpeechSynthesizer: SpeechSynthesizing {
+    var requests: [SpeechSynthesisRequest] = []
+
+    func speak(_ request: SpeechSynthesisRequest) async throws {
+        requests.append(request)
+    }
+
+    func stop() {}
+}
+
+@Test
+@MainActor
 func `speech history updates the current entry while text is being displayed`() {
     let history = SpeechHistoryStore()
     var recorder = SpeechHistoryRecorder(

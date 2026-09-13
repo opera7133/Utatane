@@ -38,6 +38,8 @@ public final class SakuraScriptPlayer {
     private var interactionMode: SakuraScriptInteractionMode?
     private var speechHistoryStore: SpeechHistoryStore?
     private var speechHistoryContext: SpeechHistoryContext?
+    private var speechSynthesizer: (any SpeechSynthesizing)?
+    private var speechSynthesisConfiguration: ((Int) -> SpeechSynthesisConfiguration?)?
 
     public private(set) var isTimeCritical = false
 
@@ -80,6 +82,7 @@ public final class SakuraScriptPlayer {
     public var onOtherEvent: (@MainActor (String, String, [String], Bool) async -> Void)?
     public var onPluginEvent: (@MainActor (String, String, [String], Bool) async -> SakuraScript?)?
     public var onDialogueContent: (@MainActor () -> Void)?
+    public var onSpeechSynthesisActivity: (@MainActor (Bool) -> Void)?
     public var onSurfaceRestore: (@MainActor () -> Void)?
     public var onPlaybackFinished: (@MainActor () -> Void)?
 
@@ -91,12 +94,25 @@ public final class SakuraScriptPlayer {
         !isDialogueActive && interactionMode == nil
     }
 
+    public var isSpeechSynthesisEnabled: Bool {
+        speechSynthesizer != nil && speechSynthesisConfiguration != nil
+    }
+
     public func configureSpeechHistory(
         store: SpeechHistoryStore?,
         context: SpeechHistoryContext?
     ) {
         speechHistoryStore = store
         speechHistoryContext = context
+    }
+
+    public func configureSpeechSynthesis(
+        synthesizer: (any SpeechSynthesizing)?,
+        configuration: ((Int) -> SpeechSynthesisConfiguration?)?
+    ) {
+        speechSynthesizer?.stop()
+        speechSynthesizer = synthesizer
+        speechSynthesisConfiguration = configuration
     }
 
     public init(
@@ -323,6 +339,7 @@ public final class SakuraScriptPlayer {
         playbackTask?.cancel()
         dismissalTask?.cancel()
         surfaceRestoreTask?.cancel()
+        speechSynthesizer?.stop()
         playbackTask = nil
         dismissalTask = nil
         surfaceRestoreTask = nil
@@ -416,6 +433,7 @@ public final class SakuraScriptPlayer {
         var preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
         var isSerikoTalkEnabled = true
         var pendingSameLineRightTabByScope: [Int: Int] = [:]
+        var voiceMode = SakuraScriptVoiceMode.defaultValue
 
         func appendStyleRun(scope: Int, location: Int, length: Int) {
             guard length > 0 else { return }
@@ -629,6 +647,34 @@ public final class SakuraScriptPlayer {
                         }
                     }
                     fastForwardRequested = false
+                    if let speechSynthesizer,
+                       let configuration = speechSynthesisConfiguration?(scope)
+                    {
+                        let spokenText: String? = switch voiceMode {
+                        case .defaultValue: text
+                        case .disabled: nil
+                        case let .alternate(alternate): alternate
+                        }
+                        if let spokenText,
+                           !spokenText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        {
+                            onSpeechSynthesisActivity?(true)
+                            defer { onSpeechSynthesisActivity?(false) }
+                            do {
+                                try await speechSynthesizer.speak(SpeechSynthesisRequest(
+                                    text: spokenText,
+                                    scope: scope,
+                                    configuration: configuration
+                                ))
+                            } catch SpeechServiceError.synthesisCancelled {
+                                guard !Task.isCancelled else { return }
+                            } catch is CancellationError {
+                                return
+                            } catch {
+                                onError?(error)
+                            }
+                        }
+                    }
                 case let .scope(newScope):
                     if newScope != scope, talkingScopes.remove(scope) != nil {
                         await surfaceWindowController.playIntervalAnimationAndWait("endtalk", scope: scope)
@@ -1109,6 +1155,7 @@ public final class SakuraScriptPlayer {
                     isQuickSection = enabled ?? !isQuickSection
                 case let .voiceMode(mode):
                     speechHistoryRecorder?.setMode(mode)
+                    voiceMode = mode
                 case let .synchronizeScopes(scopes):
                     if let scopes {
                         synchronizedScopes = Set(scopes)
