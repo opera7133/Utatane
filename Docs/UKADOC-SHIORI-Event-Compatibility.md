@@ -283,11 +283,12 @@ SSP 2.8.93で追加された`OnWindowModeChange`は、上記の2026-09-04時点�
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
+| [`OnScheduleTodayNotify`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnScheduleTodayNotify) | 🟡 | 通知経路の実動確認 | 低 | 予定の追加・編集・削除・取り込みや日付変更で「今日の予定」が変化した時、全起動ゴーストへNOTIFY。Reference0以降はtype/caption/subtitle/script/開始/終了をバイト値1区切り・末尾区切り付きで格納 |
 | [`OnSchedule5MinutesToGo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedule5MinutesToGo) | 🟡 | 通知経路の実動確認 | 低 | 時刻指定予定の5分前にReference0〜3へtype/caption/subtitle/scriptを通知。アプリが停止中だった期間の追跡はしない |
 | [`OnScheduleRead`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnScheduleRead) | 🟡 | 通知経路の実動確認 | 低 | カレンダー詳細の「予定を読む」からReference0〜3を通知。スキンアイコンのホバー読み上げは未実装 |
-| [`OnSchedulesenseBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseBegin) | 🟡 | 通知経路の実動確認 | 低 | 内蔵iCalendarセンサの読み込み開始時にReference0へファイル名を通知。外部calendar pluginは未対応 |
+| [`OnSchedulesenseBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseBegin) | 🟡 | 通知経路の実動確認 | 低 | 内蔵iCalendarセンサの読み込み開始時にReference0へファイル名、Reference1へURLを全起動ゴーストへ通知。外部calendar pluginは未対応 |
 | [`OnSchedulesenseComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseComplete) | 🟡 | 通知経路の実動確認 | 低 | iCalendar読み込み完了時にReference0へ名前、Reference1へ件数を通知 |
-| [`OnSchedulesenseFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseFailure) | 🟡 | 通知経路の実動確認 | 低 | iCalendarの解析・ファイル入出力失敗時にcan't analyzeまたはfileioをReference0へ通知 |
+| [`OnSchedulesenseFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseFailure) | 🟡 | 通知経路の実動確認 | 低 | iCalendarの解析・ファイル入出力失敗時にcan't analyzeまたはcan't downloadをReference0、センサ名をReference1へ全起動ゴーストへ通知 |
 | [`OnSchedulepostBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulepostBegin) | 🟡 | 通知経路の実動確認 | 低 | iCalendar書き出し開始時にReference0=iCalendarで通知 |
 | [`OnSchedulepostComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulepostComplete) | 🟡 | 通知経路の実動確認 | 低 | iCalendar書き出し成功時にReference0=iCalendarで通知。キャンセル・失敗時は完了イベントを発行しない |
 

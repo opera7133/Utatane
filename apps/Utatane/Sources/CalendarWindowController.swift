@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 import UtataneCore
+import UtatanePlatformMacOS
 
 struct UtataneSchedule: Codable, Identifiable, Equatable {
     enum Repetition: String, Codable, CaseIterable, Identifiable {
@@ -43,10 +44,12 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
 
     var onRead: ((UtataneSchedule, String) -> Void)?
     var onCalendarEvent: ((String, [Int: String]) -> Void)?
+    var onTodaySchedulesChange: (([Int: String]) -> Void)?
 
     private let storeURL: URL
     private let skinDirectories: [URL]
     private var notifiedOccurrences = Set<String>()
+    private var todayScheduleSnapshot: [Int: String] = [:]
 
     init(storeURL: URL, skinDirectories: [URL] = []) {
         self.storeURL = storeURL
@@ -55,6 +58,7 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
         selectedSkinID = UserDefaults.standard.string(forKey: "UtataneCalendarSkin")
         super.init(window: nil)
         load()
+        todayScheduleSnapshot = todayScheduleReferences(at: Date())
     }
 
     @available(*, unavailable)
@@ -143,7 +147,7 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
 
     func importICalendar(from url: URL) {
         let sensorName = url.deletingPathExtension().lastPathComponent
-        onCalendarEvent?("OnSchedulesenseBegin", [0: sensorName])
+        onCalendarEvent?("OnSchedulesenseBegin", [0: sensorName, 1: url.absoluteString])
         do {
             let source = try String(contentsOf: url, encoding: .utf8)
             let imported = try ICalendarCodec().decode(source)
@@ -151,7 +155,10 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
             save()
             onCalendarEvent?("OnSchedulesenseComplete", [0: sensorName, 1: String(imported.count)])
         } catch {
-            onCalendarEvent?("OnSchedulesenseFailure", [0: error is CocoaError ? "fileio" : "can't analyze"])
+            onCalendarEvent?("OnSchedulesenseFailure", [
+                0: error is CocoaError ? "can't download" : "can't analyze",
+                1: sensorName
+            ])
         }
     }
 
@@ -183,6 +190,13 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
         }
     }
 
+    func checkTodayScheduleChanges(at date: Date, calendar: Calendar = .current) {
+        let references = todayScheduleReferences(at: date, calendar: calendar)
+        guard references != todayScheduleSnapshot else { return }
+        todayScheduleSnapshot = references
+        onTodaySchedulesChange?(references)
+    }
+
     private func occurs(_ schedule: UtataneSchedule, on date: Date, calendar: Calendar) -> Bool {
         let candidate = calendar.dateComponents([.year, .month, .day, .weekday], from: date)
         let origin = calendar.dateComponents([.year, .month, .day, .weekday], from: schedule.start)
@@ -202,6 +216,23 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
         return calendar.date(bySettingHour: time.hour ?? 0, minute: time.minute ?? 0, second: time.second ?? 0, of: date)
     }
 
+    private func todayScheduleReferences(at date: Date, calendar: Calendar = .current) -> [Int: String] {
+        let items = schedules(on: date, calendar: calendar).compactMap { schedule -> ScheduleTodayNotificationItem? in
+            guard let start = occurrenceStart(for: schedule, around: date, calendar: calendar) else { return nil }
+            let duration = schedule.end.timeIntervalSince(schedule.start)
+            return ScheduleTodayNotificationItem(
+                type: schedule.type,
+                caption: schedule.caption,
+                subtitle: schedule.subtitle,
+                script: schedule.script,
+                start: start,
+                end: duration > 0 ? start.addingTimeInterval(duration) : nil,
+                isAllDay: schedule.isAllDay
+            )
+        }
+        return ScheduleTodayNotificationFormatter.references(for: items, calendar: calendar)
+    }
+
     private func load() {
         guard let data = try? Data(contentsOf: storeURL),
               let decoded = try? JSONDecoder().decode([UtataneSchedule].self, from: data)
@@ -217,6 +248,7 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
         } catch {
             AppLogStore.shared.error("カレンダーの保存に失敗しました: \(error.localizedDescription)", category: "Calendar")
         }
+        checkTodayScheduleChanges(at: Date())
     }
 }
 

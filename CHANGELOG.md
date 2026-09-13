@@ -5,6 +5,7 @@
 ### 追加
 
 - SSP 2.8.93互換として、起動時とウィンドウモード切り替え時の`OnWindowModeChange`、切り替え後の`OnDisplayChange`、現在の表示方式をnormal・shared・perghostで返す`baseware.windowmode`プロパティに対応
+- カレンダーの「今日の予定」が編集・取り込み・日付変更で変化した時、起動中の全ゴーストへ`OnScheduleTodayNotify`を通知
 
 ## [0.2.1] - 2026-09-12
 

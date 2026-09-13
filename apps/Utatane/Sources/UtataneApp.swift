@@ -422,7 +422,10 @@ private struct UtataneRootView: View {
                 readSchedule(schedule, eventID: eventID)
             }
             calendarWindowController.onCalendarEvent = { eventID, references in
-                sendEvent(.shiori(id: eventID, references: references))
+                broadcastEvent(.shiori(id: eventID, references: references))
+            }
+            calendarWindowController.onTodaySchedulesChange = { references in
+                broadcastEvent(.notification(id: "OnScheduleTodayNotify", references: references))
             }
             applyAppearance()
             gamepadMonitor.onEvent = { id, references in
@@ -1312,6 +1315,7 @@ private struct UtataneRootView: View {
     }
 
     private func sendClockEvents(at date: Date) {
+        calendarWindowController.checkTodayScheduleChanges(at: date)
         let components = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute], from: date)
         defer { lastClockMinute = components }
         guard let previous = lastClockMinute else { return }
