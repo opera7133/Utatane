@@ -332,5 +332,10 @@
   "発話履歴" : "Speech History",
   "発話履歴をウィンドウ内に表示" : "Show Speech History in Window",
   "履歴を消去" : "Clear History",
-  "発話履歴はまだありません" : "No speech history yet"
+  "発話履歴はまだありません" : "No speech history yet",
+  "エクスプローラ" : "Content Explorer",
+  "検索" : "Search",
+  "使用中" : "In Use",
+  "配布元" : "Distribution Site",
+  "一覧からコンテンツを選ぶと詳細を表示する。" : "Select content from the list to view its details."
 }

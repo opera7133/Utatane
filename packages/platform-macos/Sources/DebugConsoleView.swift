@@ -37,11 +37,11 @@ public struct DeveloperSurfaceTestItem: Identifiable, Sendable, Equatable {
 }
 
 public struct DebugConsoleView: View {
-    private enum Pane: String, CaseIterable, Identifiable {
+    public enum Pane: String, CaseIterable, Identifiable {
         case logs = "ログ"
         case tools = "開発ツール"
 
-        var id: String {
+        public var id: String {
             rawValue
         }
     }
@@ -70,6 +70,7 @@ public struct DebugConsoleView: View {
 
     private let model: GhostListModel
     @Binding private var selectedGhostID: URL?
+    @Binding private var pane: Pane
     private let lastClickedRegion: String?
     private let isSessionAvailable: Bool
     private let isReloadDisabled: Bool
@@ -89,21 +90,22 @@ public struct DebugConsoleView: View {
     private let serikoInspectorSnapshots: @MainActor () -> [SERIKOInspectorSnapshot]
 
     @ObservedObject private var logStore: AppLogStore
-    @State private var levelFilter: LevelFilter = .all
+    @Binding private var levelFilter: LevelFilter
     @State private var selectedCategory: String = "すべて"
     @State private var searchText = ""
     @State private var selectedEntryID: UUID?
     @State private var isCopiedNotification = false
-    @State private var pane: Pane = .logs
     @State private var scriptInput = #"\0テスト\e"#
-    @State private var showsCollisions = false
-    @State private var showsCollisionNames = true
+    @State private var showsCollisions: Bool
+    @State private var showsCollisionNames: Bool
     @State private var testScope = 0
     @State private var selectedSurfaceID: Int?
 
     public init(
         model: GhostListModel,
         selectedGhostID: Binding<URL?>,
+        pane: Binding<Pane>,
+        levelFilter: Binding<LevelFilter>,
         lastClickedRegion: String?,
         isSessionAvailable: Bool,
         isReloadDisabled: Bool,
@@ -114,6 +116,8 @@ public struct DebugConsoleView: View {
         onInstallNar: @escaping () -> Void,
         onPlaySlowAnimation: @escaping () -> Void,
         onExecuteScript: @escaping (String) -> Void,
+        showsCollisions: Bool,
+        showsCollisionNames: Bool,
         onSetCollisionMode: @escaping (Bool, Bool) -> Void,
         onShowBalloonTest: @escaping () -> Void,
         onCheckForUpdates: @escaping () -> Void,
@@ -125,6 +129,8 @@ public struct DebugConsoleView: View {
     ) {
         self.model = model
         _selectedGhostID = selectedGhostID
+        _pane = pane
+        _levelFilter = levelFilter
         self.lastClickedRegion = lastClickedRegion
         self.isSessionAvailable = isSessionAvailable
         self.isReloadDisabled = isReloadDisabled
@@ -135,6 +141,8 @@ public struct DebugConsoleView: View {
         self.onInstallNar = onInstallNar
         self.onPlaySlowAnimation = onPlaySlowAnimation
         self.onExecuteScript = onExecuteScript
+        _showsCollisions = State(initialValue: showsCollisions)
+        _showsCollisionNames = State(initialValue: showsCollisionNames)
         self.onSetCollisionMode = onSetCollisionMode
         self.onShowBalloonTest = onShowBalloonTest
         self.onCheckForUpdates = onCheckForUpdates

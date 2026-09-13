@@ -165,10 +165,10 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\![open,inputbox,...]` | 🟡 | ID、timeout、初期値を解析し、入力値を指定されたIDのSHIORIイベントへ `Reference0` として返す。timeoutの実動作と全オプションは未対応 |
 | password/date/slider/time/ip input | 🟡 | inputbox互換の入力プロンプトとして受付 |
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
-| configuration / 各explorer / graph / calendar | 🟡 | `\![open,configurationdialog]` でUtataneの設定画面オープンに対応。各explorer等は未実装 |
+| configuration / 各explorer / graph / calendar | 🟡 | `\![open,configurationdialog]`で設定画面、`ghostexplorer`／`shellexplorer`／`balloonexplorer`／`headlinesensorexplorer`／`pluginexplorer`で共通コンテンツエクスプローラ、`calendar`でカレンダーを開く。graphとdressup explorerは未実装 |
 | help / messenger / readme / terms / file | 🟡 | `\![open,readme]`、`\![open,help]`、`\![open,file,パス]`、`\![open,folder,パス]` に対応。該当ドキュメントやファイルを外部アプリ／Finderで開く |
 | open/save/folder/color dialog、close dialog | 🟡 | `open` / `save` / `folder` / `color` とID指定・全ダイアログのcloseに対応。title、dir、filter、ext、name、color、idを受け取り、結果を `OnSystemDialog` / `OnSystemDialogCancel` または指定イベントへ通知。filterは拡張子ワイルドカードのみ、実UIは未確認 |
-| surfacetest / aigraph / developer / shiorirequest / errorlog | ❌ | 開発UI未実装 |
+| surfacetest / aigraph / developer / shiorirequest / errorlog | 🟡 | `developer`／`surfacetest`で開発用パレット、`errorlog`でエラー絞り込み済みログを開く。aigraphとSHIORI Request手動送信は未実装 |
 | `\![open,backlogviewer]` | ✅ | 通常・呼び出しゴーストとも対象ゴーストの発話履歴を開く。ウィンドウモードでは設定に応じて下部へ統合表示 |
 | dressup / picture / archive | ❌ | 未実装 |
 

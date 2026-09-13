@@ -33,6 +33,7 @@ import UtataneYuhnaNative
 private extension Notification.Name {
     static let showUtataneGhostPicker = Notification.Name("dev.utatane.showGhostPicker")
     static let showUtataneCalendar = Notification.Name("dev.utatane.showCalendar")
+    static let showUtataneContentExplorer = Notification.Name("dev.utatane.showContentExplorer")
     static let restoreUtataneSurfaces = Notification.Name("dev.utatane.restoreSurfaces")
     static let showUtataneSpeechHistory = Notification.Name("dev.utatane.showSpeechHistory")
 }
@@ -171,6 +172,10 @@ struct UtataneApp: App {
                 CheckForUpdatesView(updater: updaterController.updater)
             }
             CommandMenu("操作") {
+                Button("エクスプローラ") {
+                    NotificationCenter.default.post(name: .showUtataneContentExplorer, object: nil)
+                }
+                .keyboardShortcut("e", modifiers: .command)
                 Button("カレンダー") {
                     NotificationCenter.default.post(name: .showUtataneCalendar, object: nil)
                 }
@@ -283,12 +288,15 @@ private struct UtataneRootView: View {
     private let pluginRuntime = PluginRuntime()
     @State private var isUpdatingContent = false
     @State private var debugWindow: NSWindow?
+    @State private var developerPalettePane: DebugConsoleView.Pane = .logs
+    @State private var developerLogLevelFilter: DebugConsoleView.LevelFilter = .all
     @State private var showsOnboarding = false
     @State private var calledGhosts: [URL: CalledGhostRuntime] = [:]
     @State private var sstpCookies: [String: [String: String]] = [:]
     @State private var sstpQuietUntil: Date?
     @State private var activeSSTPScripts: [URL: String] = [:]
     @State private var contentPickerController = ContentPickerWindowController()
+    @State private var contentExplorerController = ContentExplorerWindowController()
     @State private var textInputWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
     private let networkStatusMonitor = NetworkStatusMonitor()
@@ -341,6 +349,8 @@ private struct UtataneRootView: View {
                 DebugConsoleView(
                     model: model,
                     selectedGhostID: $selectedGhostID,
+                    pane: $developerPalettePane,
+                    levelFilter: $developerLogLevelFilter,
                     lastClickedRegion: lastClickedRegion,
                     isSessionAvailable: session != nil,
                     isReloadDisabled: currentGhost == nil || isTransitioningGhost,
@@ -359,6 +369,8 @@ private struct UtataneRootView: View {
                         guard let balloon else { return }
                         scriptPlayer.play(SakuraScript(rawValue: source), balloon: balloon)
                     },
+                    showsCollisions: surfaceWindowController.isCollisionModeEnabled,
+                    showsCollisionNames: surfaceWindowController.showsCollisionNames,
                     onSetCollisionMode: { enabled, showsNames in
                         surfaceWindowController.setCollisionMode(enabled, showsNames: showsNames)
                     },
@@ -462,6 +474,9 @@ private struct UtataneRootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .showUtataneCalendar)) { _ in
             calendarWindowController.showCalendar()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .showUtataneContentExplorer)) { _ in
+            showContentExplorer()
         }
         .onReceive(NotificationCenter.default.publisher(for: .restoreUtataneSurfaces)) { _ in
             surfaceWindowController.restoreSurfaces()
@@ -2913,6 +2928,28 @@ private struct UtataneRootView: View {
             } else if let balloon {
                 select(balloon: balloon)
             }
+        case let .openContentExplorer(target):
+            let kind: ContentExplorerKind? = switch target.lowercased() {
+            case "ghostexplorer": .ghost
+            case "shellexplorer": .shell
+            case "balloonexplorer": .balloon
+            case "headlinesensorexplorer": .headline
+            case "pluginexplorer": .plugin
+            default: nil
+            }
+            showContentExplorer(preferredKind: kind)
+        case let .openDeveloperTool(target):
+            switch target.lowercased() {
+            case "errorlog":
+                developerPalettePane = .logs
+                developerLogLevelFilter = .errorOnly
+            case "developer", "surfacetest":
+                developerPalettePane = .tools
+            default:
+                return
+            }
+            networkSettings.showsDebugWindow = true
+            updateDebugWindowVisibility(bringForward: true)
         case .openConfigurationDialog:
             openSettings()
         case .openReadme:
@@ -3244,6 +3281,7 @@ private struct UtataneRootView: View {
     }
 
     private func configureContextMenu() {
+        refreshContentExplorer()
         surfaceWindowController.onUserDressupChange = { changes in
             Task { await scriptPlayer.notifyDressupChanges(changes, source: "user") }
         }
@@ -3426,6 +3464,10 @@ private struct UtataneRootView: View {
                 .action(
                     title: String(localized: "リアルタイム音声会話…"),
                     handler: showRealtimeVoice
+                ),
+                .action(
+                    title: String(localized: "エクスプローラ"),
+                    handler: { showContentExplorer() }
                 ),
                 .action(
                     title: String(localized: "ランダムトーク"),
@@ -5096,6 +5138,143 @@ private struct UtataneRootView: View {
                 updateDebugWindowVisibility()
             } catch {
                 showError(error.localizedDescription)
+            }
+        }
+    }
+
+    private func showContentExplorer(preferredKind: ContentExplorerKind? = nil) {
+        contentExplorerController.show(
+            entries: contentExplorerEntries(),
+            preferredKind: preferredKind,
+            onActivate: activateContentExplorerEntry
+        )
+    }
+
+    private func refreshContentExplorer() {
+        guard contentExplorerController.isVisible else { return }
+        contentExplorerController.update(entries: contentExplorerEntries())
+    }
+
+    private func contentExplorerEntries() -> [ContentExplorerEntry] {
+        var entries: [ContentExplorerEntry] = []
+
+        for ghost in model.ghosts {
+            let isActive = currentGhost?.id == ghost.id || calledGhosts[ghost.id] != nil
+            entries.append(ContentExplorerEntry(
+                kind: .ghost,
+                name: ghost.name,
+                detail: ghost.rootDirectory.lastPathComponent,
+                directory: ghost.rootDirectory,
+                readmeURL: ghostReadme(ghost)?.url,
+                homeURL: ContentNetworkUpdater.homeURL(in: ghost.rootDirectory),
+                isActive: isActive
+            ))
+            for shell in ghost.shells {
+                let readme = ReadmeResolver().resolve(
+                    contentDirectory: shell.directory,
+                    descriptorURL: shell.directory.appending(path: "descript.txt")
+                )
+                entries.append(ContentExplorerEntry(
+                    kind: .shell,
+                    name: shell.name,
+                    detail: ghost.name,
+                    directory: shell.directory,
+                    parentDirectory: ghost.rootDirectory,
+                    readmeURL: readme?.url,
+                    homeURL: ContentNetworkUpdater.homeURL(in: shell.directory),
+                    isActive: currentGhost?.id == ghost.id && selectedShell?.id == shell.id
+                ))
+            }
+        }
+
+        entries.append(contentsOf: installedBalloons.map { installedBalloon in
+            let readme = ReadmeResolver().resolve(
+                contentDirectory: installedBalloon.directory,
+                descriptorURL: installedBalloon.directory.appending(path: "descript.txt")
+            )
+            return ContentExplorerEntry(
+                kind: .balloon,
+                name: installedBalloon.name,
+                detail: installedBalloon.directory.lastPathComponent,
+                directory: installedBalloon.directory,
+                readmeURL: readme?.url,
+                homeURL: ContentNetworkUpdater.homeURL(in: installedBalloon.directory),
+                isActive: balloon?.directory == installedBalloon.directory
+            )
+        })
+
+        entries.append(contentsOf: installedHeadlines.map { headline in
+            ContentExplorerEntry(
+                kind: .headline,
+                name: headline.name,
+                detail: headline.id.lastPathComponent,
+                directory: headline.id,
+                readmeURL: headline.readmeURL,
+                homeURL: headline.openURL ?? headline.siteURL
+            )
+        })
+
+        entries.append(contentsOf: installedPlugins.map { plugin in
+            ContentExplorerEntry(
+                kind: .plugin,
+                name: plugin.name,
+                detail: plugin.author ?? plugin.id,
+                directory: plugin.directory,
+                readmeURL: plugin.readmeURL,
+                homeURL: plugin.homeURL ?? plugin.authorURL,
+                canActivate: isNativePlugin(plugin)
+            )
+        })
+
+        return entries.sorted { lhs, rhs in
+            if lhs.kind != rhs.kind {
+                let lhsIndex = ContentExplorerKind.allCases.firstIndex(of: lhs.kind) ?? 0
+                let rhsIndex = ContentExplorerKind.allCases.firstIndex(of: rhs.kind) ?? 0
+                return lhsIndex < rhsIndex
+            }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
+    }
+
+    private func activateContentExplorerEntry(_ entry: ContentExplorerEntry) {
+        switch entry.kind {
+        case .ghost:
+            selectedGhostID = entry.directory
+        case .shell:
+            guard let ghost = model.ghosts.first(where: { $0.id == entry.parentDirectory }),
+                  let shell = ghost.shells.first(where: { $0.id == entry.directory })
+            else { return }
+            if currentGhost?.id == ghost.id {
+                select(shell: shell)
+            } else {
+                selectionStore.setShellDirectoryName(shell.directory.lastPathComponent, for: ghost.id)
+                selectedGhostID = ghost.id
+            }
+        case .balloon:
+            guard let selectedBalloon = installedBalloons.first(where: {
+                $0.directory == entry.directory
+            }) else { return }
+            select(balloon: selectedBalloon)
+        case .headline:
+            guard let headline = installedHeadlines.first(where: { $0.id == entry.directory }) else { return }
+            Task {
+                switch headline.kind {
+                case let .rss(feedURL): await fetchRSS(url: feedURL)
+                case .legacyDLL: await fetchLegacyHeadline(headline)
+                }
+            }
+        case .plugin:
+            guard let plugin = installedPlugins.first(where: { $0.directory == entry.directory }) else { return }
+            Task {
+                let script = await invokePlugin(
+                    target: plugin.id,
+                    event: "OnMenuExec",
+                    arguments: pluginMenuReferences(),
+                    reflectsResponse: true
+                )
+                if let script, let balloon {
+                    scriptPlayer.play(script, balloon: balloon)
+                }
             }
         }
     }

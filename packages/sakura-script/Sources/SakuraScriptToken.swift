@@ -292,6 +292,8 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case reloadGhost
     case reloadShell
     case reloadBalloon
+    case openContentExplorer(String)
+    case openDeveloperTool(String)
     case openConfigurationDialog
     case openReadme
     case openHelp

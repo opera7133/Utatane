@@ -221,6 +221,30 @@ func `parses the SSP backlog viewer command`() {
 }
 
 @Test
+func `parses SSP content explorer commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![open,ghostexplorer]\![open,shellexplorer]\![open,balloonexplorer]\![open,headlinesensorexplorer]\![open,pluginexplorer]"#
+    ) == [
+        .contentAction(.openContentExplorer("ghostexplorer")),
+        .contentAction(.openContentExplorer("shellexplorer")),
+        .contentAction(.openContentExplorer("balloonexplorer")),
+        .contentAction(.openContentExplorer("headlinesensorexplorer")),
+        .contentAction(.openContentExplorer("pluginexplorer"))
+    ])
+}
+
+@Test
+func `parses implemented SSP developer tool commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![open,developer]\![open,surfacetest]\![open,errorlog]"#
+    ) == [
+        .contentAction(.openDeveloperTool("developer")),
+        .contentAction(.openDeveloperTool("surfacetest")),
+        .contentAction(.openDeveloperTool("errorlog"))
+    ])
+}
+
+@Test
 func `parses environment variables and escaped percent`() {
     #expect(SakuraScriptParser().parse(#"%month/%day %selfnameと%keroname \%username %* %unknown"#) == [
         .environmentVariable("month"),

@@ -88,6 +88,14 @@ public final class SurfaceWindowController {
     private var stickyGroups: [Set<Int>] = []
     private var collisionMode = (enabled: false, showsNames: true)
 
+    public var isCollisionModeEnabled: Bool {
+        collisionMode.enabled
+    }
+
+    public var showsCollisionNames: Bool {
+        collisionMode.showsNames
+    }
+
     public var onMouseClick: (@MainActor (Int, String?) -> Void)?
     public var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
     public var onSurfaceChange: (@MainActor (Int, Int?, Int) -> Void)?

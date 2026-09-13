@@ -50,6 +50,19 @@ import UtataneShell
 }
 
 @MainActor
+@Test func `collision overlay state survives developer palette reconstruction`() {
+    let controller = SurfaceWindowController()
+
+    #expect(!controller.isCollisionModeEnabled)
+    #expect(controller.showsCollisionNames)
+
+    controller.setCollisionMode(true, showsNames: false)
+
+    #expect(controller.isCollisionModeEnabled)
+    #expect(!controller.showsCollisionNames)
+}
+
+@MainActor
 @Test func `renders all Emily Phase4 default characters`() throws {
     let repositoryRoot = URL(filePath: #filePath)
         .deletingLastPathComponent()
