@@ -255,6 +255,13 @@ private enum GhostContextMenuTarget {
     case called(CalledGhostRuntime)
 }
 
+private struct GhostSiteMenuResources {
+    var recommendations: [GhostSiteMenuEntry] = []
+    var portals: [GhostSiteMenuEntry] = []
+    var recommendationTitle: String?
+    var portalTitle: String?
+}
+
 private struct UtataneRootView: View {
     let model: GhostListModel
     let shellLoader: ShellLoader
@@ -266,6 +273,7 @@ private struct UtataneRootView: View {
     let speechHistoryWindowController: SpeechHistoryWindowController
     let selectionStore: ContentSelectionStore
     private let recentContentStore = RecentContentStore()
+    private let siteMenuParser = GhostSiteMenuParser()
     let sstpServer: SSTPServer
     let statusWindowController: StatusWindowController
     let alertController: ApplicationAlertController
@@ -300,6 +308,7 @@ private struct UtataneRootView: View {
     @State private var developerLogLevelFilter: DebugConsoleView.LevelFilter = .all
     @State private var showsOnboarding = false
     @State private var calledGhosts: [URL: CalledGhostRuntime] = [:]
+    @State private var siteMenuResources: [URL: GhostSiteMenuResources] = [:]
     @State private var sstpCookies: [String: [String: String]] = [:]
     @State private var sstpQuietUntil: Date?
     @State private var activeSSTPScripts: [URL: String] = [:]
@@ -1591,6 +1600,7 @@ private struct UtataneRootView: View {
         session = nil
         balloon = nil
         currentGhost = ghost
+        siteMenuResources[ghost.id] = GhostSiteMenuResources()
         mainPresentationSession.setTitle(ghost.name)
         mainPresentationSession.setIdentifier(ghost.id.path)
         teachHistory = []
@@ -2016,6 +2026,8 @@ private struct UtataneRootView: View {
             session = ghostSession
             configureContextMenu()
             _ = try? await ghostSession.start(event: .shiori(id: "OnInitialize", references: [:]))
+            siteMenuResources[ghost.id] = await loadSiteMenuResources(from: ghostSession)
+            configureContextMenu()
             let shellDefinition = try shellLoader.load(from: shellChoice.directory)
             for event in startupInformationEvents(
                 ghost: ghost,
@@ -3387,6 +3399,7 @@ private struct UtataneRootView: View {
 
     private func contextMenuItems(for target: GhostContextMenuTarget) -> [SurfaceContextMenuItem] {
         var items: [SurfaceContextMenuItem] = []
+        items.append(contentsOf: siteMenuItems(for: target))
         if case .primary = target {
             items.append(networkUpdateMenu())
         }
@@ -3421,6 +3434,134 @@ private struct UtataneRootView: View {
             handler: { NSApplication.shared.terminate(nil) }
         ))
         return items
+    }
+
+    private func siteMenuItems(for target: GhostContextMenuTarget) -> [SurfaceContextMenuItem] {
+        guard let ghost = menuGhost(for: target), let resources = siteMenuResources[ghost.id] else { return [] }
+        var items: [SurfaceContextMenuItem] = []
+        if !resources.recommendations.isEmpty {
+            items.append(siteMenu(
+                title: resources.recommendationTitle ?? String(localized: "おすすめ"),
+                entries: resources.recommendations,
+                kind: "recommend",
+                target: target
+            ))
+        }
+        if case .primary = target, !resources.portals.isEmpty {
+            items.append(siteMenu(
+                title: resources.portalTitle ?? String(localized: "ポータルサイト"),
+                entries: resources.portals,
+                kind: "portal",
+                target: target
+            ))
+        }
+        return items
+    }
+
+    private func siteMenu(
+        title: String,
+        entries: [GhostSiteMenuEntry],
+        kind: String,
+        target: GhostContextMenuTarget
+    ) -> SurfaceContextMenuItem {
+        .submenu(
+            title: title,
+            items: entries.enumerated().map { index, entry in
+                .action(
+                    title: entry.title,
+                    handler: { activate(entry, kind: kind, index: index, target: target) }
+                )
+            }
+        )
+    }
+
+    private func activate(
+        _ entry: GhostSiteMenuEntry,
+        kind: String,
+        index: Int,
+        target: GhostContextMenuTarget
+    ) {
+        let directScript: String?
+        if entry.target.lowercased().hasPrefix("script:") {
+            directScript = String(entry.target.dropFirst("script:".count))
+        } else {
+            directScript = nil
+            if let url = URL(string: entry.target), isWebURL(url) {
+                NSWorkspace.shared.open(url)
+            }
+        }
+        let references = [
+            0: entry.title,
+            1: entry.target,
+            2: entry.banner,
+            3: kind,
+            4: "0",
+            5: String(index)
+        ]
+        Task {
+            do {
+                switch target {
+                case .primary:
+                    guard let session, let balloon else { return }
+                    let response = try await session.response(for: .shiori(
+                        id: "OnRecommendsiteChoice",
+                        references: references
+                    ))
+                    if let script = response?.script {
+                        await scriptPlayer.playAndWait(script, balloon: balloon)
+                    }
+                    if let directScript, !directScript.isEmpty {
+                        await scriptPlayer.playAndWait(SakuraScript(rawValue: directScript), balloon: balloon)
+                    }
+                    if !entry.selectionScript.isEmpty {
+                        scriptPlayer.play(SakuraScript(rawValue: entry.selectionScript), balloon: balloon)
+                    }
+                case let .called(runtime):
+                    let response = try await runtime.session.response(for: .shiori(
+                        id: "OnRecommendsiteChoice",
+                        references: references
+                    ))
+                    if let script = response?.script {
+                        await runtime.player.playAndWait(script, balloon: runtime.balloon)
+                    }
+                    if let directScript, !directScript.isEmpty {
+                        await runtime.player.playAndWait(
+                            SakuraScript(rawValue: directScript),
+                            balloon: runtime.balloon
+                        )
+                    }
+                    if !entry.selectionScript.isEmpty {
+                        runtime.player.play(
+                            SakuraScript(rawValue: entry.selectionScript),
+                            balloon: runtime.balloon
+                        )
+                    }
+                }
+            } catch {
+                showError(error.localizedDescription)
+            }
+        }
+    }
+
+    private func loadSiteMenuResources(from session: GhostSession) async -> GhostSiteMenuResources {
+        let recommendations = await shioriResource("sakura.recommendsites", from: session)
+        let portals = await shioriResource("sakura.portalsites", from: session)
+        let recommendationTitle = await shioriResource("sakura.recommendbuttoncaption", from: session)
+        let portalTitle = await shioriResource("sakura.portalbuttoncaption", from: session)
+        return GhostSiteMenuResources(
+            recommendations: siteMenuParser.parse(recommendations),
+            portals: siteMenuParser.parse(portals),
+            recommendationTitle: recommendationTitle,
+            portalTitle: portalTitle
+        )
+    }
+
+    private func shioriResource(_ id: String, from session: GhostSession) async -> String? {
+        guard let response = try? await session.response(for: .shiori(id: id, references: [:])),
+              let value = response.script?.rawValue
+        else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private func configureContextMenu() {
@@ -4031,6 +4172,7 @@ private struct UtataneRootView: View {
                     caller: caller,
                     desktopWallpaperEvent: desktopWallpaperSampler.sample()?.initialEvent()
                 ) ?? ""
+                siteMenuResources[ghost.id] = await loadSiteMenuResources(from: runtime.session)
                 recentContentStore.record(
                     kind: .ghost,
                     identifier: ghost.rootDirectory.path,
