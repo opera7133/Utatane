@@ -3433,11 +3433,6 @@ private struct UtataneRootView: View {
         }
         items.append(functionMenu(for: target))
         items.append(settingsMenu(for: target))
-        items.append(.action(
-            title: String(localized: "アプリアップデートを確認…"),
-            isEnabled: appUpdater.canCheckForUpdates,
-            handler: { appUpdater.checkForUpdates() }
-        ))
         items.append(.separator)
         if case .primary = target {
             items.append(ghostSwitchMenu())
@@ -3456,6 +3451,7 @@ private struct UtataneRootView: View {
             items.append(recentContentMenu())
         }
         items.append(informationMenu(for: target))
+        items.append(languageMenu())
         items.append(.separator)
         items.append(closeGhostMenuItem(for: target))
         items.append(.action(
@@ -3758,6 +3754,11 @@ private struct UtataneRootView: View {
             .action(
                 title: String(localized: "エクスプローラ"),
                 handler: { showContentExplorer() }
+            ),
+            .action(
+                title: String(localized: "本体更新をチェック"),
+                isEnabled: appUpdater.canCheckForUpdates,
+                handler: { appUpdater.checkForUpdates() }
             )
         ]
         if case .primary = target {
@@ -3943,6 +3944,30 @@ private struct UtataneRootView: View {
                 .action(title: String(localized: "Utataneヘルプ"), handler: { UtataneHelp.open() })
             ]
         )
+    }
+
+    private func languageMenu() -> SurfaceContextMenuItem {
+        .submenu(
+            title: "Language",
+            items: UtataneSettingsStore.AppLanguage.allCases.map { language in
+                .action(
+                    title: languageMenuTitle(language),
+                    isSelected: networkSettings.appLanguage == language,
+                    handler: { networkSettings.appLanguage = language }
+                )
+            }
+        )
+    }
+
+    private func languageMenuTitle(_ language: UtataneSettingsStore.AppLanguage) -> String {
+        switch language {
+        case .system: String(localized: "システム設定に合わせる")
+        case .ja: String(localized: "日本語")
+        case .en: String(localized: "英語")
+        case .zhHans: String(localized: "中国語（簡体字）")
+        case .zhHant: String(localized: "中国語（繁体字）")
+        case .ko: String(localized: "韓国語")
+        }
     }
 
     private func ghostSwitchMenu() -> SurfaceContextMenuItem {

@@ -113,6 +113,7 @@
   "アップデートを確認…" : "Check for Updates…",
   "アップデートを自動的にダウンロード" : "Automatically download updates",
   "アプリアップデートを確認…" : "Check for Updates…",
+  "本体更新をチェック" : "Check for Application Updates",
   "アプリ内リソースが見つからない: %@" : "App resource not found: %@",
   "イベント処理エラー: %@" : "Event handling error: %@",
   "インストール済みの先頭" : "First installed",
