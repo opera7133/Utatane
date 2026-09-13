@@ -136,6 +136,22 @@ public struct ShellLoader: Sendable {
         )
     }
 
+    public func loadAnimation(filename: String, from shellDirectory: URL) throws -> URL {
+        let root = shellDirectory.standardizedFileURL.resolvingSymlinksInPath()
+        let normalizedFilename = filename.replacingOccurrences(of: "\\", with: "/")
+        let imageURL = shellDirectory
+            .appending(path: normalizedFilename, directoryHint: .notDirectory)
+            .standardizedFileURL
+            .resolvingSymlinksInPath()
+        guard ["png", "apng", "gif", "webp"].contains(imageURL.pathExtension.lowercased()),
+              imageURL.path.hasPrefix(root.path + "/"),
+              FileManager.default.fileExists(atPath: imageURL.path)
+        else {
+            throw ShellError.missingElement(filename: filename, directory: shellDirectory)
+        }
+        return imageURL
+    }
+
     private func readText(from url: URL) throws -> String {
         let data = try Data(contentsOf: url)
         guard let text = LegacyTextDecoder.decode(data) else {

@@ -27,7 +27,9 @@ private final class RuntimeProbe: ObservableObject {
 @MainActor
 private func waitForRuntime(_ condition: () -> Bool) async throws {
     let clock = ContinuousClock()
-    let deadline = clock.now.advanced(by: .seconds(3))
+    // The full suite exercises AppKit and several native SHIORI engines in
+    // parallel, so a runnable MainActor task can be delayed on loaded CI hosts.
+    let deadline = clock.now.advanced(by: .seconds(15))
     while !condition(), clock.now < deadline {
         try await Task.sleep(for: .milliseconds(10))
     }

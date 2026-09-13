@@ -117,9 +117,9 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | alias | 🟡 | sakura、kero、char scopeの名前→surface ID候補 |
 | element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱う。`seriko.use_self_alpha,1`でもアルファチャンネルのないPNGは左上色透過へフォールバック。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後と、単一のAPNGを含むelement合成後も再生情報を維持する。異なるタイムラインを持つ複数APNGの同時合成と全描画オプションは未網羅 |
 | collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用 |
-| animation基本 | 🟡 | name、interval文字列、pattern、wait、座標。base・overlay系・asis・move・stopを描画または制御へ反映 |
-| interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能。複数animationの完全な並行実行は未対応 |
-| pattern method | 🟡 | base、overlay、overlay-fast、replace、interpolate、reduce、bind、add、auto、move、stopに加え、multiply／screen／overlay／add／soft-light／hard-light／color-dodge／color-burn／color／luminosity／hue／saturation／darken／lighten／difference／exclusion系と旧名・fast名を実装。`overlaymultiply`／`blend-multiply-fast`はベースの不透明度でクリップ。AppKitに同一演算がないvivid-light等の一部は近似。asis、scaling、import、insert、start／parallel系は未実装 |
+| animation基本 | 🟡 | name、interval文字列、pattern、wait、座標。複数animationを独立したTaskとレイヤー状態で並行再生し、base・overlay系・asis・moveと各種制御を反映 |
+| interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能。exclusiveとshared-indexの完全な挙動は未対応 |
+| pattern method | 🟡 | base、overlay、overlay-fast、replace、interpolate、reduce、bind、add、auto、asis、move、scaling、insert、start／stop、alternative／parallel系、APNG／GIF／WebPのimportに加え、multiply／screen／overlay／add／soft-light／hard-light／color-dodge／color-burn／color／luminosity／hue／saturation／darken／lighten／difference／exclusion系と旧名・fast名を実装。alternative／parallelの括弧・角括弧とカンマ・ピリオド区切り、scalingの小数倍率に対応。`overlaymultiply`／`blend-multiply-fast`はベースの不透明度でクリップ。AppKitに同一演算がないvivid-light等の一部は近似 |
 | animation option／collision | 🟡 | exclusive、background、shared-indexを保持。animation固有のrect／ellipse／circle／polygon collisionをbind中・アニメーション実行中のマウス判定に利用。optionの描画順・インデックス継続・限定exclusiveの完全な挙動は未実装 |
 | surface属性 | 🟡 | surface name、共通／sakura／kero balloon offset、center／kinoko.center／basepos point、icon.rect、maxwidthを保持。balloon offsetは倍率を含め実配置へ反映。collision-sortは当たり判定優先順、animation-sortは初期合成順へ反映。maxwidthの表示制約とpoint・offsetの全用途は未対応 |
 | cursor定義 | 🟡 | sakura／kero／char scopeのmouseup、mousedown、mouserightdown、mousewheel、mousehoverをcollision名ごとに反映。system cursor 10種と、AppKitで画像として読めるカーソルファイルに対応。system:wait／move／helpはmacOSの近似表示 |

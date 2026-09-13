@@ -850,7 +850,11 @@ private final class CharacterSurfaceController {
     private var opaqueRenderedLayerCache: [Int: NSImage] = [:]
     private var persistentAnimationLayers: [Int: PersistentAnimationLayer] = [:]
     private var enabledBindGroups: Set<Int> = []
-    private var animationTask: Task<Void, Never>?
+    private var animationTasks: [Int: Task<Void, Never>] = [:]
+    private var animationGenerations: [Int: Int] = [:]
+    private var activeAnimationFrames: [Int: ActiveAnimationFrame] = [:]
+    private var animationBaseExclusions: [Int: Set<Int>] = [:]
+    private var activeAnimationScales: [Int: (x: CGFloat, y: CGFloat)] = [:]
     private var currentAnimationID: Int?
     private var pausedAnimationIDs: Set<Int> = []
     private var animationOffsets: [Int: SurfacePoint] = [:]
@@ -858,7 +862,19 @@ private final class CharacterSurfaceController {
     private var pendingAnimationImage: NSImage?
     private var schedulerTask: Task<Void, Never>?
     private var talkCharacterCount = 0
-    private var isAnimating = false
+
+    private var isAnimating: Bool {
+        !animationTasks.isEmpty
+    }
+
+    private var effectiveRuntimeScaleX: CGFloat {
+        activeAnimationScales.values.reduce(runtimeScaleX) { $0 * $1.x }
+    }
+
+    private var effectiveRuntimeScaleY: CGFloat {
+        activeAnimationScales.values.reduce(runtimeScaleY) { $0 * $1.y }
+    }
+
     private var displayScale: CGFloat
     private var automaticallyFitsLargeSurfaces: Bool
     private var automaticFitScale: CGFloat = 1
@@ -948,8 +964,8 @@ private final class CharacterSurfaceController {
             isRepaintLocked: isRepaintLocked,
             isMovementLocked: isMovementLocked,
             alpha: Double(surfaceAlpha),
-            scaleX: Double(runtimeScaleX),
-            scaleY: Double(runtimeScaleY)
+            scaleX: Double(effectiveRuntimeScaleX),
+            scaleY: Double(effectiveRuntimeScaleY)
         )
     }
 
@@ -963,7 +979,7 @@ private final class CharacterSurfaceController {
     }
 
     func show(shell: ShellDefinition, surfaceID: Int) throws {
-        animationTask?.cancel()
+        cancelAllAnimations()
         schedulerTask?.cancel()
         nijigenerateReactionTask?.cancel()
         nijigeneratePointerTask?.cancel()
@@ -1089,6 +1105,7 @@ private final class CharacterSurfaceController {
     }
 
     func setBindGroups(_ groups: Set<Int>, redraw: Bool) {
+        cancelAllAnimations()
         enabledBindGroups = groups
         schedulerTask?.cancel()
         renderedLayerCache.removeAll()
@@ -1133,9 +1150,9 @@ private final class CharacterSurfaceController {
     @discardableResult
     func playTalkAnimation() -> Bool {
         talkCharacterCount += 1
-        guard animationTask == nil, !isAnimating else { return false }
         let enabled = shell.map { $0.effectiveBindGroups(scope: scope, enabled: enabledBindGroups) } ?? []
         let animations = currentSurfaceDefinition?.animations.filter { animation in
+            guard animationTasks[animation.id] == nil else { return false }
             let components = Set((animation.interval ?? "").lowercased().split(separator: "+").map(String.init))
             guard components.contains("talk") else { return false }
             guard talkCharacterCount.isMultiple(of: max(animation.intervalParameter ?? 1, 1)) else { return false }
@@ -1151,8 +1168,9 @@ private final class CharacterSurfaceController {
         if trigger == "starttalk" {
             talkCharacterCount = 0
         }
-        guard animationTask == nil, !isAnimating,
-              let animation = animations(forInterval: trigger).randomElement()
+        guard let animation = animations(forInterval: trigger)
+            .filter({ animationTasks[$0.id] == nil })
+            .randomElement()
         else { return false }
         return startAnimation(id: animation.id, minimumFrameDurationMilliseconds: 0) != nil
     }
@@ -1178,8 +1196,9 @@ private final class CharacterSurfaceController {
     }
 
     func playAnimationAndWait(id: Int, minimumFrameDurationMilliseconds: Int = 0) async {
-        animationTask?.cancel()
-        await animationTask?.value
+        let previousTask = animationTasks[id]
+        previousTask?.cancel()
+        await previousTask?.value
         let task = startAnimation(
             id: id,
             minimumFrameDurationMilliseconds: minimumFrameDurationMilliseconds
@@ -1188,12 +1207,11 @@ private final class CharacterSurfaceController {
     }
 
     func stopAnimation(id: Int) {
-        guard currentAnimationID == id else { return }
-        animationTask?.cancel()
+        animationTasks[id]?.cancel()
     }
 
     func pauseAnimation(id: Int) {
-        guard currentAnimationID == id else { return }
+        guard animationTasks[id] != nil else { return }
         pausedAnimationIDs.insert(id)
     }
 
@@ -1202,8 +1220,7 @@ private final class CharacterSurfaceController {
     }
 
     func waitForAnimation(id: Int) async {
-        guard currentAnimationID == id else { return }
-        let task = animationTask
+        let task = animationTasks[id]
         await task?.value
     }
 
@@ -1255,26 +1272,38 @@ private final class CharacterSurfaceController {
         guard let animation = currentSurfaceDefinition?.animations.first(where: { $0.id == id }) else {
             return nil
         }
-        animationTask?.cancel()
+        animationTasks[id]?.cancel()
+        activeAnimationFrames[id] = nil
+        animationBaseExclusions[id] = nil
+        activeAnimationScales[id] = nil
         currentAnimationID = id
+        let generation = animationGenerations[id, default: 0] + 1
+        animationGenerations[id] = generation
         let task = Task<Void, Never> { [weak self] in
             guard let self else { return }
             await run(
                 animation,
                 minimumFrameDurationMilliseconds: minimumFrameDurationMilliseconds
             )
+            guard animationGenerations[id] == generation else { return }
+            activeAnimationFrames[id] = nil
+            animationBaseExclusions[id] = nil
+            activeAnimationScales[id] = nil
+            animationTasks[id] = nil
+            animationGenerations[id] = nil
             if currentAnimationID == id {
-                currentAnimationID = nil
-                animationTask = nil
+                currentAnimationID = animationTasks.keys.sorted().last
             }
+            redrawActiveAnimationFrames()
+            refreshAnimationScale()
         }
-        animationTask = task
+        animationTasks[id] = task
         return task
     }
 
     func changeSurface(to surfaceID: Int) throws {
         guard let shell, let item else { return }
-        animationTask?.cancel()
+        cancelAllAnimations()
         schedulerTask?.cancel()
         pausedAnimationIDs.removeAll()
         animationOffsets.removeAll()
@@ -1353,7 +1382,7 @@ private final class CharacterSurfaceController {
             )
         }
         baseImage = result
-        setAnimationImage(result)
+        redrawActiveAnimationFrames()
         return true
     }
 
@@ -1365,10 +1394,71 @@ private final class CharacterSurfaceController {
         let clipsToBaseAlpha: Bool
     }
 
+    private enum ActiveAnimationFrame {
+        case overlay(PersistentAnimationLayer)
+        case base(NSImage)
+        case move(x: Int, y: Int)
+    }
+
+    private func cancelAllAnimations() {
+        for task in animationTasks.values {
+            task.cancel()
+        }
+        animationTasks.removeAll()
+        animationGenerations.removeAll()
+        activeAnimationFrames.removeAll()
+        animationBaseExclusions.removeAll()
+        activeAnimationScales.removeAll()
+        currentAnimationID = nil
+        pausedAnimationIDs.removeAll()
+        refreshAnimationScale()
+    }
+
+    private func redrawActiveAnimationFrames() {
+        guard let shell, let baseSurfaceID, let baseImage else { return }
+        let excludedAnimationIDs = animationBaseExclusions.values.reduce(into: Set<Int>()) {
+            $0.formUnion($1)
+        }
+        var result = if excludedAnimationIDs.isEmpty {
+            baseImage
+        } else {
+            (try? render(
+                surfaceID: baseSurfaceID,
+                shell: shell,
+                excludingInitialAnimations: excludedAnimationIDs
+            ).image) ?? baseImage
+        }
+        let animations = currentSurfaceDefinition?.animations ?? []
+        for animation in animations.reversed() {
+            guard let frame = activeAnimationFrames[animation.id] else { continue }
+            switch frame {
+            case let .overlay(layer):
+                result = imageLoader.composite(
+                    base: result,
+                    overlay: layer.image,
+                    x: layer.x,
+                    y: layer.y,
+                    operation: layer.operation,
+                    clipsToBaseAlpha: layer.clipsToBaseAlpha
+                )
+            case let .base(image):
+                result = image
+            case let .move(x, y):
+                result = imageLoader.translated(result, x: x, y: y)
+            }
+        }
+        let activeIDs = Set(activeAnimationFrames.keys)
+        let collisions = animations
+            .filter { activeIDs.contains($0.id) }
+            .flatMap(\.collisions)
+        imageView?.collisions = effectiveCollisions(for: currentSurfaceDefinition, shell: shell) + collisions
+        setAnimationImage(result)
+    }
+
     func hide() {
         imageView?.cancelDrag()
         dragFeedback.hide()
-        animationTask?.cancel()
+        cancelAllAnimations()
         schedulerTask?.cancel()
         nijigenerateReactionTask?.cancel()
         nijigeneratePointerTask?.cancel()
@@ -1545,15 +1635,15 @@ private final class CharacterSurfaceController {
 
     private func displaySize(for image: NSImage) -> NSSize {
         NSSize(
-            width: max(1, image.size.width * effectiveDisplayScale * abs(runtimeScaleX)),
-            height: max(1, image.size.height * effectiveDisplayScale * abs(runtimeScaleY))
+            width: max(1, image.size.width * effectiveDisplayScale * abs(effectiveRuntimeScaleX)),
+            height: max(1, image.size.height * effectiveDisplayScale * abs(effectiveRuntimeScaleY))
         )
     }
 
     private func displaySize(forNijigenerateBaseSize size: NSSize) -> NSSize {
         NSSize(
-            width: max(1, size.width * effectiveDisplayScale * abs(runtimeScaleX)),
-            height: max(1, size.height * effectiveDisplayScale * abs(runtimeScaleY))
+            width: max(1, size.width * effectiveDisplayScale * abs(effectiveRuntimeScaleX)),
+            height: max(1, size.height * effectiveDisplayScale * abs(effectiveRuntimeScaleY))
         )
     }
 
@@ -1564,8 +1654,8 @@ private final class CharacterSurfaceController {
         let contentInsetScale = contentScale ?? nijigenerateConfiguration.viewport.safeContentScale
         NijigenerateViewFactory.setScale(
             NSSize(
-                width: contentInsetScale * effectiveDisplayScale * abs(runtimeScaleX),
-                height: contentInsetScale * effectiveDisplayScale * abs(runtimeScaleY)
+                width: contentInsetScale * effectiveDisplayScale * abs(effectiveRuntimeScaleX),
+                height: contentInsetScale * effectiveDisplayScale * abs(effectiveRuntimeScaleY)
             ),
             on: view ?? nijigenerateView
         )
@@ -1761,12 +1851,25 @@ private final class CharacterSurfaceController {
         guard let targetView = targetView ?? imageView else { return }
         targetView.coordinateScaleX = max(
             .leastNonzeroMagnitude,
-            effectiveDisplayScale * abs(runtimeScaleX) * targetView.coordinateScaleMultiplierX
+            effectiveDisplayScale * abs(effectiveRuntimeScaleX) * targetView.coordinateScaleMultiplierX
         )
         targetView.coordinateScaleY = max(
             .leastNonzeroMagnitude,
-            effectiveDisplayScale * abs(runtimeScaleY) * targetView.coordinateScaleMultiplierY
+            effectiveDisplayScale * abs(effectiveRuntimeScaleY) * targetView.coordinateScaleMultiplierY
         )
+    }
+
+    private func refreshAnimationScale() {
+        guard let item else { return }
+        imageView?.flipsHorizontally = effectiveRuntimeScaleX < 0
+        imageView?.flipsVertically = effectiveRuntimeScaleY < 0
+        updateImageViewCoordinateScale()
+        if let nijigenerateBaseSize {
+            updateNijigenerateScale()
+            item.setContentSize(displaySize(forNijigenerateBaseSize: nijigenerateBaseSize))
+        } else if let baseImage {
+            item.setContentSize(displaySize(for: baseImage))
+        }
     }
 
     var onWindowDragDelta: ((_ delta: NSPoint) -> Void)?
@@ -1849,10 +1952,10 @@ private final class CharacterSurfaceController {
         definition: SurfaceDefinition?,
         shell: ShellDefinition
     ) {
-        imageView.coordinateScaleX = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(runtimeScaleX))
-        imageView.coordinateScaleY = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(runtimeScaleY))
-        imageView.flipsHorizontally = runtimeScaleX < 0
-        imageView.flipsVertically = runtimeScaleY < 0
+        imageView.coordinateScaleX = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(effectiveRuntimeScaleX))
+        imageView.coordinateScaleY = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(effectiveRuntimeScaleY))
+        imageView.flipsHorizontally = effectiveRuntimeScaleX < 0
+        imageView.flipsVertically = effectiveRuntimeScaleY < 0
         imageView.locksHorizontalMovement = [.left, .right].contains(desktopAlignment)
         imageView.locksVerticalMovement = [.top, .bottom].contains(desktopAlignment)
             || (desktopAlignment == .defaultValue && locksToDesktopBottom)
@@ -1969,35 +2072,83 @@ private final class CharacterSurfaceController {
     ) throws -> NSImage {
         guard let definition else { return base }
         let enabled = shell.effectiveBindGroups(scope: scope, enabled: enabledBindGroups)
-        var result = base
-        // `definition.animations` is ordered from front to back according to
-        // animation-sort. Compositing must paint the backmost layer first.
-        for animation in definition.animations.reversed() {
-            guard !excludedAnimationIDs.contains(animation.id) else { continue }
+        let eligibleAnimations = definition.animations.filter { animation in
+            guard !excludedAnimationIDs.contains(animation.id) else { return false }
             let interval = animation.interval?.lowercased() ?? ""
             let isBound = interval.contains("bind")
-            let isInitial = interval.contains("runonce") && !isBound
-            guard isInitial || (isBound && enabled.contains(animation.id)) else { continue }
-            for pattern in animation.patterns.sorted(by: { $0.order < $1.order }) {
-                guard pattern.waitMilliseconds == 0,
-                      pattern.surfaceID >= 0,
-                      let operation = animationCompositingOperation(for: pattern.method)
-                else { continue }
+            return (interval.contains("runonce") && !isBound)
+                || (isBound && enabled.contains(animation.id))
+        }
+        let eligibleBindAnimations = Dictionary(uniqueKeysWithValues: eligibleAnimations.compactMap { animation in
+            (animation.interval ?? "").lowercased().contains("bind")
+                ? (animation.id, animation)
+                : nil
+        })
+        let insertedAnimationIDs = Set(eligibleAnimations.flatMap { animation in
+            animation.patterns.flatMap { pattern in
+                pattern.method.caseInsensitiveCompare("insert") == .orderedSame
+                    ? pattern.targetAnimationIDs
+                    : []
+            }
+        }).intersection(eligibleBindAnimations.keys)
+
+        func composite(
+            animation: SurfaceAnimation,
+            onto image: NSImage,
+            ancestry: Set<Int>
+        ) throws -> NSImage {
+            guard !ancestry.contains(animation.id) else { return image }
+            var result = image
+            let patterns = animation.patterns.sorted(by: { $0.order < $1.order })
+            for (index, pattern) in patterns.enumerated() where pattern.waitMilliseconds == 0 {
+                let method = pattern.method.lowercased()
+                if method == "insert" {
+                    for targetID in pattern.targetAnimationIDs {
+                        guard let target = eligibleBindAnimations[targetID] else { continue }
+                        result = try composite(
+                            animation: target,
+                            onto: result,
+                            ancestry: ancestry.union([animation.id])
+                        )
+                    }
+                    continue
+                }
+                guard pattern.surfaceID >= 0 else { continue }
+                let operation: NSCompositingOperation
+                if method == "base", index == 0 {
+                    operation = .copy
+                } else if let compositingOperation = animationCompositingOperation(for: method) {
+                    operation = compositingOperation
+                } else {
+                    continue
+                }
                 let overlay = try renderLayer(
                     surfaceID: pattern.surfaceID,
                     shell: shell,
                     visited: visited,
-                    ignoresTransparency: pattern.method.caseInsensitiveCompare("asis") == .orderedSame
+                    ignoresTransparency: method == "asis"
                 )
+                if method == "base", index == 0 {
+                    result = overlay
+                    continue
+                }
                 result = imageLoader.composite(
                     base: result,
                     overlay: overlay,
                     x: pattern.x,
                     y: pattern.y,
                     operation: operation,
-                    clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(pattern.method)
+                    clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(method)
                 )
             }
+            return result
+        }
+
+        var result = base
+        // `definition.animations` is ordered from front to back according to
+        // animation-sort. Compositing must paint the backmost layer first.
+        for animation in eligibleAnimations.reversed() where !insertedAnimationIDs.contains(animation.id) {
+            result = try composite(animation: animation, onto: result, ancestry: [])
         }
         return result
     }
@@ -2095,8 +2246,8 @@ private final class CharacterSurfaceController {
         guard let definition = currentSurfaceDefinition else { return .zero }
         let offset = definition.scopeBalloonOffsets[scope] ?? definition.balloonOffset ?? SurfacePoint(x: 0, y: 0)
         return NSPoint(
-            x: Double(offset.x) * effectiveDisplayScale * abs(runtimeScaleX),
-            y: Double(offset.y) * effectiveDisplayScale * abs(runtimeScaleY)
+            x: Double(offset.x) * effectiveDisplayScale * abs(effectiveRuntimeScaleX),
+            y: Double(offset.y) * effectiveDisplayScale * abs(effectiveRuntimeScaleY)
         )
     }
 
@@ -2144,8 +2295,11 @@ private final class CharacterSurfaceController {
                     }
                     return false
                 }
-                if let animation = ready.randomElement() {
-                    await run(animation)
+                for animation in ready where animationTasks[animation.id] == nil {
+                    _ = startAnimation(
+                        id: animation.id,
+                        minimumFrameDurationMilliseconds: 0
+                    )
                 }
             }
         }
@@ -2155,56 +2309,92 @@ private final class CharacterSurfaceController {
         _ animation: SurfaceAnimation,
         minimumFrameDurationMilliseconds: Int = 0
     ) async {
-        guard !isAnimating,
-              let shell,
-              let baseSurfaceID,
-              let baseImage,
+        guard let shell,
               imageView != nil
         else { return }
-        isAnimating = true
-        imageView?.collisions = effectiveCollisions(for: currentSurfaceDefinition, shell: shell) + animation.collisions
-        defer {
-            setAnimationImage(baseImage)
-            imageView?.collisions = effectiveCollisions(for: currentSurfaceDefinition, shell: shell)
-            isAnimating = false
-        }
 
-        let stoppedAnimationIDs = Set(animation.patterns.compactMap { pattern in
-            pattern.method.lowercased() == "stop" && pattern.surfaceID >= 0
-                ? pattern.surfaceID
-                : nil
+        let stoppedAnimationIDs = Set(animation.patterns.flatMap { pattern in
+            ["stop", "alternativestop", "parallelstop"].contains(pattern.method.lowercased())
+                ? pattern.targetAnimationIDs
+                : []
         })
         let isInitiallyComposited = (animation.interval ?? "").lowercased().split(separator: "+").contains("bind")
         let excludedAnimationIDs = stoppedAnimationIDs.union([animation.id])
-        let animationBase = if stoppedAnimationIDs.isEmpty, !isInitiallyComposited {
-            baseImage
-        } else {
-            (try? render(
-                surfaceID: baseSurfaceID,
-                shell: shell,
-                excludingInitialAnimations: excludedAnimationIDs
-            ).image) ?? baseImage
-        }
-        var frameBase = animationBase
-
+        animationBaseExclusions[animation.id] = stoppedAnimationIDs.isEmpty && !isInitiallyComposited
+            ? []
+            : excludedAnimationIDs
         for pattern in animation.patterns {
             guard !Task.isCancelled else { return }
             let offset = animationOffsets[animation.id] ?? SurfacePoint(x: 0, y: 0)
+            let method = pattern.method.lowercased()
 
-            if pattern.method.lowercased() == "move" {
-                frameBase = imageLoader.translated(animationBase, x: pattern.x + offset.x, y: pattern.y + offset.y)
-                setAnimationImage(frameBase)
+            if method == "import", let fileName = pattern.fileName {
+                guard await waitForAnimationFrame(
+                    milliseconds: max(pattern.waitMilliseconds, minimumFrameDurationMilliseconds),
+                    animationID: animation.id
+                ) else { return }
+                do {
+                    let url = try shellLoader.loadAnimation(filename: fileName, from: shell.directory)
+                    let imported = try imageLoader.importAnimation(at: url)
+                    activeAnimationFrames[animation.id] = .overlay(PersistentAnimationLayer(
+                        image: imported.image,
+                        x: pattern.x + offset.x,
+                        y: pattern.y + offset.y,
+                        operation: .sourceOver,
+                        clipsToBaseAlpha: false
+                    ))
+                    redrawActiveAnimationFrames()
+                    guard await waitForAnimationFrame(
+                        milliseconds: imported.durationMilliseconds,
+                        animationID: animation.id
+                    ) else { return }
+                    activeAnimationFrames[animation.id] = nil
+                    redrawActiveAnimationFrames()
+                } catch {
+                    continue
+                }
+                continue
+            } else if method == "start" {
+                startControlledAnimations(pattern.targetAnimationIDs.prefix(1), sourceID: animation.id)
+            } else if method == "stop" {
+                stopControlledAnimations(pattern.targetAnimationIDs.prefix(1), sourceID: animation.id)
+            } else if method == "alternativestart" {
+                if let id = pattern.targetAnimationIDs.randomElement() {
+                    startControlledAnimations([id], sourceID: animation.id)
+                }
+            } else if method == "alternativestop" {
+                if let id = pattern.targetAnimationIDs.randomElement() {
+                    stopControlledAnimations([id], sourceID: animation.id)
+                }
+            } else if method == "parallelstart" {
+                startControlledAnimations(pattern.targetAnimationIDs, sourceID: animation.id)
+            } else if method == "parallelstop" {
+                stopControlledAnimations(pattern.targetAnimationIDs, sourceID: animation.id)
+            } else if method == "insert" {
+                continue
+            } else if method == "scaling" {
+                let scaleX = CGFloat(pattern.scaleXPercent ?? Double(pattern.x)) / 100
+                let scaleY = CGFloat(pattern.scaleYPercent ?? Double(pattern.y)) / 100
+                activeAnimationScales[animation.id] = (x: scaleX, y: scaleY)
+                refreshAnimationScale()
+            } else if method == "move" {
+                activeAnimationFrames[animation.id] = .move(
+                    x: pattern.x + offset.x,
+                    y: pattern.y + offset.y
+                )
+                redrawActiveAnimationFrames()
             } else if pattern.surfaceID < 0 {
-                frameBase = animationBase
-                setAnimationImage(animationBase)
+                activeAnimationFrames[animation.id] = nil
+                redrawActiveAnimationFrames()
             } else if pattern.method.lowercased() == "base" {
                 do {
-                    frameBase = try render(
+                    let frameBase = try render(
                         surfaceID: pattern.surfaceID,
                         shell: shell,
                         excludingInitialAnimations: excludedAnimationIDs
                     ).image
-                    setAnimationImage(frameBase)
+                    activeAnimationFrames[animation.id] = .base(frameBase)
+                    redrawActiveAnimationFrames()
                 } catch {
                     continue
                 }
@@ -2216,41 +2406,58 @@ private final class CharacterSurfaceController {
                         visited: [],
                         ignoresTransparency: pattern.method.caseInsensitiveCompare("asis") == .orderedSame
                     )
-                    setAnimationImage(imageLoader.composite(
-                        base: frameBase,
-                        overlay: overlay,
+                    activeAnimationFrames[animation.id] = .overlay(PersistentAnimationLayer(
+                        image: overlay,
                         x: pattern.x + offset.x,
                         y: pattern.y + offset.y,
                         operation: operation,
                         clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(pattern.method)
                     ))
+                    redrawActiveAnimationFrames()
                 } catch {
                     continue
                 }
             }
 
-            var remainingMilliseconds = max(
-                pattern.waitMilliseconds,
-                minimumFrameDurationMilliseconds
-            )
-            while remainingMilliseconds > 0 {
-                guard !Task.isCancelled else { return }
-                if pausedAnimationIDs.contains(animation.id) {
-                    do {
-                        try await Task.sleep(for: .milliseconds(20))
-                    } catch {
-                        return
-                    }
-                    continue
-                }
-                let interval = min(remainingMilliseconds, 20)
+            guard await waitForAnimationFrame(
+                milliseconds: max(pattern.waitMilliseconds, minimumFrameDurationMilliseconds),
+                animationID: animation.id
+            ) else { return }
+        }
+    }
+
+    private func waitForAnimationFrame(milliseconds: Int, animationID: Int) async -> Bool {
+        var remainingMilliseconds = milliseconds
+        while remainingMilliseconds > 0 {
+            guard !Task.isCancelled else { return false }
+            if pausedAnimationIDs.contains(animationID) {
                 do {
-                    try await Task.sleep(for: .milliseconds(interval))
+                    try await Task.sleep(for: .milliseconds(20))
                 } catch {
-                    return
+                    return false
                 }
-                remainingMilliseconds -= interval
+                continue
             }
+            let interval = min(remainingMilliseconds, 20)
+            do {
+                try await Task.sleep(for: .milliseconds(interval))
+            } catch {
+                return false
+            }
+            remainingMilliseconds -= interval
+        }
+        return !Task.isCancelled
+    }
+
+    private func startControlledAnimations(_ ids: some Sequence<Int>, sourceID: Int) {
+        for id in Set(ids) where id != sourceID && animationTasks[id] == nil {
+            _ = startAnimation(id: id, minimumFrameDurationMilliseconds: 0)
+        }
+    }
+
+    private func stopControlledAnimations(_ ids: some Sequence<Int>, sourceID: Int) {
+        for id in Set(ids) where id != sourceID {
+            stopAnimation(id: id)
         }
     }
 

@@ -89,6 +89,22 @@ struct SurfaceImageLoader {
         return max(representation.value(forProperty: .frameCount) as? Int ?? 1, 1)
     }
 
+    func importAnimation(at url: URL) throws -> (image: NSImage, durationMilliseconds: Int) {
+        guard let source = NSImage(contentsOf: url) else {
+            throw SurfaceImageError.invalidImage(url)
+        }
+        guard let animation = imageAnimation(from: source) else {
+            return (source, 100)
+        }
+        let image = makeAnimatedImage(
+            frames: animation.frames,
+            durations: animation.durations,
+            loopCount: 1
+        ) ?? source
+        let durationMilliseconds = max(Int((animation.durations.reduce(0, +) * 1000).rounded()), 1)
+        return (image, durationMilliseconds)
+    }
+
     func composite(
         base: NSImage,
         overlay: NSImage,

@@ -385,6 +385,10 @@ public struct SurfaceAnimationPattern: Sendable, Equatable {
     public let waitMilliseconds: Int
     public let x: Int
     public let y: Int
+    public let targetAnimationIDs: [Int]
+    public let fileName: String?
+    public let scaleXPercent: Double?
+    public let scaleYPercent: Double?
 
     public init(
         order: Int,
@@ -392,7 +396,11 @@ public struct SurfaceAnimationPattern: Sendable, Equatable {
         surfaceID: Int,
         waitMilliseconds: Int,
         x: Int,
-        y: Int
+        y: Int,
+        targetAnimationIDs: [Int] = [],
+        fileName: String? = nil,
+        scaleXPercent: Double? = nil,
+        scaleYPercent: Double? = nil
     ) {
         self.order = order
         self.method = method
@@ -400,5 +408,9 @@ public struct SurfaceAnimationPattern: Sendable, Equatable {
         self.waitMilliseconds = waitMilliseconds
         self.x = x
         self.y = y
+        self.targetAnimationIDs = targetAnimationIDs
+        self.fileName = fileName
+        self.scaleXPercent = scaleXPercent
+        self.scaleYPercent = scaleYPercent
     }
 }

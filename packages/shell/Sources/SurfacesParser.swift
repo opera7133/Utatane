@@ -455,18 +455,80 @@ public struct SurfacesParser: Sendable {
             )
         } else if let patternPrefix = ["pattern", "patturn"].first(where: { directive.hasPrefix($0) }),
                   let order = Int(directive.dropFirst(patternPrefix.count)),
-                  values.count >= 2,
-                  let surfaceID = Int(values[legacySyntax ? 0 : 1])
+                  values.count >= 2
         {
             // SERIKO's stop pattern has no wait field:
             // animation101.pattern0,stop,100
             let waitIndex = legacySyntax ? 1 : 2
             let methodIndex = legacySyntax ? 2 : 0
             let coordinateStart = legacySyntax ? 3 : 3
+            let method = values.count > methodIndex ? values[methodIndex] : "overlay"
+            let normalizedMethod = method.lowercased()
+            let controlMethods = Set([
+                "start", "stop", "alternativestart", "alternativestop",
+                "parallelstart", "parallelstop", "insert"
+            ])
+            if controlMethods.contains(normalizedMethod) {
+                let argumentStart = methodIndex + 1
+                let argument = argumentStart < values.count
+                    ? values[argumentStart...].joined(separator: ",")
+                    : ""
+                var targetAnimationIDs = parseAnimationIDs(argument)
+                if targetAnimationIDs.isEmpty,
+                   legacySyntax,
+                   let legacyTarget = Int(values[0])
+                {
+                    targetAnimationIDs = [legacyTarget]
+                }
+                animation.patterns[order] = SurfaceAnimationPattern(
+                    order: order,
+                    method: method,
+                    surfaceID: targetAnimationIDs.first ?? -1,
+                    waitMilliseconds: 0,
+                    x: 0,
+                    y: 0,
+                    targetAnimationIDs: targetAnimationIDs
+                )
+                builder.animations[animationID] = animation
+                return
+            }
+            if normalizedMethod == "import", !legacySyntax {
+                animation.patterns[order] = SurfaceAnimationPattern(
+                    order: order,
+                    method: method,
+                    surfaceID: -1,
+                    waitMilliseconds: values.count > 2 ? Int(values[2]) ?? 0 : 0,
+                    x: values.count > 3 ? Int(values[3]) ?? 0 : 0,
+                    y: values.count > 4 ? Int(values[4]) ?? 0 : 0,
+                    fileName: values[1]
+                )
+                builder.animations[animationID] = animation
+                return
+            }
+            if normalizedMethod == "scaling" {
+                let scaleX = values.count > coordinateStart ? Double(values[coordinateStart]) : nil
+                let scaleY = values.count > coordinateStart + 1 ? Double(values[coordinateStart + 1]) : nil
+                animation.patterns[order] = SurfaceAnimationPattern(
+                    order: order,
+                    method: method,
+                    surfaceID: Int(values[legacySyntax ? 0 : 1]) ?? -1,
+                    waitMilliseconds: values.count > waitIndex ? Int(values[waitIndex]) ?? 0 : 0,
+                    x: scaleX.map(Int.init) ?? 100,
+                    y: scaleY.map(Int.init) ?? 100,
+                    scaleXPercent: scaleX,
+                    scaleYPercent: scaleY
+                )
+                builder.animations[animationID] = animation
+                return
+            }
+            guard let surfaceID = Int(values[legacySyntax ? 0 : 1]) else {
+                builder.animations[animationID] = animation
+                return
+            }
             let wait = values.count > waitIndex ? Int(values[waitIndex]) ?? 0 : 0
             animation.patterns[order] = SurfaceAnimationPattern(
                 order: order,
-                method: values.count > methodIndex ? values[methodIndex] : "overlay",
+                method: method,
                 surfaceID: surfaceID,
                 waitMilliseconds: wait,
                 x: values.count > coordinateStart ? Int(values[coordinateStart]) ?? 0 : 0,
@@ -474,6 +536,13 @@ public struct SurfacesParser: Sendable {
             )
         }
         builder.animations[animationID] = animation
+    }
+
+    private func parseAnimationIDs(_ value: String) -> [Int] {
+        value
+            .trimmingCharacters(in: CharacterSet(charactersIn: "()[]"))
+            .split(whereSeparator: { $0 == "," || $0 == "." || $0.isWhitespace })
+            .compactMap { Int($0) }
     }
 }
 

@@ -78,6 +78,49 @@ func `parses stop animation pattern without wait field`() throws {
 }
 
 @Test
+func `parses SERIKO animation control targets in compatible forms`() throws {
+    let surfaces = SurfacesParser().parse("""
+    surface0
+    {
+    animation0.pattern0,alternativestart,(1,2,2)
+    animation0.pattern1,parallelstop,[3.4.5.]
+    animation0.pattern2,start,6
+    animation0.pattern3,insert,7
+    1pattern0,0,0,alternativestart,[8.9]
+    }
+    """)
+
+    let animations = try #require(surfaces[0]?.animations)
+    let patterns = try #require(animations.first { $0.id == 0 }?.patterns)
+    #expect(patterns[0].targetAnimationIDs == [1, 2, 2])
+    #expect(patterns[1].targetAnimationIDs == [3, 4, 5])
+    #expect(patterns[2].targetAnimationIDs == [6])
+    #expect(patterns[3].targetAnimationIDs == [7])
+    #expect(animations.first { $0.id == 1 }?.patterns[0].targetAnimationIDs == [8, 9])
+}
+
+@Test
+func `parses SERIKO imported animation and scaling parameters`() throws {
+    let surface = try #require(SurfacesParser().parse("""
+    surface0
+    {
+    animation0.pattern0,import,blink.webp,120,4,5
+    animation0.pattern1,scaling,10,80,92.5,75
+    }
+    """)[0])
+
+    #expect(surface.animations[0].patterns[0].fileName == "blink.webp")
+    #expect(surface.animations[0].patterns[0].waitMilliseconds == 120)
+    #expect(surface.animations[0].patterns[0].x == 4)
+    #expect(surface.animations[0].patterns[0].y == 5)
+    #expect(surface.animations[0].patterns[1].surfaceID == 10)
+    #expect(surface.animations[0].patterns[1].x == 92)
+    #expect(surface.animations[0].patterns[1].y == 75)
+    #expect(surface.animations[0].patterns[1].scaleXPercent == 92.5)
+    #expect(surface.animations[0].patterns[1].scaleYPercent == 75)
+}
+
+@Test
 func `parses parameterized animation intervals`() throws {
     let surface = try #require(SurfacesParser().parse("""
     surface0
