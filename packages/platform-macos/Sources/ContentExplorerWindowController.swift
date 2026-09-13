@@ -42,9 +42,12 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
     public let parentDirectory: URL?
     public let readmeURL: URL?
     public let homeURL: URL?
+    public let updateURL: URL?
     public let removalContainer: URL?
     public let isActive: Bool
     public let canActivate: Bool
+    public let canUpdate: Bool
+    public let resolvesUpdateURLDynamically: Bool
 
     public var id: String {
         "\(kind.rawValue):\(directory.standardizedFileURL.path)"
@@ -58,9 +61,12 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         parentDirectory: URL? = nil,
         readmeURL: URL? = nil,
         homeURL: URL? = nil,
+        updateURL: URL? = nil,
         removalContainer: URL? = nil,
         isActive: Bool = false,
-        canActivate: Bool = true
+        canActivate: Bool = true,
+        canUpdate: Bool = true,
+        resolvesUpdateURLDynamically: Bool = false
     ) {
         self.kind = kind
         self.name = name
@@ -69,9 +75,12 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         self.parentDirectory = parentDirectory
         self.readmeURL = readmeURL
         self.homeURL = homeURL
+        self.updateURL = updateURL
         self.removalContainer = removalContainer
         self.isActive = isActive
         self.canActivate = canActivate
+        self.canUpdate = canUpdate
+        self.resolvesUpdateURLDynamically = resolvesUpdateURLDynamically
     }
 
     var activationTitle: String {
@@ -80,6 +89,10 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         case .shell, .balloon: "切り替え"
         case .headline, .plugin: "実行"
         }
+    }
+
+    var hasUpdateAction: Bool {
+        updateURL != nil || resolvesUpdateURLDynamically
     }
 }
 
@@ -91,6 +104,7 @@ final class ContentExplorerModel {
     var searchText = ""
     var selection: String?
     var onActivate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
+    var onUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onRemove: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
 
     var filteredEntries: [ContentExplorerEntry] {
@@ -154,9 +168,11 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         entries: [ContentExplorerEntry],
         preferredKind: ContentExplorerKind? = nil,
         onActivate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
+        onUpdate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
         onRemove: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void
     ) {
         model.onActivate = onActivate
+        model.onUpdate = onUpdate
         model.onRemove = onRemove
         model.update(entries: entries, preferredKind: preferredKind)
         if let window {
@@ -308,6 +324,12 @@ private struct ContentExplorerView: View {
                         }
                     }
                     Spacer()
+                    if entry.hasUpdateAction {
+                        Button("更新") {
+                            model.onUpdate?(entry)
+                        }
+                        .disabled(!entry.canUpdate)
+                    }
                     Button(entry.activationTitle) {
                         model.onActivate?(entry)
                     }

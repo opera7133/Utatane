@@ -4298,7 +4298,7 @@ private struct UtataneRootView: View {
                 target: updateTarget,
                 operation: .update,
                 progress: { progress in
-                    broadcastOtherUpdateProgress(progress, reason: updateReason)
+                    broadcastOtherUpdateProgress(progress, kind: "balloon", reason: updateReason)
                 }
             )
             try reloadInstalledBalloons(preserving: updateBalloon.directory)
@@ -4344,13 +4344,17 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func broadcastOtherUpdateProgress(_ progress: ContentUpdateProgress, reason: String) {
+    private func broadcastOtherUpdateProgress(
+        _ progress: ContentUpdateProgress,
+        kind: String,
+        reason: String
+    ) {
         let event: GhostEvent = switch progress {
         case let .ready(files):
             .shiori(id: "OnUpdateOtherReady", references: [
                 0: String(max(0, files.count - 1)),
                 1: files.joined(separator: ","),
-                3: "balloon",
+                3: kind,
                 4: reason
             ])
         case let .downloadBegin(path, index, total):
@@ -4358,20 +4362,20 @@ private struct UtataneRootView: View {
                 0: path,
                 1: String(index),
                 2: String(max(0, total - 1)),
-                3: "balloon",
+                3: kind,
                 4: reason
             ])
         case let .checksumBegin(path, expected, actual):
             .shiori(id: "OnUpdateOther.OnMD5CompareBegin", references: [
-                0: path, 1: expected, 2: actual, 3: "balloon", 4: reason
+                0: path, 1: expected, 2: actual, 3: kind, 4: reason
             ])
         case let .checksumComplete(path, expected, actual):
             .shiori(id: "OnUpdateOther.OnMD5CompareComplete", references: [
-                0: path, 1: expected, 2: actual, 3: "balloon", 4: reason
+                0: path, 1: expected, 2: actual, 3: kind, 4: reason
             ])
         case let .checksumFailure(path, expected, actual):
             .shiori(id: "OnUpdateOther.OnMD5CompareFailure", references: [
-                0: path, 1: expected, 2: actual, 3: "balloon", 4: reason
+                0: path, 1: expected, 2: actual, 3: kind, 4: reason
             ])
         }
         broadcastEvent(event)
@@ -5192,6 +5196,7 @@ private struct UtataneRootView: View {
             entries: contentExplorerEntries(),
             preferredKind: preferredKind,
             onActivate: activateContentExplorerEntry,
+            onUpdate: requestContentExplorerUpdate,
             onRemove: requestContentExplorerRemoval
         )
     }
@@ -5206,18 +5211,22 @@ private struct UtataneRootView: View {
 
         for ghost in model.ghosts {
             let isActive = currentGhost?.id == ghost.id || calledGhosts[ghost.id] != nil
+            let updateURL = ContentNetworkUpdater.homeURL(in: ghost.rootDirectory)
             entries.append(ContentExplorerEntry(
                 kind: .ghost,
                 name: ghost.name,
                 detail: ghost.rootDirectory.lastPathComponent,
                 directory: ghost.rootDirectory,
                 readmeURL: ghostReadme(ghost)?.url,
-                homeURL: ContentNetworkUpdater.homeURL(in: ghost.rootDirectory),
+                homeURL: updateURL,
+                updateURL: updateURL,
                 removalContainer: removableContentContainer(
                     for: ghost.rootDirectory,
                     root: ContentRoot.ghostsDirectory
                 ),
-                isActive: isActive
+                isActive: isActive,
+                canUpdate: !isActive || currentGhost?.id == ghost.id,
+                resolvesUpdateURLDynamically: currentGhost?.id == ghost.id
             ))
             for shell in ghost.shells {
                 let readme = ReadmeResolver().resolve(
@@ -5229,6 +5238,7 @@ private struct UtataneRootView: View {
                         $0.ghost.id == ghost.id && $0.shell.id == shell.id
                     }
                 let shellContainer = ghost.rootDirectory.appending(path: "shell", directoryHint: .isDirectory)
+                let updateURL = ContentNetworkUpdater.homeURL(in: shell.directory)
                 entries.append(ContentExplorerEntry(
                     kind: .shell,
                     name: shell.name,
@@ -5236,12 +5246,14 @@ private struct UtataneRootView: View {
                     directory: shell.directory,
                     parentDirectory: ghost.rootDirectory,
                     readmeURL: readme?.url,
-                    homeURL: ContentNetworkUpdater.homeURL(in: shell.directory),
+                    homeURL: updateURL,
+                    updateURL: updateURL,
                     removalContainer: removableContentContainer(
                         for: ghost.rootDirectory,
                         root: ContentRoot.ghostsDirectory
                     ) == nil || isActiveShell ? nil : shellContainer,
-                    isActive: isActiveShell
+                    isActive: isActiveShell,
+                    canUpdate: !isActiveShell
                 ))
             }
         }
@@ -5253,18 +5265,21 @@ private struct UtataneRootView: View {
             )
             let isActive = balloon?.directory == installedBalloon.directory
                 || calledGhosts.values.contains { $0.balloon.directory == installedBalloon.directory }
+            let updateURL = ContentNetworkUpdater.homeURL(in: installedBalloon.directory)
             return ContentExplorerEntry(
                 kind: .balloon,
                 name: installedBalloon.name,
                 detail: installedBalloon.directory.lastPathComponent,
                 directory: installedBalloon.directory,
                 readmeURL: readme?.url,
-                homeURL: ContentNetworkUpdater.homeURL(in: installedBalloon.directory),
+                homeURL: updateURL,
+                updateURL: updateURL,
                 removalContainer: isActive ? nil : removableContentContainer(
                     for: installedBalloon.directory,
                     root: ContentRoot.balloonsDirectory
                 ),
-                isActive: isActive
+                isActive: isActive,
+                canUpdate: !isActive || balloon?.directory == installedBalloon.directory
             )
         })
 
@@ -5276,6 +5291,7 @@ private struct UtataneRootView: View {
                 directory: headline.id,
                 readmeURL: headline.readmeURL,
                 homeURL: headline.openURL ?? headline.siteURL,
+                updateURL: ContentNetworkUpdater.homeURL(in: headline.id),
                 removalContainer: removableContentContainer(
                     for: headline.id,
                     root: ContentRoot.headlinesDirectory
@@ -5291,6 +5307,7 @@ private struct UtataneRootView: View {
                 directory: plugin.directory,
                 readmeURL: plugin.readmeURL,
                 homeURL: plugin.homeURL ?? plugin.authorURL,
+                updateURL: plugin.homeURL,
                 removalContainer: removableContentContainer(
                     for: plugin.directory,
                     root: ContentRoot.pluginsDirectory
@@ -5358,6 +5375,106 @@ private struct UtataneRootView: View {
 
     private func requestContentExplorerRemoval(_ entry: ContentExplorerEntry) {
         Task { await removeContentExplorerEntry(entry, asksConfirmation: true) }
+    }
+
+    private func requestContentExplorerUpdate(_ entry: ContentExplorerEntry) {
+        Task { await updateContentExplorerEntry(entry) }
+    }
+
+    private func updateContentExplorerEntry(_ entry: ContentExplorerEntry) async {
+        guard !isUpdatingContent, entry.canUpdate else { return }
+
+        if entry.kind == .ghost, currentGhost?.rootDirectory == entry.directory {
+            await updateCurrentGhost()
+            refreshContentExplorer()
+            return
+        }
+        if entry.kind == .balloon, balloon?.directory == entry.directory {
+            await updateCurrentBalloon()
+            refreshContentExplorer()
+            return
+        }
+        if entry.kind == .plugin,
+           let plugin = installedPlugins.first(where: { $0.directory == entry.directory })
+        {
+            await update(plugin: plugin)
+            refreshContentExplorer()
+            return
+        }
+
+        guard !entry.isActive, let homeURL = entry.updateURL else { return }
+        isUpdatingContent = true
+        let reason = "manual"
+        let statusToken = statusWindowController.show("「\(entry.name)」を更新中…")
+        defer {
+            isUpdatingContent = false
+            statusWindowController.hide(token: statusToken)
+        }
+
+        broadcastEvent(.shiori(id: "OnUpdateOtherBegin", references: [
+            0: entry.name,
+            1: entry.directory.path,
+            3: entry.kind.rawValue,
+            4: reason
+        ]))
+        do {
+            let target = ContentUpdateTarget(
+                kind: contentUpdateKind(for: entry.kind),
+                name: entry.name,
+                rootDirectory: entry.directory,
+                homeURL: homeURL
+            )
+            let result = try await ContentUpdateJob().run(
+                target: target,
+                operation: .update,
+                progress: { progress in
+                    broadcastOtherUpdateProgress(
+                        progress,
+                        kind: entry.kind.rawValue,
+                        reason: reason
+                    )
+                }
+            )
+            await reloadContentCatalog(kind: entry.kind)
+            configureContextMenu()
+            refreshContentExplorer()
+            AppLogStore.shared.info(
+                result.changedFiles.isEmpty
+                    ? "「\(entry.name)」は最新です"
+                    : "「\(entry.name)」を更新しました (\(result.changedFiles.count)ファイル)",
+                category: "Update",
+                details: result.changedFiles.isEmpty ? nil : result.changedFiles.joined(separator: "\n")
+            )
+            broadcastEvent(.shiori(id: "OnUpdateOtherComplete", references: [
+                0: result.changedFiles.isEmpty ? "none" : "changed",
+                1: result.changedFiles.joined(separator: ","),
+                3: entry.kind.rawValue,
+                4: reason
+            ]))
+        } catch {
+            AppLogStore.shared.error(
+                "「\(entry.name)」の更新に失敗しました: \(error.localizedDescription)",
+                category: "Update",
+                details: String(describing: error)
+            )
+            broadcastEvent(.shiori(id: "OnUpdateOtherFailure", references: [
+                0: updateFailureReason(error),
+                1: updateFailurePath(error) ?? "",
+                3: entry.kind.rawValue,
+                4: reason
+            ]))
+            showError(error.localizedDescription)
+        }
+    }
+
+    private func contentUpdateKind(for kind: ContentExplorerKind) -> ContentUpdateTarget.Kind {
+        switch kind {
+        case .ghost: .ghost
+        case .shell: .shell
+        case .balloon: .balloon
+        case .headline: .headline
+        case .plugin: .plugin
+        }
     }
 
     private func requestSelfVanish(
@@ -5446,7 +5563,7 @@ private struct UtataneRootView: View {
                 )
             } else {
                 try SafeContentTrash().moveToTrash(entry.directory, directChildOf: removalContainer)
-                await reloadContentAfterRemoval(kind: entry.kind)
+                await reloadContentCatalog(kind: entry.kind)
             }
             AppLogStore.shared.info(
                 "「\(entry.name)」をゴミ箱へ移動しました",
@@ -5562,7 +5679,7 @@ private struct UtataneRootView: View {
         selectedGhostID = nil
     }
 
-    private func reloadContentAfterRemoval(kind: ContentExplorerKind) async {
+    private func reloadContentCatalog(kind: ContentExplorerKind) async {
         switch kind {
         case .ghost, .shell:
             await model.load()

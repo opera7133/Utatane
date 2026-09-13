@@ -52,11 +52,41 @@ import Testing
         name: "Emily",
         directory: URL(filePath: "/tmp/Ghosts/emily4", directoryHint: .isDirectory)
     )
-    controller.show(entries: [entry], onActivate: { _ in }, onRemove: { _ in })
+    controller.show(entries: [entry], onActivate: { _ in }, onUpdate: { _ in }, onRemove: { _ in })
     defer { controller.close() }
 
     #expect(controller.contentSize?.width == 1120)
     #expect(controller.contentSize?.height == 720)
     #expect(ContentExplorerWindowController.minimumContentSize.width < ContentExplorerWindowController.initialContentSize.width)
     #expect(ContentExplorerWindowController.minimumContentSize.height < ContentExplorerWindowController.initialContentSize.height)
+}
+
+@MainActor
+@Test func `content explorer keeps distribution and update URLs separate`() throws {
+    let distributionURL = try #require(URL(string: "https://example.test/plugin/"))
+    let updateURL = try #require(URL(string: "https://updates.example.test/plugin/"))
+    let entry = ContentExplorerEntry(
+        kind: .plugin,
+        name: "Sample Plugin",
+        directory: URL(filePath: "/tmp/Plugins/sample", directoryHint: .isDirectory),
+        homeURL: distributionURL,
+        updateURL: updateURL
+    )
+
+    #expect(entry.homeURL == distributionURL)
+    #expect(entry.updateURL == updateURL)
+    #expect(entry.hasUpdateAction)
+    #expect(entry.canUpdate)
+}
+
+@Test func `content explorer can expose runtime resolved ghost updates`() {
+    let entry = ContentExplorerEntry(
+        kind: .ghost,
+        name: "Emily",
+        directory: URL(filePath: "/tmp/Ghosts/emily4", directoryHint: .isDirectory),
+        resolvesUpdateURLDynamically: true
+    )
+
+    #expect(entry.updateURL == nil)
+    #expect(entry.hasUpdateAction)
 }
