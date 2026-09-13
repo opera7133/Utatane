@@ -41,7 +41,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
     public let directory: URL
     public let parentDirectory: URL?
     public let readmeURL: URL?
-    public let homeURL: URL?
+    public let websiteURL: URL?
     public let updateURL: URL?
     public let removalContainer: URL?
     public let isActive: Bool
@@ -60,7 +60,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         directory: URL,
         parentDirectory: URL? = nil,
         readmeURL: URL? = nil,
-        homeURL: URL? = nil,
+        websiteURL: URL? = nil,
         updateURL: URL? = nil,
         removalContainer: URL? = nil,
         isActive: Bool = false,
@@ -74,7 +74,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         self.directory = directory
         self.parentDirectory = parentDirectory
         self.readmeURL = readmeURL
-        self.homeURL = homeURL
+        self.websiteURL = websiteURL
         self.updateURL = updateURL
         self.removalContainer = removalContainer
         self.isActive = isActive
@@ -321,9 +321,9 @@ private struct ContentExplorerView: View {
                             NSWorkspace.shared.open(readmeURL)
                         }
                     }
-                    if let homeURL = entry.homeURL {
+                    if let websiteURL = entry.websiteURL {
                         Button("配布元") {
-                            NSWorkspace.shared.open(homeURL)
+                            NSWorkspace.shared.open(websiteURL)
                         }
                     }
                     Spacer()

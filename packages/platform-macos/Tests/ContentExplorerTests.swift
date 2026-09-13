@@ -75,14 +75,23 @@ import Testing
         kind: .plugin,
         name: "Sample Plugin",
         directory: URL(filePath: "/tmp/Plugins/sample", directoryHint: .isDirectory),
-        homeURL: distributionURL,
+        websiteURL: distributionURL,
         updateURL: updateURL
     )
 
-    #expect(entry.homeURL == distributionURL)
+    #expect(entry.websiteURL == distributionURL)
     #expect(entry.updateURL == updateURL)
     #expect(entry.hasUpdateAction)
     #expect(entry.canUpdate)
+
+    let updateOnlyEntry = ContentExplorerEntry(
+        kind: .balloon,
+        name: "Origin",
+        directory: URL(filePath: "/tmp/Balloons/origin", directoryHint: .isDirectory),
+        updateURL: updateURL
+    )
+    #expect(updateOnlyEntry.websiteURL == nil)
+    #expect(updateOnlyEntry.hasUpdateAction)
 }
 
 @Test func `content explorer can expose runtime resolved ghost updates`() {

@@ -5219,7 +5219,6 @@ private struct UtataneRootView: View {
                 detail: ghost.rootDirectory.lastPathComponent,
                 directory: ghost.rootDirectory,
                 readmeURL: ghostReadme(ghost)?.url,
-                homeURL: updateURL,
                 updateURL: updateURL,
                 removalContainer: removableContentContainer(
                     for: ghost.rootDirectory,
@@ -5247,7 +5246,6 @@ private struct UtataneRootView: View {
                     directory: shell.directory,
                     parentDirectory: ghost.rootDirectory,
                     readmeURL: readme?.url,
-                    homeURL: updateURL,
                     updateURL: updateURL,
                     removalContainer: removableContentContainer(
                         for: ghost.rootDirectory,
@@ -5273,7 +5271,6 @@ private struct UtataneRootView: View {
                 detail: installedBalloon.directory.lastPathComponent,
                 directory: installedBalloon.directory,
                 readmeURL: readme?.url,
-                homeURL: updateURL,
                 updateURL: updateURL,
                 removalContainer: isActive ? nil : removableContentContainer(
                     for: installedBalloon.directory,
@@ -5291,7 +5288,7 @@ private struct UtataneRootView: View {
                 detail: headline.id.lastPathComponent,
                 directory: headline.id,
                 readmeURL: headline.readmeURL,
-                homeURL: headline.openURL ?? headline.siteURL,
+                websiteURL: headline.openURL ?? headline.siteURL,
                 updateURL: ContentNetworkUpdater.homeURL(in: headline.id),
                 removalContainer: removableContentContainer(
                     for: headline.id,
@@ -5307,7 +5304,7 @@ private struct UtataneRootView: View {
                 detail: plugin.author ?? plugin.id,
                 directory: plugin.directory,
                 readmeURL: plugin.readmeURL,
-                homeURL: plugin.homeURL ?? plugin.authorURL,
+                websiteURL: plugin.authorURL,
                 updateURL: plugin.homeURL,
                 removalContainer: removableContentContainer(
                     for: plugin.directory,
