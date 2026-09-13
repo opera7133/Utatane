@@ -177,8 +177,8 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\![set,property,...]` | 🟡 | 構文・書込可否検証・Property Systemへの書き込み経路を実装。個別のUI／サウンド状態setterは未実装 |
-| `\![get,property,...]` | 🟡 | 複数プロパティを解決して指定イベントのReference0以降へ通知。日時・OS・CPU・メモリ・カーソル・モニター・テーマ、baseware、currentghost、ghostlist、shelllistの基本値に対応 |
-| `%property[...]` | 🟡 | Property Systemの値を再生中に展開。日時・OS・CPU・メモリ・カーソル・モニター・テーマ、baseware、currentghost、ghostlist、shelllistの基本値に対応 |
+| `\![get,property,...]` | 🟡 | 複数プロパティを解決して指定イベントのReference0以降へ通知。日時・OS・CPU・メモリ・カーソル・モニター・テーマ、baseware（`baseware.windowmode`を含む）、currentghost、ghostlist、shelllistの基本値に対応 |
+| `%property[...]` | 🟡 | Property Systemの値を再生中に展開。日時・OS・CPU・メモリ・カーソル・モニター・テーマ、baseware（`baseware.windowmode`を含む）、currentghost、ghostlist、shelllistの基本値に対応 |
 
 ### HTTP、WebSocket、アーカイブなど
 

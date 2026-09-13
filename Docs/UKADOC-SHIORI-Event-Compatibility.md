@@ -21,6 +21,7 @@ UKADOC掲載イベント数: 290
 名前がソースに現れるだけでは対応としない。🟡候補についても、発生条件とReferenceをUKADOCに照らしてから✅へ変更する。
 任意IDを中継できる経路（raise、inputbox、HTTP等）は、そのイベントをベースウェアが自動発行する実装とは数えない。
 全290件を本番Swiftコード（テストコードを除く）の固定IDおよびイベント生成経路と静的照合した。✅は既存テストまたは実動確認の根拠があるものに限定する。
+SSP 2.8.93で追加された`OnWindowModeChange`は、上記の2026-09-04時点の集計には含めず追補している。
 ❌には、イベント通知だけでなく、その発生元となる本体機能自体が未実装の項目も含む。前提機能の実装後にイベント経路を追加する。
 難度はUtataneの現状を基準にした暫定評価で、UKADOC照合だけなら低、OS監視や新規UIを伴うものは中、アカウント・外部サービス・大きな新機能を伴うものは高とする。
 
@@ -46,6 +47,7 @@ UKADOC掲載イベント数: 290
 | [`OnBalloonChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonChange) | 🟡 | 通知経路のUKADOC照合 | 低 | 切替後に名前とディレクトリ名を通知。UKADOCのパス表現との完全一致は未確認 |
 | [`OnWindowStateRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWindowStateRestore) | 🟡 | 通知経路のUKADOC照合 | 低 | macOSでアプリの非表示が解除された時にReference0=systemを通知。script・user理由の区別は未対応 |
 | [`OnWindowStateMinimize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWindowStateMinimize) | 🟡 | 通知経路のUKADOC照合 | 低 | macOSでアプリが非表示になった時にReference0=systemを通知。script・user理由の区別は未対応 |
+| [`OnWindowModeChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWindowModeChange) | 🟡 | 実機でのモード切り替え確認 | 低 | 起動時はNOTIFYでReference0=init、切替時はGETでReference0=update。Reference1へ現在、Reference2へ直前のモードをnormal/shared/perghostで渡し、切替時は続けて`OnDisplayChange`を発行。起動時のReference2は空 |
 | [`OnFullScreenAppMinimize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFullScreenAppMinimize) | 🟡 | 実機アプリでの検出確認 | 中 | 前面アプリの通常レイヤに画面全体と一致するウインドウを検出すると、シェル・バルーンを透過してReference0=fullscreenを通知 |
 | [`OnFullScreenAppRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFullScreenAppRestore) | 🟡 | 実機アプリでの検出確認 | 中 | 前面アプリの全画面ウインドウがなくなると、シェル・バルーンを再表示してReference0=fullscreenを通知 |
 | [`OnVirtualDesktopChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVirtualDesktopChanged) | 🟡 | macOS Spacesの識別子取得 | 中 | macOSのactiveSpaceDidChangeでReference0=currentを通知。公開APIでSpace IDを取得できないためReference1は空 |

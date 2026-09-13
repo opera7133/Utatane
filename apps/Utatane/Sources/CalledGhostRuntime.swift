@@ -36,6 +36,7 @@ final class CalledGhostRuntime {
     private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
     private var teachHistory: [String] = []
     private var pendingHourTimeSignal = false
+    private var windowMode: GhostWindowMode
     private(set) var shell: InstalledShell
     private(set) var balloon: BalloonDefinition
 
@@ -63,6 +64,7 @@ final class CalledGhostRuntime {
         dialogueDismissalMilliseconds: Int,
         speechHistoryStore: SpeechHistoryStore,
         integratesSpeechHistory: Bool,
+        windowMode: GhostWindowMode,
         presentationSession: GhostPresentationSession? = nil,
         presentationGeometry: any PresentationGeometryProviding = SystemPresentationGeometryProvider()
     ) throws {
@@ -87,14 +89,17 @@ final class CalledGhostRuntime {
             )
         }
         self.integratesSpeechHistory = integratesSpeechHistory
+        self.windowMode = windowMode
         self.presentationSession = presentationSession
         self.presentationGeometry = effectivePresentationGeometry
+        var propertyValues = Self.propertyValues(for: ghost).merging(
+            MacOSPropertySnapshot.values(geometryProvider: effectivePresentationGeometry)
+        ) { current, _ in current }
+        propertyValues["baseware.windowmode"] = windowMode.sspIdentifier
         propertySystem = PropertySystem(configuration: .init(
             basewareName: "Utatane",
             basewareVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
-            values: Self.propertyValues(for: ghost).merging(
-                MacOSPropertySnapshot.values(geometryProvider: effectivePresentationGeometry)
-            ) { current, _ in current }
+            values: propertyValues
         ))
 
         guard let selectedShell = selectionStore.resolveShell(for: ghost) else {
@@ -178,7 +183,8 @@ final class CalledGhostRuntime {
                 ghost: ghost,
                 shell: shell,
                 balloon: balloon,
-                shellDefinition: definition
+                shellDefinition: definition,
+                windowMode: windowMode
             ) {
                 _ = try? await session.handle(event: .notification(
                     id: event.id,
@@ -204,18 +210,31 @@ final class CalledGhostRuntime {
     }
 
     func send(_ event: GhostEvent) {
+        send([event])
+    }
+
+    func sendWindowModeChange(references: [Int: String]) {
+        send([
+            .shiori(id: "OnWindowModeChange", references: references),
+            .shiori(id: "OnDisplayChange", references: displayChangeReferences())
+        ])
+    }
+
+    private func send(_ events: [GhostEvent]) {
         Task {
             do {
-                guard let response = try await session.response(for: event) else { return }
-                if let script = response.script {
-                    player.play(script, balloon: balloon)
+                for event in events {
+                    guard let response = try await session.response(for: event) else { continue }
+                    if let script = response.script {
+                        player.play(script, balloon: balloon)
+                    }
+                    forwardCommunication(response)
                 }
-                forwardCommunication(response)
             } catch {
                 AppLogStore.shared.error(
                     "SHIORIイベント処理エラー: \(error.localizedDescription)",
                     category: "SHIORI",
-                    details: "Event: \(event)\nError: \(error)",
+                    details: "Events: \(events)\nError: \(error)",
                     ghostName: ghost.name
                 )
                 onError?(error)
@@ -361,6 +380,20 @@ final class CalledGhostRuntime {
         if !integrates {
             speechHistoryPresenter?.hide()
         }
+    }
+
+    func setWindowMode(_ mode: GhostWindowMode) async {
+        windowMode = mode
+        await propertySystem.register(values: ["baseware.windowmode": mode.sspIdentifier])
+    }
+
+    private func displayChangeReferences() -> [Int: String] {
+        guard let screen = presentationGeometry.mainScreen else { return [:] }
+        return [
+            0: String(screen.bitsPerPixel),
+            1: String(Int(screen.frame.width)),
+            2: String(Int(screen.frame.height))
+        ]
     }
 
     func showSpeechHistory() {

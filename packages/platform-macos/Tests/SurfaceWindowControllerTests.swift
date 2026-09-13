@@ -1142,6 +1142,21 @@ func `window mode launch option supports SSP mode names and the previous layout`
 }
 
 @Test
+func `window mode change detector reports SSP update references and skips initial state`() {
+    #expect(GhostWindowMode.off.sspIdentifier == "normal")
+    #expect(GhostWindowMode.shared.sspIdentifier == "shared")
+    #expect(GhostWindowMode.perGhost.sspIdentifier == "perghost")
+    #expect(GhostWindowMode.shared.startupChangeReferences == [0: "init", 1: "shared", 2: ""])
+
+    var detector = WindowModeChangeDetector()
+    #expect(detector.consume(.off) == nil)
+    #expect(detector.consume(.off) == nil)
+    #expect(detector.consume(.shared) == [0: "update", 1: "shared", 2: "normal"])
+    #expect(detector.consume(.perGhost) == [0: "update", 1: "perghost", 2: "shared"])
+    #expect(detector.consume(.off) == [0: "update", 1: "normal", 2: "perghost"])
+}
+
+@Test
 func `window mode stage appearance is persisted per stage identifier`() throws {
     let suiteName = "WindowModeStageTests-\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suiteName))

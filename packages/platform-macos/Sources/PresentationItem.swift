@@ -1430,6 +1430,26 @@ public enum GhostWindowMode: String, CaseIterable, Sendable {
     case shared
     case perGhost
 
+    /// Identifier used by SSP's window-mode SHIORI event and Property System value.
+    public var sspIdentifier: String {
+        switch self {
+        case .off:
+            "normal"
+        case .shared:
+            "shared"
+        case .perGhost:
+            "perghost"
+        }
+    }
+
+    public var startupChangeReferences: [Int: String] {
+        [0: "init", 1: sspIdentifier, 2: ""]
+    }
+
+    public func updateChangeReferences(from previousMode: GhostWindowMode) -> [Int: String] {
+        [0: "update", 1: sspIdentifier, 2: previousMode.sspIdentifier]
+    }
+
     public static func launchOverride(
         in arguments: [String],
         previousLayout: GhostWindowMode = .shared
@@ -1449,6 +1469,19 @@ public enum GhostWindowMode: String, CaseIterable, Sendable {
             }
         }
         return nil
+    }
+}
+
+public struct WindowModeChangeDetector: Sendable {
+    private var previousMode: GhostWindowMode?
+
+    public init() {}
+
+    /// Returns SSP-compatible `OnWindowModeChange` references for post-startup changes.
+    public mutating func consume(_ mode: GhostWindowMode) -> [Int: String]? {
+        defer { previousMode = mode }
+        guard let previousMode, previousMode != mode else { return nil }
+        return mode.updateChangeReferences(from: previousMode)
     }
 }
 

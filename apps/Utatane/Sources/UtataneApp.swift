@@ -309,6 +309,7 @@ private struct UtataneRootView: View {
     @State private var previousRecycleBinSnapshot: RecycleBinSnapshot?
     @State private var nowPlayingChangeDetector = NowPlayingChangeDetector()
     @State private var desktopWallpaperChangeDetector = DesktopWallpaperChangeDetector()
+    @State private var windowModeChangeDetector = WindowModeChangeDetector()
     @State private var configuredShellScalePercent: Int?
     @State private var configuredBalloonScalePercent: Int?
     @State private var gamepadMonitor = GamepadEventMonitor()
@@ -470,7 +471,9 @@ private struct UtataneRootView: View {
             key: "window-mode",
             id: "\(networkSettings.windowMode.rawValue)-\(networkSettings.integratesSpeechHistoryInWindowMode)"
         ) {
-            let integratesHistory = networkSettings.windowMode != .off
+            let mode = networkSettings.windowMode
+            let changeReferences = windowModeChangeDetector.consume(mode)
+            let integratesHistory = mode != .off
                 && networkSettings.integratesSpeechHistoryInWindowMode
             if !integratesHistory {
                 speechHistoryPresenter?.hide()
@@ -479,9 +482,16 @@ private struct UtataneRootView: View {
             // Rehosting changes the coordinate space of every presented item.
             // Compare overlap/offscreen state only after the new host settles.
             previousWindowLayoutSnapshot = nil
-            presentationCoordinator.setMode(networkSettings.windowMode)
+            presentationCoordinator.setMode(mode)
+            await propertySystem.register(values: ["baseware.windowmode": mode.sspIdentifier])
+            for runtime in calledGhosts.values {
+                await runtime.setWindowMode(mode)
+            }
             if integratesHistory {
                 calledGhosts.values.forEach { $0.setIntegratesSpeechHistory(true) }
+            }
+            if let changeReferences {
+                broadcastWindowModeChange(references: changeReferences)
             }
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "random-talk", id: networkSettings.randomTalkIntervalMinutes) {
@@ -738,6 +748,7 @@ private struct UtataneRootView: View {
 
     private func registerCurrentGhostProperties() async {
         var values = MacOSPropertySnapshot.values(geometryProvider: presentationGeometry)
+        values["baseware.windowmode"] = networkSettings.windowMode.sspIdentifier
         values["ghostlist.count"] = String(model.ghosts.count)
         for (index, ghost) in model.ghosts.enumerated() {
             values["ghostlist.index(\(index)).name"] = ghost.name
@@ -773,19 +784,25 @@ private struct UtataneRootView: View {
     }
 
     private func sendEvent(_ event: GhostEvent) {
+        sendEvents([event])
+    }
+
+    private func sendEvents(_ events: [GhostEvent]) {
         guard !isTransitioningGhost, let session, let balloon else { return }
         Task {
             do {
-                guard let response = try await session.response(for: event) else { return }
-                if let script = response.script, !script.rawValue.isEmpty {
-                    scriptPlayer.play(script, balloon: balloon)
+                for event in events {
+                    guard let response = try await session.response(for: event) else { continue }
+                    if let script = response.script, !script.rawValue.isEmpty {
+                        scriptPlayer.play(script, balloon: balloon)
+                    }
+                    forwardCommunication(from: currentGhost, response: response)
                 }
-                forwardCommunication(from: currentGhost, response: response)
             } catch {
                 AppLogStore.shared.error(
                     "SHIORIイベント処理エラー: \(error.localizedDescription)",
                     category: "SHIORI",
-                    details: "Event: \(event)\nError: \(error)",
+                    details: "Events: \(events)\nError: \(error)",
                     ghostName: currentGhost?.name
                 )
                 showError(error.localizedDescription)
@@ -837,6 +854,16 @@ private struct UtataneRootView: View {
         sendEvent(event)
         for runtime in calledGhosts.values {
             runtime.send(event)
+        }
+    }
+
+    private func broadcastWindowModeChange(references: [Int: String]) {
+        sendEvents([
+            .shiori(id: "OnWindowModeChange", references: references),
+            .shiori(id: "OnDisplayChange", references: displayChangeReferences())
+        ])
+        for runtime in calledGhosts.values {
+            runtime.sendWindowModeChange(references: references)
         }
     }
 
@@ -1921,6 +1948,7 @@ private struct UtataneRootView: View {
                 installedBalloons: installedBalloons,
                 installedHeadlines: installedHeadlines,
                 installedPlugins: installedPlugins,
+                windowMode: networkSettings.windowMode,
                 surfaceWindowNumbers: surfaceWindowController.windowNumbers,
                 balloonWindowNumbers: balloonWindowController.windowNumbers,
                 otherGhosts: calledGhosts.values.map { runtime in
@@ -3608,6 +3636,7 @@ private struct UtataneRootView: View {
                     speechHistoryStore: speechHistoryStore,
                     integratesSpeechHistory: networkSettings.windowMode != .off
                         && networkSettings.integratesSpeechHistoryInWindowMode,
+                    windowMode: networkSettings.windowMode,
                     presentationSession: calledPresentationSession
                 )
                 runtime.onError = { showError($0.localizedDescription) }
@@ -5196,6 +5225,7 @@ func startupInformationEvents(
     installedBalloons: [BalloonDefinition]? = nil,
     installedHeadlines: [InstalledHeadline] = [],
     installedPlugins: [InstalledPlugin] = [],
+    windowMode: GhostWindowMode,
     surfaceWindowNumbers: [Int] = [],
     balloonWindowNumbers: [Int] = [],
     otherGhosts: [String] = []
@@ -5221,6 +5251,7 @@ func startupInformationEvents(
     }
     return [
         ("basewareversion", [0: version, 1: "Utatane", 2: build]),
+        ("OnWindowModeChange", windowMode.startupChangeReferences),
         ("uniqueid", [0: ghost.rootDirectory.lastPathComponent]),
         ("capability", indexed([
             "request.charset", "request.sender", "request.securitylevel", "request.id",

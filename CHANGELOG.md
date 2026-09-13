@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### 追加
+
+- SSP 2.8.93互換として、起動時とウィンドウモード切り替え時の`OnWindowModeChange`、切り替え後の`OnDisplayChange`、現在の表示方式をnormal・shared・perghostで返す`baseware.windowmode`プロパティに対応
+
 ## [0.2.1] - 2026-09-12
 
 ### 追加
