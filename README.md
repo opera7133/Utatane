@@ -39,7 +39,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - YAYA(文) / KAGARI / SHIOLINK(MiyoJS等) / 里珠(Proxy) / 里々 / 華和梨 / 美坂 / 灯 / ese-shiori / 偽栞 / 忍 / 翡翠 / 結奈をSHIORIとして使うゴーストのネイティブ実行 (蒼空・里珠・結奈については"実験的な機能"を参照)
 - 韓国語助詞トランスレータ`ParticleMakoto`と`Makoto Basic with Select and Repeat`のネイティブ実行
 - SSU、`saori_cpuid`、`kenonoke`、`textcopy2`、`mciaudior`、`wmove`のネイティブSAORI互換
-- ゴーストとバルーンの手動ネットワーク更新と、設定した日数ごとの自動更新
+- コンテンツエクスプローラから行うゴースト、シェル、バルーン、ヘッドライン、プラグインの個別・一括ネットワーク更新。ゴーストとバルーンは設定した日数ごとの自動更新にも対応
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
 - `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
 - Materiaの「さくら」をWineなしで実行
@@ -64,12 +64,11 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - 一般のWindows向けSHIORI / SAORI / プラグインDLLやexeは直接実行できません (wine設定で利用可)
 - Windows固有のFMOには対応していません
 - SakuraScript、SERIKO、着せ替えなどは未対応の命令や定義があります
-- ネットワーク更新はゴーストと単体バルーンが対象です。SSPの修復モードや、別配布のシェル・バルーンをまとめて更新する機能には未対応です
 - ゴーストによっては表示、文字コード、イベントの互換性に問題があります
 
 ## とりあえず使う
 
-1. [Releases](../../releases)から最新リリースの`Utatane-macOS.zip`をダウンロードする
+1. [Releases](https://github.com/opera7133/Utatane/releases)から最新リリースの`Utatane-macOS.zip`をダウンロードする
 2. ZIPを展開し、`Utatane.app`を「アプリケーション」フォルダへ移動する
 3. Utataneを起動する
 

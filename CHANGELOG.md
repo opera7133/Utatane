@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.2] - 2026-09-13
 
 ### 追加
 
@@ -21,7 +21,7 @@
 - バルーン定義のクリック待ちマーカー座標、カウンタ表示、透過方式、windowpositionと、サーフェス別設定・marker／clickwaitmarker／arrow画像の差し替えへ対応
 - バルーンの`balloonc*.png`、`balloonc*s.txt`とcommunicateboxのフォント・色・座標・サイズをinputbox、communicatebox、teachboxの入力画面へ反映
 - シェルの`menuitem`／`menuitemex`による着せ替え順序・区切り・表示名と、scope別`menu,hidden`をmacOS標準メニューへ反映
-- SSP 2.8.93互換として、起動時とウィンドウモード切り替え時の`OnWindowModeChange`、切り替え後の`OnDisplayChange`、現在の表示方式をnormal・shared・perghostで返す`baseware.windowmode`プロパティに対応
+- 起動時とウィンドウモード切り替え時の`OnWindowModeChange`、切り替え後の`OnDisplayChange`、現在の表示方式をnormal・shared・perghostで返す`baseware.windowmode`プロパティに対応
 - カレンダーの「今日の予定」が編集・取り込み・日付変更で変化した時、起動中の全ゴーストへ`OnScheduleTodayNotify`を通知
 - ウィンドウモードで任意の画像を背景に選び、画面いっぱい・全体表示・引き伸ばし・中央から配置方法を選べるようにした。発話履歴の単色背景も自動・白・灰・黒からウィンドウごとに選択でき、履歴の統合設定をウィンドウの操作メニューから切り替えられる
 
@@ -37,7 +37,6 @@
 
 - 開発用パレットを閉じて開き直した時、表示中の当たり判定とパレットの設定表示が食い違う問題を修正
 - コンテンツエクスプローラの初期画面を、一覧と詳細を確認しやすい大きさへ拡大
-- コンテンツエクスプローラで、ブラウザ閲覧用ではないネットワーク更新用の`homeurl`を「配布元」として開いていた問題を修正
 
 ## [0.2.1] - 2026-09-12
 
@@ -518,6 +517,7 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
+[0.2.2]: https://github.com/opera7133/Utatane/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/opera7133/Utatane/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/opera7133/Utatane/compare/v0.1.9...v0.2.0
 [0.1.9]: https://github.com/opera7133/Utatane/compare/v0.1.8...v0.1.9
