@@ -102,10 +102,16 @@ final class ContentExplorerModel {
     var entries: [ContentExplorerEntry] = []
     var selectedKind: ContentExplorerKind = .ghost
     var searchText = ""
-    var selection: String?
+    var selection: Set<String> = []
+    var updateStatus: String?
+    var isUpdating = false
     var onActivate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onCheckUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
+    var onCheckUpdates: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)?
+    var onUpdateEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)?
+    var onRepairEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)?
+    var onCancelUpdate: (@MainActor @Sendable () -> Void)?
     var onRemove: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
 
     var filteredEntries: [ContentExplorerEntry] {
@@ -120,8 +126,20 @@ final class ContentExplorerModel {
     }
 
     var selectedEntry: ContentExplorerEntry? {
-        guard let selection else { return nil }
-        return entries.first { $0.id == selection }
+        guard selection.count == 1, let selectedID = selection.first else { return nil }
+        return entries.first { $0.id == selectedID }
+    }
+
+    var selectedEntries: [ContentExplorerEntry] {
+        filteredEntries.filter { selection.contains($0.id) }
+    }
+
+    var visibleUpdateEntries: [ContentExplorerEntry] {
+        filteredEntries.filter(\.hasUpdateAction)
+    }
+
+    var selectedUpdateEntries: [ContentExplorerEntry] {
+        selectedEntries.filter(\.hasUpdateAction)
     }
 
     func update(
@@ -139,8 +157,9 @@ final class ContentExplorerModel {
         {
             selectedKind = availableKind
         }
-        if selectedEntry == nil || selectedEntry?.kind != selectedKind {
-            selection = filteredEntries.first?.id
+        selection.formIntersection(Set(entries.map(\.id)))
+        if selectedEntries.isEmpty {
+            selection = Set(filteredEntries.first.map { [$0.id] } ?? [])
         }
     }
 }
@@ -171,11 +190,19 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         onActivate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
         onCheckUpdate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
         onUpdate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
+        onCheckUpdates: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)? = nil,
+        onUpdateEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)? = nil,
+        onRepairEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)? = nil,
+        onCancelUpdate: (@MainActor @Sendable () -> Void)? = nil,
         onRemove: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void
     ) {
         model.onActivate = onActivate
         model.onCheckUpdate = onCheckUpdate
         model.onUpdate = onUpdate
+        model.onCheckUpdates = onCheckUpdates
+        model.onUpdateEntries = onUpdateEntries
+        model.onRepairEntries = onRepairEntries
+        model.onCancelUpdate = onCancelUpdate
         model.onRemove = onRemove
         model.update(entries: entries, preferredKind: preferredKind)
         if let window {
@@ -209,6 +236,11 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         model.update(entries: entries)
     }
 
+    public func setUpdateState(isUpdating: Bool, status: String? = nil) {
+        model.isUpdating = isUpdating
+        model.updateStatus = status
+    }
+
     public func close() {
         window?.close()
     }
@@ -232,21 +264,69 @@ private struct ContentExplorerView: View {
                 }
                 .pickerStyle(.segmented)
                 .onChange(of: model.selectedKind) { _, _ in
-                    model.selection = model.filteredEntries.first?.id
+                    model.selection = Set(model.filteredEntries.first.map { [$0.id] } ?? [])
                 }
 
                 TextField("検索", text: $model.searchText)
                     .textFieldStyle(.roundedBorder)
                     .frame(minWidth: 150, maxWidth: 230)
                     .onChange(of: model.searchText) { _, _ in
-                        if !model.filteredEntries.contains(where: { $0.id == model.selection }) {
-                            model.selection = model.filteredEntries.first?.id
+                        if model.selectedEntries.isEmpty {
+                            model.selection = Set(model.filteredEntries.first.map { [$0.id] } ?? [])
                         }
                     }
             }
             .padding(12)
 
             Divider()
+
+            if !model.visibleUpdateEntries.isEmpty {
+                HStack(spacing: 10) {
+                    Text("⌘クリックで複数選択")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    if model.isUpdating {
+                        if let updateStatus = model.updateStatus {
+                            Text(updateStatus)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
+                        Button("中止") {
+                            model.onCancelUpdate?()
+                        }
+                    } else {
+                        Menu("一括操作") {
+                            if !model.selectedUpdateEntries.isEmpty {
+                                Button("選択項目の更新を確認") {
+                                    model.onCheckUpdates?(model.selectedUpdateEntries)
+                                }
+                                Button("選択項目を更新") {
+                                    model.onUpdateEntries?(model.selectedUpdateEntries)
+                                }
+                                Button("選択項目を修復") {
+                                    model.onRepairEntries?(model.selectedUpdateEntries)
+                                }
+                                Divider()
+                            }
+                            Button("表示中の全項目の更新を確認") {
+                                model.onCheckUpdates?(model.visibleUpdateEntries)
+                            }
+                            Button("表示中の全項目を更新") {
+                                model.onUpdateEntries?(model.visibleUpdateEntries)
+                            }
+                            Button("表示中の全項目を修復") {
+                                model.onRepairEntries?(model.visibleUpdateEntries)
+                            }
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+
+                Divider()
+            }
 
             HSplitView {
                 Group {
@@ -278,15 +358,15 @@ private struct ContentExplorerView: View {
                 }
                 .frame(minWidth: 310)
 
-                detailView(model.selectedEntry)
+                detailView(model.selectedEntries)
                     .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
             }
         }
     }
 
     @ViewBuilder
-    private func detailView(_ entry: ContentExplorerEntry?) -> some View {
-        if let entry {
+    private func detailView(_ entries: [ContentExplorerEntry]) -> some View {
+        if entries.count == 1, let entry = entries.first {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: entry.kind.systemImage)
@@ -346,6 +426,12 @@ private struct ContentExplorerView: View {
                 }
             }
             .padding(20)
+        } else if entries.count > 1 {
+            ContentUnavailableView(
+                "\(entries.count)項目を選択中",
+                systemImage: "checklist",
+                description: Text("上の一括操作から確認、更新、修復ができる。")
+            )
         } else {
             ContentUnavailableView(
                 "項目を選んで",

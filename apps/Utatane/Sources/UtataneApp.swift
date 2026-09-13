@@ -288,6 +288,7 @@ private struct UtataneRootView: View {
     @State private var installedPlugins: [InstalledPlugin] = []
     private let pluginRuntime = PluginRuntime()
     @State private var isUpdatingContent = false
+    @State private var contentUpdateTask: Task<Void, Never>?
     @State private var debugWindow: NSWindow?
     @State private var developerPalettePane: DebugConsoleView.Pane = .logs
     @State private var developerLogLevelFilter: DebugConsoleView.LevelFilter = .all
@@ -5218,6 +5219,10 @@ private struct UtataneRootView: View {
             onActivate: activateContentExplorerEntry,
             onCheckUpdate: requestContentExplorerUpdateCheck,
             onUpdate: requestContentExplorerUpdate,
+            onCheckUpdates: requestContentExplorerUpdateChecks,
+            onUpdateEntries: requestContentExplorerUpdates,
+            onRepairEntries: requestContentExplorerRepairs,
+            onCancelUpdate: cancelContentExplorerUpdates,
             onRemove: requestContentExplorerRemoval
         )
     }
@@ -5401,6 +5406,158 @@ private struct UtataneRootView: View {
 
     private func requestContentExplorerUpdate(_ entry: ContentExplorerEntry) {
         Task { await updateContentExplorerEntry(entry) }
+    }
+
+    private func requestContentExplorerUpdateChecks(_ entries: [ContentExplorerEntry]) {
+        startContentExplorerBatch(entries, operation: .check)
+    }
+
+    private func requestContentExplorerUpdates(_ entries: [ContentExplorerEntry]) {
+        startContentExplorerBatch(entries, operation: .update)
+    }
+
+    private func requestContentExplorerRepairs(_ entries: [ContentExplorerEntry]) {
+        startContentExplorerBatch(entries, operation: .repair)
+    }
+
+    private func startContentExplorerBatch(
+        _ entries: [ContentExplorerEntry],
+        operation: ContentUpdateOperation
+    ) {
+        guard contentUpdateTask == nil, !isUpdatingContent else { return }
+        contentUpdateTask = Task {
+            await runContentExplorerBatch(entries, operation: operation)
+            contentUpdateTask = nil
+        }
+    }
+
+    private func cancelContentExplorerUpdates() {
+        contentUpdateTask?.cancel()
+    }
+
+    private func runContentExplorerBatch(
+        _ entries: [ContentExplorerEntry],
+        operation: ContentUpdateOperation
+    ) async {
+        let candidates = entries.filter { entry in
+            entry.hasUpdateAction && (operation == .check || entry.canUpdate)
+        }
+        guard !candidates.isEmpty else { return }
+        let targets: [ContentUpdateTarget]
+        do {
+            var resolvedTargets: [ContentUpdateTarget] = []
+            for entry in candidates {
+                try await resolvedTargets.append(contentUpdateTarget(for: entry))
+            }
+            targets = resolvedTargets
+        } catch {
+            showError(error.localizedDescription)
+            return
+        }
+
+        isUpdatingContent = true
+        contentExplorerController.setUpdateState(isUpdating: true, status: "準備中…")
+        let statusToken = statusWindowController.show("\(targets.count)項目を処理中…")
+        defer {
+            isUpdatingContent = false
+            contentExplorerController.setUpdateState(isUpdating: false)
+            statusWindowController.hide(token: statusToken)
+        }
+
+        if operation != .check, candidates.contains(where: { $0.kind == .plugin }) {
+            await pluginRuntime.unloadAll()
+        }
+        let entryByTargetID = Dictionary(uniqueKeysWithValues: zip(targets, candidates).map { ($0.id, $1) })
+        do {
+            let result = try await ContentUpdateBatchJob().run(
+                targets: targets,
+                operation: operation,
+                progress: { progress in
+                    switch progress {
+                    case let .targetBegin(target, index, total, attempt):
+                        let retry = attempt > 1 ? "（再試行 \(attempt)）" : ""
+                        contentExplorerController.setUpdateState(
+                            isUpdating: true,
+                            status: "\(index + 1)/\(total) \(target.name)\(retry)"
+                        )
+                    case let .targetProgress(target, itemProgress):
+                        broadcastOtherUpdateProgress(
+                            itemProgress,
+                            kind: target.kind.rawValue,
+                            reason: operation == .check ? "check" : operation == .repair ? "repair" : "manual"
+                        )
+                    case let .targetRetry(target, _, failureDescription):
+                        AppLogStore.shared.warning(
+                            "「\(target.name)」の更新処理を再試行します",
+                            category: "Update",
+                            details: failureDescription
+                        )
+                    case .targetComplete, .targetFailure:
+                        break
+                    }
+                }
+            )
+            for item in result.items {
+                guard let entry = entryByTargetID[item.target.id] else { continue }
+                broadcastContentUpdateResult(
+                    entry: entry,
+                    checkOnly: operation == .check,
+                    succeeded: item.succeeded,
+                    result: item.result.map { String($0.changedFiles.count) }
+                        ?? item.failureDescription
+                        ?? "fileio"
+                )
+            }
+            if operation != .check {
+                for kind in Set(candidates.map(\.kind)) {
+                    await reloadContentCatalog(kind: kind)
+                }
+                configureContextMenu()
+                refreshContentExplorer()
+            }
+            let summary = "\(result.succeededCount)件完了、\(result.failedCount)件失敗"
+            AppLogStore.shared.info(
+                "一括更新処理: \(summary)",
+                category: "Update",
+                details: result.items.compactMap { item in
+                    item.failureDescription.map { "\(item.target.name): \($0)" }
+                }.joined(separator: "\n")
+            )
+            if result.failedCount > 0 {
+                showError("一括更新処理で\(result.failedCount)件失敗しました。開発用パレットのログを確認してください。")
+            }
+        } catch is CancellationError {
+            AppLogStore.shared.info("一括更新処理を中止しました", category: "Update")
+        } catch {
+            AppLogStore.shared.error(
+                "一括更新処理に失敗しました: \(error.localizedDescription)",
+                category: "Update",
+                details: String(describing: error)
+            )
+            showError(error.localizedDescription)
+        }
+    }
+
+    private func contentUpdateTarget(for entry: ContentExplorerEntry) async throws -> ContentUpdateTarget {
+        let homeURL: URL
+        if let configured = entry.updateURL {
+            homeURL = configured
+        } else if entry.kind == .ghost,
+                  currentGhost?.rootDirectory == entry.directory,
+                  let session,
+                  let value = try await session.handle(event: .shiori(id: "On_homeurl", references: [:])),
+                  let configured = URL(string: value.rawValue.trimmingCharacters(in: .whitespacesAndNewlines))
+        {
+            homeURL = configured
+        } else {
+            throw ContentNetworkUpdateError.invalidHomeURL
+        }
+        return ContentUpdateTarget(
+            kind: contentUpdateKind(for: entry.kind),
+            name: entry.name,
+            rootDirectory: entry.directory,
+            homeURL: homeURL
+        )
     }
 
     private func checkContentExplorerEntryUpdate(_ entry: ContentExplorerEntry) async {

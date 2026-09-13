@@ -84,6 +84,62 @@ private actor UpdateFetchRecorder {
     }
 }
 
+@Test func `validates delete txt before replacing any content`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let destination = root.appending(path: "data.txt")
+    try Data("original".utf8).write(to: destination)
+
+    let replacement = Data("replacement".utf8)
+    let hash = Insecure.MD5.hash(data: replacement).map { String(format: "%02x", $0) }.joined()
+    let manifest = Data("data.txt\u{1}\(hash)\u{1}\n".utf8)
+    let updater = ContentNetworkUpdater { url in
+        switch url.lastPathComponent {
+        case "updates2.dau": manifest
+        case "data.txt": replacement
+        case "delete.txt": Data("../outside".utf8)
+        default: throw NetworkFetchError.unsuccessfulStatus(404)
+        }
+    }
+
+    await #expect(throws: ContentNetworkUpdateError.self) {
+        try await updater.update(
+            rootDirectory: root,
+            homeURL: #require(URL(string: "https://example.test/ghost/"))
+        )
+    }
+    #expect(try Data(contentsOf: destination) == Data("original".utf8))
+}
+
+@Test func `rejects conflicting update and delete paths before commit`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let destination = root.appending(path: "data.txt")
+    try Data("original".utf8).write(to: destination)
+
+    let replacement = Data("replacement".utf8)
+    let hash = Insecure.MD5.hash(data: replacement).map { String(format: "%02x", $0) }.joined()
+    let manifest = Data("data.txt\u{1}\(hash)\u{1}\n".utf8)
+    let updater = ContentNetworkUpdater { url in
+        switch url.lastPathComponent {
+        case "updates2.dau": manifest
+        case "data.txt": replacement
+        case "delete.txt": Data("data.txt".utf8)
+        default: throw NetworkFetchError.unsuccessfulStatus(404)
+        }
+    }
+
+    await #expect(throws: ContentNetworkUpdateError.self) {
+        try await updater.update(
+            rootDirectory: root,
+            homeURL: #require(URL(string: "https://example.test/ghost/"))
+        )
+    }
+    #expect(try Data(contentsOf: destination) == Data("original".utf8))
+}
+
 @Test func `downloads verifies and applies changed files`() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

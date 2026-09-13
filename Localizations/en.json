@@ -357,5 +357,14 @@
   "応答" : "Response",
   "まだ送信していません。" : "No request has been sent yet.",
   "起動中のゴーストがありません。" : "No ghost is running.",
-  "SHIORIセッションは停止しています。" : "The SHIORI session has stopped."
+  "SHIORIセッションは停止しています。" : "The SHIORI session has stopped.",
+  "⌘クリックで複数選択" : "Command-click to select multiple items",
+  "中止" : "Cancel",
+  "選択項目の更新を確認" : "Check Selected Items for Updates",
+  "選択項目を更新" : "Update Selected Items",
+  "選択項目を修復" : "Repair Selected Items",
+  "表示中の全項目の更新を確認" : "Check All Visible Items for Updates",
+  "表示中の全項目を更新" : "Update All Visible Items",
+  "表示中の全項目を修復" : "Repair All Visible Items",
+  "上の一括操作から確認、更新、修復ができる。" : "Use Batch Actions above to check, update, or repair them."
 }

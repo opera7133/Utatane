@@ -76,6 +76,7 @@ public enum ContentNetworkUpdateError: LocalizedError, Equatable, Sendable {
     case updateTooLarge
     case checksumMismatch(String)
     case downloadFailed(path: String, underlyingError: String)
+    case conflictingPaths(String, String)
 
     public var errorDescription: String? {
         switch self {
@@ -87,6 +88,7 @@ public enum ContentNetworkUpdateError: LocalizedError, Equatable, Sendable {
         case .updateTooLarge: "更新サイズが上限を超えている"
         case let .checksumMismatch(path): "MD5が一致しない: \(path)"
         case let .downloadFailed(path, error): "ファイル取得失敗 (\(path)): \(error)"
+        case let .conflictingPaths(lhs, rhs): "更新と削除のパスが競合している: \(lhs), \(rhs)"
         }
     }
 }
@@ -178,23 +180,61 @@ public struct ContentNetworkUpdater: Sendable {
             changed.append((entry, local, staged))
         }
 
+        var deleteData: Data?
+        do {
+            deleteData = try await fetch(manifestURL.deletingLastPathComponent().appending(path: "delete.txt"))
+            try Task.checkCancellation()
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // delete.txt is optional and many distribution servers return an
+            // ordinary error response when it is absent.
+            deleteData = nil
+        }
+        let rawDeletePaths = try deleteData.map(Self.parseDeleteList) ?? []
+        let changedPaths = Set(changed.map(\.entry.path))
+        for deletePath in rawDeletePaths {
+            if let changedPath = changedPaths.first(where: {
+                $0 == deletePath || $0.hasPrefix(deletePath + "/") || deletePath.hasPrefix($0 + "/")
+            }) {
+                throw ContentNetworkUpdateError.conflictingPaths(changedPath, deletePath)
+            }
+        }
+        let deletePaths = rawDeletePaths
+            .sorted { $0.count < $1.count }
+            .reduce(into: [String]()) { result, path in
+                guard !result.contains(where: { path.hasPrefix($0 + "/") }) else { return }
+                result.append(path)
+            }
+        let deletions = try deletePaths.map { path in
+            try (path: path, local: Self.confinedURL(path: path, root: root))
+        }
+
         var applied: [(local: URL, backup: URL?, existed: Bool)] = []
+        func recordOriginal(at local: URL, path: String) throws {
+            let existed = fileManager.fileExists(atPath: local.path)
+            let relativeBackup = try Self.confinedURL(path: path, root: backup)
+            if existed {
+                try fileManager.createDirectory(at: relativeBackup.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try fileManager.copyItem(at: local, to: relativeBackup)
+            }
+            applied.append((local, existed ? relativeBackup : nil, existed))
+        }
         do {
             for item in changed {
                 try Task.checkCancellation()
-                let relativeBackup = try Self.confinedURL(path: item.entry.path, root: backup)
-                let existed = fileManager.fileExists(atPath: item.local.path)
-                if existed {
-                    try fileManager.createDirectory(at: relativeBackup.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    try fileManager.copyItem(at: item.local, to: relativeBackup)
-                }
+                try recordOriginal(at: item.local, path: item.entry.path)
                 try fileManager.createDirectory(at: item.local.deletingLastPathComponent(), withIntermediateDirectories: true)
-                applied.append((item.local, existed ? relativeBackup : nil, existed))
-                if existed {
+                if fileManager.fileExists(atPath: item.local.path) {
                     try fileManager.removeItem(at: item.local)
                 }
                 try fileManager.copyItem(at: item.staged, to: item.local)
                 try Task.checkCancellation()
+            }
+            for deletion in deletions where fileManager.fileExists(atPath: deletion.local.path) {
+                try Task.checkCancellation()
+                try recordOriginal(at: deletion.local, path: deletion.path)
+                try fileManager.removeItem(at: deletion.local)
             }
         } catch {
             for item in applied.reversed() {
@@ -207,9 +247,6 @@ public struct ContentNetworkUpdater: Sendable {
         }
         // Applying files is the commit point. A cancellation after this point must
         // not report a failed job after content has already changed.
-        if let deleteData = try? await fetch(manifestURL.deletingLastPathComponent().appending(path: "delete.txt")) {
-            try Self.applyDeleteList(deleteData, root: root)
-        }
         return ContentUpdateResult(changedFiles: changed.map(\.entry.path))
     }
 
@@ -314,15 +351,6 @@ public struct ContentNetworkUpdater: Sendable {
             }
             _ = try confinedURL(path: line, root: URL(filePath: "/delete-root", directoryHint: .isDirectory))
             return line
-        }
-    }
-
-    private static func applyDeleteList(_ data: Data, root: URL) throws {
-        for path in try parseDeleteList(data) {
-            let target = try confinedURL(path: path, root: root)
-            if FileManager.default.fileExists(atPath: target.path) {
-                try FileManager.default.removeItem(at: target)
-            }
         }
     }
 

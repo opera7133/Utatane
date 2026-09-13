@@ -24,7 +24,7 @@ import Testing
 
     model.selectedKind = .balloon
     model.searchText = "orig"
-    model.selection = model.filteredEntries.first?.id
+    model.selection = Set(model.filteredEntries.first.map { [$0.id] } ?? [])
     #expect(model.filteredEntries == [balloon])
     #expect(model.selectedEntry == balloon)
 }
@@ -104,4 +104,35 @@ import Testing
 
     #expect(entry.updateURL == nil)
     #expect(entry.hasUpdateAction)
+}
+
+@MainActor
+@Test func `content explorer keeps multiple update selections in visible order`() throws {
+    let updateURL = try #require(URL(string: "https://example.test/update/"))
+    let first = ContentExplorerEntry(
+        kind: .ghost,
+        name: "First",
+        directory: URL(filePath: "/tmp/Ghosts/first", directoryHint: .isDirectory),
+        updateURL: updateURL
+    )
+    let second = ContentExplorerEntry(
+        kind: .ghost,
+        name: "Second",
+        directory: URL(filePath: "/tmp/Ghosts/second", directoryHint: .isDirectory),
+        updateURL: updateURL
+    )
+    let noUpdate = ContentExplorerEntry(
+        kind: .ghost,
+        name: "Local",
+        directory: URL(filePath: "/tmp/Ghosts/local", directoryHint: .isDirectory),
+        canUpdate: false
+    )
+    let model = ContentExplorerModel()
+    model.update(entries: [first, second, noUpdate], preferredKind: .ghost)
+    model.selection = [second.id, first.id, noUpdate.id]
+
+    #expect(model.selectedEntry == nil)
+    #expect(model.selectedEntries == [first, second, noUpdate])
+    #expect(model.selectedUpdateEntries == [first, second])
+    #expect(model.visibleUpdateEntries == [first, second])
 }
