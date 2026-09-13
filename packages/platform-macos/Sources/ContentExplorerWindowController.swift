@@ -91,7 +91,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         }
     }
 
-    var hasUpdateAction: Bool {
+    public var hasUpdateAction: Bool {
         updateURL != nil || resolvesUpdateURLDynamically
     }
 }
@@ -104,6 +104,7 @@ final class ContentExplorerModel {
     var searchText = ""
     var selection: String?
     var onActivate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
+    var onCheckUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onRemove: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
 
@@ -168,10 +169,12 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         entries: [ContentExplorerEntry],
         preferredKind: ContentExplorerKind? = nil,
         onActivate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
+        onCheckUpdate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
         onUpdate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
         onRemove: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void
     ) {
         model.onActivate = onActivate
+        model.onCheckUpdate = onCheckUpdate
         model.onUpdate = onUpdate
         model.onRemove = onRemove
         model.update(entries: entries, preferredKind: preferredKind)
@@ -325,10 +328,15 @@ private struct ContentExplorerView: View {
                     }
                     Spacer()
                     if entry.hasUpdateAction {
-                        Button("更新") {
-                            model.onUpdate?(entry)
+                        Menu("更新") {
+                            Button("更新を確認") {
+                                model.onCheckUpdate?(entry)
+                            }
+                            Button("更新を実行") {
+                                model.onUpdate?(entry)
+                            }
+                            .disabled(!entry.canUpdate)
                         }
-                        .disabled(!entry.canUpdate)
                     }
                     Button(entry.activationTitle) {
                         model.onActivate?(entry)

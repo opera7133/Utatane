@@ -343,6 +343,8 @@
   "検索" : "Search",
   "使用中" : "In Use",
   "更新" : "Update",
+  "更新を確認" : "Check for Updates",
+  "更新を実行" : "Install Update",
   "配布元" : "Distribution Site",
   "一覧からコンテンツを選ぶと詳細を表示する。" : "Select content from the list to view its details."
 }

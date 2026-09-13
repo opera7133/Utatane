@@ -52,7 +52,13 @@ import Testing
         name: "Emily",
         directory: URL(filePath: "/tmp/Ghosts/emily4", directoryHint: .isDirectory)
     )
-    controller.show(entries: [entry], onActivate: { _ in }, onUpdate: { _ in }, onRemove: { _ in })
+    controller.show(
+        entries: [entry],
+        onActivate: { _ in },
+        onCheckUpdate: { _ in },
+        onUpdate: { _ in },
+        onRemove: { _ in }
+    )
     defer { controller.close() }
 
     #expect(controller.contentSize?.width == 1120)

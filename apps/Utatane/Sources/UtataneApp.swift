@@ -5196,6 +5196,7 @@ private struct UtataneRootView: View {
             entries: contentExplorerEntries(),
             preferredKind: preferredKind,
             onActivate: activateContentExplorerEntry,
+            onCheckUpdate: requestContentExplorerUpdateCheck,
             onUpdate: requestContentExplorerUpdate,
             onRemove: requestContentExplorerRemoval
         )
@@ -5377,8 +5378,99 @@ private struct UtataneRootView: View {
         Task { await removeContentExplorerEntry(entry, asksConfirmation: true) }
     }
 
+    private func requestContentExplorerUpdateCheck(_ entry: ContentExplorerEntry) {
+        Task { await checkContentExplorerEntryUpdate(entry) }
+    }
+
     private func requestContentExplorerUpdate(_ entry: ContentExplorerEntry) {
         Task { await updateContentExplorerEntry(entry) }
+    }
+
+    private func checkContentExplorerEntryUpdate(_ entry: ContentExplorerEntry) async {
+        guard !isUpdatingContent, entry.hasUpdateAction else { return }
+        if entry.kind == .ghost, currentGhost?.rootDirectory == entry.directory {
+            await checkCurrentGhostUpdate()
+            return
+        }
+        guard let homeURL = entry.updateURL else { return }
+
+        isUpdatingContent = true
+        let reason = "manual"
+        let statusToken = statusWindowController.show("「\(entry.name)」の更新を確認中…")
+        defer {
+            isUpdatingContent = false
+            statusWindowController.hide(token: statusToken)
+        }
+
+        do {
+            let target = ContentUpdateTarget(
+                kind: contentUpdateKind(for: entry.kind),
+                name: entry.name,
+                rootDirectory: entry.directory,
+                homeURL: homeURL
+            )
+            let result = try await ContentUpdateJob().run(target: target, operation: .check)
+            let updateResult = result.changedFiles.isEmpty ? "none" : "changed"
+            broadcastEvent(.shiori(id: "OnUpdateCheckComplete", references: [
+                0: updateResult,
+                1: result.changedFiles.joined(separator: ","),
+                3: entry.kind.rawValue,
+                4: reason
+            ]))
+            broadcastContentUpdateResult(
+                entry: entry,
+                checkOnly: true,
+                succeeded: true,
+                result: String(result.changedFiles.count)
+            )
+            AppLogStore.shared.info(
+                result.changedFiles.isEmpty
+                    ? "「\(entry.name)」は最新です（確認のみ）"
+                    : "「\(entry.name)」に\(result.changedFiles.count)件の更新があります",
+                category: "Update",
+                details: result.changedFiles.isEmpty ? nil : result.changedFiles.joined(separator: "\n")
+            )
+        } catch {
+            let failureReason = updateFailureReason(error)
+            broadcastEvent(.shiori(id: "OnUpdateCheckFailure", references: [
+                0: failureReason,
+                3: entry.kind.rawValue,
+                4: reason
+            ]))
+            broadcastContentUpdateResult(
+                entry: entry,
+                checkOnly: true,
+                succeeded: false,
+                result: failureReason,
+                failurePath: updateFailurePath(error)
+            )
+            AppLogStore.shared.error(
+                "「\(entry.name)」の更新確認に失敗しました: \(error.localizedDescription)",
+                category: "Update",
+                details: String(describing: error)
+            )
+            showError(error.localizedDescription)
+        }
+    }
+
+    private func broadcastContentUpdateResult(
+        entry: ContentExplorerEntry,
+        checkOnly: Bool,
+        succeeded: Bool,
+        result: String,
+        failurePath: String? = nil
+    ) {
+        let record = ContentUpdateEventRecord(
+            name: entry.name,
+            type: entry.kind.rawValue,
+            succeeded: succeeded,
+            result: result,
+            failurePath: failurePath
+        )
+        broadcastEvent(.shiori(
+            id: checkOnly ? "OnUpdateCheckResultEx" : "OnUpdateResultEx",
+            references: [0: record.extendedValue]
+        ))
     }
 
     private func updateContentExplorerEntry(_ entry: ContentExplorerEntry) async {
@@ -5451,6 +5543,12 @@ private struct UtataneRootView: View {
                 3: entry.kind.rawValue,
                 4: reason
             ]))
+            broadcastContentUpdateResult(
+                entry: entry,
+                checkOnly: false,
+                succeeded: true,
+                result: String(result.changedFiles.count)
+            )
         } catch {
             AppLogStore.shared.error(
                 "「\(entry.name)」の更新に失敗しました: \(error.localizedDescription)",
@@ -5463,6 +5561,13 @@ private struct UtataneRootView: View {
                 3: entry.kind.rawValue,
                 4: reason
             ]))
+            broadcastContentUpdateResult(
+                entry: entry,
+                checkOnly: false,
+                succeeded: false,
+                result: updateFailureReason(error),
+                failurePath: updateFailurePath(error)
+            )
             showError(error.localizedDescription)
         }
     }
