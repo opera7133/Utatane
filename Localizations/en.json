@@ -346,5 +346,16 @@
   "更新を確認" : "Check for Updates",
   "更新を実行" : "Install Update",
   "配布元" : "Distribution Site",
-  "一覧からコンテンツを選ぶと詳細を表示する。" : "Select content from the list to view its details."
+  "一覧からコンテンツを選ぶと詳細を表示する。" : "Select content from the list to view its details.",
+  "イベントID" : "Event ID",
+  "値" : "Value",
+  "このReferenceを削除" : "Remove This Reference",
+  "Referenceを追加" : "Add Reference",
+  "応答スクリプトを実行" : "Run Response Script",
+  "送信" : "Send",
+  "選択中のゴーストへイベントIDとReferenceを送り、SHIORIの応答を確認する。" : "Send an event ID and references to the selected ghost and inspect the SHIORI response.",
+  "応答" : "Response",
+  "まだ送信していません。" : "No request has been sent yet.",
+  "起動中のゴーストがありません。" : "No ghost is running.",
+  "SHIORIセッションは停止しています。" : "The SHIORI session has stopped."
 }

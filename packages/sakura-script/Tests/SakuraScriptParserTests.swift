@@ -247,10 +247,11 @@ func `parses SSP self vanish commands`() {
 @Test
 func `parses implemented SSP developer tool commands`() {
     #expect(SakuraScriptParser().parse(
-        #"\![open,developer]\![open,surfacetest]\![open,errorlog]"#
+        #"\![open,developer]\![open,surfacetest]\![open,shiorirequest]\![open,errorlog]"#
     ) == [
         .contentAction(.openDeveloperTool("developer")),
         .contentAction(.openDeveloperTool("surfacetest")),
+        .contentAction(.openDeveloperTool("shiorirequest")),
         .contentAction(.openDeveloperTool("errorlog"))
     ])
 }

@@ -388,6 +388,24 @@ private struct UtataneRootView: View {
                     },
                     serikoInspectorSnapshots: {
                         surfaceWindowController.serikoInspectorSnapshots
+                    },
+                    onSendSHIORIRequest: { eventID, references in
+                        guard let session else {
+                            return .failure(String(localized: "起動中のゴーストがありません。"))
+                        }
+                        do {
+                            guard let response = try await session.response(
+                                for: .shiori(id: eventID, references: references)
+                            ) else {
+                                return .failure(String(localized: "SHIORIセッションは停止しています。"))
+                            }
+                            return .response(
+                                script: response.script?.rawValue,
+                                references: response.references
+                            )
+                        } catch {
+                            return .failure(error.localizedDescription)
+                        }
                     }
                 )
             } else {
@@ -2966,6 +2984,8 @@ private struct UtataneRootView: View {
                 developerLogLevelFilter = .errorOnly
             case "developer", "surfacetest":
                 developerPalettePane = .tools
+            case "shiorirequest":
+                developerPalettePane = .shioriRequest
             default:
                 return
             }

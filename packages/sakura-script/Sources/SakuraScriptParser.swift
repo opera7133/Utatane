@@ -705,7 +705,8 @@ public struct SakuraScriptParser: Sendable {
                         tokens.append(.open(arguments[2]))
                     } else if arguments.count == 2,
                               arguments[0].lowercased() == "open",
-                              ["developer", "surfacetest", "errorlog"].contains(arguments[1].lowercased())
+                              ["developer", "surfacetest", "shiorirequest", "errorlog"]
+                              .contains(arguments[1].lowercased())
                     {
                         tokens.append(.contentAction(.openDeveloperTool(arguments[1].lowercased())))
                     } else if arguments.count == 2,

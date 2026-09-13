@@ -36,10 +36,36 @@ public struct DeveloperSurfaceTestItem: Identifiable, Sendable, Equatable {
     }
 }
 
+public enum DeveloperSHIORIResponse: Sendable, Equatable {
+    case response(script: String?, references: [Int: String])
+    case failure(String)
+
+    public var script: String? {
+        guard case let .response(script, _) = self else { return nil }
+        return script
+    }
+
+    public var formattedText: String {
+        switch self {
+        case let .response(script, references):
+            var lines = references.keys.sorted().map { index in
+                "Reference\(index): \(references[index] ?? "")"
+            }
+            if let script {
+                lines.insert("Value: \(script)", at: 0)
+            }
+            return lines.isEmpty ? "No Content" : lines.joined(separator: "\n")
+        case let .failure(message):
+            return "Error: \(message)"
+        }
+    }
+}
+
 public struct DebugConsoleView: View {
     public enum Pane: String, CaseIterable, Identifiable {
         case logs = "ログ"
         case tools = "開発ツール"
+        case shioriRequest = "SHIORI Request"
 
         public var id: String {
             rawValue
@@ -88,6 +114,7 @@ public struct DebugConsoleView: View {
     private let onSelectSurface: (Int, Int) -> Void
     private let onPlayAnimation: (Int, Int) -> Void
     private let serikoInspectorSnapshots: @MainActor () -> [SERIKOInspectorSnapshot]
+    private let onSendSHIORIRequest: @MainActor (String, [Int: String]) async -> DeveloperSHIORIResponse
 
     @ObservedObject private var logStore: AppLogStore
     @Binding private var levelFilter: LevelFilter
@@ -100,6 +127,11 @@ public struct DebugConsoleView: View {
     @State private var showsCollisionNames: Bool
     @State private var testScope = 0
     @State private var selectedSurfaceID: Int?
+    @State private var shioriEventID = "OnBoot"
+    @State private var shioriReferences: [SHIORIReferenceField] = []
+    @State private var shioriResponse: DeveloperSHIORIResponse?
+    @State private var isSendingSHIORIRequest = false
+    @State private var executesSHIORIResponse = false
 
     public init(
         model: GhostListModel,
@@ -125,6 +157,7 @@ public struct DebugConsoleView: View {
         onSelectSurface: @escaping (Int, Int) -> Void,
         onPlayAnimation: @escaping (Int, Int) -> Void,
         serikoInspectorSnapshots: @escaping @MainActor () -> [SERIKOInspectorSnapshot],
+        onSendSHIORIRequest: @escaping @MainActor (String, [Int: String]) async -> DeveloperSHIORIResponse,
         logStore: AppLogStore = .shared
     ) {
         self.model = model
@@ -150,6 +183,7 @@ public struct DebugConsoleView: View {
         self.onSelectSurface = onSelectSurface
         self.onPlayAnimation = onPlayAnimation
         self.serikoInspectorSnapshots = serikoInspectorSnapshots
+        self.onSendSHIORIRequest = onSendSHIORIRequest
         self.logStore = logStore
     }
 
@@ -204,12 +238,15 @@ public struct DebugConsoleView: View {
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             Divider()
-            if pane == .logs {
+            switch pane {
+            case .logs:
                 filterBar
                 Divider()
                 logContentArea
-            } else {
+            case .tools:
                 developerTools
+            case .shioriRequest:
+                shioriRequestTool
             }
         }
         .frame(minWidth: 760, minHeight: 500)
@@ -350,6 +387,93 @@ public struct DebugConsoleView: View {
     private var selectedSurface: DeveloperSurfaceTestItem? {
         guard let selectedSurfaceID else { return nil }
         return surfaces.first { $0.id == selectedSurfaceID }
+    }
+
+    private var shioriRequestTool: some View {
+        Form {
+            Section("SHIORI Request") {
+                TextField("イベントID", text: $shioriEventID)
+                    .textFieldStyle(.roundedBorder)
+
+                ForEach($shioriReferences) { $reference in
+                    HStack {
+                        Text("Reference\(reference.index)")
+                            .font(.body.monospaced())
+                            .frame(width: 100, alignment: .trailing)
+                        TextField("値", text: $reference.value)
+                            .textFieldStyle(.roundedBorder)
+                        Button {
+                            shioriReferences.removeAll { $0.id == reference.id }
+                        } label: {
+                            Image(systemName: "minus.circle")
+                        }
+                        .buttonStyle(.plain)
+                        .help("このReferenceを削除")
+                    }
+                }
+
+                HStack {
+                    Button("Referenceを追加") {
+                        addSHIORIReference()
+                    }
+                    Spacer()
+                    Toggle("応答スクリプトを実行", isOn: $executesSHIORIResponse)
+                        .toggleStyle(.checkbox)
+                    Button("送信") {
+                        sendSHIORIRequest()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(
+                        shioriEventID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                            || !isSessionAvailable
+                            || isSendingSHIORIRequest
+                    )
+                }
+                Text("選択中のゴーストへイベントIDとReferenceを送り、SHIORIの応答を確認する。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("応答") {
+                if isSendingSHIORIRequest {
+                    ProgressView()
+                } else if let shioriResponse {
+                    ScrollView {
+                        Text(verbatim: shioriResponse.formattedText)
+                            .font(.body.monospaced())
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .frame(minHeight: 180)
+                } else {
+                    Text("まだ送信していません。")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private func addSHIORIReference() {
+        let usedIndices = Set(shioriReferences.map(\.index))
+        let index = (0 ... 255).first { !usedIndices.contains($0) } ?? 0
+        shioriReferences.append(SHIORIReferenceField(index: index))
+        shioriReferences.sort { $0.index < $1.index }
+    }
+
+    private func sendSHIORIRequest() {
+        let eventID = shioriEventID.trimmingCharacters(in: .whitespacesAndNewlines)
+        let references = Dictionary(uniqueKeysWithValues: shioriReferences.map { ($0.index, $0.value) })
+        isSendingSHIORIRequest = true
+        shioriResponse = nil
+        Task { @MainActor in
+            let response = await onSendSHIORIRequest(eventID, references)
+            shioriResponse = response
+            isSendingSHIORIRequest = false
+            if executesSHIORIResponse, let script = response.script {
+                onExecuteScript(script)
+            }
+        }
     }
 
     private func serikoSnapshotView(_ snapshot: SERIKOInspectorSnapshot) -> some View {
@@ -740,4 +864,13 @@ public struct DebugConsoleView: View {
         f.dateFormat = "yyyy-MM-dd HH:mm:ss.SSS"
         return f
     }()
+}
+
+private struct SHIORIReferenceField: Identifiable {
+    let index: Int
+    var value = ""
+
+    var id: Int {
+        index
+    }
 }
