@@ -113,10 +113,12 @@ public struct ContentNetworkUpdater: Sendable {
         homeURL: URL,
         progress: Progress? = nil
     ) async throws -> ContentUpdateResult {
+        try Task.checkCancellation()
         guard let scheme = homeURL.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
             throw ContentNetworkUpdateError.invalidHomeURL
         }
         let (manifestURL, manifestData) = try await fetchManifest(homeURL: homeURL)
+        try Task.checkCancellation()
         let entries = try Self.parseManifest(manifestData)
         guard entries.count <= maximumFileCount else { throw ContentNetworkUpdateError.tooManyFiles }
 
@@ -143,6 +145,7 @@ public struct ContentNetworkUpdater: Sendable {
         var changed: [(entry: ContentUpdateEntry, local: URL, staged: URL)] = []
         var totalBytes = 0
         for (index, item) in pending.enumerated() {
+            try Task.checkCancellation()
             let (entry, local) = item
             await progress?(.downloadBegin(path: entry.path, index: index, total: pending.count))
             let remote = manifestURL.deletingLastPathComponent().appending(path: entry.path)
@@ -150,8 +153,10 @@ public struct ContentNetworkUpdater: Sendable {
             do {
                 data = try await fetch(remote)
             } catch {
+                try Task.checkCancellation()
                 throw ContentNetworkUpdateError.downloadFailed(path: entry.path, underlyingError: error.localizedDescription)
             }
+            try Task.checkCancellation()
             totalBytes += data.count
             guard totalBytes <= maximumTotalBytes else { throw ContentNetworkUpdateError.updateTooLarge }
             let actualMD5 = Self.md5(data)
@@ -176,6 +181,7 @@ public struct ContentNetworkUpdater: Sendable {
         var applied: [(local: URL, backup: URL?, existed: Bool)] = []
         do {
             for item in changed {
+                try Task.checkCancellation()
                 let relativeBackup = try Self.confinedURL(path: item.entry.path, root: backup)
                 let existed = fileManager.fileExists(atPath: item.local.path)
                 if existed {
@@ -188,6 +194,7 @@ public struct ContentNetworkUpdater: Sendable {
                     try fileManager.removeItem(at: item.local)
                 }
                 try fileManager.copyItem(at: item.staged, to: item.local)
+                try Task.checkCancellation()
             }
         } catch {
             for item in applied.reversed() {
@@ -198,6 +205,8 @@ public struct ContentNetworkUpdater: Sendable {
             }
             throw error
         }
+        // Applying files is the commit point. A cancellation after this point must
+        // not report a failed job after content has already changed.
         if let deleteData = try? await fetch(manifestURL.deletingLastPathComponent().appending(path: "delete.txt")) {
             try Self.applyDeleteList(deleteData, root: root)
         }
@@ -206,10 +215,12 @@ public struct ContentNetworkUpdater: Sendable {
 
     /// Fetches and compares the update manifest without downloading or changing content files.
     public func check(rootDirectory: URL, homeURL: URL) async throws -> ContentUpdateResult {
+        try Task.checkCancellation()
         guard let scheme = homeURL.scheme?.lowercased(), scheme == "https" || scheme == "http" else {
             throw ContentNetworkUpdateError.invalidHomeURL
         }
         let (_, manifestData) = try await fetchManifest(homeURL: homeURL)
+        try Task.checkCancellation()
         let entries = try Self.parseManifest(manifestData)
         guard entries.count <= maximumFileCount else { throw ContentNetworkUpdateError.tooManyFiles }
         let root = rootDirectory.standardizedFileURL
@@ -324,7 +335,10 @@ public struct ContentNetworkUpdater: Sendable {
                 return (url, data)
             } catch NetworkFetchError.unsuccessfulStatus(404) {
                 continue
+            } catch is CancellationError {
+                throw CancellationError()
             } catch {
+                try Task.checkCancellation()
                 if failure == nil {
                     failure = .downloadFailed(path: name, underlyingError: error.localizedDescription)
                 }

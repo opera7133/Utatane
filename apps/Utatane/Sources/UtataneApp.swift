@@ -3958,9 +3958,15 @@ private struct UtataneRootView: View {
                 throw ContentNetworkUpdateError.invalidHomeURL
             }
             AppLogStore.shared.info("更新URL: \(homeURL.absoluteString)", category: "Update", ghostName: ghost.name)
-            let result = try await ContentNetworkUpdater().update(
+            let updateTarget = ContentUpdateTarget(
+                kind: .ghost,
+                name: ghost.name,
                 rootDirectory: ghost.rootDirectory,
-                homeURL: homeURL,
+                homeURL: homeURL
+            )
+            let result = try await ContentUpdateJob().run(
+                target: updateTarget,
+                operation: .update,
                 progress: { progress in
                     await playUpdateProgress(
                         progress,
@@ -4050,9 +4056,15 @@ private struct UtataneRootView: View {
             } else {
                 throw ContentNetworkUpdateError.invalidHomeURL
             }
-            let result = try await ContentNetworkUpdater().check(
+            let updateTarget = ContentUpdateTarget(
+                kind: .ghost,
+                name: ghost.name,
                 rootDirectory: ghost.rootDirectory,
                 homeURL: homeURL
+            )
+            let result = try await ContentUpdateJob().run(
+                target: updateTarget,
+                operation: .check
             )
             let reason = result.changedFiles.isEmpty ? "none" : "changed"
             _ = await playInstallationEvent(
@@ -4151,9 +4163,15 @@ private struct UtataneRootView: View {
         }
         await pluginRuntime.unloadAll()
         do {
-            let result = try await ContentNetworkUpdater().update(
+            let updateTarget = ContentUpdateTarget(
+                kind: .plugin,
+                name: plugin.name,
                 rootDirectory: plugin.directory,
                 homeURL: homeURL
+            )
+            let result = try await ContentUpdateJob().run(
+                target: updateTarget,
+                operation: .update
             )
             AppLogStore.shared.info(
                 result.changedFiles.isEmpty
@@ -4270,9 +4288,15 @@ private struct UtataneRootView: View {
                 throw ContentNetworkUpdateError.invalidHomeURL
             }
             AppLogStore.shared.info("バルーン更新URL: \(homeURL.absoluteString)", category: "Update")
-            let result = try await ContentNetworkUpdater().update(
+            let updateTarget = ContentUpdateTarget(
+                kind: .balloon,
+                name: updateBalloon.name,
                 rootDirectory: updateBalloon.directory,
-                homeURL: homeURL,
+                homeURL: homeURL
+            )
+            let result = try await ContentUpdateJob().run(
+                target: updateTarget,
+                operation: .update,
                 progress: { progress in
                     broadcastOtherUpdateProgress(progress, reason: updateReason)
                 }
