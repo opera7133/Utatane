@@ -29,7 +29,7 @@ final class CalledGhostRuntime {
     private let speechHistoryStore: SpeechHistoryStore
     private let speechHistoryWindowController: SpeechHistoryWindowController
     private let speechHistoryPresenter: SpeechHistoryPresenter?
-    private let localSpeechSynthesizer = MacOSSpeechSynthesizer()
+    private let speechSynthesizer = SpeechSynthesisRouter()
     private var integratesSpeechHistory: Bool
     private let speechRecognitionEnabled: Bool
     private var speechHistoryTextScale: CGFloat = 1
@@ -162,7 +162,7 @@ final class CalledGhostRuntime {
             postDialogueDismissalMilliseconds: dialogueDismissalMilliseconds
         )
         player.configureSpeechSynthesis(
-            synthesizer: speechSynthesisEnabled ? localSpeechSynthesizer : nil,
+            synthesizer: speechSynthesisEnabled ? speechSynthesizer : nil,
             configuration: speechSynthesisEnabled ? { scope in
                 (speechVoiceSettingsByScope[scope] ?? .init()).synthesisConfiguration
             } : nil
@@ -515,7 +515,7 @@ final class CalledGhostRuntime {
         settingsByScope: [Int: UtataneSettingsStore.SpeechVoiceSettings]
     ) {
         player.configureSpeechSynthesis(
-            synthesizer: enabled ? localSpeechSynthesizer : nil,
+            synthesizer: enabled ? speechSynthesizer : nil,
             configuration: enabled ? { scope in
                 (settingsByScope[scope] ?? .init()).synthesisConfiguration
             } : nil

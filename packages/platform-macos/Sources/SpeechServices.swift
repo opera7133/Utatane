@@ -1,35 +1,53 @@
 import AVFoundation
+import Foundation
 import Speech
+
+public enum SpeechSynthesisProvider: String, Codable, CaseIterable, Sendable {
+    case macOS
+    case voicevoxCompatible
+    case coeiroink
+}
 
 public struct SpeechSynthesisVoice: Identifiable, Sendable, Equatable {
     public let identifier: String
+    public let groupIdentifier: String?
     public let name: String
     public let language: String
 
     public var id: String {
-        identifier
+        [groupIdentifier, identifier].compactMap(\.self).joined(separator: ":")
     }
 
-    public init(identifier: String, name: String, language: String) {
+    public init(identifier: String, groupIdentifier: String? = nil, name: String, language: String) {
         self.identifier = identifier
+        self.groupIdentifier = groupIdentifier
         self.name = name
         self.language = language
     }
 }
 
 public struct SpeechSynthesisConfiguration: Sendable, Equatable {
+    public var provider: SpeechSynthesisProvider
     public var voiceIdentifier: String?
+    public var voiceGroupIdentifier: String?
+    public var serviceURL: URL?
     public var rate: Float
     public var volume: Float
     public var pitchMultiplier: Float
 
     public init(
+        provider: SpeechSynthesisProvider = .macOS,
         voiceIdentifier: String? = nil,
+        voiceGroupIdentifier: String? = nil,
+        serviceURL: URL? = nil,
         rate: Float = AVSpeechUtteranceDefaultSpeechRate,
         volume: Float = 1,
         pitchMultiplier: Float = 1
     ) {
+        self.provider = provider
         self.voiceIdentifier = voiceIdentifier
+        self.voiceGroupIdentifier = voiceGroupIdentifier
+        self.serviceURL = serviceURL
         self.rate = rate
         self.volume = volume
         self.pitchMultiplier = pitchMultiplier
@@ -60,6 +78,11 @@ public enum SpeechServiceError: LocalizedError, Equatable {
     case recognitionUnavailable
     case audioInputUnavailable
     case synthesisCancelled
+    case invalidServiceURL
+    case invalidVoiceIdentifier
+    case serviceResponse(Int)
+    case invalidServiceResponse
+    case audioPlaybackFailed
 
     public var errorDescription: String? {
         switch self {
@@ -73,7 +96,50 @@ public enum SpeechServiceError: LocalizedError, Equatable {
             String(localized: "音声入力を開始できません。")
         case .synthesisCancelled:
             String(localized: "音声合成が中止されました。")
+        case .invalidServiceURL:
+            String(localized: "音声合成サービスのURLが正しくありません。")
+        case .invalidVoiceIdentifier:
+            String(localized: "音声合成サービスの話者IDが正しくありません。")
+        case let .serviceResponse(statusCode):
+            String(localized: "音声合成サービスがエラーを返しました（HTTP \(statusCode)）。")
+        case .invalidServiceResponse:
+            String(localized: "音声合成サービスから正しい応答を取得できませんでした。")
+        case .audioPlaybackFailed:
+            String(localized: "合成された音声を再生できませんでした。")
         }
+    }
+}
+
+@MainActor
+public final class SpeechSynthesisRouter: SpeechSynthesizing {
+    private let systemSynthesizer = MacOSSpeechSynthesizer()
+    private let voicevoxSynthesizer: VoicevoxSpeechSynthesizer
+    private let coeiroinkSynthesizer: CoeiroinkSpeechSynthesizer
+
+    public init(
+        voicevoxClient: VoicevoxEngineClient = VoicevoxEngineClient(),
+        coeiroinkClient: CoeiroinkEngineClient = CoeiroinkEngineClient()
+    ) {
+        voicevoxSynthesizer = VoicevoxSpeechSynthesizer(client: voicevoxClient)
+        coeiroinkSynthesizer = CoeiroinkSpeechSynthesizer(client: coeiroinkClient)
+    }
+
+    public func speak(_ request: SpeechSynthesisRequest) async throws {
+        stop()
+        switch request.configuration.provider {
+        case .macOS:
+            try await systemSynthesizer.speak(request)
+        case .voicevoxCompatible:
+            try await voicevoxSynthesizer.speak(request)
+        case .coeiroink:
+            try await coeiroinkSynthesizer.speak(request)
+        }
+    }
+
+    public func stop() {
+        systemSynthesizer.stop()
+        voicevoxSynthesizer.stop()
+        coeiroinkSynthesizer.stop()
     }
 }
 

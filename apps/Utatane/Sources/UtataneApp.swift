@@ -352,7 +352,7 @@ private struct UtataneRootView: View {
     @State private var systemLoadDetector = SystemLoadTransitionDetector()
     @State private var realtimeVoiceWindowController: RealtimeVoiceWindowController?
     @State private var speechHistoryPresenter: SpeechHistoryPresenter?
-    @State private var localSpeechSynthesizer = MacOSSpeechSynthesizer()
+    @State private var speechSynthesizer = SpeechSynthesisRouter()
     @State private var localSpeechRecognizer = MacOSSpeechRecognizer()
     @State private var configuredSpeechSynthesisEnabled: Bool?
     @State private var configuredSpeechRecognitionEnabled: Bool?
@@ -4417,7 +4417,7 @@ private struct UtataneRootView: View {
             updateSpeechSynthesisActivity(active)
         }
         scriptPlayer.configureSpeechSynthesis(
-            synthesizer: enabled ? localSpeechSynthesizer : nil,
+            synthesizer: enabled ? speechSynthesizer : nil,
             configuration: enabled ? { scope in
                 networkSettings.speechVoiceSettings(for: scope).synthesisConfiguration
             } : nil

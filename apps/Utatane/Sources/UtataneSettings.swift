@@ -10,18 +10,82 @@ import UtataneRealtime
 @MainActor
 final class UtataneSettingsStore: ObservableObject {
     struct SpeechVoiceSettings: Codable, Equatable {
+        var provider = SpeechSynthesisProvider.macOS
         var voiceIdentifier = ""
+        var localAPIBaseURL = "http://127.0.0.1:50021"
+        var localAPIVoiceIdentifier = "0"
+        var coeiroinkBaseURL = "http://127.0.0.1:50032"
+        var coeiroinkSpeakerUUID = ""
+        var coeiroinkStyleIdentifier = "0"
         var rate = 0.5
         var volume = 1.0
         var pitch = 1.0
 
         var synthesisConfiguration: SpeechSynthesisConfiguration {
             SpeechSynthesisConfiguration(
-                voiceIdentifier: voiceIdentifier.isEmpty ? nil : voiceIdentifier,
+                provider: provider,
+                voiceIdentifier: selectedVoiceIdentifier,
+                voiceGroupIdentifier: selectedVoiceGroupIdentifier,
+                serviceURL: selectedServiceURL,
                 rate: Float(rate),
                 volume: Float(volume),
                 pitchMultiplier: Float(pitch)
             )
+        }
+
+        private var selectedVoiceIdentifier: String? {
+            let identifier = switch provider {
+            case .macOS: voiceIdentifier
+            case .voicevoxCompatible: localAPIVoiceIdentifier
+            case .coeiroink: coeiroinkStyleIdentifier
+            }
+            return identifier.isEmpty ? nil : identifier
+        }
+
+        private var selectedVoiceGroupIdentifier: String? {
+            guard provider == .coeiroink, !coeiroinkSpeakerUUID.isEmpty else { return nil }
+            return coeiroinkSpeakerUUID
+        }
+
+        private var selectedServiceURL: URL? {
+            switch provider {
+            case .macOS: nil
+            case .voicevoxCompatible: URL(string: localAPIBaseURL)
+            case .coeiroink: URL(string: coeiroinkBaseURL)
+            }
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case provider
+            case voiceIdentifier
+            case localAPIBaseURL
+            case localAPIVoiceIdentifier
+            case coeiroinkBaseURL
+            case coeiroinkSpeakerUUID
+            case coeiroinkStyleIdentifier
+            case rate
+            case volume
+            case pitch
+        }
+
+        init() {}
+
+        init(from decoder: any Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            provider = try values.decodeIfPresent(SpeechSynthesisProvider.self, forKey: .provider) ?? .macOS
+            voiceIdentifier = try values.decodeIfPresent(String.self, forKey: .voiceIdentifier) ?? ""
+            localAPIBaseURL = try values.decodeIfPresent(String.self, forKey: .localAPIBaseURL)
+                ?? "http://127.0.0.1:50021"
+            localAPIVoiceIdentifier = try values.decodeIfPresent(String.self, forKey: .localAPIVoiceIdentifier)
+                ?? "0"
+            coeiroinkBaseURL = try values.decodeIfPresent(String.self, forKey: .coeiroinkBaseURL)
+                ?? "http://127.0.0.1:50032"
+            coeiroinkSpeakerUUID = try values.decodeIfPresent(String.self, forKey: .coeiroinkSpeakerUUID) ?? ""
+            coeiroinkStyleIdentifier = try values.decodeIfPresent(String.self, forKey: .coeiroinkStyleIdentifier)
+                ?? "0"
+            rate = try values.decodeIfPresent(Double.self, forKey: .rate) ?? 0.5
+            volume = try values.decodeIfPresent(Double.self, forKey: .volume) ?? 1
+            pitch = try values.decodeIfPresent(Double.self, forKey: .pitch) ?? 1
         }
     }
 
@@ -783,7 +847,7 @@ struct UtataneSettingsView: View {
 
             SettingsPage(
                 title: "音声",
-                description: "macOS標準の音声合成と音声認識を設定する。"
+                description: "音声合成エンジンとmacOS標準の音声認識を設定する。"
             ) {
                 Section("音声合成") {
                     Toggle("ゴーストの発話を読み上げる", isOn: $settings.speechSynthesisEnabled)
@@ -1002,19 +1066,90 @@ private struct SpeechVoiceSettingsEditor: View {
     let title: String
     let voices: [SpeechSynthesisVoice]
     @Binding var settings: UtataneSettingsStore.SpeechVoiceSettings
+    @State private var localAPIVoices: [SpeechSynthesisVoice] = []
+    @State private var localAPIVoiceCount: Int?
+    @State private var localAPIError: String?
+    @State private var loadsLocalAPIVoices = false
 
     var body: some View {
         GroupBox(title) {
             Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
                 GridRow {
-                    Text("声")
-                    Picker("", selection: $settings.voiceIdentifier) {
-                        Text("システム標準").tag("")
-                        ForEach(voices) { voice in
-                            Text("\(voice.name) — \(voice.language)").tag(voice.identifier)
-                        }
+                    Text("音声エンジン")
+                    Picker("", selection: $settings.provider) {
+                        Text("macOS標準").tag(SpeechSynthesisProvider.macOS)
+                        Text("VOICEVOX互換API").tag(SpeechSynthesisProvider.voicevoxCompatible)
+                        Text("COEIROINK v2").tag(SpeechSynthesisProvider.coeiroink)
                     }
                     .labelsHidden()
+                }
+                if settings.provider == .macOS {
+                    GridRow {
+                        Text("声")
+                        Picker("", selection: $settings.voiceIdentifier) {
+                            Text("システム標準").tag("")
+                            ForEach(voices) { voice in
+                                Text("\(voice.name) — \(voice.language)").tag(voice.identifier)
+                            }
+                        }
+                        .labelsHidden()
+                    }
+                } else {
+                    GridRow {
+                        Text("API URL")
+                        TextField(localAPIPlaceholder, text: externalServiceURL)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    if settings.provider == .coeiroink {
+                        GridRow {
+                            Text("話者UUID")
+                            TextField("speakerUuid", text: $settings.coeiroinkSpeakerUUID)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+                    GridRow {
+                        Text(settings.provider == .coeiroink ? "スタイルID" : "話者ID")
+                        HStack {
+                            TextField("0", text: externalVoiceIdentifier)
+                                .textFieldStyle(.roundedBorder)
+                            Button("話者一覧を取得") {
+                                Task { await loadLocalAPIVoices() }
+                            }
+                            .disabled(loadsLocalAPIVoices)
+                        }
+                    }
+                    if !localAPIVoices.isEmpty {
+                        GridRow {
+                            Text("話者")
+                            Picker("", selection: externalVoiceSelection) {
+                                ForEach(localAPIVoices) { voice in
+                                    Text(voice.name).tag(voice.id)
+                                }
+                            }
+                            .labelsHidden()
+                        }
+                    }
+                    if loadsLocalAPIVoices {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            ProgressView("話者一覧を取得中…")
+                                .controlSize(.small)
+                        }
+                    } else if let localAPIError {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            Text(localAPIError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    } else if let localAPIVoiceCount {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            Text("話者を\(localAPIVoiceCount)件取得した。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
                 GridRow {
                     Text("速さ")
@@ -1029,6 +1164,100 @@ private struct SpeechVoiceSettingsEditor: View {
                     Slider(value: $settings.pitch, in: 0.5 ... 2)
                 }
             }
+        }
+        .onChange(of: settings.provider) {
+            resetLocalAPIVoices()
+        }
+        .onChange(of: settings.localAPIBaseURL) {
+            resetLocalAPIVoices()
+        }
+        .onChange(of: settings.coeiroinkBaseURL) {
+            resetLocalAPIVoices()
+        }
+    }
+
+    private var externalServiceURL: Binding<String> {
+        Binding(
+            get: {
+                settings.provider == .coeiroink ? settings.coeiroinkBaseURL : settings.localAPIBaseURL
+            },
+            set: { value in
+                if settings.provider == .coeiroink {
+                    settings.coeiroinkBaseURL = value
+                } else {
+                    settings.localAPIBaseURL = value
+                }
+            }
+        )
+    }
+
+    private var externalVoiceIdentifier: Binding<String> {
+        Binding(
+            get: {
+                settings.provider == .coeiroink
+                    ? settings.coeiroinkStyleIdentifier : settings.localAPIVoiceIdentifier
+            },
+            set: { value in
+                if settings.provider == .coeiroink {
+                    settings.coeiroinkStyleIdentifier = value
+                } else {
+                    settings.localAPIVoiceIdentifier = value
+                }
+            }
+        )
+    }
+
+    private var externalVoiceSelection: Binding<String> {
+        Binding(
+            get: {
+                if settings.provider == .coeiroink {
+                    return [settings.coeiroinkSpeakerUUID, settings.coeiroinkStyleIdentifier]
+                        .joined(separator: ":")
+                }
+                return settings.localAPIVoiceIdentifier
+            },
+            set: { id in
+                guard let voice = localAPIVoices.first(where: { $0.id == id }) else { return }
+                if settings.provider == .coeiroink {
+                    settings.coeiroinkSpeakerUUID = voice.groupIdentifier ?? ""
+                    settings.coeiroinkStyleIdentifier = voice.identifier
+                } else {
+                    settings.localAPIVoiceIdentifier = voice.identifier
+                }
+            }
+        )
+    }
+
+    private var localAPIPlaceholder: String {
+        settings.provider == .coeiroink ? "http://127.0.0.1:50032" : "http://127.0.0.1:50021"
+    }
+
+    private func resetLocalAPIVoices() {
+        localAPIVoices = []
+        localAPIVoiceCount = nil
+        localAPIError = nil
+    }
+
+    private func loadLocalAPIVoices() async {
+        guard let url = URL(string: externalServiceURL.wrappedValue) else {
+            localAPIError = SpeechServiceError.invalidServiceURL.localizedDescription
+            return
+        }
+        loadsLocalAPIVoices = true
+        localAPIError = nil
+        localAPIVoiceCount = nil
+        defer { loadsLocalAPIVoices = false }
+        do {
+            let voices = switch settings.provider {
+            case .macOS: [SpeechSynthesisVoice]()
+            case .voicevoxCompatible: try await VoicevoxEngineClient().voices(serviceURL: url)
+            case .coeiroink: try await CoeiroinkEngineClient().voices(serviceURL: url)
+            }
+            localAPIVoices = voices
+            localAPIVoiceCount = voices.count
+        } catch {
+            localAPIVoices = []
+            localAPIError = error.localizedDescription
         }
     }
 }
