@@ -30,6 +30,8 @@ final class UtataneSettingsStore: ObservableObject {
         var openAICompatibleLocalModel = "irodori-tts"
         var openAICompatibleLocalVoice = "none"
         var openAICompatibleLocalInstructions = ""
+        var elevenLabsModel = "eleven_multilingual_v2"
+        var elevenLabsVoiceID = ""
         var rate = 0.5
         var volume = 1.0
         var pitch = 1.0
@@ -58,6 +60,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .voisonaTalk: voisonaTalkVoiceName
             case .openAI: openAIVoice
             case .openAICompatibleLocal: openAICompatibleLocalVoice
+            case .elevenLabs: elevenLabsVoiceID
             }
             return identifier.isEmpty ? nil : identifier
         }
@@ -80,6 +83,7 @@ final class UtataneSettingsStore: ObservableObject {
             let model = switch provider {
             case .openAI: openAIModel
             case .openAICompatibleLocal: openAICompatibleLocalModel
+            case .elevenLabs: elevenLabsModel
             default: ""
             }
             return model.isEmpty ? nil : model
@@ -103,6 +107,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .voisonaTalk: URL(string: voisonaTalkBaseURL)
             case .openAI: URL(string: "https://api.openai.com/v1")
             case .openAICompatibleLocal: URL(string: openAICompatibleLocalBaseURL)
+            case .elevenLabs: URL(string: "https://api.elevenlabs.io/v1")
             }
         }
 
@@ -127,6 +132,8 @@ final class UtataneSettingsStore: ObservableObject {
             case openAICompatibleLocalModel
             case openAICompatibleLocalVoice
             case openAICompatibleLocalInstructions
+            case elevenLabsModel
+            case elevenLabsVoiceID
             case rate
             case volume
             case pitch
@@ -174,6 +181,9 @@ final class UtataneSettingsStore: ObservableObject {
                 String.self,
                 forKey: .openAICompatibleLocalInstructions
             ) ?? ""
+            elevenLabsModel = try values.decodeIfPresent(String.self, forKey: .elevenLabsModel)
+                ?? "eleven_multilingual_v2"
+            elevenLabsVoiceID = try values.decodeIfPresent(String.self, forKey: .elevenLabsVoiceID) ?? ""
             rate = try values.decodeIfPresent(Double.self, forKey: .rate) ?? 0.5
             volume = try values.decodeIfPresent(Double.self, forKey: .volume) ?? 1
             pitch = try values.decodeIfPresent(Double.self, forKey: .pitch) ?? 1
@@ -1162,6 +1172,7 @@ private struct SpeechVoiceSettingsEditor: View {
     @State private var voisonaTalkCredential: SpeechCredentialStore.Credential
     @State private var openAICredential: SpeechCredentialStore.Credential
     @State private var openAICompatibleLocalCredential: SpeechCredentialStore.Credential
+    @State private var elevenLabsCredential: SpeechCredentialStore.Credential
     @State private var localAPIVoices: [SpeechSynthesisVoice] = []
     @State private var localAPIVoiceCount: Int?
     @State private var localAPIError: String?
@@ -1182,6 +1193,9 @@ private struct SpeechVoiceSettingsEditor: View {
         _openAICompatibleLocalCredential = State(
             initialValue: SpeechCredentialStore.load(provider: .openAICompatibleLocal, scope: scope)
         )
+        _elevenLabsCredential = State(
+            initialValue: SpeechCredentialStore.load(provider: .elevenLabs, scope: scope)
+        )
     }
 
     var body: some View {
@@ -1197,6 +1211,7 @@ private struct SpeechVoiceSettingsEditor: View {
                         Text("VoiSona Talk").tag(SpeechSynthesisProvider.voisonaTalk)
                         Text("OpenAI").tag(SpeechSynthesisProvider.openAI)
                         Text("OpenAI互換ローカルAPI").tag(SpeechSynthesisProvider.openAICompatibleLocal)
+                        Text("ElevenLabs").tag(SpeechSynthesisProvider.elevenLabs)
                     }
                     .labelsHidden()
                 }
@@ -1259,6 +1274,66 @@ private struct SpeechVoiceSettingsEditor: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                } else if settings.provider == .elevenLabs {
+                    GridRow {
+                        Text("モデル")
+                        TextField("", text: $settings.elevenLabsModel, prompt: Text("eleven_multilingual_v2"))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text("APIキー")
+                        SecureField("", text: $elevenLabsCredential.password, prompt: Text("APIキー"))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text("話者ID")
+                        HStack {
+                            TextField("", text: $settings.elevenLabsVoiceID, prompt: Text("voice_id"))
+                                .textFieldStyle(.roundedBorder)
+                            Button("話者一覧を取得") {
+                                Task { await loadLocalAPIVoices() }
+                            }
+                            .disabled(loadsLocalAPIVoices)
+                        }
+                    }
+                    if !localAPIVoices.isEmpty {
+                        GridRow {
+                            Text("話者")
+                            Picker("", selection: $settings.elevenLabsVoiceID) {
+                                ForEach(localAPIVoices) { voice in
+                                    Text(voice.name).tag(voice.identifier)
+                                }
+                            }
+                            .labelsHidden()
+                        }
+                    }
+                    if loadsLocalAPIVoices {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            ProgressView("話者一覧を取得中…")
+                                .controlSize(.small)
+                        }
+                    } else if let localAPIError {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            Text(localAPIError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    } else if let localAPIVoiceCount {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            Text("話者を\(localAPIVoiceCount)件取得した。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    GridRow {
+                        Color.clear.frame(width: 1, height: 1)
+                        Text("発話テキストをElevenLabsへ送信する。利用量に応じて料金が発生する場合がある。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 } else {
                     GridRow {
@@ -1349,7 +1424,10 @@ private struct SpeechVoiceSettingsEditor: View {
                     Text("音量")
                     Slider(value: $settings.volume, in: 0 ... 1)
                 }
-                if settings.provider != .openAI, settings.provider != .openAICompatibleLocal {
+                if settings.provider != .openAI,
+                   settings.provider != .openAICompatibleLocal,
+                   settings.provider != .elevenLabs
+                {
                     GridRow {
                         Text("高さ")
                         Slider(value: $settings.pitch, in: 0.5 ... 2)
@@ -1386,6 +1464,10 @@ private struct SpeechVoiceSettingsEditor: View {
                 scope: scope
             )
         }
+        .onChange(of: elevenLabsCredential) {
+            SpeechCredentialStore.save(elevenLabsCredential, provider: .elevenLabs, scope: scope)
+            resetLocalAPIVoices()
+        }
     }
 
     private var openAIModel: Binding<String> {
@@ -1416,6 +1498,7 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .voisonaTalk: settings.voisonaTalkBaseURL
                 case .openAI: "https://api.openai.com/v1"
                 case .openAICompatibleLocal: settings.openAICompatibleLocalBaseURL
+                case .elevenLabs: "https://api.elevenlabs.io/v1"
                 }
             },
             set: { value in
@@ -1432,6 +1515,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     break
                 case .openAICompatibleLocal:
                     settings.openAICompatibleLocalBaseURL = value
+                case .elevenLabs:
+                    break
                 }
             }
         )
@@ -1447,6 +1532,7 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .voisonaTalk: settings.voisonaTalkVoiceName
                 case .openAI: settings.openAIVoice
                 case .openAICompatibleLocal: settings.openAICompatibleLocalVoice
+                case .elevenLabs: settings.elevenLabsVoiceID
                 }
             },
             set: { value in
@@ -1463,6 +1549,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.openAIVoice = value
                 case .openAICompatibleLocal:
                     settings.openAICompatibleLocalVoice = value
+                case .elevenLabs:
+                    settings.elevenLabsVoiceID = value
                 }
             }
         )
@@ -1503,6 +1591,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.openAIVoice = voice.identifier
                 case .openAICompatibleLocal:
                     settings.openAICompatibleLocalVoice = voice.identifier
+                case .elevenLabs:
+                    settings.elevenLabsVoiceID = voice.identifier
                 }
             }
         )
@@ -1516,6 +1606,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .voisonaTalk: "http://127.0.0.1:32766/api/talk/v1"
         case .openAI: "https://api.openai.com/v1"
         case .openAICompatibleLocal: "http://127.0.0.1:8088/v1"
+        case .elevenLabs: "https://api.elevenlabs.io/v1"
         }
     }
 
@@ -1527,6 +1618,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .voisonaTalk: "ボイス名"
         case .openAI: "声"
         case .openAICompatibleLocal: "声"
+        case .elevenLabs: "話者ID"
         }
     }
 
@@ -1536,6 +1628,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .voisonaTalk: "voice-name_ja_JP"
         case .openAI: "marin"
         case .openAICompatibleLocal: "none"
+        case .elevenLabs: "voice_id"
         default: "0"
         }
     }
@@ -1571,6 +1664,8 @@ private struct SpeechVoiceSettingsEditor: View {
                 [SpeechSynthesisVoice]()
             case .openAICompatibleLocal:
                 [SpeechSynthesisVoice]()
+            case .elevenLabs:
+                try await ElevenLabsEngineClient().voices(scope: scope)
             }
             localAPIVoices = voices
             localAPIVoiceCount = voices.count

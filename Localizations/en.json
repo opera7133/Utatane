@@ -469,6 +469,7 @@
   "話し方の指示" : "Speaking Instructions",
   "落ち着いた自然な声で話す" : "Speak in a calm, natural voice",
   "発話テキストをOpenAIへ送信する。利用量に応じて料金が発生する場合がある。" : "Speech text is sent to OpenAI. Charges may apply based on usage.",
+  "発話テキストをElevenLabsへ送信する。利用量に応じて料金が発生する場合がある。" : "Speech text is sent to ElevenLabs. Charges may apply based on usage.",
   "ボイスバージョン" : "Voice Version",
   "音声合成サービスの認証情報が設定されていません。" : "Speech synthesis service credentials are not configured."
 }

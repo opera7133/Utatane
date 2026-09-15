@@ -6,6 +6,7 @@ public enum SpeechCredentialStore {
         case voisonaTalk = "voisona-talk"
         case openAI = "openai"
         case openAICompatibleLocal = "openai-compatible-local"
+        case elevenLabs = "elevenlabs"
     }
 
     public struct Credential: Codable, Equatable, Sendable {

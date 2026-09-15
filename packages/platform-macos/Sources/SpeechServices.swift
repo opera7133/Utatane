@@ -10,6 +10,7 @@ public enum SpeechSynthesisProvider: String, Codable, CaseIterable, Sendable {
     case voisonaTalk
     case openAI
     case openAICompatibleLocal
+    case elevenLabs
 }
 
 public struct SpeechSynthesisVoice: Identifiable, Sendable, Equatable {
@@ -148,19 +149,22 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
     private let voicepeakSynthesizer: VoicepeakSpeechSynthesizer
     private let voisonaTalkSynthesizer: VoiSonaTalkSpeechSynthesizer
     private let openAISynthesizer: OpenAISpeechSynthesizer
+    private let elevenLabsSynthesizer: ElevenLabsSpeechSynthesizer
 
     public init(
         voicevoxClient: VoicevoxEngineClient = VoicevoxEngineClient(),
         coeiroinkClient: CoeiroinkEngineClient = CoeiroinkEngineClient(),
         voicepeakClient: VoicepeakEngineClient = VoicepeakEngineClient(),
         voisonaTalkClient: VoiSonaTalkEngineClient = VoiSonaTalkEngineClient(),
-        openAIClient: OpenAISpeechEngineClient = OpenAISpeechEngineClient()
+        openAIClient: OpenAISpeechEngineClient = OpenAISpeechEngineClient(),
+        elevenLabsClient: ElevenLabsEngineClient = ElevenLabsEngineClient()
     ) {
         voicevoxSynthesizer = VoicevoxSpeechSynthesizer(client: voicevoxClient)
         coeiroinkSynthesizer = CoeiroinkSpeechSynthesizer(client: coeiroinkClient)
         voicepeakSynthesizer = VoicepeakSpeechSynthesizer(client: voicepeakClient)
         voisonaTalkSynthesizer = VoiSonaTalkSpeechSynthesizer(client: voisonaTalkClient)
         openAISynthesizer = OpenAISpeechSynthesizer(client: openAIClient)
+        elevenLabsSynthesizer = ElevenLabsSpeechSynthesizer(client: elevenLabsClient)
     }
 
     public func speak(_ request: SpeechSynthesisRequest) async throws {
@@ -178,6 +182,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
             try await voisonaTalkSynthesizer.speak(request)
         case .openAI, .openAICompatibleLocal:
             try await openAISynthesizer.speak(request)
+        case .elevenLabs:
+            try await elevenLabsSynthesizer.speak(request)
         }
     }
 
@@ -188,6 +194,7 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         voicepeakSynthesizer.stop()
         voisonaTalkSynthesizer.stop()
         openAISynthesizer.stop()
+        elevenLabsSynthesizer.stop()
     }
 }
 

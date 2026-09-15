@@ -453,6 +453,83 @@ struct SpeechServicesTests {
             try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
         }
     }
+
+    @Test
+    func `ElevenLabs lists every paged voice`() async throws {
+        let capture = RequestSequenceCapture()
+        let client = ElevenLabsEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
+                let nextToken = components.queryItems?.first(where: { $0.name == "next_page_token" })?.value
+                if nextToken == nil {
+                    return (
+                        Data(#"{"voices":[{"voice_id":"voice-b","name":"Beta","verified_languages":[{"language":"ja"}]}],"has_more":true,"next_page_token":"page-2"}"#.utf8),
+                        response(for: url)
+                    )
+                }
+                #expect(nextToken == "page-2")
+                return (
+                    Data(#"{"voices":[{"voice_id":"voice-a","name":"Alpha","verified_languages":[]}],"has_more":false}"#.utf8),
+                    response(for: url)
+                )
+            },
+            credentialProvider: { scope in
+                #expect(scope == 0)
+                return SpeechCredentialStore.Credential(password: "eleven-key")
+            }
+        )
+
+        let voices = try await client.voices(scope: 0)
+        let requests = await capture.requests
+
+        #expect(voices.map(\.identifier) == ["voice-a", "voice-b"])
+        #expect(voices.last?.language == "ja")
+        #expect(requests.count == 2)
+        #expect(requests.allSatisfy { $0.url?.path == "/v2/voices" })
+        #expect(requests.allSatisfy { $0.value(forHTTPHeaderField: "xi-api-key") == "eleven-key" })
+    }
+
+    @Test
+    func `ElevenLabs synthesis sends model voice and speed`() async throws {
+        let capture = RequestCapture()
+        let client = ElevenLabsEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                return (Data("ID3-elevenlabs-audio".utf8), response(for: url, contentType: "audio/mpeg"))
+            },
+            credentialProvider: { _ in
+                SpeechCredentialStore.Credential(password: "eleven-key")
+            }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .elevenLabs,
+            voiceIdentifier: "voice/with slash",
+            serviceURL: URL(string: "https://api.elevenlabs.io/v1"),
+            modelIdentifier: "eleven_multilingual_v2",
+            rate: 0.75,
+            volume: 0.7
+        )
+
+        let audio = try await client.synthesize(.init(text: " 読み上げ ", scope: 1, configuration: configuration))
+        let synthesisRequest = try #require(await capture.request)
+        let bodyData = try #require(synthesisRequest.httpBody)
+        let body = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let voiceSettings = try #require(body["voice_settings"] as? [String: Any])
+        let components = try #require(synthesisRequest.url.flatMap {
+            URLComponents(url: $0, resolvingAgainstBaseURL: false)
+        })
+
+        #expect(audio == Data("ID3-elevenlabs-audio".utf8))
+        #expect(components.path == "/v1/text-to-speech/voice/with slash")
+        #expect(components.queryItems == [URLQueryItem(name: "output_format", value: "mp3_44100_128")])
+        #expect(synthesisRequest.value(forHTTPHeaderField: "xi-api-key") == "eleven-key")
+        #expect(body["text"] as? String == "読み上げ")
+        #expect(body["model_id"] as? String == "eleven_multilingual_v2")
+        #expect(voiceSettings["speed"] as? Double == 1.5)
+    }
 }
 
 private actor RequestCapture {

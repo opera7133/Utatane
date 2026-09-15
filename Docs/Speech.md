@@ -49,6 +49,12 @@ OpenAIの`POST /v1/audio/speech`と互換性のある、macOS上のローカル�
 
 発話テキストはOpenAIへ送信され、APIの利用量に応じて料金が発生する場合があります。APIキーはmacOSのKeychainへスコープごとに保存され、設定JSONには書き込みません。APIキーの送信先は`https://api.openai.com`だけに制限しています。
 
+### ElevenLabs
+
+[ElevenLabsの音声生成API](https://elevenlabs.io/docs/api-reference/text-to-speech/convert)を使って発話を読み上げます。APIキーとモデルを入力し、「話者一覧を取得」からアカウントで利用できる声を選びます。既定のモデルは`eleven_multilingual_v2`です。
+
+発話テキストはElevenLabsへ送信され、APIの利用量に応じて料金が発生する場合があります。APIキーはmacOSのKeychainへスコープごとに保存され、設定JSONには書き込みません。APIキーの送信先は`https://api.elevenlabs.io`だけに制限しています。
+
 ## SakuraScriptから読み上げを調整する
 
 `\__v[disable]`以降は読み上げず、`\__v[alternate,テキスト]`を使うと画面表示とは別の読みを指定できます。引数なしの`\__v`で通常の読み上げに戻ります。詳しくは[SakuraScript互換状況](UKADOC-SakuraScript-Compatibility.md)を参照してください。
