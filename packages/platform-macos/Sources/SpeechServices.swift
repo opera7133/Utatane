@@ -12,6 +12,8 @@ public enum SpeechSynthesisProvider: String, Codable, CaseIterable, Sendable {
     case openAICompatibleLocal
     case elevenLabs
     case aivisCloud
+    case azureSpeech
+    case googleCloudTTS
 }
 
 public struct SpeechSynthesisVoice: Identifiable, Sendable, Equatable {
@@ -155,6 +157,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
     private let openAISynthesizer: OpenAISpeechSynthesizer
     private let elevenLabsSynthesizer: ElevenLabsSpeechSynthesizer
     private let aivisCloudSynthesizer: AivisCloudSpeechSynthesizer
+    private let azureSpeechSynthesizer: AzureSpeechSynthesizer
+    private let googleCloudSynthesizer: GoogleCloudSpeechSynthesizer
 
     public init(
         voicevoxClient: VoicevoxEngineClient = VoicevoxEngineClient(),
@@ -163,7 +167,9 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         voisonaTalkClient: VoiSonaTalkEngineClient = VoiSonaTalkEngineClient(),
         openAIClient: OpenAISpeechEngineClient = OpenAISpeechEngineClient(),
         elevenLabsClient: ElevenLabsEngineClient = ElevenLabsEngineClient(),
-        aivisCloudClient: AivisCloudEngineClient = AivisCloudEngineClient()
+        aivisCloudClient: AivisCloudEngineClient = AivisCloudEngineClient(),
+        azureSpeechClient: AzureSpeechEngineClient = AzureSpeechEngineClient(),
+        googleCloudClient: GoogleCloudSpeechEngineClient = GoogleCloudSpeechEngineClient()
     ) {
         voicevoxSynthesizer = VoicevoxSpeechSynthesizer(client: voicevoxClient)
         coeiroinkSynthesizer = CoeiroinkSpeechSynthesizer(client: coeiroinkClient)
@@ -172,6 +178,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         openAISynthesizer = OpenAISpeechSynthesizer(client: openAIClient)
         elevenLabsSynthesizer = ElevenLabsSpeechSynthesizer(client: elevenLabsClient)
         aivisCloudSynthesizer = AivisCloudSpeechSynthesizer(client: aivisCloudClient)
+        azureSpeechSynthesizer = AzureSpeechSynthesizer(client: azureSpeechClient)
+        googleCloudSynthesizer = GoogleCloudSpeechSynthesizer(client: googleCloudClient)
     }
 
     public func speak(_ request: SpeechSynthesisRequest) async throws {
@@ -193,6 +201,10 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
             try await elevenLabsSynthesizer.speak(request)
         case .aivisCloud:
             try await aivisCloudSynthesizer.speak(request)
+        case .azureSpeech:
+            try await azureSpeechSynthesizer.speak(request)
+        case .googleCloudTTS:
+            try await googleCloudSynthesizer.speak(request)
         }
     }
 
@@ -205,6 +217,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         openAISynthesizer.stop()
         elevenLabsSynthesizer.stop()
         aivisCloudSynthesizer.stop()
+        azureSpeechSynthesizer.stop()
+        googleCloudSynthesizer.stop()
     }
 }
 

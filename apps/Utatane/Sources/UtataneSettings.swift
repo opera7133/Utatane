@@ -35,6 +35,11 @@ final class UtataneSettingsStore: ObservableObject {
         var aivisCloudModelUUID = ""
         var aivisCloudSpeakerUUID = ""
         var aivisCloudStyleID = ""
+        var azureSpeechRegion = "japaneast"
+        var azureSpeechVoiceName = "ja-JP-NanamiNeural"
+        var azureSpeechLanguage = "ja-JP"
+        var googleCloudVoiceName = ""
+        var googleCloudLanguage = "ja-JP"
         var rate = 0.5
         var volume = 1.0
         var pitch = 1.0
@@ -66,6 +71,8 @@ final class UtataneSettingsStore: ObservableObject {
             case .openAICompatibleLocal: openAICompatibleLocalVoice
             case .elevenLabs: elevenLabsVoiceID
             case .aivisCloud: aivisCloudModelUUID
+            case .azureSpeech: azureSpeechVoiceName
+            case .googleCloudTTS: googleCloudVoiceName
             }
             return identifier.isEmpty ? nil : identifier
         }
@@ -81,8 +88,13 @@ final class UtataneSettingsStore: ObservableObject {
         }
 
         private var selectedVoiceLanguageIdentifier: String? {
-            guard provider == .voisonaTalk, !voisonaTalkLanguage.isEmpty else { return nil }
-            return voisonaTalkLanguage
+            let language = switch provider {
+            case .voisonaTalk: voisonaTalkLanguage
+            case .azureSpeech: azureSpeechLanguage
+            case .googleCloudTTS: googleCloudLanguage
+            default: ""
+            }
+            return language.isEmpty ? nil : language
         }
 
         private var selectedModelIdentifier: String? {
@@ -120,6 +132,8 @@ final class UtataneSettingsStore: ObservableObject {
             case .openAICompatibleLocal: URL(string: openAICompatibleLocalBaseURL)
             case .elevenLabs: URL(string: "https://api.elevenlabs.io/v1")
             case .aivisCloud: URL(string: "https://api.aivis-project.com/v1")
+            case .azureSpeech: URL(string: "https://\(azureSpeechRegion).tts.speech.microsoft.com")
+            case .googleCloudTTS: URL(string: "https://texttospeech.googleapis.com/v1")
             }
         }
 
@@ -149,6 +163,11 @@ final class UtataneSettingsStore: ObservableObject {
             case aivisCloudModelUUID
             case aivisCloudSpeakerUUID
             case aivisCloudStyleID
+            case azureSpeechRegion
+            case azureSpeechVoiceName
+            case azureSpeechLanguage
+            case googleCloudVoiceName
+            case googleCloudLanguage
             case rate
             case volume
             case pitch
@@ -202,6 +221,12 @@ final class UtataneSettingsStore: ObservableObject {
             aivisCloudModelUUID = try values.decodeIfPresent(String.self, forKey: .aivisCloudModelUUID) ?? ""
             aivisCloudSpeakerUUID = try values.decodeIfPresent(String.self, forKey: .aivisCloudSpeakerUUID) ?? ""
             aivisCloudStyleID = try values.decodeIfPresent(String.self, forKey: .aivisCloudStyleID) ?? ""
+            azureSpeechRegion = try values.decodeIfPresent(String.self, forKey: .azureSpeechRegion) ?? "japaneast"
+            azureSpeechVoiceName = try values.decodeIfPresent(String.self, forKey: .azureSpeechVoiceName)
+                ?? "ja-JP-NanamiNeural"
+            azureSpeechLanguage = try values.decodeIfPresent(String.self, forKey: .azureSpeechLanguage) ?? "ja-JP"
+            googleCloudVoiceName = try values.decodeIfPresent(String.self, forKey: .googleCloudVoiceName) ?? ""
+            googleCloudLanguage = try values.decodeIfPresent(String.self, forKey: .googleCloudLanguage) ?? "ja-JP"
             rate = try values.decodeIfPresent(Double.self, forKey: .rate) ?? 0.5
             volume = try values.decodeIfPresent(Double.self, forKey: .volume) ?? 1
             pitch = try values.decodeIfPresent(Double.self, forKey: .pitch) ?? 1
@@ -1192,6 +1217,8 @@ private struct SpeechVoiceSettingsEditor: View {
     @State private var openAICompatibleLocalCredential: SpeechCredentialStore.Credential
     @State private var elevenLabsCredential: SpeechCredentialStore.Credential
     @State private var aivisCloudCredential: SpeechCredentialStore.Credential
+    @State private var azureSpeechCredential: SpeechCredentialStore.Credential
+    @State private var googleCloudCredential: SpeechCredentialStore.Credential
     @State private var localAPIVoices: [SpeechSynthesisVoice] = []
     @State private var localAPIVoiceCount: Int?
     @State private var localAPIError: String?
@@ -1218,6 +1245,12 @@ private struct SpeechVoiceSettingsEditor: View {
         _aivisCloudCredential = State(
             initialValue: SpeechCredentialStore.load(provider: .aivisCloud, scope: scope)
         )
+        _azureSpeechCredential = State(
+            initialValue: SpeechCredentialStore.load(provider: .azureSpeech, scope: scope)
+        )
+        _googleCloudCredential = State(
+            initialValue: SpeechCredentialStore.load(provider: .googleCloudTTS, scope: scope)
+        )
     }
 
     var body: some View {
@@ -1235,6 +1268,8 @@ private struct SpeechVoiceSettingsEditor: View {
                         Text("OpenAI互換ローカルAPI").tag(SpeechSynthesisProvider.openAICompatibleLocal)
                         Text("ElevenLabs").tag(SpeechSynthesisProvider.elevenLabs)
                         Text("Aivis Cloud API").tag(SpeechSynthesisProvider.aivisCloud)
+                        Text("Azure Speech").tag(SpeechSynthesisProvider.azureSpeech)
+                        Text("Google Cloud TTS").tag(SpeechSynthesisProvider.googleCloudTTS)
                     }
                     .labelsHidden()
                 }
@@ -1322,6 +1357,68 @@ private struct SpeechVoiceSettingsEditor: View {
                     GridRow {
                         Color.clear.frame(width: 1, height: 1)
                         Text("発話テキストをAivis Cloud APIへ送信する。利用量に応じて料金が発生する場合がある。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if settings.provider == .azureSpeech || settings.provider == .googleCloudTTS {
+                    GridRow {
+                        Text("APIキー")
+                        SecureField("", text: cloudAPIKey, prompt: Text("APIキー"))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    if settings.provider == .azureSpeech {
+                        GridRow {
+                            Text("リージョン")
+                            TextField("", text: $settings.azureSpeechRegion, prompt: Text("japaneast"))
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+                    GridRow {
+                        Text("声")
+                        HStack {
+                            TextField("", text: cloudVoiceName, prompt: Text(cloudVoicePlaceholder))
+                                .textFieldStyle(.roundedBorder)
+                            Button("話者一覧を取得") {
+                                Task { await loadLocalAPIVoices() }
+                            }
+                            .disabled(loadsLocalAPIVoices)
+                        }
+                    }
+                    if !localAPIVoices.isEmpty {
+                        GridRow {
+                            Text("話者")
+                            Picker("", selection: externalVoiceSelection) {
+                                ForEach(localAPIVoices) { voice in
+                                    Text("\(voice.name) — \(voice.language)").tag(voice.id)
+                                }
+                            }
+                            .labelsHidden()
+                        }
+                    }
+                    if loadsLocalAPIVoices {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            ProgressView("話者一覧を取得中…")
+                                .controlSize(.small)
+                        }
+                    } else if let localAPIError {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            Text(localAPIError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    } else if let localAPIVoiceCount {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            Text("話者を\(localAPIVoiceCount)件取得した。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    GridRow {
+                        Color.clear.frame(width: 1, height: 1)
+                        Text(cloudTransmissionNotice)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -1521,6 +1618,17 @@ private struct SpeechVoiceSettingsEditor: View {
         .onChange(of: aivisCloudCredential) {
             SpeechCredentialStore.save(aivisCloudCredential, provider: .aivisCloud, scope: scope)
         }
+        .onChange(of: azureSpeechCredential) {
+            SpeechCredentialStore.save(azureSpeechCredential, provider: .azureSpeech, scope: scope)
+            resetLocalAPIVoices()
+        }
+        .onChange(of: googleCloudCredential) {
+            SpeechCredentialStore.save(googleCloudCredential, provider: .googleCloudTTS, scope: scope)
+            resetLocalAPIVoices()
+        }
+        .onChange(of: settings.azureSpeechRegion) {
+            resetLocalAPIVoices()
+        }
     }
 
     private var openAIModel: Binding<String> {
@@ -1541,6 +1649,24 @@ private struct SpeechVoiceSettingsEditor: View {
             : $settings.openAICompatibleLocalInstructions
     }
 
+    private var cloudAPIKey: Binding<String> {
+        settings.provider == .azureSpeech ? $azureSpeechCredential.password : $googleCloudCredential.password
+    }
+
+    private var cloudVoiceName: Binding<String> {
+        settings.provider == .azureSpeech ? $settings.azureSpeechVoiceName : $settings.googleCloudVoiceName
+    }
+
+    private var cloudVoicePlaceholder: String {
+        settings.provider == .azureSpeech ? "ja-JP-NanamiNeural" : "ja-JP-…"
+    }
+
+    private var cloudTransmissionNotice: LocalizedStringKey {
+        settings.provider == .azureSpeech
+            ? "発話テキストをAzure Speechへ送信する。利用量に応じて料金が発生する場合がある。"
+            : "発話テキストをGoogle Cloud TTSへ送信する。利用量に応じて料金が発生する場合がある。"
+    }
+
     private var externalServiceLocation: Binding<String> {
         Binding(
             get: {
@@ -1553,6 +1679,8 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .openAICompatibleLocal: settings.openAICompatibleLocalBaseURL
                 case .elevenLabs: "https://api.elevenlabs.io/v1"
                 case .aivisCloud: "https://api.aivis-project.com/v1"
+                case .azureSpeech: "https://\(settings.azureSpeechRegion).tts.speech.microsoft.com"
+                case .googleCloudTTS: "https://texttospeech.googleapis.com/v1"
                 }
             },
             set: { value in
@@ -1573,6 +1701,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     break
                 case .aivisCloud:
                     break
+                case .azureSpeech, .googleCloudTTS:
+                    break
                 }
             }
         )
@@ -1590,6 +1720,8 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .openAICompatibleLocal: settings.openAICompatibleLocalVoice
                 case .elevenLabs: settings.elevenLabsVoiceID
                 case .aivisCloud: settings.aivisCloudModelUUID
+                case .azureSpeech: settings.azureSpeechVoiceName
+                case .googleCloudTTS: settings.googleCloudVoiceName
                 }
             },
             set: { value in
@@ -1610,6 +1742,10 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.elevenLabsVoiceID = value
                 case .aivisCloud:
                     settings.aivisCloudModelUUID = value
+                case .azureSpeech:
+                    settings.azureSpeechVoiceName = value
+                case .googleCloudTTS:
+                    settings.googleCloudVoiceName = value
                 }
             }
         )
@@ -1628,6 +1764,10 @@ private struct SpeechVoiceSettingsEditor: View {
                         settings.voisonaTalkVoiceName,
                         settings.voisonaTalkLanguage
                     ].joined(separator: ":")
+                case .azureSpeech:
+                    [settings.azureSpeechVoiceName, settings.azureSpeechLanguage].joined(separator: ":")
+                case .googleCloudTTS:
+                    [settings.googleCloudVoiceName, settings.googleCloudLanguage].joined(separator: ":")
                 default:
                     externalVoiceIdentifier.wrappedValue
                 }
@@ -1654,6 +1794,12 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.elevenLabsVoiceID = voice.identifier
                 case .aivisCloud:
                     settings.aivisCloudModelUUID = voice.identifier
+                case .azureSpeech:
+                    settings.azureSpeechVoiceName = voice.identifier
+                    settings.azureSpeechLanguage = voice.languageIdentifier ?? voice.language
+                case .googleCloudTTS:
+                    settings.googleCloudVoiceName = voice.identifier
+                    settings.googleCloudLanguage = voice.languageIdentifier ?? voice.language
                 }
             }
         )
@@ -1669,6 +1815,8 @@ private struct SpeechVoiceSettingsEditor: View {
         case .openAICompatibleLocal: "http://127.0.0.1:8088/v1"
         case .elevenLabs: "https://api.elevenlabs.io/v1"
         case .aivisCloud: "https://api.aivis-project.com/v1"
+        case .azureSpeech: "https://japaneast.tts.speech.microsoft.com"
+        case .googleCloudTTS: "https://texttospeech.googleapis.com/v1"
         }
     }
 
@@ -1682,6 +1830,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .openAICompatibleLocal: "声"
         case .elevenLabs: "話者ID"
         case .aivisCloud: "モデルUUID / アクセスキー"
+        case .azureSpeech, .googleCloudTTS: "声"
         }
     }
 
@@ -1693,6 +1842,8 @@ private struct SpeechVoiceSettingsEditor: View {
         case .openAICompatibleLocal: "none"
         case .elevenLabs: "voice_id"
         case .aivisCloud: "model_uuid / ak_…"
+        case .azureSpeech: "ja-JP-NanamiNeural"
+        case .googleCloudTTS: "ja-JP-…"
         default: "0"
         }
     }
@@ -1732,6 +1883,10 @@ private struct SpeechVoiceSettingsEditor: View {
                 try await ElevenLabsEngineClient().voices(scope: scope)
             case .aivisCloud:
                 [SpeechSynthesisVoice]()
+            case .azureSpeech:
+                try await AzureSpeechEngineClient().voices(serviceURL: externalServiceURL(), scope: scope)
+            case .googleCloudTTS:
+                try await GoogleCloudSpeechEngineClient().voices(scope: scope)
             }
             localAPIVoices = voices
             localAPIVoiceCount = voices.count

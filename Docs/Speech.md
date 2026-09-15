@@ -61,6 +61,18 @@ OpenAIの`POST /v1/audio/speech`と互換性のある、macOS上のローカル�
 
 共通設定の速さと高さはAivis Cloud APIの`speaking_rate`と`pitch`へ変換します。発話テキストはプレーンテキストとして送信し、MP3で受信します。APIキーはmacOSのKeychainへスコープごとに保存され、送信先は`https://api.aivis-project.com`だけに制限しています。APIの利用量に応じて料金が発生する場合があります。
 
+### Azure Speech
+
+[Azure SpeechのText to Speech REST API](https://learn.microsoft.com/azure/ai-services/speech-service/rest-text-to-speech)を使います。SpeechリソースのAPIキーとリージョンを設定し、「話者一覧を取得」から声を選んでください。既定のリージョンは`japaneast`です。
+
+発話テキストはSSMLとして送信し、共通設定の速さと高さを`prosody`へ反映します。APIキーはmacOSのKeychainへ保存し、送信先は`https://<region>.tts.speech.microsoft.com`形式の公式HTTPSホストだけに制限しています。APIの利用量に応じて料金が発生する場合があります。
+
+### Google Cloud TTS
+
+[Google Cloud Text-to-Speech API](https://cloud.google.com/text-to-speech/docs/reference/rest/v1/text/synthesize)を使います。Text-to-Speech APIを有効にしたプロジェクトのAPIキーを設定し、「話者一覧を取得」から声と言語を選んでください。
+
+APIキーはURLへ含めず、`x-goog-api-key`ヘッダーで送ります。発話テキストと速さ・高さはGoogle Cloudへ送信され、MP3を受信します。APIキーはmacOSのKeychainへ保存し、送信先は`https://texttospeech.googleapis.com`だけに制限しています。APIの利用量に応じて料金が発生する場合があります。
+
 ## SakuraScriptから読み上げを調整する
 
 `\__v[disable]`以降は読み上げず、`\__v[alternate,テキスト]`を使うと画面表示とは別の読みを指定できます。引数なしの`\__v`で通常の読み上げに戻ります。詳しくは[SakuraScript互換状況](UKADOC-SakuraScript-Compatibility.md)を参照してください。

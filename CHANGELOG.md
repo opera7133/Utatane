@@ -14,7 +14,7 @@
 - 右クリックメニューの「最近使ったもの」に保存する最大件数を本体設定から変更できるようにした
 - ゴーストの右クリックメニューの「機能」からUtatane本体のアップデートを確認できるようにした
 - ゴーストの右クリックメニューからUtataneの表示言語を選べるようにした。変更は再起動後に反映される
-- macOS標準音声、VOICEVOX互換API（VOICEVOX、VOICEVOX Nemo、SHAREVOX、AivisSpeechなど）、COEIROINK v2、VOICEPEAK、VoiSona Talk、Irodori-TTSなどのOpenAI互換ローカルAPI、OpenAI、ElevenLabs、Aivis Cloud APIでゴーストの発話を読み上げ、スコープごとにエンジン、声、速度、音量、ピッチを設定できるようにした。`\__v`による読み上げ除外と読み替えにも対応
+- macOS標準音声、VOICEVOX互換API（VOICEVOX、VOICEVOX Nemo、SHAREVOX、AivisSpeechなど）、COEIROINK v2、VOICEPEAK、VoiSona Talk、Irodori-TTSなどのOpenAI互換ローカルAPI、OpenAI、ElevenLabs、Aivis Cloud API、Azure Speech、Google Cloud TTSでゴーストの発話を読み上げ、スコープごとにエンジン、声、速度、音量、ピッチを設定できるようにした。`\__v`による読み上げ除外と読み替えにも対応
 - macOS標準の音声認識を右クリックメニューまたは本体設定から開始し、確定した認識結果を`OnVoiceRecognitionWord`でゴーストへ通知できるようにした。利用可能な環境ではオンデバイス認識を選べる
 - 音声合成・音声認識の起動時とON/OFF時に、`OnSpeechSynthesisStatus`と`OnVoiceRecognitionStatus`を通知するようにした
 

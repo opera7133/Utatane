@@ -596,6 +596,170 @@ struct SpeechServicesTests {
             try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
         }
     }
+
+    @Test
+    func `Azure Speech lists regional voices`() async throws {
+        let capture = RequestCapture()
+        let client = AzureSpeechEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                return (
+                    Data(#"[{"ShortName":"ja-JP-NanamiNeural","LocalName":"七海","Locale":"ja-JP"}]"#.utf8),
+                    response(for: url)
+                )
+            },
+            credentialProvider: { _ in SpeechCredentialStore.Credential(password: "azure-key") }
+        )
+        let serviceURL = try #require(URL(string: "https://japaneast.tts.speech.microsoft.com"))
+
+        let voices = try await client.voices(serviceURL: serviceURL, scope: 0)
+        let request = try #require(await capture.request)
+
+        #expect(voices.map(\.identifier) == ["ja-JP-NanamiNeural"])
+        #expect(voices.first?.languageIdentifier == "ja-JP")
+        #expect(request.url?.path == "/cognitiveservices/voices/list")
+        #expect(request.value(forHTTPHeaderField: "Ocp-Apim-Subscription-Key") == "azure-key")
+    }
+
+    @Test
+    func `Azure Speech sends escaped SSML and common controls`() async throws {
+        let capture = RequestCapture()
+        let client = AzureSpeechEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                return (Data("ID3-azure-audio".utf8), response(for: url, contentType: "audio/mpeg"))
+            },
+            credentialProvider: { _ in SpeechCredentialStore.Credential(password: "azure-key") }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .azureSpeech,
+            voiceIdentifier: "ja-JP-NanamiNeural",
+            voiceLanguageIdentifier: "ja-JP",
+            serviceURL: URL(string: "https://japaneast.tts.speech.microsoft.com"),
+            rate: 0.75,
+            volume: 0.8,
+            pitchMultiplier: 1.5
+        )
+
+        let audio = try await client.synthesize(.init(text: "A & B < C", scope: 0, configuration: configuration))
+        let request = try #require(await capture.request)
+        let body = try #require(request.httpBody.flatMap { String(data: $0, encoding: .utf8) })
+
+        #expect(audio == Data("ID3-azure-audio".utf8))
+        #expect(request.url?.path == "/cognitiveservices/v1")
+        #expect(request.value(forHTTPHeaderField: "Ocp-Apim-Subscription-Key") == "azure-key")
+        #expect(request.value(forHTTPHeaderField: "X-Microsoft-OutputFormat") == "audio-24khz-48kbitrate-mono-mp3")
+        #expect(body.contains("name='ja-JP-NanamiNeural'"))
+        #expect(body.contains("rate='150%'"))
+        #expect(body.contains("pitch='+50%'"))
+        #expect(body.contains("A &amp; B &lt; C"))
+    }
+
+    @Test
+    func `Azure Speech credentials stay on a regional Microsoft host`() async throws {
+        let client = AzureSpeechEngineClient(
+            transport: { request in
+                Issue.record("Transport should not receive \(String(describing: request.url))")
+                throw SpeechServiceError.invalidServiceResponse
+            },
+            credentialProvider: { _ in SpeechCredentialStore.Credential(password: "azure-key") }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .azureSpeech,
+            voiceIdentifier: "ja-JP-NanamiNeural",
+            serviceURL: URL(string: "https://japaneast.tts.speech.microsoft.com.example.com")
+        )
+
+        await #expect(throws: SpeechServiceError.invalidServiceURL) {
+            try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
+        }
+    }
+
+    @Test
+    func `Google Cloud lists every voice language without putting its key in the URL`() async throws {
+        let capture = RequestCapture()
+        let client = GoogleCloudSpeechEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                return (
+                    Data(#"{"voices":[{"languageCodes":["ja-JP","en-US"],"name":"ja-JP-TestVoice"}]}"#.utf8),
+                    response(for: url)
+                )
+            },
+            credentialProvider: { _ in SpeechCredentialStore.Credential(password: "google-key") }
+        )
+
+        let voices = try await client.voices(scope: 1)
+        let request = try #require(await capture.request)
+
+        #expect(voices.map(\.language).sorted() == ["en-US", "ja-JP"])
+        #expect(request.url?.absoluteString == "https://texttospeech.googleapis.com/v1/voices")
+        #expect(request.value(forHTTPHeaderField: "x-goog-api-key") == "google-key")
+    }
+
+    @Test
+    func `Google Cloud synthesis decodes audio and sends voice controls`() async throws {
+        let capture = RequestCapture()
+        let expectedAudio = Data("ID3-google-audio".utf8)
+        let client = GoogleCloudSpeechEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                let data = try JSONEncoder().encode(["audioContent": expectedAudio.base64EncodedString()])
+                return (data, response(for: url))
+            },
+            credentialProvider: { _ in SpeechCredentialStore.Credential(password: "google-key") }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .googleCloudTTS,
+            voiceIdentifier: "ja-JP-TestVoice",
+            voiceLanguageIdentifier: "ja-JP",
+            serviceURL: URL(string: "https://texttospeech.googleapis.com/v1"),
+            rate: 0.75,
+            volume: 0.8,
+            pitchMultiplier: 1.5
+        )
+
+        let audio = try await client.synthesize(.init(text: " 読み上げ ", scope: 0, configuration: configuration))
+        let request = try #require(await capture.request)
+        let bodyData = try #require(request.httpBody)
+        let body = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+        let voice = try #require(body["voice"] as? [String: Any])
+        let audioConfig = try #require(body["audioConfig"] as? [String: Any])
+
+        #expect(audio == expectedAudio)
+        #expect(request.url?.path == "/v1/text:synthesize")
+        #expect(request.value(forHTTPHeaderField: "x-goog-api-key") == "google-key")
+        #expect((body["input"] as? [String: Any])?["text"] as? String == "読み上げ")
+        #expect(voice["name"] as? String == "ja-JP-TestVoice")
+        #expect(voice["languageCode"] as? String == "ja-JP")
+        #expect(audioConfig["audioEncoding"] as? String == "MP3")
+        #expect(audioConfig["speakingRate"] as? Double == 1.5)
+        #expect(audioConfig["pitch"] as? Double == 6)
+    }
+
+    @Test
+    func `Google Cloud credentials stay on the official API host`() async throws {
+        let client = GoogleCloudSpeechEngineClient(
+            transport: { request in
+                Issue.record("Transport should not receive \(String(describing: request.url))")
+                throw SpeechServiceError.invalidServiceResponse
+            },
+            credentialProvider: { _ in SpeechCredentialStore.Credential(password: "google-key") }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .googleCloudTTS,
+            voiceIdentifier: "ja-JP-TestVoice",
+            serviceURL: URL(string: "https://example.com/v1")
+        )
+
+        await #expect(throws: SpeechServiceError.invalidServiceURL) {
+            try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
+        }
+    }
 }
 
 private actor RequestCapture {

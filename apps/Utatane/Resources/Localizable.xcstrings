@@ -1016,6 +1016,35 @@
         }
       }
     },
+    "Azure Speech" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Azure Speech"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Azure Speech"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Azure Speech"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Azure Speech"
+          }
+        }
+      }
+    },
     "Base URL" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -1215,6 +1244,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "加入 Ghost 資料夾後會顯示在這裡。"
+          }
+        }
+      }
+    },
+    "Google Cloud TTS" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Cloud TTS"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Cloud TTS"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Cloud TTS"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Google Cloud TTS"
           }
         }
       }
@@ -6729,6 +6787,35 @@
         }
       }
     },
+    "リージョン" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Region"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "리전"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "区域"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "區域"
+          }
+        }
+      }
+    },
     "レベル" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10789,6 +10876,35 @@
         }
       }
     },
+    "発話テキストをAzure Speechへ送信する。利用量に応じて料金が発生する場合がある。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speech text is sent to Azure Speech. Charges may apply based on usage."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발화 텍스트를 Azure Speech로 전송합니다. 사용량에 따라 요금이 발생할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发言文本会发送给 Azure Speech，可能会根据使用量产生费用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "發話文字會傳送給 Azure Speech，可能會依使用量產生費用。"
+          }
+        }
+      }
+    },
     "発話テキストをElevenLabsへ送信する。利用量に応じて料金が発生する場合がある。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10814,6 +10930,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "發話文字會傳送給 ElevenLabs，可能會依使用量產生費用。"
+          }
+        }
+      }
+    },
+    "発話テキストをGoogle Cloud TTSへ送信する。利用量に応じて料金が発生する場合がある。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speech text is sent to Google Cloud TTS. Charges may apply based on usage."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발화 텍스트를 Google Cloud TTS로 전송합니다. 사용량에 따라 요금이 발생할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发言文本会发送给 Google Cloud TTS，可能会根据使用量产生费用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "發話文字會傳送給 Google Cloud TTS，可能會依使用量產生費用。"
           }
         }
       }

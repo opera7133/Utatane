@@ -475,6 +475,11 @@
   "話者UUID（任意）" : "Speaker UUID (Optional)",
   "スタイルID（任意）" : "Style ID (Optional)",
   "発話テキストをAivis Cloud APIへ送信する。利用量に応じて料金が発生する場合がある。" : "Speech text is sent to the Aivis Cloud API. Charges may apply based on usage.",
+  "Azure Speech" : "Azure Speech",
+  "Google Cloud TTS" : "Google Cloud TTS",
+  "リージョン" : "Region",
+  "発話テキストをAzure Speechへ送信する。利用量に応じて料金が発生する場合がある。" : "Speech text is sent to Azure Speech. Charges may apply based on usage.",
+  "発話テキストをGoogle Cloud TTSへ送信する。利用量に応じて料金が発生する場合がある。" : "Speech text is sent to Google Cloud TTS. Charges may apply based on usage.",
   "ボイスバージョン" : "Voice Version",
   "音声合成サービスの認証情報が設定されていません。" : "Speech synthesis service credentials are not configured."
 }
