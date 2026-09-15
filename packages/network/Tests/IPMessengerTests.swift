@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import UtataneNetwork
@@ -137,4 +138,60 @@ func `IP Messenger rejects malformed and oversized datagrams`() {
             count: IPMessengerProtocol.maximumDatagramBytes + 1
         ))
     }
+}
+
+@Test
+func `IP Messenger falls back to an available port when the configured port is occupied`() throws {
+    let occupiedSocket = Darwin.socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
+    #expect(occupiedSocket >= 0)
+    defer { Darwin.close(occupiedSocket) }
+
+    var address = sockaddr_in()
+    address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    address.sin_family = sa_family_t(AF_INET)
+    address.sin_port = 0
+    address.sin_addr = in_addr(s_addr: inet_addr("127.0.0.1"))
+    let bound = withUnsafePointer(to: &address) { addressPointer in
+        addressPointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+            Darwin.bind(occupiedSocket, socketAddress, socklen_t(MemoryLayout<sockaddr_in>.size))
+        }
+    }
+    #expect(bound == 0)
+
+    var boundAddress = sockaddr_in()
+    var boundLength = socklen_t(MemoryLayout<sockaddr_in>.size)
+    let resolved = withUnsafeMutablePointer(to: &boundAddress) { addressPointer in
+        addressPointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+            Darwin.getsockname(occupiedSocket, socketAddress, &boundLength)
+        }
+    }
+    #expect(resolved == 0)
+    let port = UInt16(bigEndian: boundAddress.sin_port)
+    #expect(port > 0)
+
+    let service = IPMessengerService()
+    try service.start(configuration: IPMessengerConfiguration(
+        displayName: "Utatane",
+        port: port,
+        broadcastAddresses: ["127.0.0.1"]
+    ))
+    service.stop()
+}
+
+@Test
+func `IP Messenger derives the directed broadcast address from an interface`() {
+    var address = in_addr()
+    var netmask = in_addr()
+    #expect(inet_pton(AF_INET, "10.0.20.176", &address) == 1)
+    #expect(inet_pton(AF_INET, "255.255.255.0", &netmask) == 1)
+
+    #expect(IPMessengerService.broadcastAddress(address: address, netmask: netmask) == "10.0.20.255")
+}
+
+@Test
+func `IP Messenger presence includes loopback for clients on the same Mac`() {
+    #expect(IPMessengerService.presenceAddresses(
+        interfaceAddresses: ["10.0.20.255"],
+        configuredAddresses: ["255.255.255.255", "10.0.20.255"]
+    ) == ["10.0.20.255", "127.0.0.1", "255.255.255.255"])
 }

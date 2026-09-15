@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import OSLog
 
 public enum IPMessengerProtocol {
     public static let defaultPort: UInt16 = 2425
@@ -306,6 +307,7 @@ public final class IPMessengerService: @unchecked Sendable {
     }
 
     private let queue = DispatchQueue(label: "dev.utatane.ip-messenger")
+    private let logger = Logger(subsystem: "dev.utatane.app", category: "IPMessenger")
     private var socketDescriptor: Int32 = -1
     private var readSource: DispatchSourceRead?
     private var configuration: IPMessengerConfiguration?
@@ -332,7 +334,8 @@ public final class IPMessengerService: @unchecked Sendable {
             let descriptor = Darwin.socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)
             guard descriptor >= 0 else { throw IPMessengerError.socketFailure(errno) }
             do {
-                try Self.configureSocket(descriptor, port: configuration.port)
+                let boundPort = try Self.configureSocket(descriptor, port: configuration.port)
+                logger.debug("Listening on UDP port \(boundPort)")
             } catch {
                 Darwin.close(descriptor)
                 throw error
@@ -420,8 +423,23 @@ public final class IPMessengerService: @unchecked Sendable {
                 additional: configuration.displayName,
                 groupName: configuration.groupName
             )
-            for address in configuration.broadcastAddresses {
-                try send(data, address: address, port: configuration.port)
+            var lastError: Error?
+            var sent = false
+            let destinations = Self.presenceAddresses(
+                interfaceAddresses: Self.interfaceBroadcastAddresses(),
+                configuredAddresses: configuration.broadcastAddresses
+            )
+            for address in destinations {
+                do {
+                    try send(data, address: address, port: configuration.port)
+                    logger.debug("Sent presence mode \(mode) to \(address, privacy: .public):\(configuration.port)")
+                    sent = true
+                } catch {
+                    lastError = error
+                }
+            }
+            if !sent, let lastError {
+                throw lastError
             }
         } catch {
             publish(error)
@@ -465,6 +483,7 @@ public final class IPMessengerService: @unchecked Sendable {
     private func handle(_ data: Data, address: String, port: UInt16) {
         do {
             let packet = try IPMessengerProtocol.decode(data)
+            logger.debug("Received mode \(packet.mode) from \(address, privacy: .public):\(port)")
             if packet.userName == localUserName, packet.hostName == localHostName, port == configuration?.port {
                 return
             }
@@ -685,7 +704,7 @@ public final class IPMessengerService: @unchecked Sendable {
         Task { @MainActor in onError(error) }
     }
 
-    private static func configureSocket(_ descriptor: Int32, port: UInt16) throws {
+    private static func configureSocket(_ descriptor: Int32, port: UInt16) throws -> UInt16 {
         var enabled: Int32 = 1
         guard setsockopt(descriptor, SOL_SOCKET, SO_REUSEADDR, &enabled, socklen_t(MemoryLayout.size(ofValue: enabled))) == 0,
               setsockopt(descriptor, SOL_SOCKET, SO_REUSEPORT, &enabled, socklen_t(MemoryLayout.size(ofValue: enabled))) == 0,
@@ -699,12 +718,30 @@ public final class IPMessengerService: @unchecked Sendable {
         localAddress.sin_family = sa_family_t(AF_INET)
         localAddress.sin_port = port.bigEndian
         localAddress.sin_addr = in_addr(s_addr: INADDR_ANY)
-        let result = withUnsafePointer(to: &localAddress) { addressPointer in
+        var result = withUnsafePointer(to: &localAddress) { addressPointer in
             addressPointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
                 Darwin.bind(descriptor, socketAddress, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
+        if result != 0, errno == EADDRINUSE {
+            localAddress.sin_port = 0
+            result = withUnsafePointer(to: &localAddress) { addressPointer in
+                addressPointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                    Darwin.bind(descriptor, socketAddress, socklen_t(MemoryLayout<sockaddr_in>.size))
+                }
+            }
+        }
         guard result == 0 else { throw IPMessengerError.socketFailure(errno) }
+
+        var boundAddress = sockaddr_in()
+        var boundLength = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let resolved = withUnsafeMutablePointer(to: &boundAddress) { addressPointer in
+            addressPointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { socketAddress in
+                Darwin.getsockname(descriptor, socketAddress, &boundLength)
+            }
+        }
+        guard resolved == 0 else { throw IPMessengerError.socketFailure(errno) }
+        return UInt16(bigEndian: boundAddress.sin_port)
     }
 
     private static func validateIPv4Address(_ address: String) throws {
@@ -712,6 +749,54 @@ public final class IPMessengerService: @unchecked Sendable {
         guard inet_pton(AF_INET, address, &parsed) == 1 else {
             throw IPMessengerError.invalidAddress(address)
         }
+    }
+
+    static func interfaceBroadcastAddresses() -> [String] {
+        var firstInterface: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&firstInterface) == 0, let firstInterface else { return [] }
+        defer { freeifaddrs(firstInterface) }
+
+        var result: [String] = []
+        for interfacePointer in sequence(first: firstInterface, next: { $0.pointee.ifa_next }) {
+            let interface = interfacePointer.pointee
+            guard interface.ifa_flags & UInt32(IFF_UP) != 0,
+                  interface.ifa_flags & UInt32(IFF_BROADCAST) != 0,
+                  let addressPointer = interface.ifa_addr,
+                  let netmaskPointer = interface.ifa_netmask,
+                  addressPointer.pointee.sa_family == sa_family_t(AF_INET),
+                  netmaskPointer.pointee.sa_family == sa_family_t(AF_INET)
+            else { continue }
+
+            let address = addressPointer.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
+                $0.pointee.sin_addr
+            }
+            let netmask = netmaskPointer.withMemoryRebound(to: sockaddr_in.self, capacity: 1) {
+                $0.pointee.sin_addr
+            }
+            guard let broadcast = broadcastAddress(address: address, netmask: netmask),
+                  !result.contains(broadcast)
+            else { continue }
+            result.append(broadcast)
+        }
+        return result
+    }
+
+    static func presenceAddresses(
+        interfaceAddresses: [String],
+        configuredAddresses: [String]
+    ) -> [String] {
+        var visited: Set<String> = []
+        return (interfaceAddresses + ["127.0.0.1"] + configuredAddresses).filter {
+            visited.insert($0).inserted
+        }
+    }
+
+    static func broadcastAddress(address: in_addr, netmask: in_addr) -> String? {
+        var broadcast = in_addr(s_addr: address.s_addr | ~netmask.s_addr)
+        var buffer = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+        guard inet_ntop(AF_INET, &broadcast, &buffer, socklen_t(INET_ADDRSTRLEN)) != nil else { return nil }
+        let bytes = buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }
+        return String(decoding: bytes, as: UTF8.self)
     }
 
     private static func string(from address: sockaddr_in) -> String? {
@@ -723,12 +808,10 @@ public final class IPMessengerService: @unchecked Sendable {
     }
 
     private static func localUserName() -> String {
-        let value = NSUserName().isEmpty ? "Utatane" : NSUserName()
-        return value.replacingOccurrences(of: ":", with: ";")
+        "Utatane"
     }
 
     private static func localHostName() -> String {
-        let value = Host.current().localizedName ?? ProcessInfo.processInfo.hostName
-        return value.replacingOccurrences(of: ":", with: ";")
+        "Utatane-\(UUID().uuidString.prefix(8).lowercased())"
     }
 }
