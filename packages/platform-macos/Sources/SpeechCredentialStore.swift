@@ -2,6 +2,12 @@ import Foundation
 import Security
 
 public enum SpeechCredentialStore {
+    public enum Provider: String, Sendable {
+        case voisonaTalk = "voisona-talk"
+        case openAI = "openai"
+        case openAICompatibleLocal = "openai-compatible-local"
+    }
+
     public struct Credential: Codable, Equatable, Sendable {
         public var username: String
         public var password: String
@@ -18,11 +24,11 @@ public enum SpeechCredentialStore {
 
     private static let service = "dev.utatane.app.speech-provider"
 
-    public static func load(scope: Int) -> Credential {
+    public static func load(provider: Provider = .voisonaTalk, scope: Int) -> Credential {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account(scope: scope),
+            kSecAttrAccount as String: account(provider: provider, scope: scope),
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne
         ]
@@ -34,11 +40,11 @@ public enum SpeechCredentialStore {
         return credential
     }
 
-    public static func save(_ credential: Credential, scope: Int) {
+    public static func save(_ credential: Credential, provider: Provider = .voisonaTalk, scope: Int) {
         let key: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
-            kSecAttrAccount as String: account(scope: scope)
+            kSecAttrAccount as String: account(provider: provider, scope: scope)
         ]
         guard !credential.username.isEmpty || !credential.password.isEmpty,
               let data = try? JSONEncoder().encode(credential)
@@ -54,7 +60,7 @@ public enum SpeechCredentialStore {
         }
     }
 
-    private static func account(scope: Int) -> String {
-        "voisona-talk.scope-\(scope)"
+    private static func account(provider: Provider, scope: Int) -> String {
+        "\(provider.rawValue).scope-\(scope)"
     }
 }

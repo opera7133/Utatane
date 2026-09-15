@@ -7,7 +7,7 @@ Utataneを使う人、ゴーストや拡張を作る人、Utatane本体を開発
 - [ゴースト互換状況](Compatibility.md): 実際に確認したゴースト、SHIORI、SAORIと既知の制約
 - [ウィンドウモード](Window-Mode.md): 配信・画面収録向けの単一ウィンドウ表示、背景、スクリーンショット、発話履歴
 - [Realtime音声会話](Realtime-Voice.md): OpenAI Realtime APIまたは互換APIを使った音声会話の設定
-- [音声合成・音声認識](Speech.md): macOS標準、ローカル音声合成ソフト、VOICEPEAK、VoiSona Talkと音声認識の設定
+- [音声合成・音声認識](Speech.md): macOS標準、ローカル音声合成ソフト、OpenAIと音声認識の設定
 - [Native SHIORI / SAORI](Native-SHIORI.md): Wineなしで動く人格エンジンと、外部モジュール・Wineフォールバックの対応範囲
 
 基本的なインストール、ゴーストの追加、Materia付属FIRSTの配置方法は[プロジェクトREADME](../README.md)にあります。

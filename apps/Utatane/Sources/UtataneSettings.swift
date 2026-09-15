@@ -23,6 +23,13 @@ final class UtataneSettingsStore: ObservableObject {
         var voisonaTalkVoiceName = ""
         var voisonaTalkVoiceVersion = ""
         var voisonaTalkLanguage = "ja_JP"
+        var openAIModel = "gpt-4o-mini-tts"
+        var openAIVoice = "marin"
+        var openAIInstructions = ""
+        var openAICompatibleLocalBaseURL = "http://127.0.0.1:8088/v1"
+        var openAICompatibleLocalModel = "irodori-tts"
+        var openAICompatibleLocalVoice = "none"
+        var openAICompatibleLocalInstructions = ""
         var rate = 0.5
         var volume = 1.0
         var pitch = 1.0
@@ -34,6 +41,8 @@ final class UtataneSettingsStore: ObservableObject {
                 voiceGroupIdentifier: selectedVoiceGroupIdentifier,
                 voiceLanguageIdentifier: selectedVoiceLanguageIdentifier,
                 serviceURL: selectedServiceURL,
+                modelIdentifier: selectedModelIdentifier,
+                instructions: selectedInstructions,
                 rate: Float(rate),
                 volume: Float(volume),
                 pitchMultiplier: Float(pitch)
@@ -47,6 +56,8 @@ final class UtataneSettingsStore: ObservableObject {
             case .coeiroink: coeiroinkStyleIdentifier
             case .voicepeak: voicepeakNarrator
             case .voisonaTalk: voisonaTalkVoiceName
+            case .openAI: openAIVoice
+            case .openAICompatibleLocal: openAICompatibleLocalVoice
             }
             return identifier.isEmpty ? nil : identifier
         }
@@ -65,6 +76,24 @@ final class UtataneSettingsStore: ObservableObject {
             return voisonaTalkLanguage
         }
 
+        private var selectedModelIdentifier: String? {
+            let model = switch provider {
+            case .openAI: openAIModel
+            case .openAICompatibleLocal: openAICompatibleLocalModel
+            default: ""
+            }
+            return model.isEmpty ? nil : model
+        }
+
+        private var selectedInstructions: String? {
+            let instructions = switch provider {
+            case .openAI: openAIInstructions
+            case .openAICompatibleLocal: openAICompatibleLocalInstructions
+            default: ""
+            }
+            return instructions.isEmpty ? nil : instructions
+        }
+
         private var selectedServiceURL: URL? {
             switch provider {
             case .macOS: nil
@@ -72,6 +101,8 @@ final class UtataneSettingsStore: ObservableObject {
             case .coeiroink: URL(string: coeiroinkBaseURL)
             case .voicepeak: URL(fileURLWithPath: voicepeakExecutablePath)
             case .voisonaTalk: URL(string: voisonaTalkBaseURL)
+            case .openAI: URL(string: "https://api.openai.com/v1")
+            case .openAICompatibleLocal: URL(string: openAICompatibleLocalBaseURL)
             }
         }
 
@@ -89,6 +120,13 @@ final class UtataneSettingsStore: ObservableObject {
             case voisonaTalkVoiceName
             case voisonaTalkVoiceVersion
             case voisonaTalkLanguage
+            case openAIModel
+            case openAIVoice
+            case openAIInstructions
+            case openAICompatibleLocalBaseURL
+            case openAICompatibleLocalModel
+            case openAICompatibleLocalVoice
+            case openAICompatibleLocalInstructions
             case rate
             case volume
             case pitch
@@ -117,6 +155,25 @@ final class UtataneSettingsStore: ObservableObject {
             voisonaTalkVoiceName = try values.decodeIfPresent(String.self, forKey: .voisonaTalkVoiceName) ?? ""
             voisonaTalkVoiceVersion = try values.decodeIfPresent(String.self, forKey: .voisonaTalkVoiceVersion) ?? ""
             voisonaTalkLanguage = try values.decodeIfPresent(String.self, forKey: .voisonaTalkLanguage) ?? "ja_JP"
+            openAIModel = try values.decodeIfPresent(String.self, forKey: .openAIModel) ?? "gpt-4o-mini-tts"
+            openAIVoice = try values.decodeIfPresent(String.self, forKey: .openAIVoice) ?? "marin"
+            openAIInstructions = try values.decodeIfPresent(String.self, forKey: .openAIInstructions) ?? ""
+            openAICompatibleLocalBaseURL = try values.decodeIfPresent(
+                String.self,
+                forKey: .openAICompatibleLocalBaseURL
+            ) ?? "http://127.0.0.1:8088/v1"
+            openAICompatibleLocalModel = try values.decodeIfPresent(
+                String.self,
+                forKey: .openAICompatibleLocalModel
+            ) ?? "irodori-tts"
+            openAICompatibleLocalVoice = try values.decodeIfPresent(
+                String.self,
+                forKey: .openAICompatibleLocalVoice
+            ) ?? "none"
+            openAICompatibleLocalInstructions = try values.decodeIfPresent(
+                String.self,
+                forKey: .openAICompatibleLocalInstructions
+            ) ?? ""
             rate = try values.decodeIfPresent(Double.self, forKey: .rate) ?? 0.5
             volume = try values.decodeIfPresent(Double.self, forKey: .volume) ?? 1
             pitch = try values.decodeIfPresent(Double.self, forKey: .pitch) ?? 1
@@ -1103,6 +1160,8 @@ private struct SpeechVoiceSettingsEditor: View {
     let voices: [SpeechSynthesisVoice]
     @Binding var settings: UtataneSettingsStore.SpeechVoiceSettings
     @State private var voisonaTalkCredential: SpeechCredentialStore.Credential
+    @State private var openAICredential: SpeechCredentialStore.Credential
+    @State private var openAICompatibleLocalCredential: SpeechCredentialStore.Credential
     @State private var localAPIVoices: [SpeechSynthesisVoice] = []
     @State private var localAPIVoiceCount: Int?
     @State private var localAPIError: String?
@@ -1119,6 +1178,10 @@ private struct SpeechVoiceSettingsEditor: View {
         self.voices = voices
         _settings = settings
         _voisonaTalkCredential = State(initialValue: SpeechCredentialStore.load(scope: scope))
+        _openAICredential = State(initialValue: SpeechCredentialStore.load(provider: .openAI, scope: scope))
+        _openAICompatibleLocalCredential = State(
+            initialValue: SpeechCredentialStore.load(provider: .openAICompatibleLocal, scope: scope)
+        )
     }
 
     var body: some View {
@@ -1132,6 +1195,8 @@ private struct SpeechVoiceSettingsEditor: View {
                         Text("COEIROINK v2").tag(SpeechSynthesisProvider.coeiroink)
                         Text("VOICEPEAK").tag(SpeechSynthesisProvider.voicepeak)
                         Text("VoiSona Talk").tag(SpeechSynthesisProvider.voisonaTalk)
+                        Text("OpenAI").tag(SpeechSynthesisProvider.openAI)
+                        Text("OpenAI互換ローカルAPI").tag(SpeechSynthesisProvider.openAICompatibleLocal)
                     }
                     .labelsHidden()
                 }
@@ -1145,6 +1210,55 @@ private struct SpeechVoiceSettingsEditor: View {
                             }
                         }
                         .labelsHidden()
+                    }
+                } else if settings.provider == .openAI || settings.provider == .openAICompatibleLocal {
+                    if settings.provider == .openAICompatibleLocal {
+                        GridRow {
+                            Text("API URL")
+                            TextField("", text: $settings.openAICompatibleLocalBaseURL)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+                    GridRow {
+                        Text("モデル")
+                        TextField("", text: openAIModel, prompt: Text(openAIModelPlaceholder))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text(settings.provider == .openAI ? "APIキー" : "Bearerトークン（任意）")
+                        SecureField(
+                            "",
+                            text: openAIAPIKey,
+                            prompt: settings.provider == .openAI ? Text("APIキー") : nil
+                        )
+                        .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text("声")
+                        if settings.provider == .openAI {
+                            Picker("", selection: $settings.openAIVoice) {
+                                ForEach(Self.openAIVoices, id: \.self) { voice in
+                                    Text(voice).tag(voice)
+                                }
+                            }
+                            .labelsHidden()
+                        } else {
+                            TextField("", text: $settings.openAICompatibleLocalVoice, prompt: Text("none"))
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+                    GridRow {
+                        Text("話し方の指示")
+                        TextField("", text: openAIInstructions, prompt: Text("落ち着いた自然な声で話す"))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    if settings.provider == .openAI {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            Text("発話テキストをOpenAIへ送信する。利用量に応じて料金が発生する場合がある。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 } else {
                     GridRow {
@@ -1235,9 +1349,11 @@ private struct SpeechVoiceSettingsEditor: View {
                     Text("音量")
                     Slider(value: $settings.volume, in: 0 ... 1)
                 }
-                GridRow {
-                    Text("高さ")
-                    Slider(value: $settings.pitch, in: 0.5 ... 2)
+                if settings.provider != .openAI, settings.provider != .openAICompatibleLocal {
+                    GridRow {
+                        Text("高さ")
+                        Slider(value: $settings.pitch, in: 0.5 ... 2)
+                    }
                 }
             }
         }
@@ -1260,6 +1376,34 @@ private struct SpeechVoiceSettingsEditor: View {
             SpeechCredentialStore.save(voisonaTalkCredential, scope: scope)
             resetLocalAPIVoices()
         }
+        .onChange(of: openAICredential) {
+            SpeechCredentialStore.save(openAICredential, provider: .openAI, scope: scope)
+        }
+        .onChange(of: openAICompatibleLocalCredential) {
+            SpeechCredentialStore.save(
+                openAICompatibleLocalCredential,
+                provider: .openAICompatibleLocal,
+                scope: scope
+            )
+        }
+    }
+
+    private var openAIModel: Binding<String> {
+        settings.provider == .openAI ? $settings.openAIModel : $settings.openAICompatibleLocalModel
+    }
+
+    private var openAIModelPlaceholder: String {
+        settings.provider == .openAI ? "gpt-4o-mini-tts" : "irodori-tts"
+    }
+
+    private var openAIAPIKey: Binding<String> {
+        settings.provider == .openAI ? $openAICredential.password : $openAICompatibleLocalCredential.password
+    }
+
+    private var openAIInstructions: Binding<String> {
+        settings.provider == .openAI
+            ? $settings.openAIInstructions
+            : $settings.openAICompatibleLocalInstructions
     }
 
     private var externalServiceLocation: Binding<String> {
@@ -1270,6 +1414,8 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .coeiroink: settings.coeiroinkBaseURL
                 case .voicepeak: settings.voicepeakExecutablePath
                 case .voisonaTalk: settings.voisonaTalkBaseURL
+                case .openAI: "https://api.openai.com/v1"
+                case .openAICompatibleLocal: settings.openAICompatibleLocalBaseURL
                 }
             },
             set: { value in
@@ -1282,6 +1428,10 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.voicepeakExecutablePath = value
                 case .voisonaTalk:
                     settings.voisonaTalkBaseURL = value
+                case .openAI:
+                    break
+                case .openAICompatibleLocal:
+                    settings.openAICompatibleLocalBaseURL = value
                 }
             }
         )
@@ -1295,6 +1445,8 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .coeiroink: settings.coeiroinkStyleIdentifier
                 case .voicepeak: settings.voicepeakNarrator
                 case .voisonaTalk: settings.voisonaTalkVoiceName
+                case .openAI: settings.openAIVoice
+                case .openAICompatibleLocal: settings.openAICompatibleLocalVoice
                 }
             },
             set: { value in
@@ -1307,6 +1459,10 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.voicepeakNarrator = value
                 case .voisonaTalk:
                     settings.voisonaTalkVoiceName = value
+                case .openAI:
+                    settings.openAIVoice = value
+                case .openAICompatibleLocal:
+                    settings.openAICompatibleLocalVoice = value
                 }
             }
         )
@@ -1343,6 +1499,10 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.voisonaTalkVoiceName = voice.identifier
                     settings.voisonaTalkVoiceVersion = voice.groupIdentifier ?? ""
                     settings.voisonaTalkLanguage = voice.languageIdentifier ?? ""
+                case .openAI:
+                    settings.openAIVoice = voice.identifier
+                case .openAICompatibleLocal:
+                    settings.openAICompatibleLocalVoice = voice.identifier
                 }
             }
         )
@@ -1354,6 +1514,8 @@ private struct SpeechVoiceSettingsEditor: View {
         case .coeiroink: "http://127.0.0.1:50032"
         case .voicepeak: "/Applications/voicepeak.app/Contents/MacOS/voicepeak"
         case .voisonaTalk: "http://127.0.0.1:32766/api/talk/v1"
+        case .openAI: "https://api.openai.com/v1"
+        case .openAICompatibleLocal: "http://127.0.0.1:8088/v1"
         }
     }
 
@@ -1363,6 +1525,8 @@ private struct SpeechVoiceSettingsEditor: View {
         case .coeiroink: "スタイルID"
         case .voicepeak: "ナレーター"
         case .voisonaTalk: "ボイス名"
+        case .openAI: "声"
+        case .openAICompatibleLocal: "声"
         }
     }
 
@@ -1370,6 +1534,8 @@ private struct SpeechVoiceSettingsEditor: View {
         switch settings.provider {
         case .voicepeak: "Japanese Female 1"
         case .voisonaTalk: "voice-name_ja_JP"
+        case .openAI: "marin"
+        case .openAICompatibleLocal: "none"
         default: "0"
         }
     }
@@ -1401,6 +1567,10 @@ private struct SpeechVoiceSettingsEditor: View {
                     serviceURL: externalServiceURL(),
                     credential: voisonaTalkCredential
                 )
+            case .openAI:
+                [SpeechSynthesisVoice]()
+            case .openAICompatibleLocal:
+                [SpeechSynthesisVoice]()
             }
             localAPIVoices = voices
             localAPIVoiceCount = voices.count
@@ -1416,6 +1586,11 @@ private struct SpeechVoiceSettingsEditor: View {
         }
         return url
     }
+
+    private static let openAIVoices = [
+        "alloy", "ash", "ballad", "coral", "echo", "fable", "onyx",
+        "nova", "sage", "shimmer", "verse", "marin", "cedar"
+    ]
 }
 
 private struct ContentSourcesSettingsView: View {

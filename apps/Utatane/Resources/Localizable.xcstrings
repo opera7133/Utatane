@@ -871,6 +871,35 @@
         }
       }
     },
+    "APIキー" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API Key"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 키"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 密钥"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "API 金鑰"
+          }
+        }
+      }
+    },
     "APIキー（Keychainに保存）" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -983,6 +1012,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "基礎URL"
+          }
+        }
+      }
+    },
+    "Bearerトークン（任意）" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bearer Token (Optional)"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bearer 토큰(선택 사항)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bearer 令牌（可选）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bearer 權杖（選填）"
           }
         }
       }
@@ -1505,6 +1563,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "使用OpenAI相容模型時API金鑰可以留空。更改設定後請重新載入AI Ghost。"
+          }
+        }
+      }
+    },
+    "OpenAI互換ローカルAPI" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI-Compatible Local API"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI 호환 로컬 API"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI 兼容本地 API"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OpenAI 相容本機 API"
           }
         }
       }
@@ -10586,6 +10673,35 @@
         }
       }
     },
+    "発話テキストをOpenAIへ送信する。利用量に応じて料金が発生する場合がある。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speech text is sent to OpenAI. Charges may apply based on usage."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발화 텍스트를 OpenAI로 전송합니다. 사용량에 따라 요금이 발생할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "发言文本会发送给 OpenAI，可能会根据使用量产生费用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "發話文字會傳送給 OpenAI，可能會依使用量產生費用。"
+          }
+        }
+      }
+    },
     "発話中だけ" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11224,6 +11340,35 @@
         }
       }
     },
+    "落ち着いた自然な声で話す" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speak in a calm, natural voice"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "차분하고 자연스러운 목소리로 말하기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用沉稳自然的声音说话"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用沉穩自然的聲音說話"
+          }
+        }
+      }
+    },
     "表示" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11626,6 +11771,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "設定"
+          }
+        }
+      }
+    },
+    "話し方の指示" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speaking Instructions"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "말하기 지침"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "说话方式指示"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "說話方式指示"
           }
         }
       }
@@ -13134,6 +13308,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "語音合成服務的 URL 無效。"
+          }
+        }
+      }
+    },
+    "音声合成サービスのモデル名が正しくありません。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The speech synthesis service model name is invalid."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음성 합성 서비스 모델 이름이 올바르지 않습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音合成服务的模型名称无效。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "語音合成服務的模型名稱無效。"
           }
         }
       }

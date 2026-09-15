@@ -439,6 +439,7 @@
   "音声合成が中止されました。" : "Speech synthesis was cancelled.",
   "音声合成サービスのURLが正しくありません。" : "The speech synthesis service URL is invalid.",
   "音声合成サービスの話者IDが正しくありません。" : "The speech synthesis service voice ID is invalid.",
+  "音声合成サービスのモデル名が正しくありません。" : "The speech synthesis service model name is invalid.",
   "音声合成サービスがエラーを返しました（HTTP %lld）。" : "The speech synthesis service returned an error (HTTP %lld).",
   "音声合成サービスから正しい応答を取得できませんでした。" : "The speech synthesis service returned an invalid response.",
   "合成された音声を再生できませんでした。" : "The synthesized audio could not be played.",
@@ -461,6 +462,13 @@
   "音声合成プロセスが失敗しました（終了コード %d）：%@" : "The speech synthesis process failed (exit code %d): %@",
   "APIユーザー名" : "API Username",
   "APIパスワード" : "API Password",
+  "APIキー" : "API Key",
+  "モデル" : "Model",
+  "OpenAI互換ローカルAPI" : "OpenAI-Compatible Local API",
+  "Bearerトークン（任意）" : "Bearer Token (Optional)",
+  "話し方の指示" : "Speaking Instructions",
+  "落ち着いた自然な声で話す" : "Speak in a calm, natural voice",
+  "発話テキストをOpenAIへ送信する。利用量に応じて料金が発生する場合がある。" : "Speech text is sent to OpenAI. Charges may apply based on usage.",
   "ボイスバージョン" : "Voice Version",
   "音声合成サービスの認証情報が設定されていません。" : "Speech synthesis service credentials are not configured."
 }

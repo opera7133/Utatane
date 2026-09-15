@@ -35,6 +35,20 @@ VOICEPEAKのコマンドラインAPIには入力文字数の制限があるた�
 
 API用パスワードはログイン用パスワードとは別にできます。認証情報はmacOSのKeychainへスコープごとに保存され、Utataneの設定JSONには書き込みません。また、認証情報の送信先はlocalhostとループバックIPアドレスだけに制限しています。
 
+### OpenAI互換ローカルAPI
+
+OpenAIの`POST /v1/audio/speech`と互換性のある、macOS上のローカル音声合成サーバーに対応します。API URL、モデル名、声を設定してください。必要なサーバーではBearerトークンも設定できます。
+
+[Irodori-TTS](https://github.com/Aratako/Irodori-TTS)はmacOSのCPU/MPS経路を持ち、[Irodori-TTS-Server](https://github.com/Aratako/Irodori-TTS-Server)を使うとこの方式で接続できます。既定値はAPI URLが`http://127.0.0.1:8088/v1`、モデルが`irodori-tts`です。リファレンス音声を登録している場合は、そのIDを「声」へ入力します。
+
+接続先はlocalhostとループバックIPアドレスだけに制限しています。BearerトークンはmacOSのKeychainへスコープごとに保存します。
+
+### OpenAI
+
+[OpenAIの音声生成API](https://developers.openai.com/api/reference/cli/resources/audio/subresources/speech/methods/create)を使って発話を読み上げます。OpenAI APIキー、モデル、声を設定してください。既定のモデルは`gpt-4o-mini-tts`です。対応するモデルでは「話し方の指示」も送信できます。
+
+発話テキストはOpenAIへ送信され、APIの利用量に応じて料金が発生する場合があります。APIキーはmacOSのKeychainへスコープごとに保存され、設定JSONには書き込みません。APIキーの送信先は`https://api.openai.com`だけに制限しています。
+
 ## SakuraScriptから読み上げを調整する
 
 `\__v[disable]`以降は読み上げず、`\__v[alternate,テキスト]`を使うと画面表示とは別の読みを指定できます。引数なしの`\__v`で通常の読み上げに戻ります。詳しくは[SakuraScript互換状況](UKADOC-SakuraScript-Compatibility.md)を参照してください。

@@ -330,6 +330,129 @@ struct SpeechServicesTests {
             )
         }
     }
+
+    @Test
+    func `OpenAI synthesis sends its current speech request format`() async throws {
+        let capture = RequestCapture()
+        let client = OpenAISpeechEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                return (Data("RIFF-openai-wave".utf8), response(for: url, contentType: "audio/wav"))
+            },
+            credentialProvider: { provider, scope in
+                #expect(provider == .openAI)
+                #expect(scope == 1)
+                return SpeechCredentialStore.Credential(password: "test-api-key")
+            }
+        )
+        let request = SpeechSynthesisRequest(
+            text: " 雨が降りそう。 ",
+            scope: 1,
+            configuration: SpeechSynthesisConfiguration(
+                provider: .openAI,
+                voiceIdentifier: "marin",
+                serviceURL: URL(string: "https://api.openai.com/v1"),
+                modelIdentifier: "gpt-4o-mini-tts",
+                instructions: "落ち着いた声で",
+                rate: 0.75,
+                volume: 0.8
+            )
+        )
+
+        let audio = try await client.synthesize(request)
+        let synthesisRequest = try #require(await capture.request)
+        let bodyData = try #require(synthesisRequest.httpBody)
+        let body = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+
+        #expect(audio == Data("RIFF-openai-wave".utf8))
+        #expect(synthesisRequest.url?.absoluteString == "https://api.openai.com/v1/audio/speech")
+        #expect(synthesisRequest.httpMethod == "POST")
+        #expect(synthesisRequest.value(forHTTPHeaderField: "Authorization") == "Bearer test-api-key")
+        #expect(synthesisRequest.value(forHTTPHeaderField: "Content-Type") == "application/json")
+        #expect(body["model"] as? String == "gpt-4o-mini-tts")
+        #expect(body["input"] as? String == "雨が降りそう。")
+        #expect(body["voice"] as? String == "marin")
+        #expect(body["instructions"] as? String == "落ち着いた声で")
+        #expect(body["response_format"] as? String == "wav")
+        #expect(body["speed"] as? Double == 1.5)
+    }
+
+    @Test
+    func `OpenAI credentials can only be sent to its HTTPS API`() async throws {
+        let client = OpenAISpeechEngineClient(
+            transport: { request in
+                Issue.record("Transport should not receive \(String(describing: request.url))")
+                throw SpeechServiceError.invalidServiceResponse
+            },
+            credentialProvider: { _, _ in
+                SpeechCredentialStore.Credential(password: "test-api-key")
+            }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .openAI,
+            voiceIdentifier: "marin",
+            serviceURL: URL(string: "https://example.com/v1"),
+            modelIdentifier: "gpt-4o-mini-tts"
+        )
+
+        await #expect(throws: SpeechServiceError.invalidServiceURL) {
+            try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
+        }
+    }
+
+    @Test
+    func `OpenAI compatible local synthesis stays on loopback and allows optional auth`() async throws {
+        let capture = RequestCapture()
+        let client = OpenAISpeechEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                return (Data("RIFF-irodori-wave".utf8), response(for: url, contentType: "audio/wav"))
+            },
+            credentialProvider: { provider, scope in
+                #expect(provider == .openAICompatibleLocal)
+                #expect(scope == 0)
+                return SpeechCredentialStore.Credential()
+            }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .openAICompatibleLocal,
+            voiceIdentifier: "none",
+            serviceURL: URL(string: "http://localhost:8088/v1"),
+            modelIdentifier: "irodori-tts"
+        )
+
+        let audio = try await client.synthesize(.init(text: "ローカル合成", scope: 0, configuration: configuration))
+        let synthesisRequest = try #require(await capture.request)
+
+        #expect(audio == Data("RIFF-irodori-wave".utf8))
+        #expect(synthesisRequest.url?.absoluteString == "http://localhost:8088/v1/audio/speech")
+        #expect(synthesisRequest.value(forHTTPHeaderField: "Authorization") == nil)
+    }
+
+    @Test
+    func `OpenAI compatible local credentials never leave the loopback host`() async throws {
+        let client = OpenAISpeechEngineClient(
+            transport: { request in
+                Issue.record("Transport should not receive \(String(describing: request.url))")
+                throw SpeechServiceError.invalidServiceResponse
+            },
+            credentialProvider: { _, _ in
+                SpeechCredentialStore.Credential(password: "local-token")
+            }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .openAICompatibleLocal,
+            voiceIdentifier: "none",
+            serviceURL: URL(string: "http://192.168.1.20:8088/v1"),
+            modelIdentifier: "irodori-tts"
+        )
+
+        await #expect(throws: SpeechServiceError.invalidServiceURL) {
+            try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
+        }
+    }
 }
 
 private actor RequestCapture {

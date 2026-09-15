@@ -8,6 +8,8 @@ public enum SpeechSynthesisProvider: String, Codable, CaseIterable, Sendable {
     case coeiroink
     case voicepeak
     case voisonaTalk
+    case openAI
+    case openAICompatibleLocal
 }
 
 public struct SpeechSynthesisVoice: Identifiable, Sendable, Equatable {
@@ -42,6 +44,8 @@ public struct SpeechSynthesisConfiguration: Sendable, Equatable {
     public var voiceGroupIdentifier: String?
     public var voiceLanguageIdentifier: String?
     public var serviceURL: URL?
+    public var modelIdentifier: String?
+    public var instructions: String?
     public var rate: Float
     public var volume: Float
     public var pitchMultiplier: Float
@@ -52,6 +56,8 @@ public struct SpeechSynthesisConfiguration: Sendable, Equatable {
         voiceGroupIdentifier: String? = nil,
         voiceLanguageIdentifier: String? = nil,
         serviceURL: URL? = nil,
+        modelIdentifier: String? = nil,
+        instructions: String? = nil,
         rate: Float = AVSpeechUtteranceDefaultSpeechRate,
         volume: Float = 1,
         pitchMultiplier: Float = 1
@@ -61,6 +67,8 @@ public struct SpeechSynthesisConfiguration: Sendable, Equatable {
         self.voiceGroupIdentifier = voiceGroupIdentifier
         self.voiceLanguageIdentifier = voiceLanguageIdentifier
         self.serviceURL = serviceURL
+        self.modelIdentifier = modelIdentifier
+        self.instructions = instructions
         self.rate = rate
         self.volume = volume
         self.pitchMultiplier = pitchMultiplier
@@ -93,6 +101,7 @@ public enum SpeechServiceError: LocalizedError, Equatable {
     case synthesisCancelled
     case invalidServiceURL
     case invalidVoiceIdentifier
+    case invalidModelIdentifier
     case serviceCredentialsUnavailable
     case serviceResponse(Int)
     case invalidServiceResponse
@@ -115,6 +124,8 @@ public enum SpeechServiceError: LocalizedError, Equatable {
             String(localized: "音声合成サービスのURLが正しくありません。")
         case .invalidVoiceIdentifier:
             String(localized: "音声合成サービスの話者IDが正しくありません。")
+        case .invalidModelIdentifier:
+            String(localized: "音声合成サービスのモデル名が正しくありません。")
         case .serviceCredentialsUnavailable:
             String(localized: "音声合成サービスの認証情報が設定されていません。")
         case let .serviceResponse(statusCode):
@@ -136,17 +147,20 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
     private let coeiroinkSynthesizer: CoeiroinkSpeechSynthesizer
     private let voicepeakSynthesizer: VoicepeakSpeechSynthesizer
     private let voisonaTalkSynthesizer: VoiSonaTalkSpeechSynthesizer
+    private let openAISynthesizer: OpenAISpeechSynthesizer
 
     public init(
         voicevoxClient: VoicevoxEngineClient = VoicevoxEngineClient(),
         coeiroinkClient: CoeiroinkEngineClient = CoeiroinkEngineClient(),
         voicepeakClient: VoicepeakEngineClient = VoicepeakEngineClient(),
-        voisonaTalkClient: VoiSonaTalkEngineClient = VoiSonaTalkEngineClient()
+        voisonaTalkClient: VoiSonaTalkEngineClient = VoiSonaTalkEngineClient(),
+        openAIClient: OpenAISpeechEngineClient = OpenAISpeechEngineClient()
     ) {
         voicevoxSynthesizer = VoicevoxSpeechSynthesizer(client: voicevoxClient)
         coeiroinkSynthesizer = CoeiroinkSpeechSynthesizer(client: coeiroinkClient)
         voicepeakSynthesizer = VoicepeakSpeechSynthesizer(client: voicepeakClient)
         voisonaTalkSynthesizer = VoiSonaTalkSpeechSynthesizer(client: voisonaTalkClient)
+        openAISynthesizer = OpenAISpeechSynthesizer(client: openAIClient)
     }
 
     public func speak(_ request: SpeechSynthesisRequest) async throws {
@@ -162,6 +176,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
             try await voicepeakSynthesizer.speak(request)
         case .voisonaTalk:
             try await voisonaTalkSynthesizer.speak(request)
+        case .openAI, .openAICompatibleLocal:
+            try await openAISynthesizer.speak(request)
         }
     }
 
@@ -171,6 +187,7 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         coeiroinkSynthesizer.stop()
         voicepeakSynthesizer.stop()
         voisonaTalkSynthesizer.stop()
+        openAISynthesizer.stop()
     }
 }
 
