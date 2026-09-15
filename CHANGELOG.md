@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.3] - 2026-09-15
 
 ### 追加
 
@@ -18,6 +18,11 @@
 - macOS標準の音声認識を右クリックメニューまたは本体設定から開始し、確定した認識結果を`OnVoiceRecognitionWord`でゴーストへ通知できるようにした。利用可能な環境ではオンデバイス認識を選べる
 - 音声合成・音声認識の起動時とON/OFF時に、`OnSpeechSynthesisStatus`と`OnVoiceRecognitionStatus`を通知するようにした
 - 同じLAN上のSSP・IP Messengerと直接接続し、メンバーの発見、UTF-8／Shift_JISの平文メッセージ送受信、受信確認と再送を行えるIP Messenger画面を追加。本体設定、操作メニュー、右クリックメニュー、`\![open,messenger]`から利用でき、受信本文は外部操作を除いた表示用SakuraScriptとして現在のゴーストで再生する
+
+### 修正
+
+- 右クリックメニューの本体機能を、SSPに近い分類で「機能」へまとめるようにした
+- IP Messenger for macOSなどがUDP 2425番ポートを使用中でも、空いている返信用ポートとループバック探索で併用できるようにした
 
 ## [0.2.2] - 2026-09-13
 
@@ -536,6 +541,7 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
+[0.2.3]: https://github.com/opera7133/Utatane/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/opera7133/Utatane/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/opera7133/Utatane/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/opera7133/Utatane/compare/v0.1.9...v0.2.0
