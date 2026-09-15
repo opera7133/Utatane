@@ -530,6 +530,72 @@ struct SpeechServicesTests {
         #expect(body["model_id"] as? String == "eleven_multilingual_v2")
         #expect(voiceSettings["speed"] as? Double == 1.5)
     }
+
+    @Test
+    func `Aivis Cloud synthesis sends model style and common controls`() async throws {
+        let capture = RequestCapture()
+        let client = AivisCloudEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                return (Data("ID3-aivis-audio".utf8), response(for: url, contentType: "audio/mpeg"))
+            },
+            credentialProvider: { scope in
+                #expect(scope == 1)
+                return SpeechCredentialStore.Credential(password: "aivis-key")
+            }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .aivisCloud,
+            voiceIdentifier: "model-uuid",
+            voiceGroupIdentifier: "speaker-uuid",
+            serviceURL: URL(string: "https://api.aivis-project.com/v1"),
+            styleIdentifier: "7",
+            rate: 0.75,
+            volume: 0.7,
+            pitchMultiplier: 1.5
+        )
+
+        let audio = try await client.synthesize(.init(text: " 読み上げ ", scope: 1, configuration: configuration))
+        let synthesisRequest = try #require(await capture.request)
+        let bodyData = try #require(synthesisRequest.httpBody)
+        let body = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+
+        #expect(audio == Data("ID3-aivis-audio".utf8))
+        #expect(synthesisRequest.url?.path == "/v1/tts/synthesize")
+        #expect(synthesisRequest.value(forHTTPHeaderField: "Authorization") == "Bearer aivis-key")
+        #expect(body["model_uuid"] as? String == "model-uuid")
+        #expect(body["speaker_uuid"] as? String == "speaker-uuid")
+        #expect(body["style_id"] as? Int == 7)
+        #expect(body["text"] as? String == "読み上げ")
+        #expect(body["use_ssml"] as? Bool == false)
+        #expect(body["speaking_rate"] as? Double == 1.5)
+        #expect(body["pitch"] as? Double == 0.5)
+        #expect(body["output_format"] as? String == "mp3")
+        #expect(body["leading_silence_seconds"] as? Double == 0)
+    }
+
+    @Test
+    func `Aivis Cloud credentials never leave the official host`() async throws {
+        let client = AivisCloudEngineClient(
+            transport: { request in
+                Issue.record("Transport should not receive \(String(describing: request.url))")
+                throw SpeechServiceError.invalidServiceResponse
+            },
+            credentialProvider: { _ in
+                SpeechCredentialStore.Credential(password: "aivis-key")
+            }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .aivisCloud,
+            voiceIdentifier: "model-uuid",
+            serviceURL: URL(string: "https://example.com/v1")
+        )
+
+        await #expect(throws: SpeechServiceError.invalidServiceURL) {
+            try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
+        }
+    }
 }
 
 private actor RequestCapture {

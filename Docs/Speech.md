@@ -55,6 +55,12 @@ OpenAIの`POST /v1/audio/speech`と互換性のある、macOS上のローカル�
 
 発話テキストはElevenLabsへ送信され、APIの利用量に応じて料金が発生する場合があります。APIキーはmacOSのKeychainへスコープごとに保存され、設定JSONには書き込みません。APIキーの送信先は`https://api.elevenlabs.io`だけに制限しています。
 
+### Aivis Cloud API
+
+[Aivis Cloud API](https://aivis-project.com/cloud-api/)を使って、日本語向けの音声を生成します。APIキーと、AivisHubで確認できるモデルUUIDを設定してください。限定公開モデルでは、モデルUUIDの代わりに`ak_`から始まるアクセスキーを指定できます。複数話者・スタイルを持つモデルでは、話者UUIDとスタイルIDも任意で指定できます。
+
+共通設定の速さと高さはAivis Cloud APIの`speaking_rate`と`pitch`へ変換します。発話テキストはプレーンテキストとして送信し、MP3で受信します。APIキーはmacOSのKeychainへスコープごとに保存され、送信先は`https://api.aivis-project.com`だけに制限しています。APIの利用量に応じて料金が発生する場合があります。
+
 ## SakuraScriptから読み上げを調整する
 
 `\__v[disable]`以降は読み上げず、`\__v[alternate,テキスト]`を使うと画面表示とは別の読みを指定できます。引数なしの`\__v`で通常の読み上げに戻ります。詳しくは[SakuraScript互換状況](UKADOC-SakuraScript-Compatibility.md)を参照してください。

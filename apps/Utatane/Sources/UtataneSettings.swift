@@ -32,6 +32,9 @@ final class UtataneSettingsStore: ObservableObject {
         var openAICompatibleLocalInstructions = ""
         var elevenLabsModel = "eleven_multilingual_v2"
         var elevenLabsVoiceID = ""
+        var aivisCloudModelUUID = ""
+        var aivisCloudSpeakerUUID = ""
+        var aivisCloudStyleID = ""
         var rate = 0.5
         var volume = 1.0
         var pitch = 1.0
@@ -44,6 +47,7 @@ final class UtataneSettingsStore: ObservableObject {
                 voiceLanguageIdentifier: selectedVoiceLanguageIdentifier,
                 serviceURL: selectedServiceURL,
                 modelIdentifier: selectedModelIdentifier,
+                styleIdentifier: selectedStyleIdentifier,
                 instructions: selectedInstructions,
                 rate: Float(rate),
                 volume: Float(volume),
@@ -61,6 +65,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .openAI: openAIVoice
             case .openAICompatibleLocal: openAICompatibleLocalVoice
             case .elevenLabs: elevenLabsVoiceID
+            case .aivisCloud: aivisCloudModelUUID
             }
             return identifier.isEmpty ? nil : identifier
         }
@@ -69,6 +74,7 @@ final class UtataneSettingsStore: ObservableObject {
             let identifier = switch provider {
             case .coeiroink: coeiroinkSpeakerUUID
             case .voisonaTalk: voisonaTalkVoiceVersion
+            case .aivisCloud: aivisCloudSpeakerUUID
             default: ""
             }
             return identifier.isEmpty ? nil : identifier
@@ -87,6 +93,11 @@ final class UtataneSettingsStore: ObservableObject {
             default: ""
             }
             return model.isEmpty ? nil : model
+        }
+
+        private var selectedStyleIdentifier: String? {
+            guard provider == .aivisCloud, !aivisCloudStyleID.isEmpty else { return nil }
+            return aivisCloudStyleID
         }
 
         private var selectedInstructions: String? {
@@ -108,6 +119,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .openAI: URL(string: "https://api.openai.com/v1")
             case .openAICompatibleLocal: URL(string: openAICompatibleLocalBaseURL)
             case .elevenLabs: URL(string: "https://api.elevenlabs.io/v1")
+            case .aivisCloud: URL(string: "https://api.aivis-project.com/v1")
             }
         }
 
@@ -134,6 +146,9 @@ final class UtataneSettingsStore: ObservableObject {
             case openAICompatibleLocalInstructions
             case elevenLabsModel
             case elevenLabsVoiceID
+            case aivisCloudModelUUID
+            case aivisCloudSpeakerUUID
+            case aivisCloudStyleID
             case rate
             case volume
             case pitch
@@ -184,6 +199,9 @@ final class UtataneSettingsStore: ObservableObject {
             elevenLabsModel = try values.decodeIfPresent(String.self, forKey: .elevenLabsModel)
                 ?? "eleven_multilingual_v2"
             elevenLabsVoiceID = try values.decodeIfPresent(String.self, forKey: .elevenLabsVoiceID) ?? ""
+            aivisCloudModelUUID = try values.decodeIfPresent(String.self, forKey: .aivisCloudModelUUID) ?? ""
+            aivisCloudSpeakerUUID = try values.decodeIfPresent(String.self, forKey: .aivisCloudSpeakerUUID) ?? ""
+            aivisCloudStyleID = try values.decodeIfPresent(String.self, forKey: .aivisCloudStyleID) ?? ""
             rate = try values.decodeIfPresent(Double.self, forKey: .rate) ?? 0.5
             volume = try values.decodeIfPresent(Double.self, forKey: .volume) ?? 1
             pitch = try values.decodeIfPresent(Double.self, forKey: .pitch) ?? 1
@@ -1173,6 +1191,7 @@ private struct SpeechVoiceSettingsEditor: View {
     @State private var openAICredential: SpeechCredentialStore.Credential
     @State private var openAICompatibleLocalCredential: SpeechCredentialStore.Credential
     @State private var elevenLabsCredential: SpeechCredentialStore.Credential
+    @State private var aivisCloudCredential: SpeechCredentialStore.Credential
     @State private var localAPIVoices: [SpeechSynthesisVoice] = []
     @State private var localAPIVoiceCount: Int?
     @State private var localAPIError: String?
@@ -1196,6 +1215,9 @@ private struct SpeechVoiceSettingsEditor: View {
         _elevenLabsCredential = State(
             initialValue: SpeechCredentialStore.load(provider: .elevenLabs, scope: scope)
         )
+        _aivisCloudCredential = State(
+            initialValue: SpeechCredentialStore.load(provider: .aivisCloud, scope: scope)
+        )
     }
 
     var body: some View {
@@ -1212,6 +1234,7 @@ private struct SpeechVoiceSettingsEditor: View {
                         Text("OpenAI").tag(SpeechSynthesisProvider.openAI)
                         Text("OpenAI互換ローカルAPI").tag(SpeechSynthesisProvider.openAICompatibleLocal)
                         Text("ElevenLabs").tag(SpeechSynthesisProvider.elevenLabs)
+                        Text("Aivis Cloud API").tag(SpeechSynthesisProvider.aivisCloud)
                     }
                     .labelsHidden()
                 }
@@ -1274,6 +1297,33 @@ private struct SpeechVoiceSettingsEditor: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                } else if settings.provider == .aivisCloud {
+                    GridRow {
+                        Text("APIキー")
+                        SecureField("", text: $aivisCloudCredential.password, prompt: Text("APIキー"))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text("モデルUUID / アクセスキー")
+                        TextField("", text: $settings.aivisCloudModelUUID, prompt: Text("model_uuid / ak_…"))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text("話者UUID（任意）")
+                        TextField("", text: $settings.aivisCloudSpeakerUUID, prompt: Text("speaker_uuid"))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text("スタイルID（任意）")
+                        TextField("", text: $settings.aivisCloudStyleID, prompt: Text("style_id"))
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Color.clear.frame(width: 1, height: 1)
+                        Text("発話テキストをAivis Cloud APIへ送信する。利用量に応じて料金が発生する場合がある。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 } else if settings.provider == .elevenLabs {
                     GridRow {
@@ -1468,6 +1518,9 @@ private struct SpeechVoiceSettingsEditor: View {
             SpeechCredentialStore.save(elevenLabsCredential, provider: .elevenLabs, scope: scope)
             resetLocalAPIVoices()
         }
+        .onChange(of: aivisCloudCredential) {
+            SpeechCredentialStore.save(aivisCloudCredential, provider: .aivisCloud, scope: scope)
+        }
     }
 
     private var openAIModel: Binding<String> {
@@ -1499,6 +1552,7 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .openAI: "https://api.openai.com/v1"
                 case .openAICompatibleLocal: settings.openAICompatibleLocalBaseURL
                 case .elevenLabs: "https://api.elevenlabs.io/v1"
+                case .aivisCloud: "https://api.aivis-project.com/v1"
                 }
             },
             set: { value in
@@ -1517,6 +1571,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.openAICompatibleLocalBaseURL = value
                 case .elevenLabs:
                     break
+                case .aivisCloud:
+                    break
                 }
             }
         )
@@ -1533,6 +1589,7 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .openAI: settings.openAIVoice
                 case .openAICompatibleLocal: settings.openAICompatibleLocalVoice
                 case .elevenLabs: settings.elevenLabsVoiceID
+                case .aivisCloud: settings.aivisCloudModelUUID
                 }
             },
             set: { value in
@@ -1551,6 +1608,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.openAICompatibleLocalVoice = value
                 case .elevenLabs:
                     settings.elevenLabsVoiceID = value
+                case .aivisCloud:
+                    settings.aivisCloudModelUUID = value
                 }
             }
         )
@@ -1593,6 +1652,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.openAICompatibleLocalVoice = voice.identifier
                 case .elevenLabs:
                     settings.elevenLabsVoiceID = voice.identifier
+                case .aivisCloud:
+                    settings.aivisCloudModelUUID = voice.identifier
                 }
             }
         )
@@ -1607,6 +1668,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .openAI: "https://api.openai.com/v1"
         case .openAICompatibleLocal: "http://127.0.0.1:8088/v1"
         case .elevenLabs: "https://api.elevenlabs.io/v1"
+        case .aivisCloud: "https://api.aivis-project.com/v1"
         }
     }
 
@@ -1619,6 +1681,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .openAI: "声"
         case .openAICompatibleLocal: "声"
         case .elevenLabs: "話者ID"
+        case .aivisCloud: "モデルUUID / アクセスキー"
         }
     }
 
@@ -1629,6 +1692,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .openAI: "marin"
         case .openAICompatibleLocal: "none"
         case .elevenLabs: "voice_id"
+        case .aivisCloud: "model_uuid / ak_…"
         default: "0"
         }
     }
@@ -1666,6 +1730,8 @@ private struct SpeechVoiceSettingsEditor: View {
                 [SpeechSynthesisVoice]()
             case .elevenLabs:
                 try await ElevenLabsEngineClient().voices(scope: scope)
+            case .aivisCloud:
+                [SpeechSynthesisVoice]()
             }
             localAPIVoices = voices
             localAPIVoiceCount = voices.count

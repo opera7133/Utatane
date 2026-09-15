@@ -11,6 +11,7 @@ public enum SpeechSynthesisProvider: String, Codable, CaseIterable, Sendable {
     case openAI
     case openAICompatibleLocal
     case elevenLabs
+    case aivisCloud
 }
 
 public struct SpeechSynthesisVoice: Identifiable, Sendable, Equatable {
@@ -46,6 +47,7 @@ public struct SpeechSynthesisConfiguration: Sendable, Equatable {
     public var voiceLanguageIdentifier: String?
     public var serviceURL: URL?
     public var modelIdentifier: String?
+    public var styleIdentifier: String?
     public var instructions: String?
     public var rate: Float
     public var volume: Float
@@ -58,6 +60,7 @@ public struct SpeechSynthesisConfiguration: Sendable, Equatable {
         voiceLanguageIdentifier: String? = nil,
         serviceURL: URL? = nil,
         modelIdentifier: String? = nil,
+        styleIdentifier: String? = nil,
         instructions: String? = nil,
         rate: Float = AVSpeechUtteranceDefaultSpeechRate,
         volume: Float = 1,
@@ -69,6 +72,7 @@ public struct SpeechSynthesisConfiguration: Sendable, Equatable {
         self.voiceLanguageIdentifier = voiceLanguageIdentifier
         self.serviceURL = serviceURL
         self.modelIdentifier = modelIdentifier
+        self.styleIdentifier = styleIdentifier
         self.instructions = instructions
         self.rate = rate
         self.volume = volume
@@ -150,6 +154,7 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
     private let voisonaTalkSynthesizer: VoiSonaTalkSpeechSynthesizer
     private let openAISynthesizer: OpenAISpeechSynthesizer
     private let elevenLabsSynthesizer: ElevenLabsSpeechSynthesizer
+    private let aivisCloudSynthesizer: AivisCloudSpeechSynthesizer
 
     public init(
         voicevoxClient: VoicevoxEngineClient = VoicevoxEngineClient(),
@@ -157,7 +162,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         voicepeakClient: VoicepeakEngineClient = VoicepeakEngineClient(),
         voisonaTalkClient: VoiSonaTalkEngineClient = VoiSonaTalkEngineClient(),
         openAIClient: OpenAISpeechEngineClient = OpenAISpeechEngineClient(),
-        elevenLabsClient: ElevenLabsEngineClient = ElevenLabsEngineClient()
+        elevenLabsClient: ElevenLabsEngineClient = ElevenLabsEngineClient(),
+        aivisCloudClient: AivisCloudEngineClient = AivisCloudEngineClient()
     ) {
         voicevoxSynthesizer = VoicevoxSpeechSynthesizer(client: voicevoxClient)
         coeiroinkSynthesizer = CoeiroinkSpeechSynthesizer(client: coeiroinkClient)
@@ -165,6 +171,7 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         voisonaTalkSynthesizer = VoiSonaTalkSpeechSynthesizer(client: voisonaTalkClient)
         openAISynthesizer = OpenAISpeechSynthesizer(client: openAIClient)
         elevenLabsSynthesizer = ElevenLabsSpeechSynthesizer(client: elevenLabsClient)
+        aivisCloudSynthesizer = AivisCloudSpeechSynthesizer(client: aivisCloudClient)
     }
 
     public func speak(_ request: SpeechSynthesisRequest) async throws {
@@ -184,6 +191,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
             try await openAISynthesizer.speak(request)
         case .elevenLabs:
             try await elevenLabsSynthesizer.speak(request)
+        case .aivisCloud:
+            try await aivisCloudSynthesizer.speak(request)
         }
     }
 
@@ -195,6 +204,7 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         voisonaTalkSynthesizer.stop()
         openAISynthesizer.stop()
         elevenLabsSynthesizer.stop()
+        aivisCloudSynthesizer.stop()
     }
 }
 
