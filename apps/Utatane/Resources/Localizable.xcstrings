@@ -842,6 +842,35 @@
         }
       }
     },
+    "AITalk WebAPI" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AITalk WebAPI"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AITalk WebAPI"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AITalk WebAPI"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "AITalk WebAPI"
+          }
+        }
+      }
+    },
     "API URL" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6149,6 +6178,35 @@
         }
       }
     },
+    "パスワード" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Password"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비밀번호"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密碼"
+          }
+        }
+      }
+    },
     "ビルド %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -6580,6 +6638,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "模型 UUID / 存取金鑰"
+          }
+        }
+      }
+    },
+    "ユーザー名" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Username"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "사용자 이름"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用户名"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用者名稱"
           }
         }
       }
@@ -10354,6 +10441,35 @@
         }
       }
     },
+    "標準話者から選択" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Standard Voice"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표준 화자에서 선택"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "从标准语音中选择"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "從標準語音中選擇"
+          }
+        }
+      }
+    },
     "機能" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10843,6 +10959,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "保持在螢幕內"
+          }
+        }
+      }
+    },
+    "発話テキストをAITalk WebAPIへ送信する。契約に応じて料金が発生する。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sends spoken text to AITalk WebAPI. Charges apply according to your contract."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발화 텍스트를 AITalk WebAPI로 전송합니다. 계약에 따라 요금이 부과됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将朗读文本发送到 AITalk WebAPI。费用按合同计收。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將朗讀文字傳送到 AITalk WebAPI。費用依合約計收。"
           }
         }
       }

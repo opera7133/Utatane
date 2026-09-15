@@ -73,6 +73,12 @@ OpenAIの`POST /v1/audio/speech`と互換性のある、macOS上のローカル�
 
 APIキーはURLへ含めず、`x-goog-api-key`ヘッダーで送ります。発話テキストと速さ・高さはGoogle Cloudへ送信され、MP3を受信します。APIキーはmacOSのKeychainへ保存し、送信先は`https://texttospeech.googleapis.com`だけに制限しています。APIの利用量に応じて料金が発生する場合があります。
 
+### AITalk WebAPI
+
+[AITalk WebAPI v5](https://www.ai-j.jp/manual/business/webapi/5/)を使います。契約時に発行されたユーザー名とパスワードを入力し、標準話者から選ぶか、契約しているカスタム話者の`speaker_name`を「声」へ入力してください。
+
+共通設定の速さと高さをAITalkの`speed`と`pitch`へ変換し、プレーンテキストを送信してMP3を受信します。認証情報はmacOSのKeychainへスコープごとに保存され、設定JSONには書き込みません。認証情報と発話テキストの送信先は`https://webapi.aitalk.jp/webapi/v5/ttsget.php`だけに制限しています。利用には法人向けAITalk WebAPIの契約が必要です。
+
 ## SakuraScriptから読み上げを調整する
 
 `\__v[disable]`以降は読み上げず、`\__v[alternate,テキスト]`を使うと画面表示とは別の読みを指定できます。引数なしの`\__v`で通常の読み上げに戻ります。詳しくは[SakuraScript互換状況](UKADOC-SakuraScript-Compatibility.md)を参照してください。

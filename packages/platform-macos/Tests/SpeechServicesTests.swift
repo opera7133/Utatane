@@ -760,6 +760,76 @@ struct SpeechServicesTests {
             try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
         }
     }
+
+    @Test
+    func `AITalk WebAPI sends credentials and voice controls as form data`() async throws {
+        let capture = RequestCapture()
+        let expectedAudio = Data("ID3-aitalk-audio".utf8)
+        let client = AITalkWebAPIEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                return (expectedAudio, response(for: url, contentType: "audio/mpeg"))
+            },
+            credentialProvider: { _ in
+                SpeechCredentialStore.Credential(username: "contract-user", password: "contract+pass")
+            }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .aiTalkWebAPI,
+            voiceIdentifier: "nozomi_dnn",
+            serviceURL: URL(string: "https://webapi.aitalk.jp/webapi/v5"),
+            rate: 0.75,
+            volume: 0.8,
+            pitchMultiplier: 1.5
+        )
+
+        let audio = try await client.synthesize(.init(text: " 読み上げ + & 確認 ", scope: 1, configuration: configuration))
+        let request = try #require(await capture.request)
+        let body = try #require(request.httpBody.flatMap { String(data: $0, encoding: .utf8) })
+        let fields = Dictionary(
+            uniqueKeysWithValues: (URLComponents(string: "?\(body)")?.queryItems ?? []).compactMap { item in
+                item.value.map { (item.name, $0) }
+            }
+        )
+
+        #expect(audio == expectedAudio)
+        #expect(request.url?.absoluteString == "https://webapi.aitalk.jp/webapi/v5/ttsget.php")
+        #expect(request.value(forHTTPHeaderField: "Content-Type") ==
+            "application/x-www-form-urlencoded; charset=utf-8")
+        #expect(fields["username"] == "contract-user")
+        #expect(fields["password"] == "contract+pass")
+        #expect(fields["speaker_name"] == "nozomi_dnn")
+        #expect(fields["input_type"] == "text")
+        #expect(fields["text"] == "読み上げ + & 確認")
+        #expect(fields["ext"] == "mp3")
+        #expect(fields["fs"] == "auto")
+        #expect(fields["speed"] == "1.50")
+        #expect(fields["pitch"] == "1.50")
+        #expect(fields["tpause"] == "0")
+    }
+
+    @Test
+    func `AITalk WebAPI credentials stay on the official endpoint`() async throws {
+        let client = AITalkWebAPIEngineClient(
+            transport: { request in
+                Issue.record("Transport should not receive \(String(describing: request.url))")
+                throw SpeechServiceError.invalidServiceResponse
+            },
+            credentialProvider: { _ in
+                SpeechCredentialStore.Credential(username: "contract-user", password: "contract-pass")
+            }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .aiTalkWebAPI,
+            voiceIdentifier: "nozomi_dnn",
+            serviceURL: URL(string: "https://webapi.aitalk.jp.example.com/webapi/v5")
+        )
+
+        await #expect(throws: SpeechServiceError.invalidServiceURL) {
+            try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
+        }
+    }
 }
 
 private actor RequestCapture {

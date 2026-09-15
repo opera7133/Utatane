@@ -14,6 +14,7 @@ public enum SpeechSynthesisProvider: String, Codable, CaseIterable, Sendable {
     case aivisCloud
     case azureSpeech
     case googleCloudTTS
+    case aiTalkWebAPI
 }
 
 public struct SpeechSynthesisVoice: Identifiable, Sendable, Equatable {
@@ -159,6 +160,7 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
     private let aivisCloudSynthesizer: AivisCloudSpeechSynthesizer
     private let azureSpeechSynthesizer: AzureSpeechSynthesizer
     private let googleCloudSynthesizer: GoogleCloudSpeechSynthesizer
+    private let aiTalkWebAPISynthesizer: AITalkWebAPISpeechSynthesizer
 
     public init(
         voicevoxClient: VoicevoxEngineClient = VoicevoxEngineClient(),
@@ -169,7 +171,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         elevenLabsClient: ElevenLabsEngineClient = ElevenLabsEngineClient(),
         aivisCloudClient: AivisCloudEngineClient = AivisCloudEngineClient(),
         azureSpeechClient: AzureSpeechEngineClient = AzureSpeechEngineClient(),
-        googleCloudClient: GoogleCloudSpeechEngineClient = GoogleCloudSpeechEngineClient()
+        googleCloudClient: GoogleCloudSpeechEngineClient = GoogleCloudSpeechEngineClient(),
+        aiTalkWebAPIClient: AITalkWebAPIEngineClient = AITalkWebAPIEngineClient()
     ) {
         voicevoxSynthesizer = VoicevoxSpeechSynthesizer(client: voicevoxClient)
         coeiroinkSynthesizer = CoeiroinkSpeechSynthesizer(client: coeiroinkClient)
@@ -180,6 +183,7 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         aivisCloudSynthesizer = AivisCloudSpeechSynthesizer(client: aivisCloudClient)
         azureSpeechSynthesizer = AzureSpeechSynthesizer(client: azureSpeechClient)
         googleCloudSynthesizer = GoogleCloudSpeechSynthesizer(client: googleCloudClient)
+        aiTalkWebAPISynthesizer = AITalkWebAPISpeechSynthesizer(client: aiTalkWebAPIClient)
     }
 
     public func speak(_ request: SpeechSynthesisRequest) async throws {
@@ -205,6 +209,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
             try await azureSpeechSynthesizer.speak(request)
         case .googleCloudTTS:
             try await googleCloudSynthesizer.speak(request)
+        case .aiTalkWebAPI:
+            try await aiTalkWebAPISynthesizer.speak(request)
         }
     }
 
@@ -219,6 +225,7 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         aivisCloudSynthesizer.stop()
         azureSpeechSynthesizer.stop()
         googleCloudSynthesizer.stop()
+        aiTalkWebAPISynthesizer.stop()
     }
 }
 

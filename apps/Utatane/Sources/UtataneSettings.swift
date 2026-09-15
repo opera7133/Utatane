@@ -40,6 +40,7 @@ final class UtataneSettingsStore: ObservableObject {
         var azureSpeechLanguage = "ja-JP"
         var googleCloudVoiceName = ""
         var googleCloudLanguage = "ja-JP"
+        var aiTalkSpeakerName = "nozomi_dnn"
         var rate = 0.5
         var volume = 1.0
         var pitch = 1.0
@@ -73,6 +74,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .aivisCloud: aivisCloudModelUUID
             case .azureSpeech: azureSpeechVoiceName
             case .googleCloudTTS: googleCloudVoiceName
+            case .aiTalkWebAPI: aiTalkSpeakerName
             }
             return identifier.isEmpty ? nil : identifier
         }
@@ -134,6 +136,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .aivisCloud: URL(string: "https://api.aivis-project.com/v1")
             case .azureSpeech: URL(string: "https://\(azureSpeechRegion).tts.speech.microsoft.com")
             case .googleCloudTTS: URL(string: "https://texttospeech.googleapis.com/v1")
+            case .aiTalkWebAPI: URL(string: "https://webapi.aitalk.jp/webapi/v5")
             }
         }
 
@@ -168,6 +171,7 @@ final class UtataneSettingsStore: ObservableObject {
             case azureSpeechLanguage
             case googleCloudVoiceName
             case googleCloudLanguage
+            case aiTalkSpeakerName
             case rate
             case volume
             case pitch
@@ -227,6 +231,7 @@ final class UtataneSettingsStore: ObservableObject {
             azureSpeechLanguage = try values.decodeIfPresent(String.self, forKey: .azureSpeechLanguage) ?? "ja-JP"
             googleCloudVoiceName = try values.decodeIfPresent(String.self, forKey: .googleCloudVoiceName) ?? ""
             googleCloudLanguage = try values.decodeIfPresent(String.self, forKey: .googleCloudLanguage) ?? "ja-JP"
+            aiTalkSpeakerName = try values.decodeIfPresent(String.self, forKey: .aiTalkSpeakerName) ?? "nozomi_dnn"
             rate = try values.decodeIfPresent(Double.self, forKey: .rate) ?? 0.5
             volume = try values.decodeIfPresent(Double.self, forKey: .volume) ?? 1
             pitch = try values.decodeIfPresent(Double.self, forKey: .pitch) ?? 1
@@ -1219,6 +1224,7 @@ private struct SpeechVoiceSettingsEditor: View {
     @State private var aivisCloudCredential: SpeechCredentialStore.Credential
     @State private var azureSpeechCredential: SpeechCredentialStore.Credential
     @State private var googleCloudCredential: SpeechCredentialStore.Credential
+    @State private var aiTalkWebAPICredential: SpeechCredentialStore.Credential
     @State private var localAPIVoices: [SpeechSynthesisVoice] = []
     @State private var localAPIVoiceCount: Int?
     @State private var localAPIError: String?
@@ -1251,6 +1257,9 @@ private struct SpeechVoiceSettingsEditor: View {
         _googleCloudCredential = State(
             initialValue: SpeechCredentialStore.load(provider: .googleCloudTTS, scope: scope)
         )
+        _aiTalkWebAPICredential = State(
+            initialValue: SpeechCredentialStore.load(provider: .aiTalkWebAPI, scope: scope)
+        )
     }
 
     var body: some View {
@@ -1270,6 +1279,7 @@ private struct SpeechVoiceSettingsEditor: View {
                         Text("Aivis Cloud API").tag(SpeechSynthesisProvider.aivisCloud)
                         Text("Azure Speech").tag(SpeechSynthesisProvider.azureSpeech)
                         Text("Google Cloud TTS").tag(SpeechSynthesisProvider.googleCloudTTS)
+                        Text("AITalk WebAPI").tag(SpeechSynthesisProvider.aiTalkWebAPI)
                     }
                     .labelsHidden()
                 }
@@ -1419,6 +1429,37 @@ private struct SpeechVoiceSettingsEditor: View {
                     GridRow {
                         Color.clear.frame(width: 1, height: 1)
                         Text(cloudTransmissionNotice)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if settings.provider == .aiTalkWebAPI {
+                    GridRow {
+                        Text("ユーザー名")
+                        TextField("", text: $aiTalkWebAPICredential.username)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text("パスワード")
+                        SecureField("", text: $aiTalkWebAPICredential.password)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text("声")
+                        HStack {
+                            TextField("", text: $settings.aiTalkSpeakerName, prompt: Text("nozomi_dnn"))
+                                .textFieldStyle(.roundedBorder)
+                            Menu("標準話者から選択") {
+                                ForEach(AITalkWebAPIEngineClient.standardVoices) { voice in
+                                    Button("\(voice.name) — \(voice.language)") {
+                                        settings.aiTalkSpeakerName = voice.identifier
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    GridRow {
+                        Color.clear.frame(width: 1, height: 1)
+                        Text("発話テキストをAITalk WebAPIへ送信する。契約に応じて料金が発生する。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -1629,6 +1670,9 @@ private struct SpeechVoiceSettingsEditor: View {
         .onChange(of: settings.azureSpeechRegion) {
             resetLocalAPIVoices()
         }
+        .onChange(of: aiTalkWebAPICredential) {
+            SpeechCredentialStore.save(aiTalkWebAPICredential, provider: .aiTalkWebAPI, scope: scope)
+        }
     }
 
     private var openAIModel: Binding<String> {
@@ -1681,6 +1725,7 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .aivisCloud: "https://api.aivis-project.com/v1"
                 case .azureSpeech: "https://\(settings.azureSpeechRegion).tts.speech.microsoft.com"
                 case .googleCloudTTS: "https://texttospeech.googleapis.com/v1"
+                case .aiTalkWebAPI: "https://webapi.aitalk.jp/webapi/v5"
                 }
             },
             set: { value in
@@ -1703,6 +1748,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     break
                 case .azureSpeech, .googleCloudTTS:
                     break
+                case .aiTalkWebAPI:
+                    break
                 }
             }
         )
@@ -1722,6 +1769,7 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .aivisCloud: settings.aivisCloudModelUUID
                 case .azureSpeech: settings.azureSpeechVoiceName
                 case .googleCloudTTS: settings.googleCloudVoiceName
+                case .aiTalkWebAPI: settings.aiTalkSpeakerName
                 }
             },
             set: { value in
@@ -1746,6 +1794,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.azureSpeechVoiceName = value
                 case .googleCloudTTS:
                     settings.googleCloudVoiceName = value
+                case .aiTalkWebAPI:
+                    settings.aiTalkSpeakerName = value
                 }
             }
         )
@@ -1800,6 +1850,8 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .googleCloudTTS:
                     settings.googleCloudVoiceName = voice.identifier
                     settings.googleCloudLanguage = voice.languageIdentifier ?? voice.language
+                case .aiTalkWebAPI:
+                    settings.aiTalkSpeakerName = voice.identifier
                 }
             }
         )
@@ -1817,6 +1869,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .aivisCloud: "https://api.aivis-project.com/v1"
         case .azureSpeech: "https://japaneast.tts.speech.microsoft.com"
         case .googleCloudTTS: "https://texttospeech.googleapis.com/v1"
+        case .aiTalkWebAPI: "https://webapi.aitalk.jp/webapi/v5"
         }
     }
 
@@ -1831,6 +1884,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .elevenLabs: "話者ID"
         case .aivisCloud: "モデルUUID / アクセスキー"
         case .azureSpeech, .googleCloudTTS: "声"
+        case .aiTalkWebAPI: "声"
         }
     }
 
@@ -1844,6 +1898,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .aivisCloud: "model_uuid / ak_…"
         case .azureSpeech: "ja-JP-NanamiNeural"
         case .googleCloudTTS: "ja-JP-…"
+        case .aiTalkWebAPI: "nozomi_dnn"
         default: "0"
         }
     }
@@ -1887,6 +1942,8 @@ private struct SpeechVoiceSettingsEditor: View {
                 try await AzureSpeechEngineClient().voices(serviceURL: externalServiceURL(), scope: scope)
             case .googleCloudTTS:
                 try await GoogleCloudSpeechEngineClient().voices(scope: scope)
+            case .aiTalkWebAPI:
+                AITalkWebAPIEngineClient.standardVoices
             }
             localAPIVoices = voices
             localAPIVoiceCount = voices.count

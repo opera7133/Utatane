@@ -1,4 +1,9 @@
 {
+  "AITalk WebAPI" : "AITalk WebAPI",
+  "ユーザー名" : "Username",
+  "パスワード" : "Password",
+  "標準話者から選択" : "Choose Standard Voice",
+  "発話テキストをAITalk WebAPIへ送信する。契約に応じて料金が発生する。" : "Sends spoken text to AITalk WebAPI. Charges apply according to your contract.",
   "iCalendarを読み込む…" : "Import iCalendar…",
   "iCalendarを書き出す…" : "Export iCalendar…",
   "Utatane標準" : "Utatane Default",
