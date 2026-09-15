@@ -722,7 +722,7 @@ public struct SakuraScriptParser: Sendable {
                         tokens.append(.contentAction(.openContentExplorer(arguments[1].lowercased())))
                     } else if arguments.count == 2,
                               arguments[0].lowercased() == "open",
-                              arguments[1].lowercased() == "backlogviewer"
+                              ["backlogviewer", "calendar", "messenger"].contains(arguments[1].lowercased())
                     {
                         tokens.append(.open(arguments[1]))
                     } else if arguments.count >= 2,

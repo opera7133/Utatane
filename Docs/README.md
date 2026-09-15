@@ -8,6 +8,7 @@ Utataneを使う人、ゴーストや拡張を作る人、Utatane本体を開発
 - [ウィンドウモード](Window-Mode.md): 配信・画面収録向けの単一ウィンドウ表示、背景、スクリーンショット、発話履歴
 - [Realtime音声会話](Realtime-Voice.md): OpenAI Realtime APIまたは互換APIを使った音声会話の設定
 - [音声合成・音声認識](Speech.md): macOS標準、ローカル音声合成ソフト、クラウド音声合成と音声認識の設定
+- [IP Messenger](IP-Messenger.md): 同じLAN上のSSP・IP Messengerとのメッセージ送受信
 - [Native SHIORI / SAORI](Native-SHIORI.md): Wineなしで動く人格エンジンと、外部モジュール・Wineフォールバックの対応範囲
 
 基本的なインストール、ゴーストの追加、Materia付属FIRSTの配置方法は[プロジェクトREADME](../README.md)にあります。
@@ -38,6 +39,7 @@ Utataneを使う人、ゴーストや拡張を作る人、Utatane本体を開発
 | 手元のゴーストが動くか知りたい | [ゴースト互換状況](Compatibility.md) |
 | ゴーストをウィンドウ単位で収録したい | [ウィンドウモード](Window-Mode.md) |
 | ゴーストの発話を読み上げたい | [音声合成・音声認識](Speech.md) |
+| 同じLAN上のSSP・IP Messengerと会話したい | [IP Messenger](IP-Messenger.md) |
 | 新しいゴーストを作りたい | [Utatane対応ガイド](Content-Authoring.md) |
 | SSP向けゴーストを移行したい | [Utatane対応ガイド](Content-Authoring.md)、各[互換表](UKADOC-Text-File-Compatibility.md) |
 | SHIORI・SAORIの実行方式を知りたい | [Native SHIORI / SAORI](Native-SHIORI.md) |

@@ -18,6 +18,41 @@
         }
       }
     },
+    "NSLocalNetworkUsageDescription" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Used by IP Messenger compatibility to discover members and exchange messages on the same LAN."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IP Messenger互換機能で、同じLAN上のメンバーを探してメッセージを送受信するために使用します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "IP Messenger 호환 기능에서 같은 LAN의 멤버를 찾고 메시지를 송수신하는 데 사용합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用于 IP Messenger 兼容功能，以发现同一局域网中的成员并收发消息。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "用於 IP Messenger 相容功能，以尋找相同區域網路中的成員並收發訊息。"
+          }
+        }
+      }
+    },
     "NSLocationUsageDescription" : {
       "extractionState" : "manual",
       "localizations" : {

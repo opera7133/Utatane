@@ -302,6 +302,11 @@ final class UtataneSettingsStore: ObservableObject {
         // Keep the existing keys so current users retain their update settings.
         static let automaticContentUpdate = "network.automaticGhostUpdate"
         static let contentUpdateIntervalDays = "network.ghostUpdateIntervalDays"
+        static let ipMessengerEnabled = "network.ipMessengerEnabled"
+        static let ipMessengerDisplayName = "network.ipMessengerDisplayName"
+        static let ipMessengerGroupName = "network.ipMessengerGroupName"
+        static let ipMessengerPort = "network.ipMessengerPort"
+        static let ipMessengerBroadcastAddresses = "network.ipMessengerBroadcastAddresses"
         static let startupBehavior = "general.startupBehavior"
         static let appearance = "general.appearance"
         static let windowLevelBehavior = "general.windowLevelBehavior"
@@ -353,6 +358,26 @@ final class UtataneSettingsStore: ObservableObject {
 
     @Published var contentUpdateIntervalDays: Int {
         didSet { defaults.set(contentUpdateIntervalDays, forKey: Key.contentUpdateIntervalDays) }
+    }
+
+    @Published var ipMessengerEnabled: Bool {
+        didSet { defaults.set(ipMessengerEnabled, forKey: Key.ipMessengerEnabled) }
+    }
+
+    @Published var ipMessengerDisplayName: String {
+        didSet { defaults.set(ipMessengerDisplayName, forKey: Key.ipMessengerDisplayName) }
+    }
+
+    @Published var ipMessengerGroupName: String {
+        didSet { defaults.set(ipMessengerGroupName, forKey: Key.ipMessengerGroupName) }
+    }
+
+    @Published var ipMessengerPort: Int {
+        didSet { defaults.set(ipMessengerPort, forKey: Key.ipMessengerPort) }
+    }
+
+    @Published var ipMessengerBroadcastAddresses: String {
+        didSet { defaults.set(ipMessengerBroadcastAddresses, forKey: Key.ipMessengerBroadcastAddresses) }
     }
 
     @Published var startupBehavior: StartupBehavior {
@@ -550,6 +575,16 @@ final class UtataneSettingsStore: ObservableObject {
             defaults.integer(forKey: Key.contentUpdateIntervalDays),
             fallback: 7
         )
+        ipMessengerEnabled = defaults.bool(forKey: Key.ipMessengerEnabled)
+        ipMessengerDisplayName = defaults.string(forKey: Key.ipMessengerDisplayName)
+            ?? Self.defaultIPMessengerDisplayName
+        ipMessengerGroupName = defaults.string(forKey: Key.ipMessengerGroupName) ?? "Utatane"
+        ipMessengerPort = Self.positiveValue(
+            defaults.integer(forKey: Key.ipMessengerPort),
+            fallback: Int(IPMessengerProtocol.defaultPort)
+        )
+        ipMessengerBroadcastAddresses = defaults.string(forKey: Key.ipMessengerBroadcastAddresses)
+            ?? "255.255.255.255"
         startupBehavior = StartupBehavior(
             rawValue: defaults.string(forKey: Key.startupBehavior) ?? ""
         ) ?? .restore
@@ -642,6 +677,23 @@ final class UtataneSettingsStore: ObservableObject {
 
     func setSpeechVoiceSettings(_ settings: SpeechVoiceSettings, for scope: Int) {
         speechVoiceSettingsByScope[scope] = settings
+    }
+
+    var ipMessengerConfiguration: IPMessengerConfiguration {
+        let addresses = ipMessengerBroadcastAddresses.components(
+            separatedBy: CharacterSet(charactersIn: ", \n\t")
+        ).filter { !$0.isEmpty }
+        return IPMessengerConfiguration(
+            displayName: ipMessengerDisplayName.trimmingCharacters(in: .whitespacesAndNewlines),
+            groupName: ipMessengerGroupName.trimmingCharacters(in: .whitespacesAndNewlines),
+            port: UInt16(clamping: ipMessengerPort),
+            broadcastAddresses: addresses.isEmpty ? ["255.255.255.255"] : addresses
+        )
+    }
+
+    private static var defaultIPMessengerDisplayName: String {
+        let fullName = NSFullUserName().trimmingCharacters(in: .whitespacesAndNewlines)
+        return fullName.isEmpty ? NSUserName() : fullName
     }
 
     private static func apply(_ language: AppLanguage, to defaults: UserDefaults) {
@@ -1054,8 +1106,23 @@ struct UtataneSettingsView: View {
 
             SettingsPage(
                 title: "ネットワーク",
-                description: "RSS / Atomとヘッドラインの自動巡回を設定する。"
+                description: "LANメッセージ、RSS / Atom、ネットワーク更新を設定する。"
             ) {
+                Section("IP Messenger") {
+                    Toggle("IP Messenger互換モードを利用", isOn: $settings.ipMessengerEnabled)
+                    TextField("表示名", text: $settings.ipMessengerDisplayName)
+                        .disabled(!settings.ipMessengerEnabled)
+                    TextField("グループ", text: $settings.ipMessengerGroupName)
+                        .disabled(!settings.ipMessengerEnabled)
+                    TextField("ポート", value: $settings.ipMessengerPort, format: .number)
+                        .disabled(!settings.ipMessengerEnabled)
+                    TextField("ブロードキャスト先", text: $settings.ipMessengerBroadcastAddresses)
+                        .disabled(!settings.ipMessengerEnabled)
+                    Text("通常はUDP 2425番と255.255.255.255のままでよい。LAN上の平文メッセージを送受信するため、信頼できるネットワークで利用して。暗号化と添付ファイルには未対応。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("RSS / ヘッドライン") {
                     Toggle("自動巡回する", isOn: $settings.automaticHeadlineRefresh)
                     Picker("巡回間隔", selection: $settings.headlineRefreshIntervalMinutes) {

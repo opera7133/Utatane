@@ -50,6 +50,7 @@ final class CalledGhostRuntime {
     var onError: ((Error) -> Void)?
     var onCommunication: ((String, String) -> Void)?
     var onNarDrop: (([URL]) -> Void)?
+    var onOpenMessenger: (() -> Void)?
     var onContentAction: ((SakuraScriptContentAction) -> Void)?
     var onOtherEvent: ((String, String, [String], Bool) async -> Void)?
     var onOtherGhostTalk: ((String, String) -> Void)?
@@ -684,6 +685,10 @@ final class CalledGhostRuntime {
             self?.send(.shiori(id: "OnChoiceTimeout", references: [0: script]))
         }
         player.onOpen = { [weak self] target in
+            if target.caseInsensitiveCompare("messenger") == .orderedSame {
+                self?.onOpenMessenger?()
+                return
+            }
             if target.caseInsensitiveCompare("backlogviewer") == .orderedSame {
                 self?.showSpeechHistory()
                 return

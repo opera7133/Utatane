@@ -214,9 +214,11 @@ func `parses browser commands`() {
 }
 
 @Test
-func `parses the SSP backlog viewer command`() {
-    #expect(SakuraScriptParser().parse(#"\![open,backlogviewer]"#) == [
-        .open("backlogviewer")
+func `parses SSP utility window commands`() {
+    #expect(SakuraScriptParser().parse(#"\![open,backlogviewer]\![open,calendar]\![open,messenger]"#) == [
+        .open("backlogviewer"),
+        .open("calendar"),
+        .open("messenger")
     ])
 }
 

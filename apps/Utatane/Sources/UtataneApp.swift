@@ -33,6 +33,7 @@ import UtataneYuhnaNative
 private extension Notification.Name {
     static let showUtataneGhostPicker = Notification.Name("dev.utatane.showGhostPicker")
     static let showUtataneCalendar = Notification.Name("dev.utatane.showCalendar")
+    static let showUtataneIPMessenger = Notification.Name("dev.utatane.showIPMessenger")
     static let showUtataneContentExplorer = Notification.Name("dev.utatane.showContentExplorer")
     static let restoreUtataneSurfaces = Notification.Name("dev.utatane.restoreSurfaces")
     static let showUtataneSpeechHistory = Notification.Name("dev.utatane.showSpeechHistory")
@@ -182,6 +183,10 @@ struct UtataneApp: App {
                     NotificationCenter.default.post(name: .showUtataneCalendar, object: nil)
                 }
                 .keyboardShortcut("k", modifiers: [.command, .shift])
+                Button("IP Messenger") {
+                    NotificationCenter.default.post(name: .showUtataneIPMessenger, object: nil)
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
                 Button("ゴーストを変更…") {
                     NotificationCenter.default.post(name: .showUtataneGhostPicker, object: nil)
                 }
@@ -317,6 +322,7 @@ private struct UtataneRootView: View {
     @State private var activeSSTPScripts: [URL: String] = [:]
     @State private var contentPickerController = ContentPickerWindowController()
     @State private var contentExplorerController = ContentExplorerWindowController()
+    @State private var ipMessengerWindowController = IPMessengerWindowController()
     @State private var textInputWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
     private let networkStatusMonitor = NetworkStatusMonitor()
@@ -491,6 +497,9 @@ private struct UtataneRootView: View {
             calendarWindowController.onTodaySchedulesChange = { references in
                 broadcastEvent(.notification(id: "OnScheduleTodayNotify", references: references))
             }
+            ipMessengerWindowController.onOpenSettings = {
+                showSettingsPane(.network)
+            }
             applyAppearance()
             gamepadMonitor.onEvent = { id, references in
                 broadcastEvent(.shiori(id: id, references: references))
@@ -535,6 +544,9 @@ private struct UtataneRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showUtataneCalendar)) { _ in
             calendarWindowController.showCalendar()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showUtataneIPMessenger)) { _ in
+            ipMessengerWindowController.showMessenger()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .showUtataneContentExplorer)) { _ in
             showContentExplorer()
         }
@@ -546,6 +558,16 @@ private struct UtataneRootView: View {
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "display-settings", id: "\(networkSettings.shellScalePercent)-\(networkSettings.automaticallyFitsLargeSurfaces)-\(networkSettings.balloonScalePercent)-\(networkSettings.linksBalloonScale)-\(networkSettings.balloonTextScalePercent)-\(networkSettings.locksShellToDesktopBottom)-\(networkSettings.keepsShellOnScreen)") {
             configureDisplay()
+        }
+        .applicationRuntimeTask(
+            in: applicationDelegate.runtimeTasks,
+            key: "ip-messenger",
+            id: "\(networkSettings.ipMessengerEnabled)-\(networkSettings.ipMessengerDisplayName)-\(networkSettings.ipMessengerGroupName)-\(networkSettings.ipMessengerPort)-\(networkSettings.ipMessengerBroadcastAddresses)"
+        ) {
+            ipMessengerWindowController.configure(
+                enabled: networkSettings.ipMessengerEnabled,
+                configuration: networkSettings.ipMessengerConfiguration
+            )
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "appearance", id: networkSettings.appearance) {
             applyAppearance()
@@ -1809,6 +1831,10 @@ private struct UtataneRootView: View {
             scriptPlayer.onOpen = { target in
                 if target.caseInsensitiveCompare("calendar") == .orderedSame {
                     calendarWindowController.showCalendar()
+                    return
+                }
+                if target.caseInsensitiveCompare("messenger") == .orderedSame {
+                    ipMessengerWindowController.showMessenger()
                     return
                 }
                 if target.caseInsensitiveCompare("backlogviewer") == .orderedSame {
@@ -3762,6 +3788,10 @@ private struct UtataneRootView: View {
                 handler: { calendarWindowController.showCalendar() }
             ),
             .action(
+                title: String(localized: "IP Messenger"),
+                handler: { ipMessengerWindowController.showMessenger() }
+            ),
+            .action(
                 title: String(localized: "発話履歴"),
                 handler: {
                     switch target {
@@ -4275,6 +4305,7 @@ private struct UtataneRootView: View {
                 )
                 runtime.onError = { showError($0.localizedDescription) }
                 runtime.onNarDrop = { installNars(from: $0) }
+                runtime.onOpenMessenger = { ipMessengerWindowController.showMessenger() }
                 runtime.onCommunication = { target, sentence in
                     deliverCommunication(from: ghost, target: target, sentence: sentence)
                 }
@@ -6750,6 +6781,7 @@ private struct UtataneRootView: View {
     private func requestApplicationTermination() {
         applicationDelegate.runtimeTasks.stop()
         sstpServer.stop()
+        ipMessengerWindowController.stop()
         networkStatusMonitor.stop()
         Task {
             let closeAll = GhostEvent.shiori(
