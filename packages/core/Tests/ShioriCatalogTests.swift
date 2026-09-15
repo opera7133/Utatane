@@ -2,6 +2,26 @@ import Foundation
 import Testing
 @testable import UtataneCore
 
+@Test(arguments: ["libexample.dylib", "example.so", "example.bundle", "shiolink.dll", "example.dll"])
+func `explicit macOS SHIORI takes priority over dictionary signatures`(filename: String) throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data().write(to: directory.appending(path: "yaya.txt"))
+    let descriptor = ShioriCatalog.identify(
+        masterDirectory: directory,
+        declaredModuleFilename: "yaya.dll",
+        macOSModuleFilename: filename
+    )
+    if filename == "shiolink.dll" {
+        #expect(descriptor?.execution == .externalProcess)
+    } else if filename == "example.dll" {
+        #expect(descriptor == nil)
+    } else {
+        #expect(descriptor?.execution == .dynamicLibrary)
+    }
+}
+
 @Test func `identifies known module filename ignoring case`() {
     let descriptor = ShioriCatalog.descriptor(moduleFilename: "NISESHIORI.DLL")
 

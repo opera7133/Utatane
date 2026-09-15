@@ -41,6 +41,8 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
     public let shells: [InstalledShell]
     public let characters: [InstalledGhostCharacter]
     public let shioriFilename: String?
+    /// An explicit Utatane macOS override; shioriFilename is the selected filename on macOS.
+    public let shioriMacOSFilename: String?
     public let charset: String?
     public let defaultBalloonDirectoryName: String?
 
@@ -55,6 +57,7 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
         shells: [InstalledShell]? = nil,
         characters: [InstalledGhostCharacter]? = nil,
         shioriFilename: String? = nil,
+        shioriMacOSFilename: String? = nil,
         charset: String? = nil,
         defaultBalloonDirectoryName: String? = nil
     ) {
@@ -68,7 +71,12 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
             InstalledGhostCharacter(scope: 0, defaultSurfaceID: 0),
             InstalledGhostCharacter(scope: 1, defaultSurfaceID: 10)
         ]
-        self.shioriFilename = shioriFilename
+        #if os(macOS)
+            self.shioriFilename = shioriMacOSFilename ?? shioriFilename
+        #else
+            self.shioriFilename = shioriFilename
+        #endif
+        self.shioriMacOSFilename = shioriMacOSFilename
         self.charset = charset
         self.defaultBalloonDirectoryName = defaultBalloonDirectoryName
     }

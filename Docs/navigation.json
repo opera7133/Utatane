@@ -108,6 +108,11 @@
           "title": "新規制作とSSP資産への対応"
         },
         {
+          "file": "Creators/SHIORI-Development.md",
+          "slug": "create/shiori",
+          "title": "SHIORI開発者向け対応ガイド"
+        },
+        {
           "file": "Creators/nijigenerate-shell.md",
           "slug": "create/nijigenerate",
           "title": "nijigenerateシェル"

@@ -76,7 +76,12 @@ public struct ContentValidator: Sendable {
         var diagnostics: [ContentDiagnostic] = []
         let master = root.appending(path: "ghost/master", directoryHint: .isDirectory)
         if let declared = ghost.shioriFilename {
-            if ShioriCatalog.identify(masterDirectory: master, declaredModuleFilename: declared) == nil {
+            let descriptor = ShioriCatalog.identify(
+                masterDirectory: master,
+                declaredModuleFilename: declared,
+                macOSModuleFilename: ghost.shioriMacOSFilename
+            )
+            if descriptor == nil {
                 diagnostics.append(diagnostic(
                     .warning,
                     code: "shiori.unknown",
@@ -86,8 +91,8 @@ public struct ContentValidator: Sendable {
                 ))
             }
             let moduleURL = master.appending(path: declared, directoryHint: .notDirectory)
-            let descriptor = ShioriCatalog.descriptor(moduleFilename: declared)
             if descriptor?.provisioning == .ghost,
+               descriptor?.execution != .externalProcess,
                !FileManager.default.fileExists(atPath: moduleURL.path)
             {
                 diagnostics.append(diagnostic(
@@ -132,7 +137,8 @@ public struct ContentValidator: Sendable {
             ghostName: ghost.name,
             shiori: ShioriCatalog.identify(
                 masterDirectory: master,
-                declaredModuleFilename: ghost.shioriFilename
+                declaredModuleFilename: ghost.shioriFilename,
+                macOSModuleFilename: ghost.shioriMacOSFilename
             )?.displayName ?? ghost.shioriFilename,
             diagnostics: diagnostics
         )

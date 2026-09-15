@@ -44,6 +44,7 @@ UKADOC掲載は74項目。汎用パーサーはコメントと空行を除いた
 | 状況 | 項目 |
 | --- | --- |
 | 利用 | `name`、`shiori`、`balloon`、`sakura.name`、`kero.name`、`char*.name` |
+| Utatane拡張 | `shiori.macos`で汎用macOS SHIORIまたはSHIOLINKを優先指定。指定がなければ従来の`shiori`を使用（[開発者向けガイド](../Creators/SHIORI-Development.md)） |
 | 利用 | `sakura.seriko.defaultsurface`、`kero.seriko.defaultsurface`、`char*.seriko.defaultsurface` |
 | 利用 | `balloon.defaultsurface`、scope別`balloon.defaultsurface` |
 | 別経路で利用 | `homeurl`、`readme`、`readme.charset` |

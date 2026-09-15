@@ -2,6 +2,8 @@
 
 UtataneがmacOS上でSHIORI・SAORIを実行する仕組みと、実装済みの範囲をまとめます。既知のSHIORIはWineを使わない内蔵実装を優先し、それ以外はmacOS用モジュールまたは設定済みWineへ渡します。
 
+独自SHIORIの実装手順は[SHIORI開発者向け対応ガイド](../Creators/SHIORI-Development.md)を参照してください。ここでは利用できるエンジンと実行経路の対応範囲を説明します。
+
 ## 対応方式の一覧
 
 | SHIORI | 実行方式 | SAORI | 状態 |
@@ -27,6 +29,8 @@ UtataneがmacOS上でSHIORI・SAORIを実行する仕組みと、実装済みの
 「共通SAORIブリッジ」は、Utatane内蔵SHIORIのうちSAORI呼び出し構文を実装しているものが使う経路です。外部SHIORIの内部動作を横取りするものではありません。
 
 ## SHIORIの選択
+
+独自SHIORIの両OS向け配布では、`ghost/master/descript.txt`の`shiori`にWindows用DLL、`shiori.macos`に汎用ABIのmacOS用モジュールまたは`shiolink.dll`を併記できます。空でない`shiori.macos`は内蔵エンジンの自動判定より優先し、指定先の読み込み失敗時は別のエンジンへ戻りません。詳しくは[開発者向けガイド](../Creators/SHIORI-Development.md#windowsとmacosを同じゴーストで配布する)を参照してください。
 
 識別子、別名、代表的なDLL名、実行方式、追加ランタイムの要否は`UtataneCore`のSHIORIカタログで管理しています。設定の「SHIORI対応状況」も同じ情報を表示します。UtataneはSHIORIの検索・ダウンロード・更新は行いません。
 

@@ -446,7 +446,7 @@ pre code { padding: 0; }
 </ul>
 <p>IP Messenger v2の暗号化、ファイル添付、IPv6、メンバー管理サーバー、オフライン配送には対応していません。メッセージは暗号化されないため、信頼できるLANで利用してください。</p>
 </section>
-<section class="chapter" id="use-realtime-voice"><h2>Realtime音声会話</h2><p>Utataneは、OpenAI Realtime APIと、そのWebRTC call作成方式に対応する互換APIへ接続できる。特定の社内endpointはアプリやゴーストへ埋め込まず、利用者がBase URL、model、voice、API keyを設定する。</p>
+<section class="chapter" id="use-realtime-voice"><h2>Realtime音声会話</h2><p>Utataneは、OpenAI Realtime APIと、そのWebRTC call作成方式に対応する互換APIへ接続できる。利用者がBase URL、model、voice、API keyを設定することもできる。</p>
 <h3 id="use-realtime-voice-設定">設定</h3>
 <p>「設定」→「ネットワーク」→「リアルタイム音声会話」で次を設定する。</p>
 <ul>
@@ -798,6 +798,7 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 <p>表にあるネイティブSAORIは、SSUを除いてSHIORI非依存の共通レジストリにあり、ネイティブMISAKA、YAYA、SATORI、KAWARIから利用できます。SSUはSATORI同梱実装を維持しています。未知のmacOS用標準ABIモジュールとWindows DLLにも読み込み経路はありますが、Windows固有機能への依存まで吸収するものではありません。</p>
 </section>
 <section class="chapter" id="support-engines"><h2>SHIORI・SAORIの対応範囲</h2><p>UtataneがmacOS上でSHIORI・SAORIを実行する仕組みと、実装済みの範囲をまとめます。既知のSHIORIはWineを使わない内蔵実装を優先し、それ以外はmacOS用モジュールまたは設定済みWineへ渡します。</p>
+<p>独自SHIORIの実装手順は<a href="https://dl.wmsci.com/utatane/docs/create/shiori/">SHIORI開発者向け対応ガイド</a>を参照してください。ここでは利用できるエンジンと実行経路の対応範囲を説明します。</p>
 <h3 id="support-engines-対応方式の一覧">対応方式の一覧</h3>
 <table>
 <thead>
@@ -913,6 +914,7 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 </tbody></table>
 <p>「共通SAORIブリッジ」は、Utatane内蔵SHIORIのうちSAORI呼び出し構文を実装しているものが使う経路です。外部SHIORIの内部動作を横取りするものではありません。</p>
 <h3 id="support-engines-shioriの選択">SHIORIの選択</h3>
+<p>独自SHIORIの両OS向け配布では、<code>ghost/master/descript.txt</code>の<code>shiori</code>にWindows用DLL、<code>shiori.macos</code>に汎用ABIのmacOS用モジュールまたは<code>shiolink.dll</code>を併記できます。空でない<code>shiori.macos</code>は内蔵エンジンの自動判定より優先し、指定先の読み込み失敗時は別のエンジンへ戻りません。詳しくは<a href="https://dl.wmsci.com/utatane/docs/create/shiori/#windows%E3%81%A8macos%E3%82%92%E5%90%8C%E3%81%98%E3%82%B4%E3%83%BC%E3%82%B9%E3%83%88%E3%81%A7%E9%85%8D%E5%B8%83%E3%81%99%E3%82%8B">開発者向けガイド</a>を参照してください。</p>
 <p>識別子、別名、代表的なDLL名、実行方式、追加ランタイムの要否は<code>UtataneCore</code>のSHIORIカタログで管理しています。設定の「SHIORI対応状況」も同じ情報を表示します。UtataneはSHIORIの検索・ダウンロード・更新は行いません。</p>
 <p>既知の名前に一致しない<code>.dylib</code>、<code>.so</code>、<code>.bundle</code>は標準SHIORI ABIの<code>load</code>・<code>request</code>・<code>unload</code>で読み込みます。未知の<code>.dll</code>は、Wineと汎用DLLホストが設定済みの場合だけ実行します。SHIOLINKはSHIORI本体ではなく外部プロセスへの接続方式です。似非shioriはese-shioriの別名で、<code>niseshiori.dll</code>を使う偽栞とは別物です。</p>
 <h3 id="support-engines-共通saoriブリッジ">共通SAORIブリッジ</h3>

@@ -1,5 +1,12 @@
 # Changelog
 
+## [Unreleased]
+
+### 追加
+
+- ゴーストの`descript.txt`に`shiori.macos`を指定し、Windows用SHIORIを残したままmacOS用モジュールまたはSHIOLINKを優先する配布構成に対応
+- SHIORI開発者向けガイドに、WindowsからのmacOSビルド、両OS向け配布、言語ごとの接続方法を追加
+
 ## [0.2.3] - 2026-09-15
 
 ### 追加

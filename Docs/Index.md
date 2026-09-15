@@ -10,6 +10,7 @@ Macでゴーストを楽しむ。作る。困ったときに調べる。
 - **好みに調整する** — [コンテンツ管理](Guide/Content.md)、[設定](Guide/Settings.md)、[配信・ウィンドウ表示](Guide/Window-Mode.md)
 - **困ったことを解決する** — [症状から調べる](Support/Troubleshooting.md)、[ゴーストの動作確認情報](Support/Compatibility.md)
 - **コンテンツを作る** — [新規制作・SSP向け資産への対応](Creators/Content-Authoring.md)、[命令やファイルの対応状況](Reference/UKADOC-SakuraScript-Compatibility.md)
+- **SHIORIを開発する** — [自作SHIORIの新規開発・移植](Creators/SHIORI-Development.md)
 - **本体を開発する** — [ビルドとテスト](Development/Development.md)、[ドキュメントの編集](Development/Documentation.md)
 
 ## このドキュメントについて

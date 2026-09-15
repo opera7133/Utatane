@@ -2252,6 +2252,20 @@ private struct UtataneRootView: View {
             path: "ghost/master",
             directoryHint: .isDirectory
         )
+        // A creator's explicit platform choice must precede dictionary-based engine detection.
+        if let filename = ghost.shioriMacOSFilename {
+            if ShiolinkPersonalityEngine.supports(shioriFilename: filename) {
+                return try ShiolinkPersonalityEngine(masterDirectoryURL: masterDirectory)
+            }
+            guard let moduleURL = ContentRoot.shioriModuleURL(for: ghost),
+                  ["dylib", "so", "bundle"].contains(moduleURL.pathExtension.lowercased())
+            else {
+                throw AppError.unsupportedShiori(filename)
+            }
+            return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
+                DynamicLibraryModuleSession(directoryURL: masterDirectory, moduleURL: moduleURL)
+            ))
+        }
         if AIGhostManifestLoader.supports(masterDirectoryURL: masterDirectory) {
             let baseURL = networkSettings.aiBaseURL.isEmpty
                 ? nil : URL(string: networkSettings.aiBaseURL)

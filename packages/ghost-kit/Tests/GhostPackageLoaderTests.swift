@@ -3,6 +3,47 @@ import Testing
 import UtataneCore
 @testable import UtataneGhostKit
 
+@Test(arguments: ["libexample.dylib", "modules/example.so", "example.bundle", "shiolink.dll", ""])
+func `selects an explicit macOS SHIORI without requiring the Windows DLL`(override: String) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let master = root.appending(path: "ghost/master")
+    let shell = root.appending(path: "shell/master")
+    for directory in [master, shell] {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+    try Data("name,Shared Ghost\nshiori,example.dll\nshiori.macos,\(override)\n".utf8)
+        .write(to: master.appending(path: "descript.txt"))
+    try Data("shiori,legacy.dll\n".utf8).write(to: master.appending(path: "alias.txt"))
+    try Data("name,Master\n".utf8).write(to: shell.appending(path: "descript.txt"))
+    let ghost = try GhostPackageLoader().loadGhost(at: root)
+    #expect(ghost.shioriMacOSFilename == (override.isEmpty ? nil : override))
+    #if os(macOS)
+        #expect(ghost.shioriFilename == (override.isEmpty ? "example.dll" : override))
+    #else
+        #expect(ghost.shioriFilename == "example.dll")
+    #endif
+}
+
+@Test
+func `macOS SHIORI overrides an alias declaration and works without a common declaration`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let master = root.appending(path: "ghost/master")
+    let shell = root.appending(path: "shell/master")
+    for directory in [master, shell] {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+    try Data("name,Mac Ghost\nshiori.macos,libexample.dylib\n".utf8)
+        .write(to: master.appending(path: "descript.txt"))
+    try Data("name,Master\n".utf8).write(to: shell.appending(path: "descript.txt"))
+    #if os(macOS)
+        #expect(try GhostPackageLoader().loadGhost(at: root).shioriFilename == "libexample.dylib")
+        try Data("shiori,legacy.dll\n".utf8).write(to: master.appending(path: "alias.txt"))
+        #expect(try GhostPackageLoader().loadGhost(at: root).shioriFilename == "libexample.dylib")
+    #endif
+}
+
 @Test
 func `loads and names every installed shell with master as default`() throws {
     let root = FileManager.default.temporaryDirectory

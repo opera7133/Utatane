@@ -72,17 +72,9 @@ YAYA / AYA、里々、華和梨、美坂などはUtataneの内蔵実装を優先
 
 ### 独自SHIORI
 
-新しいネイティブモジュールは、標準の`loadu`（または`load`）、`request`、`unload`を公開するmacOS用`.dylib`、`.so`、`.bundle`として配置できます。`ghost/master/descript.txt`の`shiori`には、そのmacOS用ファイル名を指定します。
+自分でSHIORIを開発する場合は、[SHIORI開発者向け対応ガイド](SHIORI-Development.md)を参照してください。新規開発と既存Windows版の移植、macOS用モジュールの関数の型・バッファの所有権、SHIOLINKの通信手順、配布前の確認を説明しています。
 
-- `loadu`と電文はUTF-8を推奨
-- SHIORI/3.0要求へ、ステータス行、`Charset`、必要なら`Value`を含む応答を返す
-- 改行はCRLF、ヘッダー末尾には空行を置く
-- arm64とx86_64の両方へ配布するならUniversal Binaryにする
-- 設定や可変状態をゴースト本体へ書く前に、読み取り専用配置でも動くか確認する
-
-外部プロセスとして実装したい場合はSHIOLINKも利用できます。実行ファイルの絶対パスが必要になるため、不特定の利用者へそのまま配布する用途より、開発・個別設定向けです。
-
-既存のWindows SHIORIを移植するときは、辞書評価部を共有し、DLLのエントリポイント、文字コード変換、Windows APIの部分をmacOS用の薄い層へ分けます。Windows DLLしか入っていない場合、Utataneは設定済みWineとDLLホストへ渡せますが、補助DLLや独自UIまでの互換性は保証しません。
+macOS用モジュールは`ghost/master`へ配置します。両OS向けに配布する場合は、`descript.txt`に`shiori,example.dll`と`shiori.macos,libexample.dylib`を併記してロード先を分けられます。Windows環境しか持っていない場合のmacOSビルド手順と、言語ごとの接続方法も専用ガイドにあります。
 
 ## SAORIを対応させる
 

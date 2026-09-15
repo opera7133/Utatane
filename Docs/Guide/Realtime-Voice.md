@@ -1,6 +1,6 @@
 # Realtime音声会話
 
-Utataneは、OpenAI Realtime APIと、そのWebRTC call作成方式に対応する互換APIへ接続できる。特定の社内endpointはアプリやゴーストへ埋め込まず、利用者がBase URL、model、voice、API keyを設定する。
+Utataneは、OpenAI Realtime APIと、そのWebRTC call作成方式に対応する互換APIへ接続できる。利用者がBase URL、model、voice、API keyを設定することもできる。
 
 ## 設定
 

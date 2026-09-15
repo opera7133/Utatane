@@ -2,6 +2,37 @@ import Foundation
 import Testing
 @testable import UtataneContentValidator
 
+@Test(arguments: ["libexample.dylib", "shiolink.dll"])
+func `validates the macOS SHIORI choice instead of the Windows declaration`(filename: String) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let master = root.appending(path: "ghost/master")
+    let shell = root.appending(path: "shell/master")
+    for directory in [master, shell] {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+    try Data("name,Shared\nshiori,yaya.dll\nshiori.macos,\(filename)\n".utf8)
+        .write(to: master.appending(path: "descript.txt"))
+    try Data().write(to: master.appending(path: "yaya.txt"))
+    try Data("name,Master\n".utf8).write(to: shell.appending(path: "descript.txt"))
+    #if os(macOS)
+        let report = ContentValidator().validate(ghostRoot: root)
+        if filename == "shiolink.dll" {
+            #expect(report.shiori == "SHIOLINK")
+            #expect(!report.diagnostics.contains { $0.code == "shiori.missing-module" })
+        } else {
+            #expect(report.shiori == "外部macOS SHIORI")
+            #expect(report.diagnostics.contains {
+                $0.code == "shiori.missing-module" && $0.message.contains(filename)
+            })
+            try Data().write(to: master.appending(path: filename))
+            #expect(!ContentValidator().validate(ghostRoot: root).diagnostics.contains {
+                $0.code == "shiori.missing-module"
+            })
+        }
+    #endif
+}
+
 @Test
 func `reports missing surfaces elements and unknown SakuraScript`() throws {
     let root = FileManager.default.temporaryDirectory

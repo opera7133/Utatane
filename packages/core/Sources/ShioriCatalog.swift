@@ -163,7 +163,22 @@ public enum ShioriCatalog {
 
     /// Identifies dictionary based engines before falling back to the declared module name.
     /// The order mirrors Utatane's runtime selection order where formats overlap.
-    public static func identify(masterDirectory: URL, declaredModuleFilename: String? = nil) -> ShioriDescriptor? {
+    public static func identify(
+        masterDirectory: URL,
+        declaredModuleFilename: String? = nil,
+        macOSModuleFilename: String? = nil
+    ) -> ShioriDescriptor? {
+        if let filename = macOSModuleFilename {
+            let url = URL(filePath: filename.replacingOccurrences(of: "\\", with: "/"))
+            switch url.pathExtension.lowercased() {
+            case "dylib", "so", "bundle":
+                return descriptor(id: "external-posix-shiori")
+            case "dll" where url.lastPathComponent.lowercased() == "shiolink.dll":
+                return descriptor(moduleFilename: "shiolink.dll")
+            default:
+                return nil
+            }
+        }
         let exists: (String) -> Bool = { filename in
             FileManager.default.fileExists(atPath: masterDirectory.appending(path: filename).path)
         }

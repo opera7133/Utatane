@@ -10,7 +10,7 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 | --- | --- |
 | `Guide/` | 導入、日常の操作、設定、音声、保存場所 |
 | `Support/` | トラブル対処、ゴースト・SHIORIの互換性 |
-| `Creators/` | ゴースト、シェル、プラグインの制作 |
+| `Creators/` | ゴースト、SHIORI、シェル、プラグインの制作 |
 | `Reference/` | 命令、イベント、ファイル、SSTPの対応表 |
 | `Development/` | 本体のビルド、リリース、ドキュメント運用 |
 
@@ -40,6 +40,7 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 
 最初に[Utatane対応ガイド](Creators/Content-Authoring.md)を読んでください。新規制作と、既存のSSP向け資産をUtataneでも動かす場合の進め方を分けて説明しています。
 
+- [SHIORI開発者向け対応ガイド](Creators/SHIORI-Development.md): 独自SHIORIの新規開発・移植、macOS用ABI、SHIOLINK、検証と配布
 - [SakuraScript互換状況](Reference/UKADOC-SakuraScript-Compatibility.md): 表示命令と実行命令の対応範囲
 - [SHIORIイベント互換状況](Reference/UKADOC-SHIORI-Event-Compatibility.md): Utataneが通知するイベントとReference
 - [テキストファイル互換状況](Reference/UKADOC-Text-File-Compatibility.md): descript、install、surfaces、更新定義など
@@ -67,6 +68,7 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 | 同じLAN上のSSP・IP Messengerと会話したい | [IP Messenger](Guide/IP-Messenger.md) |
 | 新しいゴーストを作りたい | [Utatane対応ガイド](Creators/Content-Authoring.md) |
 | SSP向けゴーストを移行したい | [Utatane対応ガイド](Creators/Content-Authoring.md)、各[互換表](Reference/UKADOC-Text-File-Compatibility.md) |
+| 自作SHIORIをUtataneに対応させたい | [SHIORI開発者向け対応ガイド](Creators/SHIORI-Development.md) |
 | SHIORI・SAORIの実行方式を知りたい | [Native SHIORI / SAORI](Support/Native-SHIORI.md) |
 | nijigenerateをシェルで使いたい | [nijigenerateシェル拡張](Creators/nijigenerate-shell.md) |
 | macOS用プラグインを作りたい | [ネイティブプラグイン](Creators/Native-Plugins.md) |

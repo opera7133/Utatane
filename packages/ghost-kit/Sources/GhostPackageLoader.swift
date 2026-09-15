@@ -38,6 +38,8 @@ public struct GhostPackageLoader: Sendable {
         let shells = try findShells(in: rootDirectory)
         let shellDirectory = try findDefaultShell(in: rootDirectory, shells: shells)
         let name = metadata["name"] ?? rootDirectory.lastPathComponent
+        let macOSShiori = metadata["shiori.macos"].flatMap { $0.isEmpty ? nil : $0 }
+        let commonShiori = metadata["shiori"] ?? aliasMetadata["shiori"]
 
         return InstalledGhost(
             name: name,
@@ -45,7 +47,8 @@ public struct GhostPackageLoader: Sendable {
             defaultShellDirectory: shellDirectory,
             shells: shells,
             characters: characters(from: metadata),
-            shioriFilename: metadata["shiori"] ?? aliasMetadata["shiori"],
+            shioriFilename: commonShiori,
+            shioriMacOSFilename: macOSShiori,
             charset: metadata["charset"],
             defaultBalloonDirectoryName: metadata["balloon"]
         )
