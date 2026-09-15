@@ -17,6 +17,8 @@ final class UtataneSettingsStore: ObservableObject {
         var coeiroinkBaseURL = "http://127.0.0.1:50032"
         var coeiroinkSpeakerUUID = ""
         var coeiroinkStyleIdentifier = "0"
+        var voicepeakExecutablePath = "/Applications/voicepeak.app/Contents/MacOS/voicepeak"
+        var voicepeakNarrator = ""
         var rate = 0.5
         var volume = 1.0
         var pitch = 1.0
@@ -38,6 +40,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .macOS: voiceIdentifier
             case .voicevoxCompatible: localAPIVoiceIdentifier
             case .coeiroink: coeiroinkStyleIdentifier
+            case .voicepeak: voicepeakNarrator
             }
             return identifier.isEmpty ? nil : identifier
         }
@@ -52,6 +55,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .macOS: nil
             case .voicevoxCompatible: URL(string: localAPIBaseURL)
             case .coeiroink: URL(string: coeiroinkBaseURL)
+            case .voicepeak: URL(fileURLWithPath: voicepeakExecutablePath)
             }
         }
 
@@ -63,6 +67,8 @@ final class UtataneSettingsStore: ObservableObject {
             case coeiroinkBaseURL
             case coeiroinkSpeakerUUID
             case coeiroinkStyleIdentifier
+            case voicepeakExecutablePath
+            case voicepeakNarrator
             case rate
             case volume
             case pitch
@@ -83,6 +89,9 @@ final class UtataneSettingsStore: ObservableObject {
             coeiroinkSpeakerUUID = try values.decodeIfPresent(String.self, forKey: .coeiroinkSpeakerUUID) ?? ""
             coeiroinkStyleIdentifier = try values.decodeIfPresent(String.self, forKey: .coeiroinkStyleIdentifier)
                 ?? "0"
+            voicepeakExecutablePath = try values.decodeIfPresent(String.self, forKey: .voicepeakExecutablePath)
+                ?? "/Applications/voicepeak.app/Contents/MacOS/voicepeak"
+            voicepeakNarrator = try values.decodeIfPresent(String.self, forKey: .voicepeakNarrator) ?? ""
             rate = try values.decodeIfPresent(Double.self, forKey: .rate) ?? 0.5
             volume = try values.decodeIfPresent(Double.self, forKey: .volume) ?? 1
             pitch = try values.decodeIfPresent(Double.self, forKey: .pitch) ?? 1
@@ -1080,6 +1089,7 @@ private struct SpeechVoiceSettingsEditor: View {
                         Text("macOS標準").tag(SpeechSynthesisProvider.macOS)
                         Text("VOICEVOX互換API").tag(SpeechSynthesisProvider.voicevoxCompatible)
                         Text("COEIROINK v2").tag(SpeechSynthesisProvider.coeiroink)
+                        Text("VOICEPEAK").tag(SpeechSynthesisProvider.voicepeak)
                     }
                     .labelsHidden()
                 }
@@ -1096,8 +1106,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     }
                 } else {
                     GridRow {
-                        Text("API URL")
-                        TextField(localAPIPlaceholder, text: externalServiceURL)
+                        Text(settings.provider == .voicepeak ? "実行ファイル" : "API URL")
+                        TextField(externalServicePlaceholder, text: externalServiceLocation)
                             .textFieldStyle(.roundedBorder)
                     }
                     if settings.provider == .coeiroink {
@@ -1108,7 +1118,7 @@ private struct SpeechVoiceSettingsEditor: View {
                         }
                     }
                     GridRow {
-                        Text(settings.provider == .coeiroink ? "スタイルID" : "話者ID")
+                        Text(externalVoiceIdentifierLabel)
                         HStack {
                             TextField("0", text: externalVoiceIdentifier)
                                 .textFieldStyle(.roundedBorder)
@@ -1174,18 +1184,28 @@ private struct SpeechVoiceSettingsEditor: View {
         .onChange(of: settings.coeiroinkBaseURL) {
             resetLocalAPIVoices()
         }
+        .onChange(of: settings.voicepeakExecutablePath) {
+            resetLocalAPIVoices()
+        }
     }
 
-    private var externalServiceURL: Binding<String> {
+    private var externalServiceLocation: Binding<String> {
         Binding(
             get: {
-                settings.provider == .coeiroink ? settings.coeiroinkBaseURL : settings.localAPIBaseURL
+                switch settings.provider {
+                case .macOS, .voicevoxCompatible: settings.localAPIBaseURL
+                case .coeiroink: settings.coeiroinkBaseURL
+                case .voicepeak: settings.voicepeakExecutablePath
+                }
             },
             set: { value in
-                if settings.provider == .coeiroink {
-                    settings.coeiroinkBaseURL = value
-                } else {
+                switch settings.provider {
+                case .macOS, .voicevoxCompatible:
                     settings.localAPIBaseURL = value
+                case .coeiroink:
+                    settings.coeiroinkBaseURL = value
+                case .voicepeak:
+                    settings.voicepeakExecutablePath = value
                 }
             }
         )
@@ -1194,14 +1214,20 @@ private struct SpeechVoiceSettingsEditor: View {
     private var externalVoiceIdentifier: Binding<String> {
         Binding(
             get: {
-                settings.provider == .coeiroink
-                    ? settings.coeiroinkStyleIdentifier : settings.localAPIVoiceIdentifier
+                switch settings.provider {
+                case .macOS, .voicevoxCompatible: settings.localAPIVoiceIdentifier
+                case .coeiroink: settings.coeiroinkStyleIdentifier
+                case .voicepeak: settings.voicepeakNarrator
+                }
             },
             set: { value in
-                if settings.provider == .coeiroink {
-                    settings.coeiroinkStyleIdentifier = value
-                } else {
+                switch settings.provider {
+                case .macOS, .voicevoxCompatible:
                     settings.localAPIVoiceIdentifier = value
+                case .coeiroink:
+                    settings.coeiroinkStyleIdentifier = value
+                case .voicepeak:
+                    settings.voicepeakNarrator = value
                 }
             }
         )
@@ -1214,22 +1240,37 @@ private struct SpeechVoiceSettingsEditor: View {
                     return [settings.coeiroinkSpeakerUUID, settings.coeiroinkStyleIdentifier]
                         .joined(separator: ":")
                 }
-                return settings.localAPIVoiceIdentifier
+                return externalVoiceIdentifier.wrappedValue
             },
             set: { id in
                 guard let voice = localAPIVoices.first(where: { $0.id == id }) else { return }
-                if settings.provider == .coeiroink {
+                switch settings.provider {
+                case .coeiroink:
                     settings.coeiroinkSpeakerUUID = voice.groupIdentifier ?? ""
                     settings.coeiroinkStyleIdentifier = voice.identifier
-                } else {
+                case .macOS, .voicevoxCompatible:
                     settings.localAPIVoiceIdentifier = voice.identifier
+                case .voicepeak:
+                    settings.voicepeakNarrator = voice.identifier
                 }
             }
         )
     }
 
-    private var localAPIPlaceholder: String {
-        settings.provider == .coeiroink ? "http://127.0.0.1:50032" : "http://127.0.0.1:50021"
+    private var externalServicePlaceholder: String {
+        switch settings.provider {
+        case .macOS, .voicevoxCompatible: "http://127.0.0.1:50021"
+        case .coeiroink: "http://127.0.0.1:50032"
+        case .voicepeak: "/Applications/voicepeak.app/Contents/MacOS/voicepeak"
+        }
+    }
+
+    private var externalVoiceIdentifierLabel: LocalizedStringKey {
+        switch settings.provider {
+        case .macOS, .voicevoxCompatible: "話者ID"
+        case .coeiroink: "スタイルID"
+        case .voicepeak: "ナレーター"
+        }
     }
 
     private func resetLocalAPIVoices() {
@@ -1239,10 +1280,6 @@ private struct SpeechVoiceSettingsEditor: View {
     }
 
     private func loadLocalAPIVoices() async {
-        guard let url = URL(string: externalServiceURL.wrappedValue) else {
-            localAPIError = SpeechServiceError.invalidServiceURL.localizedDescription
-            return
-        }
         loadsLocalAPIVoices = true
         localAPIError = nil
         localAPIVoiceCount = nil
@@ -1250,8 +1287,14 @@ private struct SpeechVoiceSettingsEditor: View {
         do {
             let voices = switch settings.provider {
             case .macOS: [SpeechSynthesisVoice]()
-            case .voicevoxCompatible: try await VoicevoxEngineClient().voices(serviceURL: url)
-            case .coeiroink: try await CoeiroinkEngineClient().voices(serviceURL: url)
+            case .voicevoxCompatible:
+                try await VoicevoxEngineClient().voices(serviceURL: externalServiceURL())
+            case .coeiroink:
+                try await CoeiroinkEngineClient().voices(serviceURL: externalServiceURL())
+            case .voicepeak:
+                try await VoicepeakEngineClient().voices(
+                    executableURL: URL(fileURLWithPath: settings.voicepeakExecutablePath)
+                )
             }
             localAPIVoices = voices
             localAPIVoiceCount = voices.count
@@ -1259,6 +1302,13 @@ private struct SpeechVoiceSettingsEditor: View {
             localAPIVoices = []
             localAPIError = error.localizedDescription
         }
+    }
+
+    private func externalServiceURL() throws -> URL {
+        guard let url = URL(string: externalServiceLocation.wrappedValue) else {
+            throw SpeechServiceError.invalidServiceURL
+        }
+        return url
     }
 }
 

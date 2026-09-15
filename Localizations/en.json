@@ -447,12 +447,16 @@
   "macOS標準" : "macOS System",
   "VOICEVOX互換API" : "VOICEVOX-Compatible API",
   "COEIROINK v2" : "COEIROINK v2",
+  "VOICEPEAK" : "VOICEPEAK",
   "API URL" : "API URL",
+  "実行ファイル" : "Executable",
   "話者ID" : "Voice ID",
   "話者UUID" : "Speaker UUID",
   "スタイルID" : "Style ID",
+  "ナレーター" : "Narrator",
   "話者一覧を取得" : "Load Voices",
   "話者" : "Voice",
   "話者一覧を取得中…" : "Loading voices…",
-  "話者を%lld件取得した。" : "Loaded %lld voices."
+  "話者を%lld件取得した。" : "Loaded %lld voices.",
+  "音声合成プロセスが失敗しました（終了コード %d）：%@" : "The speech synthesis process failed (exit code %d): %@"
 }

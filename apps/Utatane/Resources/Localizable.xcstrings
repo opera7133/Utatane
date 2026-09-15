@@ -2524,6 +2524,35 @@
         }
       }
     },
+    "VOICEPEAK" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VOICEPEAK"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VOICEPEAK"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VOICEPEAK"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VOICEPEAK"
+          }
+        }
+      }
+    },
     "VOICEVOX互換API" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5482,6 +5511,35 @@
         }
       }
     },
+    "ナレーター" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Narrator"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내레이터"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旁白"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "旁白"
+          }
+        }
+      }
+    },
     "ネイティブ実装" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -8436,6 +8494,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "執行"
+          }
+        }
+      }
+    },
+    "実行ファイル" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Executable"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "실행 파일"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可执行文件"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "執行檔"
           }
         }
       }
@@ -12989,6 +13076,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "語音合成服務的說話者 ID 無效。"
+          }
+        }
+      }
+    },
+    "音声合成プロセスが失敗しました（終了コード %d）：%@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The speech synthesis process failed (exit code %d): %@"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "음성 합성 프로세스가 실패했습니다(종료 코드 %d): %@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "语音合成进程失败（退出代码 %d）：%@"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "語音合成程序失敗（結束代碼 %d）：%@"
           }
         }
       }

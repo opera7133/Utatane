@@ -140,6 +140,59 @@ struct SpeechServicesTests {
         #expect(body["processingAlgorithm"] as? String == "coeiroink")
         #expect(synthesisRequest.value(forHTTPHeaderField: "Content-Type") == "application/json")
     }
+
+    @Test
+    func `VOICEPEAK lists narrators from its command line API`() async throws {
+        let capture = CommandCapture()
+        let client = VoicepeakEngineClient { executableURL, arguments in
+            await capture.store(executableURL: executableURL, arguments: arguments)
+            return .init(standardOutput: Data("Japanese Female 1\n夏色花梨\n".utf8))
+        }
+        let executableURL = URL(fileURLWithPath: "/Applications/voicepeak.app/Contents/MacOS/voicepeak")
+
+        let voices = try await client.voices(executableURL: executableURL)
+
+        #expect(voices.map(\.identifier) == ["Japanese Female 1", "夏色花梨"])
+        #expect(await capture.arguments == ["--list-narrator"])
+    }
+
+    @Test
+    func `VOICEPEAK synthesis uses arguments without a shell`() async throws {
+        let capture = CommandCapture()
+        let client = VoicepeakEngineClient { executableURL, arguments in
+            await capture.store(executableURL: executableURL, arguments: arguments)
+            let outputIndex = try #require(arguments.firstIndex(of: "--out"))
+            let outputPath = arguments[outputIndex + 1]
+            try Data("RIFF-voicepeak-wave".utf8).write(to: URL(fileURLWithPath: outputPath))
+            return .init(standardOutput: Data())
+        }
+        let executableURL = URL(fileURLWithPath: "/Applications/voicepeak.app/Contents/MacOS/voicepeak")
+        let request = SpeechSynthesisRequest(
+            text: "引用符も'シェル'へ渡さない",
+            scope: 0,
+            configuration: SpeechSynthesisConfiguration(
+                provider: .voicepeak,
+                voiceIdentifier: "夏色花梨",
+                serviceURL: executableURL,
+                rate: 0.75,
+                volume: 0.8,
+                pitchMultiplier: 1.5
+            )
+        )
+
+        let audio = try await client.synthesize(request)
+        let arguments = try #require(await capture.arguments)
+        let sayIndex = try #require(arguments.firstIndex(of: "--say"))
+        let narratorIndex = try #require(arguments.firstIndex(of: "--narrator"))
+        let speedIndex = try #require(arguments.firstIndex(of: "--speed"))
+        let pitchIndex = try #require(arguments.firstIndex(of: "--pitch"))
+
+        #expect(audio == Data("RIFF-voicepeak-wave".utf8))
+        #expect(arguments[sayIndex + 1] == "引用符も'シェル'へ渡さない")
+        #expect(arguments[narratorIndex + 1] == "夏色花梨")
+        #expect(arguments[speedIndex + 1] == "150")
+        #expect(arguments[pitchIndex + 1] == "150")
+    }
 }
 
 private actor RequestCapture {
@@ -147,6 +200,16 @@ private actor RequestCapture {
 
     func store(_ request: URLRequest) {
         self.request = request
+    }
+}
+
+private actor CommandCapture {
+    private(set) var executableURL: URL?
+    private(set) var arguments: [String]?
+
+    func store(executableURL: URL, arguments: [String]) {
+        self.executableURL = executableURL
+        self.arguments = arguments
     }
 }
 

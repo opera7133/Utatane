@@ -6,6 +6,7 @@ public enum SpeechSynthesisProvider: String, Codable, CaseIterable, Sendable {
     case macOS
     case voicevoxCompatible
     case coeiroink
+    case voicepeak
 }
 
 public struct SpeechSynthesisVoice: Identifiable, Sendable, Equatable {
@@ -83,6 +84,7 @@ public enum SpeechServiceError: LocalizedError, Equatable {
     case serviceResponse(Int)
     case invalidServiceResponse
     case audioPlaybackFailed
+    case externalProcessFailed(Int32, String)
 
     public var errorDescription: String? {
         switch self {
@@ -106,6 +108,8 @@ public enum SpeechServiceError: LocalizedError, Equatable {
             String(localized: "音声合成サービスから正しい応答を取得できませんでした。")
         case .audioPlaybackFailed:
             String(localized: "合成された音声を再生できませんでした。")
+        case let .externalProcessFailed(status, message):
+            String(localized: "音声合成プロセスが失敗しました（終了コード \(status)）：\(message)")
         }
     }
 }
@@ -115,13 +119,16 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
     private let systemSynthesizer = MacOSSpeechSynthesizer()
     private let voicevoxSynthesizer: VoicevoxSpeechSynthesizer
     private let coeiroinkSynthesizer: CoeiroinkSpeechSynthesizer
+    private let voicepeakSynthesizer: VoicepeakSpeechSynthesizer
 
     public init(
         voicevoxClient: VoicevoxEngineClient = VoicevoxEngineClient(),
-        coeiroinkClient: CoeiroinkEngineClient = CoeiroinkEngineClient()
+        coeiroinkClient: CoeiroinkEngineClient = CoeiroinkEngineClient(),
+        voicepeakClient: VoicepeakEngineClient = VoicepeakEngineClient()
     ) {
         voicevoxSynthesizer = VoicevoxSpeechSynthesizer(client: voicevoxClient)
         coeiroinkSynthesizer = CoeiroinkSpeechSynthesizer(client: coeiroinkClient)
+        voicepeakSynthesizer = VoicepeakSpeechSynthesizer(client: voicepeakClient)
     }
 
     public func speak(_ request: SpeechSynthesisRequest) async throws {
@@ -133,6 +140,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
             try await voicevoxSynthesizer.speak(request)
         case .coeiroink:
             try await coeiroinkSynthesizer.speak(request)
+        case .voicepeak:
+            try await voicepeakSynthesizer.speak(request)
         }
     }
 
@@ -140,6 +149,7 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         systemSynthesizer.stop()
         voicevoxSynthesizer.stop()
         coeiroinkSynthesizer.stop()
+        voicepeakSynthesizer.stop()
     }
 }
 

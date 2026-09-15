@@ -177,7 +177,7 @@ final class SpeechAudioDataPlayer: NSObject, AVAudioPlayerDelegate {
     private var player: AVAudioPlayer?
     private var continuation: CheckedContinuation<Void, Error>?
 
-    func play(_ data: Data) async throws {
+    func play(_ data: Data, volume: Float = 1) async throws {
         stop()
         let player: AVAudioPlayer
         do {
@@ -186,6 +186,7 @@ final class SpeechAudioDataPlayer: NSObject, AVAudioPlayerDelegate {
             throw SpeechServiceError.audioPlaybackFailed
         }
         player.delegate = self
+        player.volume = min(max(volume, 0), 1)
         self.player = player
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
