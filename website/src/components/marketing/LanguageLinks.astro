@@ -1,0 +1,12 @@
+---
+import { localeCodes, locales, localePath, languageLabels } from '../../i18n.mjs';
+const { locale, route = '' } = Astro.props;
+---
+<div class="languages" aria-label="Language / 言語">
+  {localeCodes.map(code => (
+    <a lang={locales[code].meta.htmlLang} hreflang={locales[code].meta.htmlLang}
+       href={localePath(code, route)} aria-current={code === locale ? 'page' : undefined}>
+      {languageLabels[code]}
+    </a>
+  ))}
+</div>

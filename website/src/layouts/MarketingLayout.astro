@@ -1,0 +1,47 @@
+---
+import { locales, localeCodes, localePath } from '../i18n.mjs';
+import { origin, siteURL, repositoryURL } from '../site.mjs';
+import '../styles/marketing.css';
+const { locale, guide = false } = Astro.props;
+const { meta, guide: guideCopy } = locales[locale];
+const { title, description } = guide ? guideCopy : meta;
+const route = guide ? 'getting-started/' : '';
+const canonical = origin + localePath(locale, route);
+const image = siteURL('assets/utatane-icon.png');
+const structuredData = guide ? {
+  '@context': 'https://schema.org', '@type': 'WebPage', name: title,
+  description, inLanguage: meta.htmlLang, url: canonical,
+  isPartOf: { '@type': 'WebSite', name: 'Utatane', url: siteURL('') },
+  about: { '@type': 'SoftwareApplication', name: 'Utatane', operatingSystem: 'macOS 14 or later' }
+} : {
+  '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'Utatane', alternateName: '転寝',
+  description, inLanguage: meta.htmlLang, operatingSystem: 'macOS 14 or later',
+  applicationCategory: 'DesktopEnhancementApplication', url: canonical,
+  downloadUrl: `${repositoryURL}/releases`, image, softwareRequirements: 'macOS 14 or later',
+  license: 'https://opensource.org/license/mit', codeRepository: repositoryURL,
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'JPY' }
+};
+---
+<!doctype html>
+<html lang={meta.htmlLang}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+    <link rel="canonical" href={canonical} />
+    {localeCodes.map(code => <link rel="alternate" hreflang={locales[code].meta.htmlLang} href={origin + localePath(code, route)} />)}
+    <link rel="alternate" hreflang="x-default" href={origin + localePath('ja', route)} />
+    <meta property="og:type" content={guide ? 'article' : 'website'} />
+    <meta property="og:locale" content={meta.ogLocale} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:site_name" content="Utatane" />
+    <meta property="og:image" content={image} />
+    <meta name="twitter:card" content="summary" />
+    <script type="application/ld+json" set:html={JSON.stringify(structuredData).replaceAll('<', '\\u003c')} />
+    <link rel="icon" href={siteURL('assets/utatane-icon.png')} />
+  </head>
+  <body><slot /></body>
+</html>

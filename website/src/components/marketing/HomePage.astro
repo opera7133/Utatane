@@ -1,0 +1,96 @@
+---
+import MarketingLayout from '../../layouts/MarketingLayout.astro';
+import MarketingHeader from './MarketingHeader.astro';
+import MarketingFooter from './MarketingFooter.astro';
+import { translations, localePath } from '../../i18n.mjs';
+import { sitePath } from '../../site.mjs';
+const { locale } = Astro.props;
+const t = translations(locale);
+---
+<MarketingLayout locale={locale}>
+
+<div class="wrap">
+<MarketingHeader locale={locale} />
+<main id="top">
+<section class="hero" aria-labelledby="title">
+<div><p class="eyebrow">UKAGAKA, ON YOUR MAC.</p><div class="title-block"><h1 id="title" aria-label="Utatane / 転寝"><span class="title-word title-latin" aria-hidden="true">Utatane</span><span class="title-word title-kanji" aria-hidden="true" lang="ja">転寝</span></h1><button type="button" id="motion-toggle" aria-pressed="false" hidden>動きを止める</button></div>
+<p class="lead">{t('a-little-company-for-your-desktop')}</p>
+<p class="intro">{t('they-chat-change-outfits-and-sometimes-ask-for-a-little-attention')}</p>
+<a class="button" href="#install"><span>{t('get-started-on-mac')}</span> <span aria-hidden="true">↓</span></a>
+<p class="small">{t('macos-14-or-later-apple-silicon-intel')}</p>
+</div>
+<figure><picture><source srcset={sitePath("assets/utatane-screenshot.webp")} type="image/webp"><img src={sitePath("assets/utatane-screenshot.png")} width="700" height="447" decoding="async" fetchpriority="high" alt={t('ria-the-bundled-ghost-running-in-utatane-on-macos')}></picture>
+<figcaption><span>{t('bundled-ghost-ria-and-the-ria-balloon')}</span><span>01 / DESKTOP</span></figcaption></figure>
+</section>
+<div class="factline">
+<p><strong>{t('made-for-macos')}</strong><span>{t('supported-engines-run-natively')}</span></p>
+<p><strong>{t('a-character-included-from-the-start')}</strong><span>{t('meet-ria-with-a-dialogue-balloon-included')}</span></p>
+<p><strong>{t('compatibility-in-progress')}</strong><span>{t('not-a-complete-replacement-for-ssp')}</span></p>
+</div>
+<section class="section" id="experience">
+<div class="section-head"><div><p class="eyebrow">01 / EVERYDAY COMPANY</p><h2>{t('let-them-linger-or-say-hello')}</h2></div>
+<p>{t('a-ghost-is-a-ukagaka-character-and-its-dialogue-utatane-gives-it')}</p></div>
+<div class="feature-list">
+<article class="feature"><span class="number">01</span><h3>{t('a-two-way-conversation')}</h3><p>{t('click-pet-or-choose-a-reply-each-ghost-has-its-own-conversations')}</p></article>
+<article class="feature"><span class="number">02</span><h3>{t('make-room-for-your-style')}</h3><p>{t('switch-shells-and-balloons-and-adjust-their-size-supported-ghosts')}</p></article>
+<article class="feature"><span class="number">03</span><h3>{t('meet-someone-new')}</h3><p>{t('install-a-distributed-nar-file-or-import-ghosts-and-balloons-from')}</p></article>
+<article class="feature"><span class="number">04</span><h3>{t('capture-them-in-one-window')}</h3><p>{t('window-mode-keeps-ghosts-and-balloons-together-with-selectable-ba')}</p></article>
+</div>
+<aside class="engine-support" aria-labelledby="engine-support-title">
+<p class="engine-title" id="engine-support-title">{t('how-dialogue-engines-run')}</p>
+<dl>
+<div><dt>{t('runs-in-utatane')}</dt><dd><strong>YAYA(文) / KAGARI / SHIOLINK (MiyoJS等) / 里々 / 華和梨 / 美坂 / 灯 / ese-shiori / 偽栞 / 忍 / 翡翠 / 結奈</strong><span>{t('supported-versions-run-natively-on-macos-with-no-wine-setup-requi')}</span></dd></div>
+<div><dt>{t('runs-with-an-additional-runtime')}</dt><dd><strong>里珠 (Proxy)</strong><span>{t('experimental-support-connects-to-the-perl-script-bundled-with-the')}</span></dd></div>
+<div><dt>{t('wine-for-some-add-ons')}</dt><dd>{t('wine-may-still-be-needed-when-a-ghost-depends-on-separate-windows')}</dd></div>
+</dl>
+</aside>
+</section>
+<section class="compatibility" id="compatibility">
+<p class="eyebrow">02 / BEFORE YOU BRING YOUR GHOST</p>
+<div class="compat-intro"><h2>{t('not-every-ghost-is-at-home-yet')}</h2><p>{t('even-ghosts-using-the-same-engine-can-depend-on-different-feature')}</p></div>
+<dl class="status-list">
+<div class="status-row"><dt>{t('supported')}</dt><dd>{t('basic-rendering-dialogue-mouse-interaction-nar-installation-and-i')}</dd></div>
+<div class="status-row"><dt>{t('depends-on-the-ghost')}</dt><dd>{t('some-sakurascript-seriko-and-outfit-definitions-are-unsupported-w')}</dd></div>
+<div class="status-row"><dt>{t('release-cadence')}</dt><dd>{t('releases-are-published-in-small-rolling-style-increments-a-regula')}</dd></div>
+<div class="status-row"><dt>{t('not-supported-yet')}</dt><dd>{t('windows-specific-fmo-some-sakurascript-and-seriko-features-and-so')}</dd></div>
+</dl>
+<div class="compat-links"><a href="https://github.com/opera7133/Utatane/blob/main/Docs/Support/Compatibility.md"><span>{t('ghost-compatibility')}</span> <span aria-hidden="true">↗</span></a><a href="https://github.com/opera7133/Utatane/blob/main/Docs/Support/Native-SHIORI.md"><span>{t('engines-and-dll-support')}</span> <span aria-hidden="true">↗</span></a></div>
+</section>
+<section class="install" id="install">
+<div class="section-head"><div><p class="eyebrow">03 / MAKE YOURSELF AT HOME</p><h2>{t('download-and-get-started')}</h2></div>
+<div class="release-meta">
+<p><a id="release-link" href="https://github.com/opera7133/Utatane/releases"><span class="release-label">{t('all-releases')}</span></a><span id="release-kind"></span></p>
+<p id="release-status" class="release-status" role="status" aria-live="polite"><span>{t('find-the-latest-download-on-github-releases')}</span></p>
+<a class="button" id="download-link" href="https://github.com/opera7133/Utatane/releases"><span id="download-label">{t('view-downloads')}</span><span aria-hidden="true">↓</span></a>
+</div></div>
+<ol class="steps">
+<li><h3>{t('download')}</h3><p>{t('get-utatane-macos-zip-from-the-latest-release-it-supports-both-ap')}</p></li>
+<li><h3>{t('move-the-app')}</h3><p>{t('unzip-the-download-and-move-utatane-app-to-your-applications-fold')}</p></li>
+<li><h3>{t('say-hello')}</h3><p>{t('open-utatane-to-display-ria-the-included-character-you-can-add-ot')}</p></li>
+</ol>
+<details class="security"><summary><span>{t('if-macos-blocks-the-first-launch')}</span></summary>
+<p>{t('current-development-builds-are-unsigned-verify-the-download-sourc')}</p>
+<p>{t('alternatively-move-the-app-to-applications-then-run-the-following')}</p>
+<pre><code>sudo xattr -rc "/Applications/Utatane.app"</code></pre>
+<p>{t('this-recursively-removes-extended-attributes-including-quarantine')}</p>
+<p><a href="https://github.com/opera7133/Utatane/releases"><span>{t('check-release-notes-and-scan-reports')}</span> <span aria-hidden="true">↗</span></a></p>
+</details>
+</section>
+<section class="section faq" id="questions">
+<div><p class="eyebrow">04 / A FEW MORE THINGS</p><h2>{t('a-few-things-to-know')}</h2></div>
+<div class="questions">
+<details><summary><span>{t('what-is-ukagaka')}</span></summary><p>{t('ukagaka-is-a-system-and-culture-for-keeping-characters-on-your-de')}</p></details>
+<details><summary><span>{t('do-i-need-wine')}</span></summary><p>{t('supported-yaya-aya-kagari-shiolink-miyojs-etc-satori-kawari-misak')}</p></details>
+<details><summary><span>{t('can-i-run-sakura-and-unyuu')}</span></summary><p>{t('the-supported-version-of-materia-s-first-can-run-without-wine-thr')}</p></details>
+<details><summary><span>{t('does-it-support-other-languages')}</span></summary><p>{t('the-app-and-this-page-support-japanese-english-simplified-chinese')}</p></details>
+<details><summary><span>{t('what-if-something-doesn-t-work')}</span></summary><p>{t('please-report-the-ghost-s-name-your-utatane-version-and-what-happ')}</p><p><a href="https://github.com/opera7133/Utatane/issues/new/choose"><span>{t('report-an-issue')}</span> <span aria-hidden="true">↗</span></a></p></details>
+</div>
+</section>
+<aside class="experiments"><p>{t('for-the-curious-alongside-sstp-and-rss-headline-support-there-are')}</p><a href="https://github.com/opera7133/Utatane#readme"><span>{t('read-more')}</span> <span aria-hidden="true">↗</span></a></aside>
+</main>
+<MarketingFooter locale={locale} />
+</div>
+
+
+<script>import '../../scripts/marketing.js';</script>
+</MarketingLayout>

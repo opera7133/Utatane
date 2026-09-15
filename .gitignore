@@ -19,6 +19,11 @@ dist
 build
 apps/Utatane/Resources/*Host
 
+# Web build inputs generated from Docs
+website/node_modules/
+website/.astro/
+website/src/content/docs/
+
 # Ghost local extensions
 Content/Bundled/Ghosts/*/shell/master/*_local.*
 Content/Bundled/Ghosts/*/shell/master/surface[3-9]*.png

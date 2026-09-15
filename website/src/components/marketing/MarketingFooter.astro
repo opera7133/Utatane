@@ -1,0 +1,15 @@
+---
+import { translations } from '../../i18n.mjs';
+import { sitePath } from '../../site.mjs';
+const { locale } = Astro.props;
+const t = translations(locale);
+---
+<footer>
+<div class="footer-top"><strong>Utatane / 転寝</strong><nav aria-label="Project links"><a href="https://github.com/opera7133/Utatane"><span>{t('source-code')}</span> <span aria-hidden="true">↗</span></a><a href="https://github.com/opera7133/Utatane/releases"><span>{t('releases')}</span> <span aria-hidden="true">↗</span></a><a href="https://github.com/opera7133/Utatane/issues/new/choose"><span>{t('issues')}</span> <span aria-hidden="true">↗</span></a></nav></div>
+<div class="credits">
+<p>{t('the-app-is-released-under-the-mit-license-ghosts-shells-and-ballo')}</p>
+<p><span>{t('ria-s-shell-is-based-on-p016-nebusoku-by-bottleneko-balloon-based')}</span>{' '}
+<a href="https://catbottle.sakura.ne.jp/souko_fs.html"><span>{t('shell-author')}</span> <span aria-hidden="true">↗</span></a> · <a href="https://github.com/lost-nd-xxx/something_like_balloon"><span>{t('balloon-source')}</span> <span aria-hidden="true">↗</span></a></p>
+</div>
+<div class="bottom"><span>© 2026 wamo.</span><a href={sitePath("simple.html")}><span>{t('simple-information-page')}</span> <span aria-hidden="true">↗</span></a></div>
+</footer>

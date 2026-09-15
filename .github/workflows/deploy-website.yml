@@ -5,8 +5,10 @@ on:
     branches: [main]
     paths:
       - "website/**"
+      - "Docs/**"
+      - "apps/Utatane/Resources/UtataneHelp.html"
+      - "project.yml"
       - "Scripts/test-website.cjs"
-      - "Scripts/generate-website-locales.cjs"
       - ".github/workflows/deploy-website.yml"
   workflow_dispatch:
 
@@ -21,8 +23,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Install website dependencies
+        working-directory: website
+        run: bun install --frozen-lockfile
+
       - name: Test website
-        run: node Scripts/generate-website-locales.cjs --check && node Scripts/test-website.cjs
+        working-directory: website
+        run: bun run check && bun run build && bun run test
 
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install --yes lftp
@@ -50,6 +67,6 @@ jobs:
           set ssl:verify-certificate true
           set net:max-retries 3
           set net:timeout 20
-          mirror --reverse --verbose --parallel=4 --exclude-glob .DS_Store --exclude-glob '*/.DS_Store' website "$DEPLOY_TARGET"
+          mirror --reverse --verbose --parallel=4 --exclude-glob .DS_Store --exclude-glob '*/.DS_Store' website/dist "$DEPLOY_TARGET"
           bye
           LFTP

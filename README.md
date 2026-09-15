@@ -55,7 +55,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - OpenAI Realtime APIまたは互換APIへ接続するリアルタイム音声会話
 - ゴーストのAI連携
 
-詳しくは[Native SHIORI / SAORI](Docs/Native-SHIORI.md)を参照してください。
+詳しくは[Native SHIORI / SAORI](Docs/Support/Native-SHIORI.md)を参照してください。
 
 </details>
 
@@ -126,17 +126,18 @@ Content/Local/
 └── Ghosts/first/
 ```
 
-ネイティブ経路は元の`first.dll`や`var/first.txt`を書き換えません。眠気に関係する値など、Utatane上で変化した状態は`~/Library/Application Support/Utatane/State/FIRST/`へ別保存します。現時点の対応範囲と技術的な制約は[Native SHIORI / SAORI](Docs/Native-SHIORI.md)を参照してください。
+ネイティブ経路は元の`first.dll`や`var/first.txt`を書き換えません。眠気に関係する値など、Utatane上で変化した状態は`~/Library/Application Support/Utatane/State/FIRST/`へ別保存します。現時点の対応範囲と技術的な制約は[Native SHIORI / SAORI](Docs/Support/Native-SHIORI.md)を参照してください。
 
 </details>
 
 ## もう少し詳しい話
 
 - [ドキュメント一覧](Docs/README.md)
+- [Webドキュメント](https://dl.wmsci.com/utatane/docs/) / [はじめてのUtatane](Docs/Guide/Getting-Started.md)
 - [変更履歴](CHANGELOG.md)
-- [ウィンドウモード](Docs/Window-Mode.md)
-- [ゴースト・SHIORI・SAORI制作者向けUtatane対応ガイド](Docs/Content-Authoring.md)
-- [ゴースト互換状況](Docs/Compatibility.md)
+- [ウィンドウモード](Docs/Guide/Window-Mode.md)
+- [ゴースト・SHIORI・SAORI制作者向けUtatane対応ガイド](Docs/Creators/Content-Authoring.md)
+- [ゴースト互換状況](Docs/Support/Compatibility.md)
 
 ## ライセンス
 

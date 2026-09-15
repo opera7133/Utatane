@@ -1,0 +1,17 @@
+---
+import DefaultThemeSelect from '@astrojs/starlight/components/ThemeSelect.astro';
+---
+<div class="docs-appearance">
+  <label class="skin-label">スタイル
+    <select data-doc-skin-select aria-label="ドキュメントのスタイル">
+      <option value="paper">標準</option>
+      <option value="glass">ガラス</option>
+      <option value="classic">クラシック98</option>
+    </select>
+  </label>
+  <DefaultThemeSelect {...Astro.props} />
+</div>
+<script>
+  import { installSkinSelector } from '../scripts/skin.mjs';
+  installSkinSelector();
+</script>

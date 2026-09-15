@@ -1,0 +1,37 @@
+---
+import MarketingLayout from '../../layouts/MarketingLayout.astro';
+import MarketingHeader from './MarketingHeader.astro';
+import { locales, localePath } from '../../i18n.mjs';
+import { sitePath } from '../../site.mjs';
+const { locale } = Astro.props;
+const content = locales[locale].guide;
+const tabs = {
+  ja: ['伺か初心者', '気付けば何年目'], en: ['New to Ukagaka', 'Been here for years'],
+  'zh-Hans': ['伺か新手', '多年老用户'], 'zh-Hant': ['伺か新手', '多年老使用者'],
+  ko: ['우카가카 입문자', '어느새 수년째']
+}[locale];
+const panels = [['beginner', content.sections.slice(0, 3)], ['veteran', content.sections.slice(3)]];
+// Maintained article fragments in our translation data, not external HTML pages.
+const bodyFor = body => body.replaceAll('href="/utatane/', `href="${sitePath('')}`);
+---
+<MarketingLayout locale={locale} guide>
+  <div class="wrap">
+    <MarketingHeader locale={locale} guide />
+    <main class="guide-page">
+      <header class="guide-hero"><p class="eyebrow">{content.label}</p><h1>{content.heading}</h1><p class="lead">{content.lead}</p></header>
+      <div class="guide-tabs" role="tablist" aria-label={content.guide}>
+        {panels.map(([id], index) => <button type="button" role="tab" id={`tab-${id}`} aria-controls={`panel-${id}`} aria-selected={index === 0 ? 'true' : 'false'}>{tabs[index]}</button>)}
+      </div>
+      <div class="guide-panels">
+        {panels.map(([id, sections]) => (
+          <div class="guide-sections" id={`panel-${id}`} role="tabpanel" aria-labelledby={`tab-${id}`}>
+            {sections.map(([number, heading, body]) => <section class="guide-section"><p class="number">{number}</p><div><h2>{heading}</h2><Fragment set:html={bodyFor(body)} /></div></section>)}
+          </div>
+        ))}
+      </div>
+      <aside class="guide-help"><h2>{content.issue}</h2><p>{content.trouble}</p><a href="https://github.com/opera7133/Utatane/issues/new/choose">{content.issue} <span aria-hidden="true">↗</span></a></aside>
+    </main>
+    <footer><div class="bottom"><span>© 2026 wamo.</span><a href={localePath(locale)}>{content.back}</a></div></footer>
+  </div>
+  <script>import '../../scripts/guide-tabs.js';</script>
+</MarketingLayout>

@@ -1,0 +1,168 @@
+{
+  "groups": [
+    {
+      "label": "はじめに",
+      "pages": [
+        {
+          "file": "Guide/Getting-Started.md",
+          "slug": "start",
+          "title": "はじめてのUtatane",
+          "help": true
+        },
+        {
+          "file": "Guide/Basic-Operations.md",
+          "slug": "use/basics",
+          "title": "ゴーストと遊ぶ",
+          "help": true
+        }
+      ]
+    },
+    {
+      "label": "Utataneを使う",
+      "pages": [
+        {
+          "file": "Guide/Content.md",
+          "slug": "use/content",
+          "title": "コンテンツを管理する",
+          "help": true
+        },
+        {
+          "file": "Guide/Settings.md",
+          "slug": "use/settings",
+          "title": "設定を調整する",
+          "help": true
+        },
+        {
+          "file": "Guide/Window-Mode.md",
+          "slug": "use/window-mode",
+          "title": "ウィンドウモードと発話履歴",
+          "help": true
+        },
+        {
+          "file": "Guide/Speech.md",
+          "slug": "use/speech",
+          "title": "音声合成・音声認識",
+          "help": true
+        },
+        {
+          "file": "Guide/Features.md",
+          "slug": "use/features",
+          "title": "カレンダー・ニュース・拡張",
+          "help": true
+        },
+        {
+          "file": "Guide/IP-Messenger.md",
+          "slug": "use/ip-messenger",
+          "title": "IP Messenger",
+          "help": true
+        },
+        {
+          "file": "Guide/Realtime-Voice.md",
+          "slug": "use/realtime-voice",
+          "title": "Realtime音声会話",
+          "help": true
+        },
+        {
+          "file": "Guide/Storage.md",
+          "slug": "use/storage",
+          "title": "保存場所とバックアップ",
+          "help": true
+        },
+        {
+          "file": "Guide/Shortcuts.md",
+          "slug": "use/shortcuts",
+          "title": "メニューとショートカット",
+          "help": true
+        }
+      ]
+    },
+    {
+      "label": "困ったとき・対応範囲",
+      "pages": [
+        {
+          "file": "Support/Troubleshooting.md",
+          "slug": "support/troubleshooting",
+          "title": "困ったとき",
+          "help": true
+        },
+        {
+          "file": "Support/Compatibility.md",
+          "slug": "support/ghosts",
+          "title": "ゴースト動作確認情報",
+          "help": true
+        },
+        {
+          "file": "Support/Native-SHIORI.md",
+          "slug": "support/engines",
+          "title": "SHIORI・SAORIの対応範囲",
+          "help": true
+        }
+      ]
+    },
+    {
+      "label": "コンテンツを作る・対応させる",
+      "pages": [
+        {
+          "file": "Creators/Content-Authoring.md",
+          "slug": "create/guide",
+          "title": "新規制作とSSP資産への対応"
+        },
+        {
+          "file": "Creators/nijigenerate-shell.md",
+          "slug": "create/nijigenerate",
+          "title": "nijigenerateシェル"
+        },
+        {
+          "file": "Creators/Native-Plugins.md",
+          "slug": "create/plugins",
+          "title": "ネイティブプラグイン"
+        },
+        {
+          "file": "Reference/UKADOC-SakuraScript-Compatibility.md",
+          "slug": "reference/sakurascript",
+          "title": "SakuraScriptの対応状況"
+        },
+        {
+          "file": "Reference/UKADOC-SHIORI-Event-Compatibility.md",
+          "slug": "reference/events",
+          "title": "SHIORIイベントの対応状況"
+        },
+        {
+          "file": "Reference/UKADOC-Text-File-Compatibility.md",
+          "slug": "reference/files",
+          "title": "設定ファイルの対応状況"
+        },
+        {
+          "file": "Reference/UKADOC-SSTP-Compatibility.md",
+          "slug": "reference/sstp",
+          "title": "SSTPの対応状況"
+        }
+      ]
+    },
+    {
+      "label": "Utatane本体を開発する",
+      "pages": [
+        {
+          "file": "Development/Development.md",
+          "slug": "develop/build",
+          "title": "ビルド・テスト・構成"
+        },
+        {
+          "file": "Development/Release.md",
+          "slug": "develop/release",
+          "title": "リリース手順"
+        },
+        {
+          "file": "Development/Documentation.md",
+          "slug": "develop/documentation",
+          "title": "ドキュメントの編集と公開"
+        },
+        {
+          "file": "Development/Coverage.md",
+          "slug": "develop/coverage",
+          "title": "利用者向け説明の範囲"
+        }
+      ]
+    }
+  ]
+}

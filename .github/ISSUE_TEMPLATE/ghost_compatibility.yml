@@ -9,7 +9,7 @@ body:
         Reports in Japanese, English, Simplified Chinese, Traditional Chinese, or Korean are welcome.
         可以用中文填写。可以用中文填寫。한국어로 작성해도 괜찮아요.
 
-        [対応状況](https://github.com/opera7133/Utatane/blob/main/Docs/Compatibility.md)と既存のIssueも確認してください。
+        [対応状況](https://github.com/opera7133/Utatane/blob/main/Docs/Support/Compatibility.md)と既存のIssueも確認してください。
         Please check the compatibility notes and existing issues. Testing in SSP is helpful but not required.
 
         **Issueは公開されます。ゴースト本体や辞書は添付せず、作者の配布ページを教えてください。ログにAPIキーや個人情報がないか確認してください。**

@@ -1,0 +1,14 @@
+---
+import HomePage from '../components/marketing/HomePage.astro';
+import GuidePage from '../components/marketing/GuidePage.astro';
+import { locales } from '../i18n.mjs';
+
+export function getStaticPaths() {
+  return Object.entries(locales).flatMap(([locale, { meta }]) => [
+    { params: { route: meta.directory || undefined }, props: { locale, guide: false } },
+    { params: { route: [meta.directory, 'getting-started'].filter(Boolean).join('/') }, props: { locale, guide: true } }
+  ]);
+}
+const { locale, guide } = Astro.props;
+---
+{guide ? <GuidePage locale={locale} /> : <HomePage locale={locale} />}

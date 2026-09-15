@@ -1,0 +1,22 @@
+---
+import LanguageLinks from './LanguageLinks.astro';
+import { translations, localePath } from '../../i18n.mjs';
+import { sitePath } from '../../site.mjs';
+const { locale, guide = false } = Astro.props;
+const t = translations(locale);
+const home = localePath(locale);
+---
+<header class="topbar">
+  <a class="brand" href={guide ? home : '#top'}>
+    <picture><source srcset={sitePath('assets/utatane-icon.webp')} type="image/webp" />
+      <img src={sitePath('assets/utatane-icon.png')} width="128" height="128" alt="" />
+    </picture>Utatane
+  </a>
+  <nav aria-label="Navigation">
+    <a class="nav-feature" href={guide ? `${home}#experience` : '#experience'}><span>{t('experience')}</span></a>
+    <a href={localePath(locale, 'getting-started/')} aria-current={guide ? 'page' : undefined}><span>{t('guide')}</span></a>
+    <a href={sitePath('docs/')}><span>{t('docs')}</span></a>
+    <a href={guide ? `${home}#install` : '#install'}><span>{t('download')}</span></a>
+    <LanguageLinks locale={locale} route={guide ? 'getting-started/' : ''} />
+  </nav>
+</header>

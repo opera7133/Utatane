@@ -1,0 +1,73 @@
+/* The reading surface stays opaque in all styles. Chrome can be playful. */
+:root {
+  --sl-font: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic", sans-serif;
+  --sl-content-width: 48rem;
+  --sl-sidebar-width: 19rem;
+  --sl-color-accent-low: #0d343e;
+  --sl-color-accent: #49b6ca;
+  --sl-color-accent-high: #bcebf4;
+  --sl-line-height: 1.85;
+}
+:root[data-theme="light"] {
+  --sl-color-white: #1d2631;
+  --sl-color-black: #fff;
+  --sl-color-gray-1: #303a46;
+  --sl-color-gray-2: #475463;
+  --sl-color-gray-3: #647080;
+  --sl-color-gray-4: #b5bdc7;
+  --sl-color-gray-5: #e2e7ed;
+  --sl-color-gray-6: #f5f7fa;
+  --sl-color-gray-7: #fafbfd;
+  --sl-color-accent-low: #e4f5f7;
+  --sl-color-accent: #08748a;
+  --sl-color-accent-high: #065467;
+}
+header.header { background: var(--sl-color-bg-nav); }
+.site-title { font-weight: 650; letter-spacing: -.025em; }
+.site-title img { border-radius: 10px; }
+.sidebar-content { padding-top: 1.5rem; }
+.sidebar-content a { border-radius: 7px; padding-block: .4rem; }
+.sidebar-content summary { padding-block: .45rem; }
+.content-panel { border-top-color: var(--sl-color-hairline); }
+.sl-markdown-content { font-size: 1rem; }
+.sl-markdown-content h2 { margin-top: 2.5rem; letter-spacing: -.025em; }
+.sl-markdown-content table { font-size: .94rem; line-height: 1.75; }
+.sl-markdown-content th { background: var(--sl-color-gray-6); }
+.sl-markdown-content :is(td, th) { padding: .85rem 1rem; }
+.sl-markdown-content :is(a, code) { overflow-wrap: anywhere; }
+.docs-appearance { display: flex; align-items: center; gap: .65rem; }
+.skin-label { display: flex; align-items: center; gap: .4rem; font-size: .8rem; white-space: nowrap; }
+[data-doc-skin-select] { font: inherit; color: inherit; background: var(--sl-color-bg); border: 1px solid var(--sl-color-gray-4); border-radius: 7px; padding: .4rem; min-height: 2rem; }
+:is(a, button, select, input):focus-visible { outline: 3px solid var(--sl-color-accent); outline-offset: 3px; }
+
+/* Glass-inspired CSS, not the native macOS Liquid Glass material. */
+:root[data-doc-skin="glass"] { --sl-color-bg-nav: #eff9facf; --sl-color-bg-sidebar: #eaf5f7d9; }
+:root[data-theme="dark"][data-doc-skin="glass"] { --sl-color-bg-nav: #152a35ed; --sl-color-bg-sidebar: #14232ee8; }
+[data-doc-skin="glass"] body { background: radial-gradient(ellipse at 0 0, #52b9c62b, transparent 65%), radial-gradient(ellipse at 100% 40%, #84b5f12b, transparent 70%), var(--sl-color-bg); }
+[data-doc-skin="glass"] :is(header.header, .sidebar-pane) { backdrop-filter: blur(22px) saturate(130%); -webkit-backdrop-filter: blur(22px) saturate(130%); }
+[data-doc-skin="glass"] header.header { box-shadow: 0 3px 20px #0b334b0d; }
+[data-doc-skin="glass"] .main-pane { background: var(--sl-color-bg); }
+
+/* 98-style bevels and title bar; keep modern font sizing for Japanese text. */
+:root[data-doc-skin="classic"] {
+  --sl-color-bg-nav: #c0c0c0;
+  --sl-color-bg-sidebar: #c0c0c0;
+  --sl-color-hairline: #8b8b8b;
+}
+[data-doc-skin="classic"] :is(header.header, .sidebar-pane) { color: #151515; border: 2px solid; border-color: #fff #707070 #707070 #fff; }
+[data-doc-skin="classic"] .site-title { color: #fff; background: linear-gradient(90deg, #000080, #0877a5); padding: .3rem .7rem; font-size: 1.05rem; letter-spacing: 0; }
+[data-doc-skin="classic"] :is(header.header a, .sidebar-content a, .sidebar-content summary) { color: #151515; }
+[data-doc-skin="classic"] header.header a.site-title { color: #fff; }
+[data-doc-skin="classic"] .sidebar-content a { border-radius: 0; }
+[data-doc-skin="classic"] .sidebar-content a[aria-current="page"] { color: #fff; background: #000080; }
+[data-doc-skin="classic"] :is(select, button) { border-radius: 0; color: #111; background: #c0c0c0; border: 2px solid; border-color: #fff #707070 #707070 #fff; box-shadow: 1px 1px #111; }
+[data-doc-skin="classic"] .sidebar-content ul { border-inline-start: 1px dotted #777; }
+
+@media (max-width: 50rem) { .skin-label { font-size: .75rem; } .docs-appearance { gap: .3rem; } }
+@media (prefers-reduced-transparency: reduce) {
+  [data-doc-skin="glass"] :is(header.header, .sidebar-pane) { background: var(--sl-color-bg); backdrop-filter: none; -webkit-backdrop-filter: none; }
+}
+@media print {
+  header.header, .sidebar-pane, .right-sidebar-container { display: none !important; }
+  .main-pane { margin: 0 !important; width: 100% !important; }
+}

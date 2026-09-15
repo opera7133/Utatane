@@ -1,0 +1,19 @@
+{
+  "name": "utatane-website",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare-content": "node scripts/prepare-content.mjs",
+    "dev": "npm run prepare-content && astro dev",
+    "build": "node scripts/prepare-content.mjs --clean-build && astro build && node scripts/finalize-build.mjs",
+    "preview": "astro preview",
+    "help": "node scripts/build-help.mjs",
+    "check": "node scripts/check-sources.mjs && node ../Scripts/test-website.cjs && node scripts/build-help.mjs --check",
+    "test": "node scripts/test-build.mjs && node scripts/test-routes.mjs"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "0.42.0",
+    "astro": "7.3.2",
+    "marked": "18.0.13"
+  }
+}

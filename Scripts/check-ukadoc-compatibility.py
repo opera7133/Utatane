@@ -6,7 +6,7 @@ import sys
 
 
 ROOT = Path(__file__).resolve().parent.parent
-DOCUMENT = ROOT / "Docs" / "UKADOC-Text-File-Compatibility.md"
+DOCUMENT = ROOT / "Docs" / "Reference" / "UKADOC-Text-File-Compatibility.md"
 SOURCE_ROOTS = (ROOT / "packages", ROOT / "apps")
 
 # Add a claimed syntax here when the compatibility table starts describing it as
