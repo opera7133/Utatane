@@ -19,6 +19,10 @@ final class UtataneSettingsStore: ObservableObject {
         var coeiroinkStyleIdentifier = "0"
         var voicepeakExecutablePath = "/Applications/voicepeak.app/Contents/MacOS/voicepeak"
         var voicepeakNarrator = ""
+        var voisonaTalkBaseURL = "http://127.0.0.1:32766/api/talk/v1"
+        var voisonaTalkVoiceName = ""
+        var voisonaTalkVoiceVersion = ""
+        var voisonaTalkLanguage = "ja_JP"
         var rate = 0.5
         var volume = 1.0
         var pitch = 1.0
@@ -28,6 +32,7 @@ final class UtataneSettingsStore: ObservableObject {
                 provider: provider,
                 voiceIdentifier: selectedVoiceIdentifier,
                 voiceGroupIdentifier: selectedVoiceGroupIdentifier,
+                voiceLanguageIdentifier: selectedVoiceLanguageIdentifier,
                 serviceURL: selectedServiceURL,
                 rate: Float(rate),
                 volume: Float(volume),
@@ -41,13 +46,23 @@ final class UtataneSettingsStore: ObservableObject {
             case .voicevoxCompatible: localAPIVoiceIdentifier
             case .coeiroink: coeiroinkStyleIdentifier
             case .voicepeak: voicepeakNarrator
+            case .voisonaTalk: voisonaTalkVoiceName
             }
             return identifier.isEmpty ? nil : identifier
         }
 
         private var selectedVoiceGroupIdentifier: String? {
-            guard provider == .coeiroink, !coeiroinkSpeakerUUID.isEmpty else { return nil }
-            return coeiroinkSpeakerUUID
+            let identifier = switch provider {
+            case .coeiroink: coeiroinkSpeakerUUID
+            case .voisonaTalk: voisonaTalkVoiceVersion
+            default: ""
+            }
+            return identifier.isEmpty ? nil : identifier
+        }
+
+        private var selectedVoiceLanguageIdentifier: String? {
+            guard provider == .voisonaTalk, !voisonaTalkLanguage.isEmpty else { return nil }
+            return voisonaTalkLanguage
         }
 
         private var selectedServiceURL: URL? {
@@ -56,6 +71,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .voicevoxCompatible: URL(string: localAPIBaseURL)
             case .coeiroink: URL(string: coeiroinkBaseURL)
             case .voicepeak: URL(fileURLWithPath: voicepeakExecutablePath)
+            case .voisonaTalk: URL(string: voisonaTalkBaseURL)
             }
         }
 
@@ -69,6 +85,10 @@ final class UtataneSettingsStore: ObservableObject {
             case coeiroinkStyleIdentifier
             case voicepeakExecutablePath
             case voicepeakNarrator
+            case voisonaTalkBaseURL
+            case voisonaTalkVoiceName
+            case voisonaTalkVoiceVersion
+            case voisonaTalkLanguage
             case rate
             case volume
             case pitch
@@ -92,6 +112,11 @@ final class UtataneSettingsStore: ObservableObject {
             voicepeakExecutablePath = try values.decodeIfPresent(String.self, forKey: .voicepeakExecutablePath)
                 ?? "/Applications/voicepeak.app/Contents/MacOS/voicepeak"
             voicepeakNarrator = try values.decodeIfPresent(String.self, forKey: .voicepeakNarrator) ?? ""
+            voisonaTalkBaseURL = try values.decodeIfPresent(String.self, forKey: .voisonaTalkBaseURL)
+                ?? "http://127.0.0.1:32766/api/talk/v1"
+            voisonaTalkVoiceName = try values.decodeIfPresent(String.self, forKey: .voisonaTalkVoiceName) ?? ""
+            voisonaTalkVoiceVersion = try values.decodeIfPresent(String.self, forKey: .voisonaTalkVoiceVersion) ?? ""
+            voisonaTalkLanguage = try values.decodeIfPresent(String.self, forKey: .voisonaTalkLanguage) ?? "ja_JP"
             rate = try values.decodeIfPresent(Double.self, forKey: .rate) ?? 0.5
             volume = try values.decodeIfPresent(Double.self, forKey: .volume) ?? 1
             pitch = try values.decodeIfPresent(Double.self, forKey: .pitch) ?? 1
@@ -863,6 +888,7 @@ struct UtataneSettingsView: View {
                     ForEach([0, 1], id: \.self) { scope in
                         SpeechVoiceSettingsEditor(
                             title: scope == 0 ? "本体（スコープ0）" : "相方（スコープ1）",
+                            scope: scope,
                             voices: MacOSSpeechSynthesizer.availableVoices,
                             settings: Binding(
                                 get: { settings.speechVoiceSettings(for: scope) },
@@ -1073,12 +1099,27 @@ struct UtataneSettingsView: View {
 
 private struct SpeechVoiceSettingsEditor: View {
     let title: String
+    let scope: Int
     let voices: [SpeechSynthesisVoice]
     @Binding var settings: UtataneSettingsStore.SpeechVoiceSettings
+    @State private var voisonaTalkCredential: SpeechCredentialStore.Credential
     @State private var localAPIVoices: [SpeechSynthesisVoice] = []
     @State private var localAPIVoiceCount: Int?
     @State private var localAPIError: String?
     @State private var loadsLocalAPIVoices = false
+
+    init(
+        title: String,
+        scope: Int,
+        voices: [SpeechSynthesisVoice],
+        settings: Binding<UtataneSettingsStore.SpeechVoiceSettings>
+    ) {
+        self.title = title
+        self.scope = scope
+        self.voices = voices
+        _settings = settings
+        _voisonaTalkCredential = State(initialValue: SpeechCredentialStore.load(scope: scope))
+    }
 
     var body: some View {
         GroupBox(title) {
@@ -1090,6 +1131,7 @@ private struct SpeechVoiceSettingsEditor: View {
                         Text("VOICEVOX互換API").tag(SpeechSynthesisProvider.voicevoxCompatible)
                         Text("COEIROINK v2").tag(SpeechSynthesisProvider.coeiroink)
                         Text("VOICEPEAK").tag(SpeechSynthesisProvider.voicepeak)
+                        Text("VoiSona Talk").tag(SpeechSynthesisProvider.voisonaTalk)
                     }
                     .labelsHidden()
                 }
@@ -1107,25 +1149,49 @@ private struct SpeechVoiceSettingsEditor: View {
                 } else {
                     GridRow {
                         Text(settings.provider == .voicepeak ? "実行ファイル" : "API URL")
-                        TextField(externalServicePlaceholder, text: externalServiceLocation)
+                        TextField("", text: externalServiceLocation, prompt: Text(externalServicePlaceholder))
                             .textFieldStyle(.roundedBorder)
                     }
                     if settings.provider == .coeiroink {
                         GridRow {
                             Text("話者UUID")
-                            TextField("speakerUuid", text: $settings.coeiroinkSpeakerUUID)
+                            TextField("", text: $settings.coeiroinkSpeakerUUID, prompt: Text("speakerUuid"))
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+                    if settings.provider == .voisonaTalk {
+                        GridRow {
+                            Text("APIユーザー名")
+                            TextField("", text: $voisonaTalkCredential.username, prompt: Text("name@example.com"))
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        GridRow {
+                            Text("APIパスワード")
+                            SecureField("", text: $voisonaTalkCredential.password, prompt: Text("APIパスワード"))
                                 .textFieldStyle(.roundedBorder)
                         }
                     }
                     GridRow {
                         Text(externalVoiceIdentifierLabel)
                         HStack {
-                            TextField("0", text: externalVoiceIdentifier)
+                            TextField("", text: externalVoiceIdentifier, prompt: Text(externalVoiceIdentifierPlaceholder))
                                 .textFieldStyle(.roundedBorder)
                             Button("話者一覧を取得") {
                                 Task { await loadLocalAPIVoices() }
                             }
                             .disabled(loadsLocalAPIVoices)
+                        }
+                    }
+                    if settings.provider == .voisonaTalk {
+                        GridRow {
+                            Text("ボイスバージョン")
+                            TextField("", text: $settings.voisonaTalkVoiceVersion, prompt: Text("1.0.0"))
+                                .textFieldStyle(.roundedBorder)
+                        }
+                        GridRow {
+                            Text("言語")
+                            TextField("", text: $settings.voisonaTalkLanguage, prompt: Text("ja_JP"))
+                                .textFieldStyle(.roundedBorder)
                         }
                     }
                     if !localAPIVoices.isEmpty {
@@ -1187,6 +1253,13 @@ private struct SpeechVoiceSettingsEditor: View {
         .onChange(of: settings.voicepeakExecutablePath) {
             resetLocalAPIVoices()
         }
+        .onChange(of: settings.voisonaTalkBaseURL) {
+            resetLocalAPIVoices()
+        }
+        .onChange(of: voisonaTalkCredential) {
+            SpeechCredentialStore.save(voisonaTalkCredential, scope: scope)
+            resetLocalAPIVoices()
+        }
     }
 
     private var externalServiceLocation: Binding<String> {
@@ -1196,6 +1269,7 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .macOS, .voicevoxCompatible: settings.localAPIBaseURL
                 case .coeiroink: settings.coeiroinkBaseURL
                 case .voicepeak: settings.voicepeakExecutablePath
+                case .voisonaTalk: settings.voisonaTalkBaseURL
                 }
             },
             set: { value in
@@ -1206,6 +1280,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.coeiroinkBaseURL = value
                 case .voicepeak:
                     settings.voicepeakExecutablePath = value
+                case .voisonaTalk:
+                    settings.voisonaTalkBaseURL = value
                 }
             }
         )
@@ -1218,6 +1294,7 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .macOS, .voicevoxCompatible: settings.localAPIVoiceIdentifier
                 case .coeiroink: settings.coeiroinkStyleIdentifier
                 case .voicepeak: settings.voicepeakNarrator
+                case .voisonaTalk: settings.voisonaTalkVoiceName
                 }
             },
             set: { value in
@@ -1228,6 +1305,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.coeiroinkStyleIdentifier = value
                 case .voicepeak:
                     settings.voicepeakNarrator = value
+                case .voisonaTalk:
+                    settings.voisonaTalkVoiceName = value
                 }
             }
         )
@@ -1236,11 +1315,19 @@ private struct SpeechVoiceSettingsEditor: View {
     private var externalVoiceSelection: Binding<String> {
         Binding(
             get: {
-                if settings.provider == .coeiroink {
-                    return [settings.coeiroinkSpeakerUUID, settings.coeiroinkStyleIdentifier]
+                switch settings.provider {
+                case .coeiroink:
+                    [settings.coeiroinkSpeakerUUID, settings.coeiroinkStyleIdentifier]
                         .joined(separator: ":")
+                case .voisonaTalk:
+                    [
+                        settings.voisonaTalkVoiceVersion,
+                        settings.voisonaTalkVoiceName,
+                        settings.voisonaTalkLanguage
+                    ].joined(separator: ":")
+                default:
+                    externalVoiceIdentifier.wrappedValue
                 }
-                return externalVoiceIdentifier.wrappedValue
             },
             set: { id in
                 guard let voice = localAPIVoices.first(where: { $0.id == id }) else { return }
@@ -1252,6 +1339,10 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.localAPIVoiceIdentifier = voice.identifier
                 case .voicepeak:
                     settings.voicepeakNarrator = voice.identifier
+                case .voisonaTalk:
+                    settings.voisonaTalkVoiceName = voice.identifier
+                    settings.voisonaTalkVoiceVersion = voice.groupIdentifier ?? ""
+                    settings.voisonaTalkLanguage = voice.languageIdentifier ?? ""
                 }
             }
         )
@@ -1262,6 +1353,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .macOS, .voicevoxCompatible: "http://127.0.0.1:50021"
         case .coeiroink: "http://127.0.0.1:50032"
         case .voicepeak: "/Applications/voicepeak.app/Contents/MacOS/voicepeak"
+        case .voisonaTalk: "http://127.0.0.1:32766/api/talk/v1"
         }
     }
 
@@ -1270,6 +1362,15 @@ private struct SpeechVoiceSettingsEditor: View {
         case .macOS, .voicevoxCompatible: "話者ID"
         case .coeiroink: "スタイルID"
         case .voicepeak: "ナレーター"
+        case .voisonaTalk: "ボイス名"
+        }
+    }
+
+    private var externalVoiceIdentifierPlaceholder: String {
+        switch settings.provider {
+        case .voicepeak: "Japanese Female 1"
+        case .voisonaTalk: "voice-name_ja_JP"
+        default: "0"
         }
     }
 
@@ -1294,6 +1395,11 @@ private struct SpeechVoiceSettingsEditor: View {
             case .voicepeak:
                 try await VoicepeakEngineClient().voices(
                     executableURL: URL(fileURLWithPath: settings.voicepeakExecutablePath)
+                )
+            case .voisonaTalk:
+                try await VoiSonaTalkEngineClient().voices(
+                    serviceURL: externalServiceURL(),
+                    credential: voisonaTalkCredential
                 )
             }
             localAPIVoices = voices

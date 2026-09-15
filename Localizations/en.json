@@ -458,5 +458,9 @@
   "話者" : "Voice",
   "話者一覧を取得中…" : "Loading voices…",
   "話者を%lld件取得した。" : "Loaded %lld voices.",
-  "音声合成プロセスが失敗しました（終了コード %d）：%@" : "The speech synthesis process failed (exit code %d): %@"
+  "音声合成プロセスが失敗しました（終了コード %d）：%@" : "The speech synthesis process failed (exit code %d): %@",
+  "APIユーザー名" : "API Username",
+  "APIパスワード" : "API Password",
+  "ボイスバージョン" : "Voice Version",
+  "音声合成サービスの認証情報が設定されていません。" : "Speech synthesis service credentials are not configured."
 }

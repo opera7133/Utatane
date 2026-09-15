@@ -7,21 +7,30 @@ public enum SpeechSynthesisProvider: String, Codable, CaseIterable, Sendable {
     case voicevoxCompatible
     case coeiroink
     case voicepeak
+    case voisonaTalk
 }
 
 public struct SpeechSynthesisVoice: Identifiable, Sendable, Equatable {
     public let identifier: String
     public let groupIdentifier: String?
+    public let languageIdentifier: String?
     public let name: String
     public let language: String
 
     public var id: String {
-        [groupIdentifier, identifier].compactMap(\.self).joined(separator: ":")
+        [groupIdentifier, identifier, languageIdentifier].compactMap(\.self).joined(separator: ":")
     }
 
-    public init(identifier: String, groupIdentifier: String? = nil, name: String, language: String) {
+    public init(
+        identifier: String,
+        groupIdentifier: String? = nil,
+        languageIdentifier: String? = nil,
+        name: String,
+        language: String
+    ) {
         self.identifier = identifier
         self.groupIdentifier = groupIdentifier
+        self.languageIdentifier = languageIdentifier
         self.name = name
         self.language = language
     }
@@ -31,6 +40,7 @@ public struct SpeechSynthesisConfiguration: Sendable, Equatable {
     public var provider: SpeechSynthesisProvider
     public var voiceIdentifier: String?
     public var voiceGroupIdentifier: String?
+    public var voiceLanguageIdentifier: String?
     public var serviceURL: URL?
     public var rate: Float
     public var volume: Float
@@ -40,6 +50,7 @@ public struct SpeechSynthesisConfiguration: Sendable, Equatable {
         provider: SpeechSynthesisProvider = .macOS,
         voiceIdentifier: String? = nil,
         voiceGroupIdentifier: String? = nil,
+        voiceLanguageIdentifier: String? = nil,
         serviceURL: URL? = nil,
         rate: Float = AVSpeechUtteranceDefaultSpeechRate,
         volume: Float = 1,
@@ -48,6 +59,7 @@ public struct SpeechSynthesisConfiguration: Sendable, Equatable {
         self.provider = provider
         self.voiceIdentifier = voiceIdentifier
         self.voiceGroupIdentifier = voiceGroupIdentifier
+        self.voiceLanguageIdentifier = voiceLanguageIdentifier
         self.serviceURL = serviceURL
         self.rate = rate
         self.volume = volume
@@ -81,6 +93,7 @@ public enum SpeechServiceError: LocalizedError, Equatable {
     case synthesisCancelled
     case invalidServiceURL
     case invalidVoiceIdentifier
+    case serviceCredentialsUnavailable
     case serviceResponse(Int)
     case invalidServiceResponse
     case audioPlaybackFailed
@@ -102,6 +115,8 @@ public enum SpeechServiceError: LocalizedError, Equatable {
             String(localized: "音声合成サービスのURLが正しくありません。")
         case .invalidVoiceIdentifier:
             String(localized: "音声合成サービスの話者IDが正しくありません。")
+        case .serviceCredentialsUnavailable:
+            String(localized: "音声合成サービスの認証情報が設定されていません。")
         case let .serviceResponse(statusCode):
             String(localized: "音声合成サービスがエラーを返しました（HTTP \(statusCode)）。")
         case .invalidServiceResponse:
@@ -120,15 +135,18 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
     private let voicevoxSynthesizer: VoicevoxSpeechSynthesizer
     private let coeiroinkSynthesizer: CoeiroinkSpeechSynthesizer
     private let voicepeakSynthesizer: VoicepeakSpeechSynthesizer
+    private let voisonaTalkSynthesizer: VoiSonaTalkSpeechSynthesizer
 
     public init(
         voicevoxClient: VoicevoxEngineClient = VoicevoxEngineClient(),
         coeiroinkClient: CoeiroinkEngineClient = CoeiroinkEngineClient(),
-        voicepeakClient: VoicepeakEngineClient = VoicepeakEngineClient()
+        voicepeakClient: VoicepeakEngineClient = VoicepeakEngineClient(),
+        voisonaTalkClient: VoiSonaTalkEngineClient = VoiSonaTalkEngineClient()
     ) {
         voicevoxSynthesizer = VoicevoxSpeechSynthesizer(client: voicevoxClient)
         coeiroinkSynthesizer = CoeiroinkSpeechSynthesizer(client: coeiroinkClient)
         voicepeakSynthesizer = VoicepeakSpeechSynthesizer(client: voicepeakClient)
+        voisonaTalkSynthesizer = VoiSonaTalkSpeechSynthesizer(client: voisonaTalkClient)
     }
 
     public func speak(_ request: SpeechSynthesisRequest) async throws {
@@ -142,6 +160,8 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
             try await coeiroinkSynthesizer.speak(request)
         case .voicepeak:
             try await voicepeakSynthesizer.speak(request)
+        case .voisonaTalk:
+            try await voisonaTalkSynthesizer.speak(request)
         }
     }
 
@@ -150,6 +170,7 @@ public final class SpeechSynthesisRouter: SpeechSynthesizing {
         voicevoxSynthesizer.stop()
         coeiroinkSynthesizer.stop()
         voicepeakSynthesizer.stop()
+        voisonaTalkSynthesizer.stop()
     }
 }
 

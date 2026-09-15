@@ -193,6 +193,143 @@ struct SpeechServicesTests {
         #expect(arguments[speedIndex + 1] == "150")
         #expect(arguments[pitchIndex + 1] == "150")
     }
+
+    @Test
+    func `VoiSona Talk lists every installed voice language`() async throws {
+        let capture = RequestCapture()
+        let credential = SpeechCredentialStore.Credential(
+            username: "speaker@example.com",
+            password: "api-secret"
+        )
+        let client = VoiSonaTalkEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                let data = try #require(#"""
+                {
+                  "items": [
+                    {
+                      "display_names": [
+                        {"language":"ja_JP","name":"田中さん"},
+                        {"language":"en_US","name":"Tanaka-san"}
+                      ],
+                      "languages": ["ja_JP", "en_US"],
+                      "voice_name": "tanaka-san",
+                      "voice_version": "2.0.1"
+                    }
+                  ]
+                }
+                """#.data(using: .utf8))
+                return (data, response(for: url))
+            },
+            credentialProvider: { _ in credential }
+        )
+
+        let voices = try await client.voices(
+            serviceURL: #require(URL(string: "http://127.0.0.1:32766/api/talk/v1")),
+            credential: credential
+        )
+
+        #expect(voices.map(\.id) == [
+            "2.0.1:tanaka-san:en_US",
+            "2.0.1:tanaka-san:ja_JP"
+        ])
+        #expect(voices.map(\.name) == ["Tanaka-san", "田中さん"])
+        #expect(await capture.request?.url?.path == "/api/talk/v1/voices")
+        #expect(await capture.request?.value(forHTTPHeaderField: "Authorization") ==
+            "Basic c3BlYWtlckBleGFtcGxlLmNvbTphcGktc2VjcmV0")
+    }
+
+    @Test
+    func `VoiSona Talk writes a temporary WAV and retires its job`() async throws {
+        let capture = RequestSequenceCapture()
+        let credential = SpeechCredentialStore.Credential(
+            username: "speaker@example.com",
+            password: "api-secret"
+        )
+        let client = VoiSonaTalkEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                switch (request.httpMethod ?? "GET", url.path) {
+                case ("POST", "/api/talk/v1/speech-syntheses"):
+                    let bodyData = try #require(request.httpBody)
+                    let body = try #require(try JSONSerialization.jsonObject(with: bodyData) as? [String: Any])
+                    let outputPath = try #require(body["output_file_path"] as? String)
+                    try Data("RIFF-voisona-wave".utf8).write(to: URL(fileURLWithPath: outputPath))
+                    return (Data(#"{"uuid":"job-123"}"#.utf8), response(for: url))
+                case ("GET", "/api/talk/v1/speech-syntheses/job-123"):
+                    return (Data(#"{"state":"succeeded"}"#.utf8), response(for: url))
+                case ("DELETE", "/api/talk/v1/speech-syntheses/job-123"):
+                    return (Data(), response(for: url))
+                default:
+                    Issue.record("Unexpected endpoint: \(request.httpMethod ?? "GET") \(url.path)")
+                    return (Data(), response(for: url, statusCode: 404))
+                }
+            },
+            sleeper: {},
+            credentialProvider: { scope in
+                #expect(scope == 1)
+                return credential
+            }
+        )
+        let serviceURL = try #require(URL(string: "http://localhost:32766/api/talk/v1"))
+        let request = SpeechSynthesisRequest(
+            text: "読み上げ",
+            scope: 1,
+            configuration: SpeechSynthesisConfiguration(
+                provider: .voisonaTalk,
+                voiceIdentifier: "tanaka-san",
+                voiceGroupIdentifier: "2.0.1",
+                voiceLanguageIdentifier: "ja_JP",
+                serviceURL: serviceURL,
+                rate: 0.75,
+                volume: 0.8,
+                pitchMultiplier: 1.5
+            )
+        )
+
+        let audio = try await client.synthesize(request)
+        let requests = await capture.requests
+        let createBodyData = try #require(requests.first?.httpBody)
+        let createBody = try #require(try JSONSerialization.jsonObject(with: createBodyData) as? [String: Any])
+        let parameters = try #require(createBody["global_parameters"] as? [String: Any])
+
+        #expect(audio == Data("RIFF-voisona-wave".utf8))
+        #expect(requests.map { $0.httpMethod ?? "GET" } == ["POST", "GET", "DELETE"])
+        #expect(createBody["destination"] as? String == "file")
+        #expect(createBody["voice_name"] as? String == "tanaka-san")
+        #expect(createBody["voice_version"] as? String == "2.0.1")
+        #expect(createBody["language"] as? String == "ja_JP")
+        #expect(parameters["speed"] as? Double == 1.5)
+        #expect(parameters["pitch"] as? Double == 300)
+    }
+
+    @Test
+    func `VoiSona Talk credentials never leave the loopback host`() async throws {
+        let client = VoiSonaTalkEngineClient(
+            transport: { request in
+                Issue.record("Transport should not receive \(String(describing: request.url))")
+                throw SpeechServiceError.invalidServiceResponse
+            },
+            credentialProvider: { _ in
+                SpeechCredentialStore.Credential(username: "user", password: "secret")
+            }
+        )
+
+        await #expect(throws: SpeechServiceError.invalidServiceURL) {
+            try await client.voices(
+                serviceURL: #require(URL(string: "https://example.com/api/talk/v1")),
+                credential: SpeechCredentialStore.Credential(username: "user", password: "secret")
+            )
+        }
+        await #expect(throws: SpeechServiceError.invalidServiceURL) {
+            try await client.voices(
+                serviceURL: #require(URL(string: "https://127.attacker.example/api/talk/v1")),
+                credential: SpeechCredentialStore.Credential(username: "user", password: "secret")
+            )
+        }
+    }
 }
 
 private actor RequestCapture {
@@ -200,6 +337,14 @@ private actor RequestCapture {
 
     func store(_ request: URLRequest) {
         self.request = request
+    }
+}
+
+private actor RequestSequenceCapture {
+    private(set) var requests: [URLRequest] = []
+
+    func store(_ request: URLRequest) {
+        requests.append(request)
     }
 }
 

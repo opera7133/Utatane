@@ -45,6 +45,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - Materiaの「さくら」をWineなしで実行
 - プラグインの利用（ネイティブ対応SHIORIおよびmacOS向けにビルドされたdylibを使用するプラグインのみ）
 - カレンダー
+- macOS標準音声、VOICEVOX互換API、COEIROINK v2、VOICEPEAK、VoiSona Talkによる発話の読み上げと、macOS標準の音声認識
 
 <details>
 <summary>実験的な機能</summary>
