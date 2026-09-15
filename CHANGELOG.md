@@ -17,7 +17,7 @@
 - macOS標準音声、VOICEVOX互換API（VOICEVOX、VOICEVOX Nemo、SHAREVOX、AivisSpeechなど）、COEIROINK v2、VOICEPEAK、VoiSona Talk、Irodori-TTSなどのOpenAI互換ローカルAPI、OpenAI、ElevenLabs、Aivis Cloud API、Azure Speech、Google Cloud TTS、AITalk WebAPI、CoeFont Cloudでゴーストの発話を読み上げ、スコープごとにエンジン、声、速度、音量、ピッチを設定できるようにした。`\__v`による読み上げ除外と読み替えにも対応
 - macOS標準の音声認識を右クリックメニューまたは本体設定から開始し、確定した認識結果を`OnVoiceRecognitionWord`でゴーストへ通知できるようにした。利用可能な環境ではオンデバイス認識を選べる
 - 音声合成・音声認識の起動時とON/OFF時に、`OnSpeechSynthesisStatus`と`OnVoiceRecognitionStatus`を通知するようにした
-- 同じLAN上のSSP・IP Messengerと直接接続し、メンバーの発見、UTF-8／Shift_JISの平文メッセージ送受信、受信確認と再送を行えるIP Messenger画面を追加。本体設定、操作メニュー、右クリックメニュー、`\![open,messenger]`から利用できる
+- 同じLAN上のSSP・IP Messengerと直接接続し、メンバーの発見、UTF-8／Shift_JISの平文メッセージ送受信、受信確認と再送を行えるIP Messenger画面を追加。本体設定、操作メニュー、右クリックメニュー、`\![open,messenger]`から利用でき、受信本文は外部操作を除いた表示用SakuraScriptとして現在のゴーストで再生する
 
 ## [0.2.2] - 2026-09-13
 

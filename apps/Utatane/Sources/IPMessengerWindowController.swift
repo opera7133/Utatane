@@ -34,6 +34,7 @@ final class IPMessengerWindowController: NSWindowController, ObservableObject {
     @Published var draft = ""
 
     var onOpenSettings: (() -> Void)?
+    var onReceiveMessage: ((IPMessengerReceivedMessage) -> Void)?
 
     private let service = IPMessengerService()
     private var activeConfiguration: IPMessengerConfiguration?
@@ -171,6 +172,7 @@ final class IPMessengerWindowController: NSWindowController, ObservableObject {
             packetNumber: message.packetNumber,
             delivery: .received
         ))
+        onReceiveMessage?(message)
         showMessenger()
         NSApplication.shared.requestUserAttention(.informationalRequest)
     }

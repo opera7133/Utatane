@@ -500,6 +500,9 @@ private struct UtataneRootView: View {
             ipMessengerWindowController.onOpenSettings = {
                 showSettingsPane(.network)
             }
+            ipMessengerWindowController.onReceiveMessage = { message in
+                playIPMessengerMessage(message)
+            }
             applyAppearance()
             gamepadMonitor.onEvent = { id, references in
                 broadcastEvent(.shiori(id: id, references: references))
@@ -911,6 +914,15 @@ private struct UtataneRootView: View {
 
     private func sendEvent(_ event: GhostEvent) {
         sendEvents([event])
+    }
+
+    private func playIPMessengerMessage(_ message: IPMessengerReceivedMessage) {
+        guard !isTransitioningGhost, currentGhost != nil, let balloon else { return }
+        scriptPlayer.play(
+            SakuraScript(rawValue: message.body),
+            balloon: balloon,
+            policy: .externalMessage
+        )
     }
 
     private func sendEvents(_ events: [GhostEvent]) {

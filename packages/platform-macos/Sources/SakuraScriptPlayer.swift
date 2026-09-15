@@ -3,6 +3,57 @@ import CoreText
 import UtataneBalloon
 import UtataneSakuraScript
 
+public enum SakuraScriptPlaybackPolicy: Sendable, Equatable {
+    case trusted
+    case externalMessage
+}
+
+func filteredSakuraScriptTokens(
+    _ tokens: [SakuraScriptToken],
+    policy: SakuraScriptPlaybackPolicy
+) -> [SakuraScriptToken] {
+    guard policy == .externalMessage else { return tokens }
+    return tokens.filter { token in
+        switch token {
+        case .text,
+             .scope,
+             .surface,
+             .namedSurface,
+             .animation,
+             .stopAnimation,
+             .pauseAnimation,
+             .resumeAnimation,
+             .balloonSurface,
+             .lineBreak,
+             .cursorMove,
+             .automaticLineBreak,
+             .partialClear,
+             .wait,
+             .waitUntil,
+             .waitForClick,
+             .balloonTimeout,
+             .balloonWait,
+             .balloonOffset,
+             .balloonAlignment,
+             .balloonMarker,
+             .balloonNumber,
+             .serikoTalk,
+             .autoscroll,
+             .marker,
+             .font,
+             .quickSection,
+             .voiceMode,
+             .synchronizeScopes,
+             .clear,
+             .clearAll,
+             .end:
+            true
+        default:
+            false
+        }
+    }
+}
+
 @MainActor
 public final class SakuraScriptPlayer {
     private static var signaledSyncObjects: Set<String> = []
@@ -200,6 +251,7 @@ public final class SakuraScriptPlayer {
         _ script: SakuraScript,
         balloon: BalloonDefinition,
         characterDelayMilliseconds: Int? = nil,
+        policy: SakuraScriptPlaybackPolicy = .trusted,
         onPresentationReady: (@MainActor () -> Void)? = nil
     ) {
         guard !(preventsUserBreak && playbackTask != nil) else { return }
@@ -216,7 +268,7 @@ public final class SakuraScriptPlayer {
         currentBalloon = balloon
         currentScriptRawValue = script.rawValue
         balloonWindowController.setWaitingForClick(false)
-        var tokens = parser.parse(script)
+        var tokens = filteredSakuraScriptTokens(parser.parse(script), policy: policy)
         let continuesPreviousDialogue = tokens.first == .clearAll
         if continuesPreviousDialogue {
             tokens.removeFirst()
@@ -243,6 +295,7 @@ public final class SakuraScriptPlayer {
         _ script: SakuraScript,
         balloon: BalloonDefinition,
         characterDelayMilliseconds: Int? = nil,
+        policy: SakuraScriptPlaybackPolicy = .trusted,
         onPresentationReady: (@MainActor () -> Void)? = nil
     ) async {
         await withTaskCancellationHandler {
@@ -251,6 +304,7 @@ public final class SakuraScriptPlayer {
                     script,
                     balloon: balloon,
                     characterDelayMilliseconds: characterDelayMilliseconds,
+                    policy: policy,
                     onPresentationReady: onPresentationReady
                 )
                 playbackContinuation = continuation
@@ -265,13 +319,19 @@ public final class SakuraScriptPlayer {
     public func enqueue(
         _ script: SakuraScript,
         balloon: BalloonDefinition,
-        characterDelayMilliseconds: Int? = nil
+        characterDelayMilliseconds: Int? = nil,
+        policy: SakuraScriptPlaybackPolicy = .trusted
     ) {
         let previous = queuedPlaybackTail ?? playbackTask
         let task = Task { @MainActor [weak self] in
             await previous?.value
             guard !Task.isCancelled, let self else { return }
-            play(script, balloon: balloon, characterDelayMilliseconds: characterDelayMilliseconds)
+            play(
+                script,
+                balloon: balloon,
+                characterDelayMilliseconds: characterDelayMilliseconds,
+                policy: policy
+            )
             await playbackTask?.value
         }
         queuedPlaybackTail = task
@@ -280,13 +340,19 @@ public final class SakuraScriptPlayer {
     public func interrupt(
         with script: SakuraScript,
         balloon: BalloonDefinition,
-        characterDelayMilliseconds: Int? = nil
+        characterDelayMilliseconds: Int? = nil,
+        policy: SakuraScriptPlaybackPolicy = .trusted
     ) {
         guard playbackTask != nil else {
-            play(script, balloon: balloon, characterDelayMilliseconds: characterDelayMilliseconds)
+            play(
+                script,
+                balloon: balloon,
+                characterDelayMilliseconds: characterDelayMilliseconds,
+                policy: policy
+            )
             return
         }
-        var tokens = parser.parse(script)
+        var tokens = filteredSakuraScriptTokens(parser.parse(script), policy: policy)
         if tokens.first == .clearAll {
             tokens.removeFirst()
         }

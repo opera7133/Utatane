@@ -41,7 +41,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - SSU、`saori_cpuid`、`kenonoke`、`textcopy2`、`mciaudior`、`wmove`のネイティブSAORI互換
 - コンテンツエクスプローラから行うゴースト、シェル、バルーン、ヘッドライン、プラグインの個別・一括ネットワーク更新。ゴーストとバルーンは設定した日数ごとの自動更新にも対応
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
-- 同じLAN上のSSP・IP Messengerとのメンバー発見と平文メッセージ送受信
+- 同じLAN上のSSP・IP Messengerとのメンバー発見、平文メッセージ送受信、受信SakuraScriptの安全な表示再生
 - `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
 - Materiaの「さくら」をWineなしで実行
 - プラグインの利用（ネイティブ対応SHIORIおよびmacOS向けにビルドされたdylibを使用するプラグインのみ）
