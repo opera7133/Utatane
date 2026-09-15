@@ -1,4 +1,9 @@
 {
+  "CoeFont Cloud" : "CoeFont Cloud",
+  "CoeFont UUID" : "CoeFont UUID",
+  "アクセスキー" : "存取金鑰",
+  "アクセスシークレット" : "存取密鑰",
+  "発話テキストをCoeFont Cloudへ送信する。利用プランに応じて料金が発生する。" : "將朗讀文字傳送到 CoeFont Cloud。可能會依使用方案產生費用。",
   "AITalk WebAPI" : "AITalk WebAPI",
   "ユーザー名" : "使用者名稱",
   "パスワード" : "密碼",

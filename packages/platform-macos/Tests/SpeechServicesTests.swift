@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import UtatanePlatformMacOS
@@ -830,6 +831,141 @@ struct SpeechServicesTests {
             try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
         }
     }
+
+    @Test
+    func `CoeFont lists account voices with a bodyless signature`() async throws {
+        let capture = RequestCapture()
+        let client = CoeFontCloudEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                return (
+                    Data(#"[{"coefont":"voice-b","name":"Beta"},{"coefont":"voice-a","name":"Alpha"}]"#.utf8),
+                    response(for: url)
+                )
+            },
+            credentialProvider: { _ in
+                SpeechCredentialStore.Credential(username: "access-key", password: "access-secret")
+            },
+            dateProvider: { Date(timeIntervalSince1970: 1_700_000_000) }
+        )
+
+        let voices = try await client.voices(scope: 0)
+        let request = try #require(await capture.request)
+
+        #expect(voices.map(\.identifier) == ["voice-a", "voice-b"])
+        #expect(request.url?.absoluteString == "https://api.coefont.cloud/v2/coefonts/pro")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "access-key")
+        #expect(request.value(forHTTPHeaderField: "X-Coefont-Date") == "1700000000")
+        #expect(request.value(forHTTPHeaderField: "X-Coefont-Content") ==
+            coeFontSignature(secret: "access-secret", timestamp: "1700000000", body: nil))
+    }
+
+    @Test
+    func `CoeFont synthesis signs its exact body and sends common controls`() async throws {
+        let capture = RequestCapture()
+        let expectedAudio = Data("ID3-coefont-audio".utf8)
+        let client = CoeFontCloudEngineClient(
+            transport: { request in
+                await capture.store(request)
+                let url = try #require(request.url)
+                return (expectedAudio, response(for: url, contentType: "audio/mpeg"))
+            },
+            credentialProvider: { _ in
+                SpeechCredentialStore.Credential(username: "access-key", password: "access-secret")
+            },
+            dateProvider: { Date(timeIntervalSince1970: 1_700_000_000) }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .coeFontCloud,
+            voiceIdentifier: "voice-uuid",
+            serviceURL: URL(string: "https://api.coefont.cloud/v2"),
+            rate: 0.75,
+            volume: 0.8,
+            pitchMultiplier: 1.5
+        )
+
+        let audio = try await client.synthesize(.init(text: " 読み上げ ", scope: 1, configuration: configuration))
+        let request = try #require(await capture.request)
+        let body = try #require(request.httpBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+
+        #expect(audio == expectedAudio)
+        #expect(request.url?.absoluteString == "https://api.coefont.cloud/v2/text2speech")
+        #expect(request.value(forHTTPHeaderField: "Authorization") == "access-key")
+        #expect(request.value(forHTTPHeaderField: "X-Coefont-Content") ==
+            coeFontSignature(secret: "access-secret", timestamp: "1700000000", body: body))
+        #expect(json["coefont"] as? String == "voice-uuid")
+        #expect(json["text"] as? String == "読み上げ")
+        #expect(json["speed"] as? Double == 1.5)
+        #expect(json["pitch"] as? Double == 600)
+        #expect(json["format"] as? String == "mp3")
+    }
+
+    @Test
+    func `CoeFont credentials stay on the official API host`() async throws {
+        let client = CoeFontCloudEngineClient(
+            transport: { request in
+                Issue.record("Transport should not receive \(String(describing: request.url))")
+                throw SpeechServiceError.invalidServiceResponse
+            },
+            credentialProvider: { _ in
+                SpeechCredentialStore.Credential(username: "access-key", password: "access-secret")
+            }
+        )
+        let configuration = SpeechSynthesisConfiguration(
+            provider: .coeFontCloud,
+            voiceIdentifier: "voice-uuid",
+            serviceURL: URL(string: "https://api.coefont.cloud.example.com/v2")
+        )
+
+        await #expect(throws: SpeechServiceError.invalidServiceURL) {
+            try await client.synthesize(.init(text: "test", scope: 0, configuration: configuration))
+        }
+    }
+
+    @Test
+    func `CoeFont audio redirects discard signing credentials`() async throws {
+        let delegate = CoeFontRedirectSanitizingDelegate()
+        let sourceURL = try #require(URL(string: "https://api.coefont.cloud/v2/text2speech"))
+        let destinationURL = try #require(URL(string: "https://storage.example/audio.mp3"))
+        let response = try #require(HTTPURLResponse(
+            url: sourceURL,
+            statusCode: 302,
+            httpVersion: nil,
+            headerFields: ["Location": destinationURL.absoluteString]
+        ))
+        var redirectedRequest = URLRequest(url: destinationURL)
+        redirectedRequest.setValue("access-key", forHTTPHeaderField: "Authorization")
+        redirectedRequest.setValue("1700000000", forHTTPHeaderField: "X-Coefont-Date")
+        redirectedRequest.setValue("signature", forHTTPHeaderField: "X-Coefont-Content")
+        let task = URLSession.shared.dataTask(with: sourceURL)
+
+        let sanitized = await withCheckedContinuation { continuation in
+            delegate.urlSession(
+                URLSession.shared,
+                task: task,
+                willPerformHTTPRedirection: response,
+                newRequest: redirectedRequest
+            ) { continuation.resume(returning: $0) }
+        }
+
+        #expect(sanitized?.url == destinationURL)
+        #expect(sanitized?.value(forHTTPHeaderField: "Authorization") == nil)
+        #expect(sanitized?.value(forHTTPHeaderField: "X-Coefont-Date") == nil)
+        #expect(sanitized?.value(forHTTPHeaderField: "X-Coefont-Content") == nil)
+    }
+}
+
+private func coeFontSignature(secret: String, timestamp: String, body: Data?) -> String {
+    var content = Data(timestamp.utf8)
+    if let body {
+        content.append(body)
+    }
+    return HMAC<SHA256>.authenticationCode(
+        for: content,
+        using: SymmetricKey(data: Data(secret.utf8))
+    ).map { String(format: "%02x", $0) }.joined()
 }
 
 private actor RequestCapture {

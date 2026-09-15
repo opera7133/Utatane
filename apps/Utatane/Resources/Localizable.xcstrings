@@ -1190,6 +1190,64 @@
         }
       }
     },
+    "CoeFont Cloud" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoeFont Cloud"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoeFont Cloud"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoeFont Cloud"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoeFont Cloud"
+          }
+        }
+      }
+    },
+    "CoeFont UUID" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoeFont UUID"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoeFont UUID"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoeFont UUID"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CoeFont UUID"
+          }
+        }
+      }
+    },
     "Finderで表示" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3883,6 +3941,64 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "慢速播放"
+          }
+        }
+      }
+    },
+    "アクセスキー" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access Key"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "액세스 키"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "访问密钥"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存取金鑰"
+          }
+        }
+      }
+    },
+    "アクセスシークレット" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Access Secret"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "액세스 시크릿"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "访问密钥密码"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存取密鑰"
           }
         }
       }
@@ -11046,6 +11162,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "發話文字會傳送給 Azure Speech，可能會依使用量產生費用。"
+          }
+        }
+      }
+    },
+    "発話テキストをCoeFont Cloudへ送信する。利用プランに応じて料金が発生する。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sends spoken text to CoeFont Cloud. Charges may apply according to your plan."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발화 텍스트를 CoeFont Cloud로 전송합니다. 이용 요금제에 따라 요금이 부과될 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将朗读文本发送到 CoeFont Cloud。可能会根据所用套餐产生费用。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "將朗讀文字傳送到 CoeFont Cloud。可能會依使用方案產生費用。"
           }
         }
       }

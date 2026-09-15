@@ -79,6 +79,12 @@ APIキーはURLへ含めず、`x-goog-api-key`ヘッダーで送ります。発�
 
 共通設定の速さと高さをAITalkの`speed`と`pitch`へ変換し、プレーンテキストを送信してMP3を受信します。認証情報はmacOSのKeychainへスコープごとに保存され、設定JSONには書き込みません。認証情報と発話テキストの送信先は`https://webapi.aitalk.jp/webapi/v5/ttsget.php`だけに制限しています。利用には法人向けAITalk WebAPIの契約が必要です。
 
+### CoeFont Cloud
+
+[CoeFont API v2](https://docs.coefont.cloud/)を使います。CoeFontのAPI情報ページで取得したアクセスキーとアクセスシークレットを設定し、「話者一覧を取得」から契約中のCoeFontを選んでください。詳細画面に表示されるCoeFont UUIDを「声」へ直接入力することもできます。
+
+共通設定の速さと高さはCoeFontの`speed`と`pitch`へ変換し、MP3を受信します。APIリクエストはアクセスシークレットを用いたHMAC-SHA256で署名します。認証情報はmacOSのKeychainへスコープごとに保存され、送信先は`https://api.coefont.cloud`だけに制限しています。音声ファイルへのリダイレクト時には署名ヘッダーを削除します。利用できる声と料金はCoeFontの契約内容に従います。
+
 ## SakuraScriptから読み上げを調整する
 
 `\__v[disable]`以降は読み上げず、`\__v[alternate,テキスト]`を使うと画面表示とは別の読みを指定できます。引数なしの`\__v`で通常の読み上げに戻ります。詳しくは[SakuraScript互換状況](UKADOC-SakuraScript-Compatibility.md)を参照してください。

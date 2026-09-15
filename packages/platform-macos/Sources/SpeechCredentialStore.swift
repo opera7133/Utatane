@@ -11,6 +11,7 @@ public enum SpeechCredentialStore {
         case azureSpeech = "azure-speech"
         case googleCloudTTS = "google-cloud-tts"
         case aiTalkWebAPI = "aitalk-webapi"
+        case coeFontCloud = "coefont-cloud"
     }
 
     public struct Credential: Codable, Equatable, Sendable {

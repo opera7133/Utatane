@@ -41,6 +41,7 @@ final class UtataneSettingsStore: ObservableObject {
         var googleCloudVoiceName = ""
         var googleCloudLanguage = "ja-JP"
         var aiTalkSpeakerName = "nozomi_dnn"
+        var coeFontVoiceID = ""
         var rate = 0.5
         var volume = 1.0
         var pitch = 1.0
@@ -75,6 +76,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .azureSpeech: azureSpeechVoiceName
             case .googleCloudTTS: googleCloudVoiceName
             case .aiTalkWebAPI: aiTalkSpeakerName
+            case .coeFontCloud: coeFontVoiceID
             }
             return identifier.isEmpty ? nil : identifier
         }
@@ -137,6 +139,7 @@ final class UtataneSettingsStore: ObservableObject {
             case .azureSpeech: URL(string: "https://\(azureSpeechRegion).tts.speech.microsoft.com")
             case .googleCloudTTS: URL(string: "https://texttospeech.googleapis.com/v1")
             case .aiTalkWebAPI: URL(string: "https://webapi.aitalk.jp/webapi/v5")
+            case .coeFontCloud: URL(string: "https://api.coefont.cloud/v2")
             }
         }
 
@@ -172,6 +175,7 @@ final class UtataneSettingsStore: ObservableObject {
             case googleCloudVoiceName
             case googleCloudLanguage
             case aiTalkSpeakerName
+            case coeFontVoiceID
             case rate
             case volume
             case pitch
@@ -232,6 +236,7 @@ final class UtataneSettingsStore: ObservableObject {
             googleCloudVoiceName = try values.decodeIfPresent(String.self, forKey: .googleCloudVoiceName) ?? ""
             googleCloudLanguage = try values.decodeIfPresent(String.self, forKey: .googleCloudLanguage) ?? "ja-JP"
             aiTalkSpeakerName = try values.decodeIfPresent(String.self, forKey: .aiTalkSpeakerName) ?? "nozomi_dnn"
+            coeFontVoiceID = try values.decodeIfPresent(String.self, forKey: .coeFontVoiceID) ?? ""
             rate = try values.decodeIfPresent(Double.self, forKey: .rate) ?? 0.5
             volume = try values.decodeIfPresent(Double.self, forKey: .volume) ?? 1
             pitch = try values.decodeIfPresent(Double.self, forKey: .pitch) ?? 1
@@ -1225,6 +1230,7 @@ private struct SpeechVoiceSettingsEditor: View {
     @State private var azureSpeechCredential: SpeechCredentialStore.Credential
     @State private var googleCloudCredential: SpeechCredentialStore.Credential
     @State private var aiTalkWebAPICredential: SpeechCredentialStore.Credential
+    @State private var coeFontCloudCredential: SpeechCredentialStore.Credential
     @State private var localAPIVoices: [SpeechSynthesisVoice] = []
     @State private var localAPIVoiceCount: Int?
     @State private var localAPIError: String?
@@ -1260,6 +1266,9 @@ private struct SpeechVoiceSettingsEditor: View {
         _aiTalkWebAPICredential = State(
             initialValue: SpeechCredentialStore.load(provider: .aiTalkWebAPI, scope: scope)
         )
+        _coeFontCloudCredential = State(
+            initialValue: SpeechCredentialStore.load(provider: .coeFontCloud, scope: scope)
+        )
     }
 
     var body: some View {
@@ -1280,6 +1289,7 @@ private struct SpeechVoiceSettingsEditor: View {
                         Text("Azure Speech").tag(SpeechSynthesisProvider.azureSpeech)
                         Text("Google Cloud TTS").tag(SpeechSynthesisProvider.googleCloudTTS)
                         Text("AITalk WebAPI").tag(SpeechSynthesisProvider.aiTalkWebAPI)
+                        Text("CoeFont Cloud").tag(SpeechSynthesisProvider.coeFontCloud)
                     }
                     .labelsHidden()
                 }
@@ -1460,6 +1470,66 @@ private struct SpeechVoiceSettingsEditor: View {
                     GridRow {
                         Color.clear.frame(width: 1, height: 1)
                         Text("発話テキストをAITalk WebAPIへ送信する。契約に応じて料金が発生する。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } else if settings.provider == .coeFontCloud {
+                    GridRow {
+                        Text("アクセスキー")
+                        TextField("", text: $coeFontCloudCredential.username)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text("アクセスシークレット")
+                        SecureField("", text: $coeFontCloudCredential.password)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                    GridRow {
+                        Text("声")
+                        HStack {
+                            TextField("", text: $settings.coeFontVoiceID, prompt: Text("CoeFont UUID"))
+                                .textFieldStyle(.roundedBorder)
+                            Button("話者一覧を取得") {
+                                Task { await loadLocalAPIVoices() }
+                            }
+                            .disabled(loadsLocalAPIVoices)
+                        }
+                    }
+                    if !localAPIVoices.isEmpty {
+                        GridRow {
+                            Text("話者")
+                            Picker("", selection: externalVoiceSelection) {
+                                ForEach(localAPIVoices) { voice in
+                                    Text(voice.name).tag(voice.id)
+                                }
+                            }
+                            .labelsHidden()
+                        }
+                    }
+                    if loadsLocalAPIVoices {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            ProgressView("話者一覧を取得中…")
+                                .controlSize(.small)
+                        }
+                    } else if let localAPIError {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            Text(localAPIError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    } else if let localAPIVoiceCount {
+                        GridRow {
+                            Color.clear.frame(width: 1, height: 1)
+                            Text("話者を\(localAPIVoiceCount)件取得した。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    GridRow {
+                        Color.clear.frame(width: 1, height: 1)
+                        Text("発話テキストをCoeFont Cloudへ送信する。利用プランに応じて料金が発生する。")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -1673,6 +1743,10 @@ private struct SpeechVoiceSettingsEditor: View {
         .onChange(of: aiTalkWebAPICredential) {
             SpeechCredentialStore.save(aiTalkWebAPICredential, provider: .aiTalkWebAPI, scope: scope)
         }
+        .onChange(of: coeFontCloudCredential) {
+            SpeechCredentialStore.save(coeFontCloudCredential, provider: .coeFontCloud, scope: scope)
+            resetLocalAPIVoices()
+        }
     }
 
     private var openAIModel: Binding<String> {
@@ -1726,6 +1800,7 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .azureSpeech: "https://\(settings.azureSpeechRegion).tts.speech.microsoft.com"
                 case .googleCloudTTS: "https://texttospeech.googleapis.com/v1"
                 case .aiTalkWebAPI: "https://webapi.aitalk.jp/webapi/v5"
+                case .coeFontCloud: "https://api.coefont.cloud/v2"
                 }
             },
             set: { value in
@@ -1750,6 +1825,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     break
                 case .aiTalkWebAPI:
                     break
+                case .coeFontCloud:
+                    break
                 }
             }
         )
@@ -1770,6 +1847,7 @@ private struct SpeechVoiceSettingsEditor: View {
                 case .azureSpeech: settings.azureSpeechVoiceName
                 case .googleCloudTTS: settings.googleCloudVoiceName
                 case .aiTalkWebAPI: settings.aiTalkSpeakerName
+                case .coeFontCloud: settings.coeFontVoiceID
                 }
             },
             set: { value in
@@ -1796,6 +1874,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.googleCloudVoiceName = value
                 case .aiTalkWebAPI:
                     settings.aiTalkSpeakerName = value
+                case .coeFontCloud:
+                    settings.coeFontVoiceID = value
                 }
             }
         )
@@ -1852,6 +1932,8 @@ private struct SpeechVoiceSettingsEditor: View {
                     settings.googleCloudLanguage = voice.languageIdentifier ?? voice.language
                 case .aiTalkWebAPI:
                     settings.aiTalkSpeakerName = voice.identifier
+                case .coeFontCloud:
+                    settings.coeFontVoiceID = voice.identifier
                 }
             }
         )
@@ -1870,6 +1952,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .azureSpeech: "https://japaneast.tts.speech.microsoft.com"
         case .googleCloudTTS: "https://texttospeech.googleapis.com/v1"
         case .aiTalkWebAPI: "https://webapi.aitalk.jp/webapi/v5"
+        case .coeFontCloud: "https://api.coefont.cloud/v2"
         }
     }
 
@@ -1885,6 +1968,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .aivisCloud: "モデルUUID / アクセスキー"
         case .azureSpeech, .googleCloudTTS: "声"
         case .aiTalkWebAPI: "声"
+        case .coeFontCloud: "声"
         }
     }
 
@@ -1899,6 +1983,7 @@ private struct SpeechVoiceSettingsEditor: View {
         case .azureSpeech: "ja-JP-NanamiNeural"
         case .googleCloudTTS: "ja-JP-…"
         case .aiTalkWebAPI: "nozomi_dnn"
+        case .coeFontCloud: "CoeFont UUID"
         default: "0"
         }
     }
@@ -1944,6 +2029,8 @@ private struct SpeechVoiceSettingsEditor: View {
                 try await GoogleCloudSpeechEngineClient().voices(scope: scope)
             case .aiTalkWebAPI:
                 AITalkWebAPIEngineClient.standardVoices
+            case .coeFontCloud:
+                try await CoeFontCloudEngineClient().voices(scope: scope)
             }
             localAPIVoices = voices
             localAPIVoiceCount = voices.count
