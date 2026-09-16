@@ -33,7 +33,7 @@ example-ghost/
         └── surface0.png
 ```
 
-`ghost/master/descript.txt`の`shiori`には使用するモジュール名を書きます。古いゴーストとの互換用に`alias.txt`の指定も読みますが、新規作成では`descript.txt`へ明記してください。
+`ghost/master/descript.txt`の`shiori`には使用するモジュール名を書きます。省略した場合は従来のベースウェアと同じく`shiori.dll`を探します。古いゴーストとの互換用に`alias.txt`の指定も読みますが、新規作成では`descript.txt`へ明記してください。
 
 最初は次の小さい動作だけを作り、順番に増やすと原因を分けやすくなります。
 

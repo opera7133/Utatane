@@ -50,6 +50,13 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
         rootDirectory
     }
 
+    /// The module name a baseware resolves when `shiori` is omitted.
+    /// Keep shioriFilename optional so dictionary-based compatibility detection
+    /// can still distinguish an omitted declaration from an explicit one.
+    public var effectiveShioriFilename: String {
+        shioriFilename ?? "shiori.dll"
+    }
+
     public init(
         name: String,
         rootDirectory: URL,

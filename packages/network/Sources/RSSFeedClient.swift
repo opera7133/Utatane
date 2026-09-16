@@ -56,6 +56,62 @@ public struct RSSFeedClient: Sendable {
         guard !delegate.items.isEmpty else { throw RSSFeedError.noItems }
         return RSSFeed(title: delegate.feedTitle, link: delegate.feedLink, items: delegate.items)
     }
+
+    public static func sspTimestamp(_ value: String) -> String {
+        guard !value.isEmpty else { return "" }
+        let date: Date? = ISO8601DateFormatter().date(from: value) ?? {
+            let formats = [
+                "EEE, dd MMM yyyy HH:mm:ss Z",
+                "EEE, d MMM yyyy HH:mm:ss Z",
+                "yyyy-MM-dd HH:mm:ss Z"
+            ]
+            for format in formats {
+                let formatter = DateFormatter()
+                formatter.locale = Locale(identifier: "en_US_POSIX")
+                formatter.dateFormat = format
+                if let date = formatter.date(from: value) {
+                    return date
+                }
+            }
+            return nil
+        }()
+        guard let date else { return "" }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
+        return [
+            components.year,
+            components.month,
+            components.day,
+            components.hour,
+            components.minute,
+            components.second
+        ].map { String($0 ?? 0) }.joined(separator: ",")
+    }
+
+    public static func updateFingerprint(_ feed: RSSFeed) -> String {
+        var hash: UInt64 = 14_695_981_039_346_656_037
+        func append(_ value: String) {
+            for byte in value.utf8 {
+                hash ^= UInt64(byte)
+                hash &*= 1_099_511_628_211
+            }
+            hash ^= 0x1F
+            hash &*= 1_099_511_628_211
+        }
+        append(feed.title)
+        append(feed.link)
+        for item in feed.items {
+            append(item.title)
+            append(item.link)
+            append(item.published)
+            append(item.author)
+            append(item.summary)
+            hash ^= 0x1E
+            hash &*= 1_099_511_628_211
+        }
+        return String(hash, radix: 16)
+    }
 }
 
 private final class RSSParserDelegate: NSObject, XMLParserDelegate {

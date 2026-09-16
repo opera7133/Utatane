@@ -20,9 +20,9 @@
 | ファイル | 状況 | 現在の実装 | 主な不足 |
 | --- | --- | --- | --- |
 | Ghost `descript.txt` | 🟡 | UTF-8／Shift_JIS、基本情報、SHIORI名、キャラクター名、既定surface・balloon、更新URL、README、推奨balloon | 74項目中、配置、SSTP制御、SHIORI詳細設定、カーソル、メニュー、アイコン等が未反映 |
-| Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`、bindgroup／bindoption、着せ替えmenuitem、初期位置・上下配置、z-order、sticky-window、balloonのoffset／alignment／dontmove／syncscale | 102項目中、画像ベース座標の全用途、オーナードローメニュー装飾、DPI、透過・crossfade等が未反映 |
+| Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`（`full`を含む）、bindgroup／bindoption、着せ替えmenuitem、初期位置・上下配置、z-order、sticky-window、balloonのoffset／alignment／dontmove／syncscale | 102項目中、画像ベース座標の全用途、オーナードローメニュー装飾、DPI、透過・crossfade等が未反映 |
 | Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、arrow／clickwaitmarker／number、cursor／anchor／anchor.visited、透過方式、windowposition、入力欄 | 162項目中、SSTP／online marker、blendmethod、recommended ghost等が未反映 |
-| Plugin `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、name、id、filename、type、charset、作者、更新URL、README、secondchangeinterval、otherghosttalkを読み込み、SHIORI／dylib／Windows DLLへ分類。メニューから実行、README表示、ネットワーク更新が可能。ネイティブSHIORI型は実体をロードし、OnSecondChange・OnMenuExec・raiseplugin／notifypluginを配送。AKARIの`_create_thread`は独立評価ワーカーで実行し、変更されたグローバル変数を完了時に反映。YAYA製wallet_of_unyuとAKARI製sudohaikuyuは実ファイルでOnMenuExecを確認。macOS dylibは標準`loadu/load`・`unload`・`request`を優先 | dylib実物とWine DLL、AKARIワーカー内の外部通信を伴う長時間処理は未確認 |
+| Plugin `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、name、id、filename、type、charset、作者、更新URL、README、secondchangeinterval、otherghosttalkを読み込み、SHIORI／dylib／Windows DLLへ分類。Utatane拡張の`filename.macos`でmacOS用モジュールを優先指定可能。メニューから実行、README表示、ネットワーク更新が可能。ネイティブSHIORI型は実体をロードし、OnSecondChange・OnMenuExec・raiseplugin／notifypluginを配送。AKARIの`_create_thread`は独立評価ワーカーで実行し、変更されたグローバル変数を完了時に反映。YAYA製wallet_of_unyuとAKARI製sudohaikuyuは実ファイルでOnMenuExecを確認。macOS dylibは標準`loadu/load`・`unload`・`request`を優先 | dylib実物とWine DLL、AKARIワーカー内の外部通信を伴う長時間処理は未確認 |
 | Headline `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、名前、DLL名、URL、open URL、homeurl、charset、alwaysdisplay、readme、readme.charset。RSS用`type`・`feed`拡張も利用 | UKADOC掲載項目は保持・利用。Windows DLL実行は実行環境依存 |
 | `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストールに加え、refreshとrefreshundeletemaskをバックアップ付き置換で実装 | supplement・languageは未対応 |
 | `delete.txt` | ✅ | UTF-8／Shift_JIS、charset行、Windows区切りの相対ファイル・ディレクトリを事前検証し、更新ファイルの置換と同じロールバック境界で安全に削除 | — |
@@ -58,7 +58,7 @@ UKADOC掲載は102項目。現在利用するのはかなり限定的。
 
 | 状況 | 項目 |
 | --- | --- |
-| 利用 | `name`、`seriko.use_self_alpha`、`seriko.zorder`、`seriko.sticky-window`、`seriko.alignmenttodesktop` |
+| 利用 | `name`、`seriko.use_self_alpha`（`1`／`true`／`full`）、`seriko.zorder`、`seriko.sticky-window`、`seriko.alignmenttodesktop` |
 | 利用 | scope別`bindgroup*.name/default/addid` |
 | 利用 | scope別`bindoption*.group`の`mustselect`・`multiple` |
 | 利用 | scope別`menuitem*`／`menuitemex*`の着せ替え順序・区切り・表示名、`menu,hidden` |
@@ -79,13 +79,13 @@ UKADOC掲載は162項目。現在の実利用項目は以下。
 | 利用 | `type`、`name`、`origin.x/y`、`validrect.left/top/right/bottom`、`wordwrappoint.x/y`、`vertical` |
 | 利用 | `font.name`、`font.height`、`font.color.r/g/b`、`font.shadowcolor.r/g/b`、`font.shadowstyle` |
 | 利用 | `font.bold`、`font.italic`、`font.underline`、`font.strike`、`font.outline`、`arrow0.x/y`、`arrow1.x/y`、`clickwaitmarker.x/y` |
-| 利用 | `number.font.name/height/color`、`number.xr/y`、`use_self_alpha`、`windowposition.x`、`windowposition.y`、`windowposition.limit` |
+| 利用 | `number.font.name/height/color`、`number.xr/y`、`use_self_alpha`（`full`を含む）、`windowposition.x`、`windowposition.y`、`windowposition.limit` |
 | 利用 | `communicatebox.font.name/height/color`、`communicatebox.background.color`、`communicatebox.x`、`communicatebox.y`、`communicatebox.width`、`communicatebox.height` |
 | 画像として利用 | `balloonc1.png`／`balloonc2.png`／`balloonc3.png`と対応する`balloonc*s.txt`を、communicatebox／teachbox／inputboxのネイティブ入力パネルへ反映 |
 | 利用 | cursor、cursor.notselect、anchor、anchor.notselect、anchor.visitedの`style`、font／pen／brush RGB。訪問済みアンカーはゴーストの実行中にID単位で保持 |
 | 画像として利用 | balloon画像、marker画像、clickwaitmarker／arrow画像。`balloons*s.txt`等のサーフェス別上書きと`marker.filename`／`clickwaitmarker.filename`／`arrow.filename`を反映 |
 | 別経路で利用 | `readme`、`readme.charset` |
-| 未反映 | disable.font、blendmethod、SSTP／online markerの座標・間隔・文字、入力画像上のボタン自体のオーナードロー、`use_self_alpha,full`、recommended ghost |
+| 未反映 | disable.font、blendmethod、SSTP／online markerの座標・間隔・文字、入力画像上のボタン自体のオーナードロー、recommended ghost |
 
 `origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックします。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置します。入力欄は従来どおり横書き。
 
@@ -123,7 +123,7 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | --- | --- | --- |
 | surface選択 | 🟡 | 単一ID、範囲、列挙、除外、`surface.append` |
 | alias | 🟡 | sakura、kero、char scopeの名前→surface ID候補 |
-| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱います。`seriko.use_self_alpha,1`でもアルファチャンネルのないPNGは左上色透過へフォールバック。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つAPNG同士の合成後も再生情報を維持します。極端に長い最小公倍周期と全描画オプションは未網羅 |
+| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱います。`seriko.use_self_alpha,1`ではアルファチャンネルのないPNGを左上色透過へフォールバックし、`full`では全面を不透明として扱います。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つAPNG同士の合成後も再生情報を維持します。極端に長い最小公倍周期と全描画オプションは未網羅 |
 | collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用 |
 | animation基本 | 🟡 | name、interval文字列、pattern、wait、座標。複数animationを独立したTaskとレイヤー状態で並行再生し、base・overlay系・asis・moveと各種制御を反映 |
 | interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能 |

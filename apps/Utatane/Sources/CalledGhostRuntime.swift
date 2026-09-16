@@ -53,8 +53,8 @@ final class CalledGhostRuntime {
         balloonController.restoreLayoutPresetPositions(preset.balloonPositions)
     }
 
-    var contextMenuItems: (() -> [SurfaceContextMenuItem])? {
-        didSet { surfaceController.contextMenuItems = { [weak self] in self?.contextMenuItems?() ?? [] } }
+    var contextMenuItems: ((Int) -> [SurfaceContextMenuItem])? {
+        didSet { surfaceController.contextMenuItems = { [weak self] scope in self?.contextMenuItems?(scope) ?? [] } }
     }
 
     var onError: ((Error) -> Void)?
@@ -224,13 +224,16 @@ final class CalledGhostRuntime {
         if let desktopWallpaperEvent {
             _ = try? await session.handle(event: desktopWallpaperGhostEvent(desktopWallpaperEvent))
         }
-        let script = try await session.handle(event: .shiori(id: "OnGhostCalled", references: [
-            0: caller.characters.first(where: { $0.scope == 0 })?.name ?? caller.name,
-            1: "",
-            2: caller.name,
-            3: caller.rootDirectory.path,
-            7: shell.name
-        ]))
+        let script = try await session.handle(
+            event: SHIORIEventFactory.ghostCalled(
+                callerCharacterName: caller.characters.first(where: { $0.scope == 0 })?.name ?? caller.name,
+                callerScript: "",
+                callerGhostName: caller.name,
+                callerGhostPath: caller.rootDirectory.path,
+                shellName: shell.name
+            ),
+            fallingBackTo: SHIORIEventFactory.boot(shellName: shell.name)
+        )
         surfaceController.setPresentationHidden(false)
         if let script {
             player.play(script, balloon: balloon)
@@ -240,6 +243,34 @@ final class CalledGhostRuntime {
 
     func send(_ event: GhostEvent) {
         send([event])
+    }
+
+    func send(_ event: GhostEvent, fallingBackTo fallback: GhostEvent) {
+        Task {
+            do {
+                let response = try await session.response(for: event)
+                if let script = response?.script, !script.rawValue.isEmpty {
+                    player.play(script, balloon: balloon)
+                    if let response {
+                        forwardCommunication(response)
+                    }
+                    return
+                }
+                guard let fallbackResponse = try await session.response(for: fallback) else { return }
+                if let script = fallbackResponse.script, !script.rawValue.isEmpty {
+                    player.play(script, balloon: balloon)
+                }
+                forwardCommunication(fallbackResponse)
+            } catch {
+                AppLogStore.shared.error(
+                    "SHIORIイベント処理エラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: "Event: \(event)\nFallback: \(fallback)\nError: \(error)",
+                    ghostName: ghost.name
+                )
+                onError?(error)
+            }
+        }
     }
 
     func sendWindowModeChange(references: [Int: String]) {
@@ -482,17 +513,17 @@ final class CalledGhostRuntime {
     func select(shell newShell: InstalledShell) {
         do {
             let previousShell = shell
-            send(.shiori(id: "OnShellChanging", references: [
-                0: newShell.name,
-                1: previousShell.name,
-                2: newShell.directory.path
-            ]))
+            send(SHIORIEventFactory.shellChanging(
+                newShellName: newShell.name,
+                previousShellName: previousShell.name,
+                newShellPath: newShell.directory.path
+            ))
             try show(shell: newShell)
-            send(.shiori(id: "OnShellChanged", references: [
-                0: newShell.name,
-                1: ghost.name,
-                2: newShell.directory.path
-            ]))
+            send(SHIORIEventFactory.shellChanged(
+                shellName: newShell.name,
+                ghostName: ghost.name,
+                shellPath: newShell.directory.path
+            ))
         } catch {
             AppLogStore.shared.error(
                 "シェル切り替えエラー「\(newShell.name)」: \(error.localizedDescription)",
@@ -508,10 +539,10 @@ final class CalledGhostRuntime {
         player.cancel()
         balloon = newBalloon
         selectionStore.setBalloonDirectoryName(newBalloon.directory.lastPathComponent, for: ghost.id)
-        send(.shiori(id: "OnBalloonChange", references: [
-            0: newBalloon.name,
-            1: newBalloon.directory.lastPathComponent
-        ]))
+        send(SHIORIEventFactory.balloonChange(
+            name: newBalloon.name,
+            path: newBalloon.directory.path
+        ))
     }
 
     func configurePlayback(characterDelayMilliseconds: Int, dismissalMilliseconds: Int) {
@@ -605,8 +636,8 @@ final class CalledGhostRuntime {
         }
         surfaceController.onNarDrop = { [weak self] _, urls in self?.onNarDrop?(urls) }
         surfaceController.onFileDropping = { [weak self] scope, urls in
-            guard let first = urls.first else { return }
-            self?.send(.shiori(id: "OnFileDropping", references: [0: first.path, 1: String(scope)]))
+            guard let event = FileDropEventRouter.dropping(scope: scope, urls: urls) else { return }
+            self?.send(event)
         }
         surfaceController.onFileDrop = { [weak self] scope, urls in
             self?.sendFileDropEvents(scope: scope, urls: urls)
@@ -618,9 +649,7 @@ final class CalledGhostRuntime {
             self?.handleURLDrop(scope: scope, url: url)
         }
         surfaceController.onTextDrop = { [weak self] scope, value in
-            self?.send(.shiori(id: "OnTextDrop", references: [
-                0: value.replacingOccurrences(of: "\n", with: "\u{1}"), 1: String(scope)
-            ]))
+            self?.send(SHIORIEventFactory.textDrop(value, scope: scope))
         }
         player.onError = { [weak self] error in
             guard let self else { return }
@@ -657,19 +686,14 @@ final class CalledGhostRuntime {
                 self?.send(.choice(id: id, arguments: arguments))
             }
         }
-        player.onChoiceSelectEx = { [weak self] label, id, arguments in
-            self?.send(.shiori(id: "OnChoiceSelectEx", references: Dictionary(
-                uniqueKeysWithValues: ([label, id] + arguments).enumerated().map { ($0.offset, $0.element) }
-            )))
+        player.onChoiceSelection = { [weak self] label, id, arguments in
+            self?.sendChoiceSelection(label: label, id: id, arguments: arguments)
         }
+        player.onChoiceSelectEx = nil
         player.onAnchorSelectEx = { [weak self] label, id, arguments in
-            self?.send(.shiori(id: "OnAnchorSelectEx", references: Dictionary(
-                uniqueKeysWithValues: ([label, id] + arguments).enumerated().map { ($0.offset, $0.element) }
-            )))
+            self?.sendAnchorSelection(label: label, id: id, arguments: arguments)
         }
-        player.onAnchorSelect = { [weak self] id in
-            self?.send(.shiori(id: "OnAnchorSelect", references: [0: id]))
-        }
+        player.onAnchorSelect = nil
         player.onChoiceEnter = { [weak self] label, id, arguments in
             self?.send(.shiori(id: "OnChoiceEnter", references: linkEventReferences(label, id, arguments)))
         }
@@ -839,10 +863,7 @@ final class CalledGhostRuntime {
                 actionTitle: String(localized: "OK"),
                 appearance: textInputAppearance(style: .communicate)
             ) else {
-                return try? await session.handle(event: .shiori(
-                    id: "OnCommunicateInputCancel",
-                    references: [0: "", 1: "cancel"]
-                ))
+                return try? await session.handle(event: SHIORIEventFactory.communicateInputCancel)
             }
             return try? await session.handle(event: .shiori(
                 id: "OnCommunicate",
@@ -851,7 +872,7 @@ final class CalledGhostRuntime {
         }
         player.onTeachBox = { [weak self] initialValue in
             guard let self else { return nil }
-            _ = try? await session.handle(event: .shiori(id: "OnTeachStart", references: [:]))
+            _ = try? await session.handle(event: SHIORIEventFactory.teachStart)
             let autocomplete = try? await session.handle(event: .shiori(
                 id: "inputbox.autocomplete",
                 references: [0: "teachbox"]
@@ -865,18 +886,10 @@ final class CalledGhostRuntime {
                 actionTitle: String(localized: "OK"),
                 appearance: textInputAppearance(style: .teach)
             ) else {
-                return try? await session.handle(event: .shiori(
-                    id: "OnTeachInputCancel",
-                    references: [0: "", 1: "cancel"]
-                ))
+                return try? await session.handle(event: SHIORIEventFactory.teachInputCancel)
             }
             teachHistory.append(value)
-            return try? await session.handle(event: .shiori(
-                id: "OnTeach",
-                references: Dictionary(uniqueKeysWithValues: teachHistory.enumerated().map {
-                    ($0.offset, $0.element)
-                })
-            ))
+            return try? await session.handle(event: SHIORIEventFactory.teach(history: teachHistory))
         }
         player.onOtherGhostTalk = { [weak self] target, script in
             self?.onOtherGhostTalk?(target, script)
@@ -940,20 +953,13 @@ final class CalledGhostRuntime {
 
     private func sendFileDropEvents(scope: Int, urls: [URL]) {
         guard !urls.isEmpty else { return }
-        let joinedReferences = [
-            0: urls.map(\.path).joined(separator: "\u{1}"),
-            1: String(scope),
-            2: urls.map(droppedFileMIMEType).joined(separator: "\u{1}")
-        ]
-        for url in urls where url.hasDirectoryPath {
-            send(.shiori(id: "OnDirectoryDrop", references: [0: url.path, 1: String(scope)]))
+        for event in FileDropEventRouter.directoryEvents(scope: scope, urls: urls) {
+            send(event)
         }
         Task {
             do {
-                let response = try await session.response(for: .shiori(
-                    id: "OnFileDrop2",
-                    references: joinedReferences
-                ))
+                guard let droppedEvent = FileDropEventRouter.dropped(scope: scope, urls: urls) else { return }
+                let response = try await session.response(for: droppedEvent)
                 if let script = response?.script {
                     player.play(script, balloon: balloon)
                     if let response {
@@ -962,11 +968,10 @@ final class CalledGhostRuntime {
                     return
                 }
                 guard let url = urls.first,
-                      url.pathExtension.caseInsensitiveCompare("nar") != .orderedSame,
-                      let viewerEventID = droppedFileViewerEventID(url),
+                      let viewerEvent = FileDropEventRouter.viewerOpened(scope: scope, urls: urls),
                       NSWorkspace.shared.open(url)
                 else { return }
-                send(.shiori(id: viewerEventID, references: joinedReferences))
+                send(viewerEvent)
             } catch {
                 AppLogStore.shared.error(
                     "ファイルドロップ処理エラー: \(error.localizedDescription)",
@@ -983,7 +988,7 @@ final class CalledGhostRuntime {
         let queryReferences = [
             0: url.absoluteString,
             1: String(scope),
-            2: droppedFileMIMEType(url),
+            2: FileDropEventRouter.mimeType(url),
             3: plannedAction
         ]
         Task {
@@ -1048,31 +1053,59 @@ final class CalledGhostRuntime {
             let (data, response) = try await URLSession.shared.data(for: request)
             let httpResponse = response as? HTTPURLResponse
             let statusCode = httpResponse?.statusCode ?? 0
-            guard (200 ..< 300).contains(statusCode) else { throw URLError(.badServerResponse) }
+            let cookie = httpResponse?.value(forHTTPHeaderField: "Set-Cookie") ?? ""
+            let headers = Self.httpResponseHeaders(httpResponse)
+            if !(200 ..< 300).contains(statusCode) {
+                guard let eventID = command.eventID else { return nil }
+                let event = if command.isFeed {
+                    SHIORIEventFactory.executeRSSFailure(
+                        eventID: eventID,
+                        method: command.method,
+                        url: command.url,
+                        reason: String(statusCode),
+                        cookie: cookie,
+                        headers: headers
+                    )
+                } else {
+                    SHIORIEventFactory.executeHTTPFailure(
+                        eventID: eventID,
+                        method: command.method,
+                        url: command.url,
+                        reason: String(statusCode),
+                        cookie: cookie,
+                        headers: headers
+                    )
+                }
+                return try? await session.handle(event: event)
+            }
 
             if command.isFeed {
                 do {
                     let feed = try RSSFeedClient.parse(data)
                     guard let eventID = command.eventID else { return nil }
-                    let successID = eventID.hasPrefix("On") ? eventID : "OnExecuteRSSComplete"
-                    var references: [Int: String] = [:]
-                    for (index, item) in feed.items.enumerated() {
-                        references[index] = [
+                    let records = feed.items.map { item in
+                        [
                             item.title,
                             item.link,
-                            item.published,
+                            RSSFeedClient.sspTimestamp(item.published),
                             item.author,
                             item.summary
                         ].joined(separator: "\u{1}")
                     }
-                    return try await session.handle(event: .shiori(id: successID, references: references))
+                    return try await session.handle(event: SHIORIEventFactory.executeRSSComplete(
+                        eventID: eventID,
+                        records: records
+                    ))
                 } catch {
                     guard let eventID = command.eventID else { return nil }
-                    let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExecuteRSSFailure"
-                    return try? await session.handle(event: .shiori(id: failureID, references: [
-                        0: command.url,
-                        4: "parse"
-                    ]))
+                    return try? await session.handle(event: SHIORIEventFactory.executeRSSFailure(
+                        eventID: eventID,
+                        method: command.method,
+                        url: command.url,
+                        reason: "parse",
+                        cookie: cookie,
+                        headers: headers
+                    ))
                 }
             }
 
@@ -1094,16 +1127,15 @@ final class CalledGhostRuntime {
                     .replacingOccurrences(of: "\n", with: "\u{1}")
             }
             guard let eventID = command.eventID else { return nil }
-            let successID = eventID.hasPrefix("On") ? eventID : "OnExecuteHTTPComplete"
-            return try await session.handle(event: .shiori(id: successID, references: [
-                0: command.method,
-                1: eventID,
-                2: command.url,
-                3: result,
-                4: String(statusCode),
-                5: httpResponse?.value(forHTTPHeaderField: "Set-Cookie") ?? "",
-                6: Self.httpResponseHeaders(httpResponse)
-            ]))
+            return try await session.handle(event: SHIORIEventFactory.executeHTTPComplete(
+                eventID: eventID,
+                method: command.method,
+                url: command.url,
+                result: result,
+                statusCode: String(statusCode),
+                cookie: cookie,
+                headers: headers
+            ))
         } catch {
             if (error as NSError).domain == NSURLErrorDomain,
                (error as NSError).code == NSURLErrorTimedOut
@@ -1114,13 +1146,23 @@ final class CalledGhostRuntime {
                 ]))
             }
             guard let eventID = command.eventID else { return nil }
-            let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : (command.isFeed ? "OnExecuteRSSFailure" : "OnExecuteHTTPFailure")
-            return try? await session.handle(event: .shiori(id: failureID, references: [
-                0: command.method,
-                1: eventID,
-                2: command.url,
-                4: String(describing: error)
-            ]))
+            let reason = Self.httpFailureReason(error)
+            let event = if command.isFeed {
+                SHIORIEventFactory.executeRSSFailure(
+                    eventID: eventID,
+                    method: command.method,
+                    url: command.url,
+                    reason: reason
+                )
+            } else {
+                SHIORIEventFactory.executeHTTPFailure(
+                    eventID: eventID,
+                    method: command.method,
+                    url: command.url,
+                    reason: reason
+                )
+            }
+            return try? await session.handle(event: event)
         }
     }
 
@@ -1129,6 +1171,22 @@ final class CalledGhostRuntime {
             .map { "\($0.key): \($0.value)" }
             .sorted()
             .joined(separator: "\u{1}") ?? ""
+    }
+
+    private static func httpFailureReason(_ error: Error) -> String {
+        let error = error as NSError
+        if error.domain == NSCocoaErrorDomain {
+            return "fileio"
+        }
+        guard error.domain == NSURLErrorDomain else {
+            return String(error.code)
+        }
+        return switch URLError.Code(rawValue: error.code) {
+        case .timedOut: "timeout"
+        case .cancelled: "artificial"
+        case .httpTooManyRedirects: "toomanyredirect"
+        default: String(error.code)
+        }
     }
 
     private func handleArchive(_ command: SakuraScriptArchiveCommand) async -> SakuraScript? {
@@ -1154,27 +1212,24 @@ final class CalledGhostRuntime {
             do {
                 let result = try runner.extract(archiveURL: archiveURL, destinationDirectoryURL: destURL, password: password)
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? eventID : "OnExtractArchiveComplete"
-                return try await session.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: String(result.fileCount),
-                    2: String(result.compressedBytes),
-                    3: String(result.uncompressedBytes)
-                ]))
+                return try await session.handle(event: SHIORIEventFactory.extractArchiveComplete(
+                    eventID: eventID,
+                    fileCount: result.fileCount,
+                    compressedBytes: result.compressedBytes,
+                    uncompressedBytes: result.uncompressedBytes
+                ))
             } catch let error as ArchiveOperationError {
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExtractArchiveFailure"
-                return try? await session.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: error.errorCode
-                ]))
+                return try? await session.handle(event: SHIORIEventFactory.extractArchiveFailure(
+                    eventID: eventID,
+                    reason: error.errorCode
+                ))
             } catch {
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExtractArchiveFailure"
-                return try? await session.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: "open failed"
-                ]))
+                return try? await session.handle(event: SHIORIEventFactory.extractArchiveFailure(
+                    eventID: eventID,
+                    reason: "open failed"
+                ))
             }
         case let .compress(archivePath, sourceDirectoryPath, eventID, password):
             let archiveURL = resolvePath(archivePath)
@@ -1182,27 +1237,24 @@ final class CalledGhostRuntime {
             do {
                 let result = try runner.compress(destinationArchiveURL: archiveURL, sourceDirectoryURL: sourceURL, password: password)
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? eventID : "OnCompressArchiveComplete"
-                return try await session.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: String(result.fileCount),
-                    2: String(result.compressedBytes),
-                    3: String(result.uncompressedBytes)
-                ]))
+                return try await session.handle(event: SHIORIEventFactory.compressArchiveComplete(
+                    eventID: eventID,
+                    fileCount: result.fileCount,
+                    compressedBytes: result.compressedBytes,
+                    uncompressedBytes: result.uncompressedBytes
+                ))
             } catch let error as ArchiveOperationError {
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCompressArchiveFailure"
-                return try? await session.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: error.errorCode
-                ]))
+                return try? await session.handle(event: SHIORIEventFactory.compressArchiveFailure(
+                    eventID: eventID,
+                    reason: error.errorCode
+                ))
             } catch {
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCompressArchiveFailure"
-                return try? await session.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: "open failed"
-                ]))
+                return try? await session.handle(event: SHIORIEventFactory.compressArchiveFailure(
+                    eventID: eventID,
+                    reason: "open failed"
+                ))
             }
         case let .createNar(narPath, sourceDirectoryPath, eventID):
             let archiveURL = resolvePath(narPath)
@@ -1350,9 +1402,88 @@ final class CalledGhostRuntime {
             }.joined(separator: "\u{1}")
             let defaultID = result.succeeded && !value.isEmpty ? "OnNSLookupComplete" : "OnNSLookupFailure"
             let id = eventID.hasPrefix("On") ? eventID : defaultID
-            return try? await session.handle(event: .shiori(id: id, references: [
-                0: eventID, 1: host, 2: reverse ? "reverse" : "lookup", 3: value
-            ]))
+            return try? await session.handle(event: SHIORIEventFactory.nsLookup(
+                id: id,
+                eventLabel: eventID,
+                host: host,
+                reverse: reverse,
+                result: result.succeeded && !value.isEmpty ? value : nil
+            ))
+        }
+    }
+
+    private func sendAnchorSelection(label: String, id: String, arguments: [String]) {
+        Task {
+            do {
+                let extended = try await session.response(for: SHIORIEventFactory.anchorSelectExtended(
+                    label: label,
+                    id: id,
+                    arguments: arguments
+                ))
+                if let extended {
+                    forwardCommunication(extended)
+                    if let script = extended.script, !script.rawValue.isEmpty {
+                        player.interrupt(with: script, balloon: balloon)
+                        return
+                    }
+                }
+
+                guard let legacy = try await session.response(for: SHIORIEventFactory.anchorSelect(id: id)) else {
+                    return
+                }
+                if let script = legacy.script, !script.rawValue.isEmpty {
+                    player.interrupt(with: script, balloon: balloon)
+                }
+                forwardCommunication(legacy)
+            } catch {
+                AppLogStore.shared.error(
+                    "アンカー選択イベント処理エラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: "Anchor: \(id)\nError: \(error)",
+                    ghostName: ghost.name
+                )
+                onError?(error)
+            }
+        }
+    }
+
+    private func sendChoiceSelection(label: String, id: String, arguments: [String]) {
+        if let url = URL(string: id), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) {
+            NSWorkspace.shared.open(url)
+            return
+        }
+        Task {
+            do {
+                let extended = try await session.response(for: SHIORIEventFactory.choiceSelectExtended(
+                    label: label,
+                    id: id,
+                    arguments: arguments
+                ))
+                if let extended {
+                    forwardCommunication(extended)
+                    if let script = extended.script, !script.rawValue.isEmpty {
+                        player.play(script, balloon: balloon)
+                        return
+                    }
+                }
+
+                guard let legacy = try await session.response(for: SHIORIEventFactory.choiceSelect(
+                    id: id,
+                    arguments: arguments
+                )) else { return }
+                if let script = legacy.script, !script.rawValue.isEmpty {
+                    player.play(script, balloon: balloon)
+                }
+                forwardCommunication(legacy)
+            } catch {
+                AppLogStore.shared.error(
+                    "選択肢イベント処理エラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: "Choice: \(id)\nError: \(error)",
+                    ghostName: ghost.name
+                )
+                onError?(error)
+            }
         }
     }
 

@@ -1,6 +1,32 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.5] - 2026-09-16
+
+### 追加
+
+- プラグインの`descript.txt`で`filename.macos`を指定し、Windows用DLLを残したままmacOS用のdylib・bundle・SHIOLINKを同梱できるようにした
+- SHIORIイベント生成を共通化し、起動・切り替え・呼び出し、シェル・バルーン切り替え、選択肢・アンカー、更新、RSS・ヘッドライン、HTTP、SNTP、名前解決、圧縮・展開のReferenceを回帰テストできるようにした
+
+### 変更
+
+- ゴーストのSHIORI指定を省略した場合は、辞書形式の内蔵判定を保ったまま従来互換の`shiori.dll`を既定名として扱うようにした
+- シェルとバルーンの`use_self_alpha,full`を読み取り、アルファチャンネルを持たない画像を全面不透明として描画するようにした
+- ゴースト・シェル・バルーン・ヘッドライン・プラグインの更新イベントで、対象種別、更新理由、ファイル番号、MD5比較値、失敗理由をSSP互換のReferenceへ揃えた
+- RSSの更新日時をSSP形式へ変換し、`OnRSS*`が無応答の場合は従来の`OnHeadlinesense*`へフォールバックするようにした
+- ファイルやフォルダのドラッグ＆ドロップで、複数項目、ディレクトリ、MIME typeと画像・音声・動画・書庫の閲覧イベントをSSP互換のReferenceへ揃えた
+- 初回起動、ゴースト切り替え、呼び出し、消滅後の起動イベントが無応答の場合に`OnBoot`へフォールバックし、他ゴーストの起動・終了通知もSSP互換のReferenceへ揃えた
+
+### 修正
+
+- 拡張選択肢で`OnChoiceSelectEx`と`OnChoiceSelect`が競合する問題を修正し、拡張イベントがトークを返さなかった場合だけ従来イベントを送るようにした
+- 中ボタン・追加ボタンのマウス操作を左ボタンとして扱う場合がある問題を修正し、対応する`Ex`イベントへ通知するようにした
+- RSSの取得失敗と解析失敗を区別し、圧縮・展開、名前解決、SNTPの失敗イベントから不要なReferenceを除いた
+- `OnGhostCallComplete`へUKADOCにないゴーストパスをReference3として送っていた問題を修正した
+
+### 開発・検証
+
+- タグ付きリリースの説明を対応するCHANGELOG項目から自動生成し、比較リンクとVirusTotal結果を添えて公開するようにした
+- UKADOC SHIORIイベント互換表を実装経路とテストに照らして再調査し、確認済み項目を15件から100件へ更新した
 
 ## [0.2.4] - 2026-09-16
 
@@ -565,7 +591,7 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.4...HEAD
+[0.2.5]: https://github.com/opera7133/Utatane/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/opera7133/Utatane/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/opera7133/Utatane/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/opera7133/Utatane/compare/v0.2.1...v0.2.2

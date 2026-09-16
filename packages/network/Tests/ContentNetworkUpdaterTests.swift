@@ -57,6 +57,19 @@ private actor UpdateFetchRecorder {
     #expect(failure.extendedValue == "Ghost\u{1}ghost\u{1}NG\u{1}md5 miss\u{1}ghost/master/a.txt")
 }
 
+@Test func `maps update failures to SHIORI reasons and paths`() {
+    #expect(ContentNetworkUpdateError.checksumMismatch("a.txt").shioriFailureReason == "md5 miss")
+    #expect(ContentNetworkUpdateError.checksumMismatch("a.txt").failurePath == "a.txt")
+    #expect(ContentNetworkUpdateError.downloadFailed(
+        path: "b.txt",
+        underlyingError: "HTTP status 404"
+    ).shioriFailureReason == "404")
+    #expect(ContentNetworkUpdateError.downloadFailed(
+        path: "c.txt",
+        underlyingError: "request timed out"
+    ).shioriFailureReason == "timeout")
+}
+
 @Test func `parses and safely applies delete txt after update`() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
     try FileManager.default.createDirectory(

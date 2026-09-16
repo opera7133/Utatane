@@ -353,6 +353,7 @@ private struct UtataneRootView: View {
     @State private var lastGhostName: String = ""
     @State private var lastObjectName: String = ""
     @State private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
+    @State private var rssFeedFingerprints: [String: String] = [:]
     @State private var teachHistory: [String] = []
     @State private var lastClockMinute: DateComponents?
     @State private var pendingHourTimeSignal = false
@@ -968,13 +969,10 @@ private struct UtataneRootView: View {
         guard !isTransitioningGhost, let session, let balloon else { return }
         Task {
             do {
-                let extended = try await session.response(for: .shiori(
-                    id: "OnAnchorSelectEx",
-                    references: Dictionary(
-                        uniqueKeysWithValues: ([label, id] + arguments).enumerated().map {
-                            ($0.offset, $0.element)
-                        }
-                    )
+                let extended = try await session.response(for: SHIORIEventFactory.anchorSelectExtended(
+                    label: label,
+                    id: id,
+                    arguments: arguments
                 ))
                 if let extended {
                     forwardCommunication(from: currentGhost, response: extended)
@@ -984,10 +982,9 @@ private struct UtataneRootView: View {
                     }
                 }
 
-                guard let legacy = try await session.response(for: .shiori(
-                    id: "OnAnchorSelect",
-                    references: [0: id]
-                )) else { return }
+                guard let legacy = try await session.response(for: SHIORIEventFactory.anchorSelect(id: id)) else {
+                    return
+                }
                 if let script = legacy.script, !script.rawValue.isEmpty {
                     scriptPlayer.interrupt(with: script, balloon: balloon)
                 }
@@ -1002,6 +999,70 @@ private struct UtataneRootView: View {
                 showError(error.localizedDescription)
             }
         }
+    }
+
+    private func sendChoiceSelection(label: String, id: String, arguments: [String]) {
+        if performBuiltInChoice(id: id) {
+            return
+        }
+        guard !isTransitioningGhost, let session, let balloon else {
+            return
+        }
+        Task {
+            do {
+                let extended = try await session.response(for: SHIORIEventFactory.choiceSelectExtended(
+                    label: label,
+                    id: id,
+                    arguments: arguments
+                ))
+                if let extended {
+                    forwardCommunication(from: currentGhost, response: extended)
+                    if let script = extended.script, !script.rawValue.isEmpty {
+                        scriptPlayer.play(script, balloon: balloon)
+                        return
+                    }
+                }
+
+                guard let legacy = try await session.response(for: SHIORIEventFactory.choiceSelect(
+                    id: id,
+                    arguments: arguments
+                )) else { return }
+                if let script = legacy.script, !script.rawValue.isEmpty {
+                    scriptPlayer.play(script, balloon: balloon)
+                }
+                forwardCommunication(from: currentGhost, response: legacy)
+            } catch {
+                AppLogStore.shared.error(
+                    "選択肢イベント処理エラー: \(error.localizedDescription)",
+                    category: "SHIORI",
+                    details: "Choice: \(id)\nError: \(error)",
+                    ghostName: currentGhost?.name
+                )
+                showError(error.localizedDescription)
+            }
+        }
+    }
+
+    private func performBuiltInChoice(id: String) -> Bool {
+        if ["configuration", "configurationdialog"].contains(id.lowercased()) {
+            networkSettings.selectedPane = .advanced
+            openSettings()
+        } else if id.caseInsensitiveCompare("ghostexplorer") == .orderedSame {
+            showGhostPicker()
+        } else if id.caseInsensitiveCompare("shellexplorer") == .orderedSame {
+            showShellPicker()
+        } else if id.caseInsensitiveCompare("balloonexplorer") == .orderedSame {
+            showBalloonPicker()
+        } else if id.caseInsensitiveCompare("On_Update") == .orderedSame {
+            Task { await updateCurrentGhost() }
+        } else if let url = URL(string: id), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) {
+            NSWorkspace.shared.open(url)
+        } else if id.caseInsensitiveCompare("CANCEL_NOTALK") == .orderedSame {
+            scriptPlayer.cancel()
+        } else {
+            return false
+        }
+        return true
     }
 
     private func broadcastEvent(_ event: GhostEvent) {
@@ -1176,20 +1237,13 @@ private struct UtataneRootView: View {
 
     private func sendFileDropEvents(scope: Int, urls: [URL]) {
         guard !urls.isEmpty, let session, let balloon else { return }
-        let joinedReferences = [
-            0: urls.map(\.path).joined(separator: "\u{1}"),
-            1: String(scope),
-            2: urls.map(droppedFileMIMEType).joined(separator: "\u{1}")
-        ]
-        for url in urls where url.hasDirectoryPath {
-            sendEvent(.shiori(id: "OnDirectoryDrop", references: [0: url.path, 1: String(scope)]))
+        for event in FileDropEventRouter.directoryEvents(scope: scope, urls: urls) {
+            sendEvent(event)
         }
         Task {
             do {
-                let response = try await session.response(for: .shiori(
-                    id: "OnFileDrop2",
-                    references: joinedReferences
-                ))
+                guard let droppedEvent = FileDropEventRouter.dropped(scope: scope, urls: urls) else { return }
+                let response = try await session.response(for: droppedEvent)
                 if let script = response?.script {
                     scriptPlayer.play(script, balloon: balloon)
                     if let response {
@@ -1198,11 +1252,10 @@ private struct UtataneRootView: View {
                     return
                 }
                 guard let url = urls.first,
-                      url.pathExtension.caseInsensitiveCompare("nar") != .orderedSame,
-                      let viewerEventID = droppedFileViewerEventID(url),
+                      let viewerEvent = FileDropEventRouter.viewerOpened(scope: scope, urls: urls),
                       NSWorkspace.shared.open(url)
                 else { return }
-                sendEvent(.shiori(id: viewerEventID, references: joinedReferences))
+                sendEvent(viewerEvent)
             } catch {
                 AppLogStore.shared.error(
                     "ファイルドロップ処理エラー: \(error.localizedDescription)",
@@ -1222,7 +1275,7 @@ private struct UtataneRootView: View {
         let queryReferences = [
             0: url.absoluteString,
             1: String(scope),
-            2: droppedFileMIMEType(url),
+            2: FileDropEventRouter.mimeType(url),
             3: plannedAction
         ]
         Task {
@@ -1743,8 +1796,8 @@ private struct UtataneRootView: View {
                 installNars(from: urls)
             }
             surfaceWindowController.onFileDropping = { scope, urls in
-                guard let first = urls.first else { return }
-                sendEvent(.shiori(id: "OnFileDropping", references: [0: first.path, 1: String(scope)]))
+                guard let event = FileDropEventRouter.dropping(scope: scope, urls: urls) else { return }
+                sendEvent(event)
             }
             surfaceWindowController.onFileDrop = { scope, urls in
                 sendFileDropEvents(scope: scope, urls: urls)
@@ -1758,9 +1811,7 @@ private struct UtataneRootView: View {
                 handleURLDrop(scope: scope, url: url)
             }
             surfaceWindowController.onTextDrop = { scope, value in
-                sendEvent(.shiori(id: "OnTextDrop", references: [
-                    0: value.replacingOccurrences(of: "\n", with: "\u{1}"), 1: String(scope)
-                ]))
+                sendEvent(SHIORIEventFactory.textDrop(value, scope: scope))
             }
 
             installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonReadDirectories)
@@ -1804,30 +1855,14 @@ private struct UtataneRootView: View {
                 sendEvent(.shiori(id: "OnBalloonTimeout", references: [0: script, 1: "0"]))
             }
             scriptPlayer.onChoice = { id, arguments in
-                if ["configuration", "configurationdialog"].contains(id.lowercased()) {
-                    networkSettings.selectedPane = .advanced
-                    openSettings()
-                } else if id.caseInsensitiveCompare("ghostexplorer") == .orderedSame {
-                    showGhostPicker()
-                } else if id.caseInsensitiveCompare("shellexplorer") == .orderedSame {
-                    showShellPicker()
-                } else if id.caseInsensitiveCompare("balloonexplorer") == .orderedSame {
-                    showBalloonPicker()
-                } else if id.caseInsensitiveCompare("On_Update") == .orderedSame {
-                    Task { await updateCurrentGhost() }
-                } else if let url = URL(string: id), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) {
-                    NSWorkspace.shared.open(url)
-                } else if id.caseInsensitiveCompare("CANCEL_NOTALK") == .orderedSame {
-                    scriptPlayer.cancel()
-                } else {
+                if !performBuiltInChoice(id: id) {
                     sendEvent(.choice(id: id, arguments: arguments))
                 }
             }
-            scriptPlayer.onChoiceSelectEx = { label, id, arguments in
-                sendEvent(.shiori(id: "OnChoiceSelectEx", references: Dictionary(
-                    uniqueKeysWithValues: ([label, id] + arguments).enumerated().map { ($0.offset, $0.element) }
-                )))
+            scriptPlayer.onChoiceSelection = { label, id, arguments in
+                sendChoiceSelection(label: label, id: id, arguments: arguments)
             }
+            scriptPlayer.onChoiceSelectEx = nil
             scriptPlayer.onAnchorSelectEx = { label, id, arguments in
                 sendAnchorSelection(label: label, id: id, arguments: arguments)
             }
@@ -2023,10 +2058,7 @@ private struct UtataneRootView: View {
                     actionTitle: String(localized: "OK"),
                     appearance: textInputAppearance(style: .communicate)
                 ) else {
-                    return try? await activeSession.handle(event: .shiori(
-                        id: "OnCommunicateInputCancel",
-                        references: [0: "", 1: "cancel"]
-                    ))
+                    return try? await activeSession.handle(event: SHIORIEventFactory.communicateInputCancel)
                 }
                 return try? await activeSession.handle(event: .shiori(
                     id: "OnCommunicate",
@@ -2035,10 +2067,7 @@ private struct UtataneRootView: View {
             }
             scriptPlayer.onTeachBox = { initialValue in
                 guard let activeSession = session else { return nil }
-                _ = try? await activeSession.handle(event: .shiori(
-                    id: "OnTeachStart",
-                    references: [:]
-                ))
+                _ = try? await activeSession.handle(event: SHIORIEventFactory.teachStart)
                 let autocomplete = try? await activeSession.handle(event: .shiori(
                     id: "inputbox.autocomplete",
                     references: [0: "teachbox"]
@@ -2052,18 +2081,10 @@ private struct UtataneRootView: View {
                     actionTitle: String(localized: "OK"),
                     appearance: textInputAppearance(style: .teach)
                 ) else {
-                    return try? await activeSession.handle(event: .shiori(
-                        id: "OnTeachInputCancel",
-                        references: [0: "", 1: "cancel"]
-                    ))
+                    return try? await activeSession.handle(event: SHIORIEventFactory.teachInputCancel)
                 }
                 teachHistory.append(value)
-                return try? await activeSession.handle(event: .shiori(
-                    id: "OnTeach",
-                    references: Dictionary(uniqueKeysWithValues: teachHistory.enumerated().map {
-                        ($0.offset, $0.element)
-                    })
-                ))
+                return try? await activeSession.handle(event: SHIORIEventFactory.teach(history: teachHistory))
             }
             scriptPlayer.onHTTP = { request in
                 if request.waitsForCompletion {
@@ -2163,20 +2184,18 @@ private struct UtataneRootView: View {
                     await scriptPlayer.playAndWait(script, balloon: balloon)
                 }
             }
-            let bootEvent = GhostEvent.shiori(id: "OnBoot", references: [0: shellChoice.name])
+            let bootEvent = SHIORIEventFactory.boot(shellName: shellChoice.name)
             let startupScript: SakuraScript?
             if case let .vanished(previous, vanishScript) = startup {
-                let vanishedScript = try await ghostSession.handle(event: .shiori(id: "OnVanished", references: [
-                    0: previous.characters.first(where: { $0.scope == 0 })?.name ?? previous.name,
-                    1: vanishScript,
-                    2: previous.name,
-                    7: shellChoice.name
-                ]))
-                startupScript = if let vanishedScript {
-                    vanishedScript
-                } else {
-                    try await ghostSession.handle(event: bootEvent)
-                }
+                startupScript = try await ghostSession.handle(
+                    event: SHIORIEventFactory.vanished(
+                        characterName: previous.characters.first(where: { $0.scope == 0 })?.name ?? previous.name,
+                        vanishScript: vanishScript,
+                        ghostName: previous.name,
+                        shellName: shellChoice.name
+                    ),
+                    fallingBackTo: bootEvent
+                )
             } else {
                 let arrivedByGhostChange = if case .changed = startup {
                     true
@@ -2188,14 +2207,10 @@ private struct UtataneRootView: View {
                     arrivedByGhostChange: arrivedByGhostChange
                 ) {
                 case .firstBoot:
-                    let firstBootScript = try await ghostSession.handle(event: .shiori(
-                        id: "OnFirstBoot", references: [0: "0"]
-                    ))
-                    startupScript = if let firstBootScript {
-                        firstBootScript
-                    } else {
-                        try await ghostSession.handle(event: bootEvent)
-                    }
+                    startupScript = try await ghostSession.handle(
+                        event: SHIORIEventFactory.firstBoot(vanishCount: 0),
+                        fallingBackTo: bootEvent
+                    )
                 case .boot:
                     startupScript = try await ghostSession.handle(event: bootEvent)
                 case .ghostChanged:
@@ -2203,18 +2218,17 @@ private struct UtataneRootView: View {
                         startupScript = try await ghostSession.handle(event: bootEvent)
                         break
                     }
-                    let changedScript = try await ghostSession.handle(event: .shiori(id: "OnGhostChanged", references: [
-                        0: previous.characters.first(where: { $0.scope == 0 })?.name ?? previous.name,
-                        1: changeScript,
-                        2: previous.name,
-                        3: previous.rootDirectory.path,
-                        7: shellChoice.name
-                    ]))
-                    startupScript = if let changedScript {
-                        changedScript
-                    } else {
-                        try await ghostSession.handle(event: bootEvent)
-                    }
+                    startupScript = try await ghostSession.handle(
+                        event: SHIORIEventFactory.ghostChanged(
+                            previousCharacterName: previous.characters.first(where: { $0.scope == 0 })?.name
+                                ?? previous.name,
+                            previousScript: changeScript,
+                            previousGhostName: previous.name,
+                            previousGhostPath: previous.rootDirectory.path,
+                            shellName: shellChoice.name
+                        ),
+                        fallingBackTo: bootEvent
+                    )
                 }
             }
             markBooted(ghost)
@@ -2540,31 +2554,59 @@ private struct UtataneRootView: View {
             let (data, response) = try await URLSession.shared.data(for: request)
             let httpResponse = response as? HTTPURLResponse
             let statusCode = httpResponse?.statusCode ?? 0
-            guard (200 ..< 300).contains(statusCode) else { throw URLError(.badServerResponse) }
+            let cookie = httpResponse?.value(forHTTPHeaderField: "Set-Cookie") ?? ""
+            let headers = Self.httpResponseHeaders(httpResponse)
+            if !(200 ..< 300).contains(statusCode) {
+                guard let eventID = command.eventID else { return nil }
+                let event = if command.isFeed {
+                    SHIORIEventFactory.executeRSSFailure(
+                        eventID: eventID,
+                        method: command.method,
+                        url: command.url,
+                        reason: String(statusCode),
+                        cookie: cookie,
+                        headers: headers
+                    )
+                } else {
+                    SHIORIEventFactory.executeHTTPFailure(
+                        eventID: eventID,
+                        method: command.method,
+                        url: command.url,
+                        reason: String(statusCode),
+                        cookie: cookie,
+                        headers: headers
+                    )
+                }
+                return try? await activeSession.handle(event: event)
+            }
 
             if command.isFeed {
                 do {
                     let feed = try RSSFeedClient.parse(data)
                     guard let eventID = command.eventID else { return nil }
-                    let successID = eventID.hasPrefix("On") ? eventID : "OnExecuteRSSComplete"
-                    var references: [Int: String] = [:]
-                    for (index, item) in feed.items.enumerated() {
-                        references[index] = [
+                    let records = feed.items.map { item in
+                        [
                             item.title,
                             item.link,
-                            item.published,
+                            RSSFeedClient.sspTimestamp(item.published),
                             item.author,
                             item.summary
                         ].joined(separator: "\u{1}")
                     }
-                    return try await activeSession.handle(event: .shiori(id: successID, references: references))
+                    return try await activeSession.handle(event: SHIORIEventFactory.executeRSSComplete(
+                        eventID: eventID,
+                        records: records
+                    ))
                 } catch {
                     guard let eventID = command.eventID else { return nil }
-                    let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExecuteRSSFailure"
-                    return try? await activeSession.handle(event: .shiori(id: failureID, references: [
-                        0: command.url,
-                        4: "parse"
-                    ]))
+                    return try? await activeSession.handle(event: SHIORIEventFactory.executeRSSFailure(
+                        eventID: eventID,
+                        method: command.method,
+                        url: command.url,
+                        reason: "parse",
+                        cookie: cookie,
+                        headers: headers
+                    ))
                 }
             }
 
@@ -2586,16 +2628,15 @@ private struct UtataneRootView: View {
                     .replacingOccurrences(of: "\n", with: "\u{1}")
             }
             guard let eventID = command.eventID else { return nil }
-            let successID = eventID.hasPrefix("On") ? eventID : "OnExecuteHTTPComplete"
-            return try await activeSession.handle(event: .shiori(id: successID, references: [
-                0: command.method,
-                1: eventID,
-                2: command.url,
-                3: result,
-                4: String(statusCode),
-                5: httpResponse?.value(forHTTPHeaderField: "Set-Cookie") ?? "",
-                6: Self.httpResponseHeaders(httpResponse)
-            ]))
+            return try await activeSession.handle(event: SHIORIEventFactory.executeHTTPComplete(
+                eventID: eventID,
+                method: command.method,
+                url: command.url,
+                result: result,
+                statusCode: String(statusCode),
+                cookie: cookie,
+                headers: headers
+            ))
         } catch {
             if (error as NSError).domain == NSURLErrorDomain,
                (error as NSError).code == NSURLErrorTimedOut
@@ -2606,13 +2647,23 @@ private struct UtataneRootView: View {
                 ]))
             }
             guard let eventID = command.eventID else { return nil }
-            let failureID = eventID.hasPrefix("On") ? "\(eventID)Failure" : (command.isFeed ? "OnExecuteRSSFailure" : "OnExecuteHTTPFailure")
-            return try? await activeSession.handle(event: .shiori(id: failureID, references: [
-                0: command.method,
-                1: eventID,
-                2: command.url,
-                4: String(describing: error)
-            ]))
+            let reason = Self.httpFailureReason(error)
+            let event = if command.isFeed {
+                SHIORIEventFactory.executeRSSFailure(
+                    eventID: eventID,
+                    method: command.method,
+                    url: command.url,
+                    reason: reason
+                )
+            } else {
+                SHIORIEventFactory.executeHTTPFailure(
+                    eventID: eventID,
+                    method: command.method,
+                    url: command.url,
+                    reason: reason
+                )
+            }
+            return try? await activeSession.handle(event: event)
         }
     }
 
@@ -2621,6 +2672,22 @@ private struct UtataneRootView: View {
             .map { "\($0.key): \($0.value)" }
             .sorted()
             .joined(separator: "\u{1}") ?? ""
+    }
+
+    private static func httpFailureReason(_ error: Error) -> String {
+        let error = error as NSError
+        if error.domain == NSCocoaErrorDomain {
+            return "fileio"
+        }
+        guard error.domain == NSURLErrorDomain else {
+            return String(error.code)
+        }
+        return switch URLError.Code(rawValue: error.code) {
+        case .timedOut: "timeout"
+        case .cancelled: "artificial"
+        case .httpTooManyRedirects: "toomanyredirect"
+        default: String(error.code)
+        }
     }
 
     private func handleArchive(_ command: SakuraScriptArchiveCommand) async -> SakuraScript? {
@@ -2647,27 +2714,24 @@ private struct UtataneRootView: View {
             do {
                 let result = try runner.extract(archiveURL: archiveURL, destinationDirectoryURL: destURL, password: password)
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? eventID : "OnExtractArchiveComplete"
-                return try await activeSession.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: String(result.fileCount),
-                    2: String(result.compressedBytes),
-                    3: String(result.uncompressedBytes)
-                ]))
+                return try await activeSession.handle(event: SHIORIEventFactory.extractArchiveComplete(
+                    eventID: eventID,
+                    fileCount: result.fileCount,
+                    compressedBytes: result.compressedBytes,
+                    uncompressedBytes: result.uncompressedBytes
+                ))
             } catch let error as ArchiveOperationError {
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExtractArchiveFailure"
-                return try? await activeSession.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: error.errorCode
-                ]))
+                return try? await activeSession.handle(event: SHIORIEventFactory.extractArchiveFailure(
+                    eventID: eventID,
+                    reason: error.errorCode
+                ))
             } catch {
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnExtractArchiveFailure"
-                return try? await activeSession.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: "open failed"
-                ]))
+                return try? await activeSession.handle(event: SHIORIEventFactory.extractArchiveFailure(
+                    eventID: eventID,
+                    reason: "open failed"
+                ))
             }
         case let .compress(archivePath, sourceDirectoryPath, eventID, password):
             let archiveURL = resolvePath(archivePath)
@@ -2675,27 +2739,24 @@ private struct UtataneRootView: View {
             do {
                 let result = try runner.compress(destinationArchiveURL: archiveURL, sourceDirectoryURL: sourceURL, password: password)
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? eventID : "OnCompressArchiveComplete"
-                return try await activeSession.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: String(result.fileCount),
-                    2: String(result.compressedBytes),
-                    3: String(result.uncompressedBytes)
-                ]))
+                return try await activeSession.handle(event: SHIORIEventFactory.compressArchiveComplete(
+                    eventID: eventID,
+                    fileCount: result.fileCount,
+                    compressedBytes: result.compressedBytes,
+                    uncompressedBytes: result.uncompressedBytes
+                ))
             } catch let error as ArchiveOperationError {
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCompressArchiveFailure"
-                return try? await activeSession.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: error.errorCode
-                ]))
+                return try? await activeSession.handle(event: SHIORIEventFactory.compressArchiveFailure(
+                    eventID: eventID,
+                    reason: error.errorCode
+                ))
             } catch {
                 guard let eventID else { return nil }
-                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCompressArchiveFailure"
-                return try? await activeSession.handle(event: .shiori(id: id, references: [
-                    0: eventID,
-                    1: "open failed"
-                ]))
+                return try? await activeSession.handle(event: SHIORIEventFactory.compressArchiveFailure(
+                    eventID: eventID,
+                    reason: "open failed"
+                ))
             }
         case let .createNar(narPath, sourceDirectoryPath, eventID):
             let archiveURL = resolvePath(narPath)
@@ -2842,9 +2903,13 @@ private struct UtataneRootView: View {
             }.joined(separator: "\u{1}")
             let defaultID = result.succeeded && !value.isEmpty ? "OnNSLookupComplete" : "OnNSLookupFailure"
             let id = eventID.hasPrefix("On") ? eventID : defaultID
-            return try? await session.handle(event: .shiori(id: id, references: [
-                0: eventID, 1: host, 2: reverse ? "reverse" : "lookup", 3: value
-            ]))
+            return try? await session.handle(event: SHIORIEventFactory.nsLookup(
+                id: id,
+                eventLabel: eventID,
+                host: host,
+                reverse: reverse,
+                result: result.succeeded && !value.isEmpty ? value : nil
+            ))
         }
     }
 
@@ -2956,22 +3021,16 @@ private struct UtataneRootView: View {
         defer { statusWindowController.hide(token: statusToken) }
         do {
             let previousShell = selectedShell
-            sendEvent(.shiori(
-                id: "OnShellChanging",
-                references: [
-                    0: shell.name,
-                    1: previousShell?.name ?? "",
-                    2: shell.directory.path
-                ]
+            sendEvent(SHIORIEventFactory.shellChanging(
+                newShellName: shell.name,
+                previousShellName: previousShell?.name ?? "",
+                newShellPath: shell.directory.path
             ))
             try show(shell: shell)
-            sendEvent(.shiori(
-                id: "OnShellChanged",
-                references: [
-                    0: shell.name,
-                    1: currentGhost?.name ?? "",
-                    2: shell.directory.path
-                ]
+            sendEvent(SHIORIEventFactory.shellChanged(
+                shellName: shell.name,
+                ghostName: currentGhost?.name ?? "",
+                shellPath: shell.directory.path
             ))
         } catch {
             showError(error.localizedDescription)
@@ -2993,10 +3052,10 @@ private struct UtataneRootView: View {
             )
         }
         configureContextMenu()
-        sendEvent(.shiori(id: "OnBalloonChange", references: [
-            0: selectedBalloon.name,
-            1: selectedBalloon.directory.lastPathComponent
-        ]))
+        sendEvent(SHIORIEventFactory.balloonChange(
+            name: selectedBalloon.name,
+            path: selectedBalloon.directory.path
+        ))
     }
 
     private func handleContentAction(
@@ -3517,9 +3576,12 @@ private struct UtataneRootView: View {
         return items
     }
 
-    private func contextMenuItems(for target: GhostContextMenuTarget) -> [SurfaceContextMenuItem] {
+    private func contextMenuItems(
+        for target: GhostContextMenuTarget,
+        scope: Int
+    ) -> [SurfaceContextMenuItem] {
         var items: [SurfaceContextMenuItem] = []
-        items.append(contentsOf: siteMenuItems(for: target))
+        items.append(contentsOf: siteMenuItems(for: target, scope: scope))
         if case .primary = target {
             items.append(networkUpdateMenu())
         }
@@ -3557,7 +3619,10 @@ private struct UtataneRootView: View {
         return items
     }
 
-    private func siteMenuItems(for target: GhostContextMenuTarget) -> [SurfaceContextMenuItem] {
+    private func siteMenuItems(
+        for target: GhostContextMenuTarget,
+        scope: Int
+    ) -> [SurfaceContextMenuItem] {
         guard let ghost = menuGhost(for: target), let resources = siteMenuResources[ghost.id] else { return [] }
         var items: [SurfaceContextMenuItem] = []
         if !resources.recommendations.isEmpty {
@@ -3565,6 +3630,7 @@ private struct UtataneRootView: View {
                 title: resources.recommendationTitle ?? String(localized: "おすすめ"),
                 entries: resources.recommendations,
                 kind: "recommend",
+                scope: scope,
                 target: target
             ))
         }
@@ -3573,6 +3639,7 @@ private struct UtataneRootView: View {
                 title: resources.portalTitle ?? String(localized: "ポータルサイト"),
                 entries: resources.portals,
                 kind: "portal",
+                scope: scope,
                 target: target
             ))
         }
@@ -3583,6 +3650,7 @@ private struct UtataneRootView: View {
         title: String,
         entries: [GhostSiteMenuEntry],
         kind: String,
+        scope: Int,
         target: GhostContextMenuTarget
     ) -> SurfaceContextMenuItem {
         .submenu(
@@ -3590,7 +3658,9 @@ private struct UtataneRootView: View {
             items: entries.enumerated().map { index, entry in
                 .action(
                     title: entry.title,
-                    handler: { activate(entry, kind: kind, index: index, target: target) }
+                    handler: {
+                        activate(entry, kind: kind, scope: scope, index: index, target: target)
+                    }
                 )
             }
         )
@@ -3599,6 +3669,7 @@ private struct UtataneRootView: View {
     private func activate(
         _ entry: GhostSiteMenuEntry,
         kind: String,
+        scope: Int,
         index: Int,
         target: GhostContextMenuTarget
     ) {
@@ -3611,23 +3682,20 @@ private struct UtataneRootView: View {
                 NSWorkspace.shared.open(url)
             }
         }
-        let references = [
-            0: entry.title,
-            1: entry.target,
-            2: entry.banner,
-            3: kind,
-            4: "0",
-            5: String(index)
-        ]
+        let event = SHIORIEventFactory.recommendsiteChoice(
+            title: entry.title,
+            target: entry.target,
+            banner: entry.banner,
+            kind: kind,
+            scope: scope,
+            index: index
+        )
         Task {
             do {
                 switch target {
                 case .primary:
                     guard let session, let balloon else { return }
-                    let response = try await session.response(for: .shiori(
-                        id: "OnRecommendsiteChoice",
-                        references: references
-                    ))
+                    let response = try await session.response(for: event)
                     if let script = response?.script {
                         await scriptPlayer.playAndWait(script, balloon: balloon)
                     }
@@ -3638,10 +3706,7 @@ private struct UtataneRootView: View {
                         scriptPlayer.play(SakuraScript(rawValue: entry.selectionScript), balloon: balloon)
                     }
                 case let .called(runtime):
-                    let response = try await runtime.session.response(for: .shiori(
-                        id: "OnRecommendsiteChoice",
-                        references: references
-                    ))
+                    let response = try await runtime.session.response(for: event)
                     if let script = response?.script {
                         await runtime.player.playAndWait(script, balloon: runtime.balloon)
                     }
@@ -3690,11 +3755,13 @@ private struct UtataneRootView: View {
         surfaceWindowController.onUserDressupChange = { changes in
             Task { await scriptPlayer.notifyDressupChanges(changes, source: "user") }
         }
-        surfaceWindowController.contextMenuItems = {
-            contextMenuItems(for: .primary)
+        surfaceWindowController.contextMenuItems = { scope in
+            contextMenuItems(for: .primary, scope: scope)
         }
         for runtime in calledGhosts.values {
-            runtime.contextMenuItems = { contextMenuItems(for: .called(runtime)) }
+            runtime.contextMenuItems = { scope in
+                contextMenuItems(for: .called(runtime), scope: scope)
+            }
         }
     }
 
@@ -4423,12 +4490,12 @@ private struct UtataneRootView: View {
     private func startCalledGhost(_ ghost: InstalledGhost) async throws {
         guard let caller = currentGhost, calledGhosts[ghost.id] == nil else { return }
         do {
-            sendEvent(.shiori(id: "OnGhostCalling", references: [
-                0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
-                1: "manual",
-                2: ghost.name,
-                3: ghost.rootDirectory.path
-            ]))
+            sendEvent(SHIORIEventFactory.ghostCalling(
+                characterName: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                mode: "manual",
+                ghostName: ghost.name,
+                ghostPath: ghost.rootDirectory.path
+            ))
             let calledPresentationSession = presentationCoordinator.makeSession(
                 title: ghost.name,
                 identifier: ghost.id.path
@@ -4510,21 +4577,20 @@ private struct UtataneRootView: View {
                 name: ghost.name
             )
             configureContextMenu()
-            sendEvent(.shiori(id: "OnGhostCallComplete", references: [
-                0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
-                1: startupScript,
-                2: ghost.name,
-                3: ghost.rootDirectory.path,
-                7: runtime.shell.name
-            ]))
-            let otherGhostReferences = [
-                0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
-                1: startupScript,
-                2: ghost.name,
-                7: runtime.shell.name
-            ]
+            let calledCharacterName = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+            sendEvent(SHIORIEventFactory.ghostCallComplete(
+                characterName: calledCharacterName,
+                startupScript: startupScript,
+                ghostName: ghost.name,
+                shellName: runtime.shell.name
+            ))
             for otherRuntime in calledGhosts.values where otherRuntime.ghost.id != ghost.id {
-                otherRuntime.send(.shiori(id: "OnOtherGhostBooted", references: otherGhostReferences))
+                otherRuntime.send(SHIORIEventFactory.otherGhostBooted(
+                    characterName: calledCharacterName,
+                    startupScript: startupScript,
+                    ghostName: ghost.name,
+                    shellName: runtime.shell.name
+                ))
             }
         } catch {
             calledGhosts[ghost.id] = nil
@@ -4538,12 +4604,12 @@ private struct UtataneRootView: View {
         configureContextMenu()
         Task {
             let finalScript = await runtime.stop()
-            sendEvent(.shiori(id: "OnOtherGhostClosed", references: [
-                0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
-                1: finalScript,
-                2: ghost.name,
-                7: runtime.shell.name
-            ]))
+            sendEvent(SHIORIEventFactory.otherGhostClosed(
+                characterName: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                finalScript: finalScript,
+                ghostName: ghost.name,
+                shellName: runtime.shell.name
+            ))
         }
     }
 
@@ -4777,7 +4843,11 @@ private struct UtataneRootView: View {
         installNars(from: [url])
     }
 
-    private func updateCurrentGhost(isAutomatic: Bool = false, reason: String? = nil) async {
+    private func updateCurrentGhost(
+        isAutomatic: Bool = false,
+        reason: String? = nil,
+        fromContentExplorer: Bool = false
+    ) async {
         guard !isUpdatingContent,
               let ghost = currentGhost,
               let updateSession = session,
@@ -4799,7 +4869,7 @@ private struct UtataneRootView: View {
 
         do {
             let usesCustomUpdate = await playInstallationEvent(
-                .shiori(id: "OnUpdateProcessExec", references: [0: updateReason]),
+                SHIORIEventFactory.updateProcessExec(reason: updateReason),
                 session: updateSession,
                 balloon: updateBalloon
             )
@@ -4807,12 +4877,12 @@ private struct UtataneRootView: View {
                 return
             }
             _ = await playInstallationEvent(
-                .shiori(id: "OnUpdateBegin", references: [
-                    0: ghost.name,
-                    1: ghost.rootDirectory.path,
-                    3: "ghost",
-                    4: updateReason
-                ]),
+                SHIORIEventFactory.updateBegin(
+                    name: ghost.name,
+                    path: ghost.rootDirectory.path,
+                    updateType: "ghost",
+                    reason: updateReason
+                ),
                 session: updateSession,
                 balloon: updateBalloon
             )
@@ -4853,17 +4923,17 @@ private struct UtataneRootView: View {
                 ghostName: ghost.name
             )
             _ = await playInstallationEvent(
-                .shiori(id: "OnUpdateComplete", references: [
-                    0: result.changedFiles.isEmpty ? "none" : "changed",
-                    1: result.changedFiles.joined(separator: ","),
-                    3: "ghost",
-                    4: updateReason
-                ]),
+                SHIORIEventFactory.updateComplete(
+                    changedFiles: result.changedFiles,
+                    updateType: "ghost",
+                    reason: updateReason
+                ),
                 session: updateSession,
                 balloon: updateBalloon
             )
             await playUpdateResult(
                 checkOnly: false,
+                fromContentExplorer: fromContentExplorer,
                 name: ghost.name,
                 succeeded: true,
                 result: String(result.changedFiles.count),
@@ -4879,17 +4949,18 @@ private struct UtataneRootView: View {
                 ghostName: ghost.name
             )
             let handled = await playInstallationEvent(
-                .shiori(id: "OnUpdateFailure", references: [
-                    0: updateFailureReason(error),
-                    1: updateFailurePath(error) ?? "",
-                    3: "ghost",
-                    4: updateReason
-                ]),
+                SHIORIEventFactory.updateFailure(
+                    failureReason: updateFailureReason(error),
+                    failurePath: updateFailurePath(error),
+                    updateType: "ghost",
+                    reason: updateReason
+                ),
                 session: updateSession,
                 balloon: updateBalloon
             )
             await playUpdateResult(
                 checkOnly: false,
+                fromContentExplorer: fromContentExplorer,
                 name: ghost.name,
                 succeeded: false,
                 result: updateFailureReason(error),
@@ -4935,13 +5006,11 @@ private struct UtataneRootView: View {
                 target: updateTarget,
                 operation: .check
             )
-            let reason = result.changedFiles.isEmpty ? "none" : "changed"
             _ = await playInstallationEvent(
-                .shiori(id: "OnUpdateCheckComplete", references: [
-                    0: reason,
-                    1: result.changedFiles.joined(separator: ","),
-                    3: "ghost"
-                ]),
+                SHIORIEventFactory.updateCheckComplete(
+                    changedFiles: result.changedFiles,
+                    updateType: "ghost"
+                ),
                 session: updateSession,
                 balloon: updateBalloon
             )
@@ -4965,7 +5034,7 @@ private struct UtataneRootView: View {
         } catch {
             let reason = updateFailureReason(error)
             _ = await playInstallationEvent(
-                .shiori(id: "OnUpdateCheckFailure", references: [0: reason]),
+                SHIORIEventFactory.updateCheckFailure(failureReason: reason),
                 session: updateSession,
                 balloon: updateBalloon
             )
@@ -5002,6 +5071,7 @@ private struct UtataneRootView: View {
 
     private func playUpdateResult(
         checkOnly: Bool,
+        fromContentExplorer: Bool = false,
         name: String,
         succeeded: Bool,
         result: String,
@@ -5016,23 +5086,37 @@ private struct UtataneRootView: View {
             result: result,
             failurePath: failurePath
         )
-        let extendedID = checkOnly ? "OnUpdateCheckResultEx" : "OnUpdateResultEx"
-        let legacyID = checkOnly ? "OnUpdateCheckResult" : "OnUpdateResult"
+        if fromContentExplorer, !checkOnly {
+            let event = SHIORIEventFactory.updateResultExplorer(records: [record.legacyValue])
+            _ = await playInstallationEvent(event, session: session, balloon: balloon)
+            for runtime in calledGhosts.values {
+                runtime.send(event)
+            }
+            return
+        }
+        let extended = SHIORIEventFactory.updateResultExtended(
+            records: [record.extendedValue],
+            checkOnly: checkOnly
+        )
+        let legacy = SHIORIEventFactory.updateResultLegacy(
+            records: [record.legacyValue],
+            checkOnly: checkOnly
+        )
         let handled = await playInstallationEvent(
-            .shiori(id: extendedID, references: [0: record.extendedValue]),
+            extended,
             session: session,
             balloon: balloon
         )
         if !handled {
             _ = await playInstallationEvent(
-                .shiori(id: legacyID, references: [0: record.legacyValue]),
+                legacy,
                 session: session,
                 balloon: balloon
             )
         }
     }
 
-    private func update(plugin: InstalledPlugin) async {
+    private func update(plugin: InstalledPlugin, fromContentExplorer: Bool = false) async {
         guard !isUpdatingContent, let homeURL = plugin.homeURL else { return }
         isUpdatingContent = true
         let status = statusWindowController.show(String(
@@ -5062,12 +5146,33 @@ private struct UtataneRootView: View {
                 category: "Plugin",
                 details: result.changedFiles.isEmpty ? nil : result.changedFiles.joined(separator: "\n")
             )
+            if fromContentExplorer {
+                await broadcastContentUpdateResults([
+                    ContentUpdateEventRecord(
+                        name: plugin.name,
+                        type: "plugin",
+                        succeeded: true,
+                        result: String(result.changedFiles.count)
+                    )
+                ], checkOnly: false, fromContentExplorer: true)
+            }
         } catch {
             AppLogStore.shared.error(
                 "プラグイン「\(plugin.name)」の更新に失敗しました: \(error.localizedDescription)",
                 category: "Plugin",
                 details: String(describing: error)
             )
+            if fromContentExplorer {
+                await broadcastContentUpdateResults([
+                    ContentUpdateEventRecord(
+                        name: plugin.name,
+                        type: "plugin",
+                        succeeded: false,
+                        result: updateFailureReason(error),
+                        failurePath: updateFailurePath(error)
+                    )
+                ], checkOnly: false, fromContentExplorer: true)
+            }
             showError(error.localizedDescription)
         }
         await reloadPlugins()
@@ -5082,66 +5187,55 @@ private struct UtataneRootView: View {
     ) async {
         let event: GhostEvent = switch progress {
         case let .ready(files):
-            .shiori(id: "OnUpdateReady", references: [
-                0: String(max(0, files.count - 1)),
-                1: files.joined(separator: ","),
-                3: "ghost",
-                4: reason
-            ])
+            SHIORIEventFactory.updateReady(files: files, updateType: "ghost", reason: reason)
         case let .downloadBegin(path, index, total):
-            .shiori(id: "OnUpdate.OnDownloadBegin", references: [
-                0: path,
-                1: String(index),
-                2: String(max(0, total - 1)),
-                3: "ghost",
-                4: reason
-            ])
+            SHIORIEventFactory.updateDownloadBegin(
+                path: path,
+                index: index,
+                total: total,
+                updateType: "ghost",
+                reason: reason
+            )
         case let .checksumBegin(path, expected, actual):
-            .shiori(id: "OnUpdate.OnMD5CompareBegin", references: [
-                0: path, 1: expected, 2: actual, 3: "ghost", 4: reason
-            ])
+            SHIORIEventFactory.updateMD5CompareBegin(
+                path: path,
+                expected: expected,
+                actual: actual,
+                updateType: "ghost",
+                reason: reason
+            )
         case let .checksumComplete(path, expected, actual):
-            .shiori(id: "OnUpdate.OnMD5CompareComplete", references: [
-                0: path, 1: expected, 2: actual, 3: "ghost", 4: reason
-            ])
+            SHIORIEventFactory.updateMD5CompareComplete(
+                path: path,
+                expected: expected,
+                actual: actual,
+                updateType: "ghost",
+                reason: reason
+            )
         case let .checksumFailure(path, expected, actual):
-            .shiori(id: "OnUpdate.OnMD5CompareFailure", references: [
-                0: path, 1: expected, 2: actual, 3: "ghost", 4: reason
-            ])
+            SHIORIEventFactory.updateMD5CompareFailure(
+                path: path,
+                expected: expected,
+                actual: actual,
+                updateType: "ghost",
+                reason: reason
+            )
         }
         _ = await playInstallationEvent(event, session: session, balloon: balloon)
     }
 
     private func updateFailureReason(_ error: Error) -> String {
-        switch error {
-        case ContentNetworkUpdateError.checksumMismatch: "md5 miss"
-        case let ContentNetworkUpdateError.downloadFailed(_, underlyingError):
-            if underlyingError.localizedCaseInsensitiveContains("timed out")
-                || underlyingError.localizedCaseInsensitiveContains("timeout")
-            {
-                "timeout"
-            } else if let status = underlyingError
-                .split(whereSeparator: { !$0.isNumber })
-                .compactMap({ Int($0) })
-                .first(where: { 400 ... 599 ~= $0 })
-            {
-                String(status)
-            } else {
-                "fileio"
-            }
-        default: "fileio"
-        }
+        (error as? ContentNetworkUpdateError)?.shioriFailureReason ?? "fileio"
     }
 
     private func updateFailurePath(_ error: Error) -> String? {
-        switch error {
-        case let ContentNetworkUpdateError.checksumMismatch(path): path
-        case let ContentNetworkUpdateError.downloadFailed(path, _): path
-        default: nil
-        }
+        (error as? ContentNetworkUpdateError)?.failurePath
     }
 
-    private func updateCurrentBalloon(isAutomatic: Bool = false) async {
+    private func updateCurrentBalloon(
+        isAutomatic: Bool = false,
+        fromContentExplorer: Bool = false
+    ) async {
         guard !isUpdatingContent, let updateBalloon = balloon else { return }
         isUpdatingContent = true
         defer { isUpdatingContent = false }
@@ -5160,12 +5254,12 @@ private struct UtataneRootView: View {
         }
 
         do {
-            broadcastEvent(.shiori(id: "OnUpdateOtherBegin", references: [
-                0: updateBalloon.name,
-                1: updateBalloon.directory.path,
-                3: "balloon",
-                4: updateReason
-            ]))
+            broadcastEvent(SHIORIEventFactory.updateOtherBegin(
+                name: updateBalloon.name,
+                path: updateBalloon.directory.path,
+                updateType: "balloon",
+                reason: updateReason
+            ))
             guard let homeURL = ContentNetworkUpdater.homeURL(in: updateBalloon.directory) else {
                 throw ContentNetworkUpdateError.invalidHomeURL
             }
@@ -5190,12 +5284,21 @@ private struct UtataneRootView: View {
                 category: "Update",
                 details: result.changedFiles.isEmpty ? nil : result.changedFiles.joined(separator: "\n")
             )
-            broadcastEvent(.shiori(id: "OnUpdateOtherComplete", references: [
-                0: result.changedFiles.isEmpty ? "none" : "changed",
-                1: result.changedFiles.joined(separator: ","),
-                3: "balloon",
-                4: updateReason
-            ]))
+            broadcastEvent(SHIORIEventFactory.updateOtherComplete(
+                changedFiles: result.changedFiles,
+                updateType: "balloon",
+                reason: updateReason
+            ))
+            if fromContentExplorer {
+                await broadcastContentUpdateResults([
+                    ContentUpdateEventRecord(
+                        name: updateBalloon.name,
+                        type: "balloon",
+                        succeeded: true,
+                        result: String(result.changedFiles.count)
+                    )
+                ], checkOnly: false, fromContentExplorer: true)
+            }
             if !isAutomatic {
                 if let statusToken {
                     statusWindowController.hide(token: statusToken)
@@ -5214,12 +5317,23 @@ private struct UtataneRootView: View {
                 category: "Update",
                 details: String(describing: error)
             )
-            broadcastEvent(.shiori(id: "OnUpdateOtherFailure", references: [
-                0: updateFailureReason(error),
-                1: updateFailurePath(error) ?? "",
-                3: "balloon",
-                4: updateReason
-            ]))
+            broadcastEvent(SHIORIEventFactory.updateOtherFailure(
+                failureReason: updateFailureReason(error),
+                failurePath: updateFailurePath(error),
+                updateType: "balloon",
+                reason: updateReason
+            ))
+            if fromContentExplorer {
+                await broadcastContentUpdateResults([
+                    ContentUpdateEventRecord(
+                        name: updateBalloon.name,
+                        type: "balloon",
+                        succeeded: false,
+                        result: updateFailureReason(error),
+                        failurePath: updateFailurePath(error)
+                    )
+                ], checkOnly: false, fromContentExplorer: true)
+            }
             if !isAutomatic {
                 showError(error.localizedDescription)
             }
@@ -5233,32 +5347,37 @@ private struct UtataneRootView: View {
     ) {
         let event: GhostEvent = switch progress {
         case let .ready(files):
-            .shiori(id: "OnUpdateOtherReady", references: [
-                0: String(max(0, files.count - 1)),
-                1: files.joined(separator: ","),
-                3: kind,
-                4: reason
-            ])
+            SHIORIEventFactory.updateOtherReady(files: files, updateType: kind, reason: reason)
         case let .downloadBegin(path, index, total):
-            .shiori(id: "OnUpdateOther.OnDownloadBegin", references: [
-                0: path,
-                1: String(index),
-                2: String(max(0, total - 1)),
-                3: kind,
-                4: reason
-            ])
+            SHIORIEventFactory.updateOtherDownloadBegin(
+                path: path,
+                index: index,
+                total: total,
+                updateType: kind,
+                reason: reason
+            )
         case let .checksumBegin(path, expected, actual):
-            .shiori(id: "OnUpdateOther.OnMD5CompareBegin", references: [
-                0: path, 1: expected, 2: actual, 3: kind, 4: reason
-            ])
-        case let .checksumComplete(path, expected, actual):
-            .shiori(id: "OnUpdateOther.OnMD5CompareComplete", references: [
-                0: path, 1: expected, 2: actual, 3: kind, 4: reason
-            ])
-        case let .checksumFailure(path, expected, actual):
-            .shiori(id: "OnUpdateOther.OnMD5CompareFailure", references: [
-                0: path, 1: expected, 2: actual, 3: kind, 4: reason
-            ])
+            SHIORIEventFactory.updateOtherMD5CompareBegin(
+                path: path,
+                expected: expected,
+                actual: actual,
+                updateType: kind,
+                reason: reason
+            )
+        case let .checksumComplete(_, expected, actual):
+            SHIORIEventFactory.updateOtherMD5CompareComplete(
+                expected: expected,
+                actual: actual,
+                updateType: kind,
+                reason: reason
+            )
+        case let .checksumFailure(_, expected, actual):
+            SHIORIEventFactory.updateOtherMD5CompareFailure(
+                expected: expected,
+                actual: actual,
+                updateType: kind,
+                reason: reason
+            )
         }
         broadcastEvent(event)
     }
@@ -5302,12 +5421,39 @@ private struct UtataneRootView: View {
         AppLogStore.shared.info("RSS/Atomフィード取得開始: \(url.absoluteString)", category: "Headline")
         do {
             let siteName = url.host ?? "RSS"
-            _ = await playInstallationEvent(
-                .shiori(id: "OnRSSBegin", references: [0: siteName, 1: url.absoluteString]),
+            let beginHandled = await playInstallationEvent(
+                SHIORIEventFactory.rssBegin(name: siteName, url: url.absoluteString),
                 session: rssSession,
                 balloon: rssBalloon
             )
+            if !beginHandled {
+                _ = await playInstallationEvent(
+                    SHIORIEventFactory.headlinesenseBegin(name: siteName, url: url.absoluteString),
+                    session: rssSession,
+                    balloon: rssBalloon
+                )
+            }
             let feed = try await RSSFeedClient().fetch(url)
+            let feedKey = url.absoluteString
+            let fingerprint = RSSFeedClient.updateFingerprint(feed)
+            let hasNoUpdate = rssFeedFingerprints[feedKey] == fingerprint
+            rssFeedFingerprints[feedKey] = fingerprint
+            if hasNoUpdate {
+                AppLogStore.shared.info("RSS/Atomフィード更新なし: \(feed.title)", category: "Headline")
+                let completeHandled = await playInstallationEvent(
+                    SHIORIEventFactory.rssNoUpdate,
+                    session: rssSession,
+                    balloon: rssBalloon
+                )
+                if !completeHandled {
+                    _ = await playInstallationEvent(
+                        SHIORIEventFactory.headlinesenseComplete,
+                        session: rssSession,
+                        balloon: rssBalloon
+                    )
+                }
+                return
+            }
             var references: [Int: String] = [
                 0: sanitizeNetworkText(feed.title),
                 1: feed.link
@@ -5315,29 +5461,61 @@ private struct UtataneRootView: View {
             for (index, item) in feed.items.prefix(50).enumerated() {
                 references[index + 2] = [
                     sanitizeNetworkText(item.title), item.link,
-                    sanitizeNetworkText(item.published), sanitizeNetworkText(item.author),
+                    RSSFeedClient.sspTimestamp(item.published), sanitizeNetworkText(item.author),
                     sanitizeNetworkText(item.summary)
                 ].joined(separator: "\u{1}")
             }
             AppLogStore.shared.info("RSS/Atomフィード取得完了: \(feed.title) (\(feed.items.count)件)", category: "Headline")
-            _ = await playInstallationEvent(
-                .shiori(id: "OnRSSComplete", references: references),
+            let completeHandled = await playInstallationEvent(
+                SHIORIEventFactory.rssComplete(references: references),
                 session: rssSession,
                 balloon: rssBalloon
             )
+            if !completeHandled {
+                let displayedItems = Array(feed.items.prefix(50))
+                for (index, item) in displayedItems.enumerated() {
+                    let phase = if displayedItems.count == 1 {
+                        "First and Last"
+                    } else if index == 0 {
+                        "First"
+                    } else if index == displayedItems.count - 1 {
+                        "Last"
+                    } else {
+                        "Next"
+                    }
+                    _ = await playInstallationEvent(
+                        SHIORIEventFactory.headlinesenseFind(
+                            name: sanitizeNetworkText(feed.title),
+                            url: item.link.isEmpty ? feed.link : item.link,
+                            phase: phase,
+                            headline: sanitizeNetworkText(item.title)
+                        ),
+                        session: rssSession,
+                        balloon: rssBalloon
+                    )
+                }
+            }
         } catch {
+            let reason = error is NetworkFetchError ? "can't download" : "can't analyze"
             AppLogStore.shared.error(
                 "RSS/Atom取得エラー (\(url.absoluteString)): \(error.localizedDescription)",
                 category: "Headline",
                 details: String(describing: error)
             )
             let handled = await playInstallationEvent(
-                .shiori(id: "OnRSSFailure", references: [0: "can't analyze"]),
+                SHIORIEventFactory.rssFailure(reason: reason),
                 session: rssSession,
                 balloon: rssBalloon
             )
             if !handled {
-                showError(error.localizedDescription)
+                let headlineHandled = await playInstallationEvent(
+                    SHIORIEventFactory.headlinesenseFailure(reason: reason),
+                    session: rssSession,
+                    balloon: rssBalloon
+                )
+                if !headlineHandled {
+                    showError(error.localizedDescription)
+                }
             }
         }
     }
@@ -5358,10 +5536,10 @@ private struct UtataneRootView: View {
         }
         AppLogStore.shared.info("HEADLINE取得開始: \(headline.name) (\(sourceURL.absoluteString))", category: "Headline")
         _ = await playInstallationEvent(
-            .shiori(id: "OnHeadlinesenseBegin", references: [
-                0: headline.name,
-                1: sourceURL.absoluteString
-            ]),
+            SHIORIEventFactory.headlinesenseBegin(
+                name: headline.name,
+                url: sourceURL.absoluteString
+            ),
             session: headlineSession,
             balloon: headlineBalloon
         )
@@ -5400,7 +5578,7 @@ private struct UtataneRootView: View {
             AppLogStore.shared.info("HEADLINE取得完了: \(headline.name) (\(displayedItems.count)件)", category: "Headline")
             guard !displayedItems.isEmpty else {
                 _ = await playInstallationEvent(
-                    .shiori(id: "OnHeadlinesenseComplete", references: [0: "no update"]),
+                    SHIORIEventFactory.headlinesenseComplete,
                     session: headlineSession,
                     balloon: headlineBalloon
                 )
@@ -5417,12 +5595,12 @@ private struct UtataneRootView: View {
                     "Next"
                 }
                 _ = await playInstallationEvent(
-                    .shiori(id: "OnHeadlinesense.OnFind", references: [
-                        0: headline.name,
-                        1: item.url ?? headline.openURL?.absoluteString ?? sourceURL.absoluteString,
-                        2: phase,
-                        3: sanitizeNetworkText(item.title)
-                    ]),
+                    SHIORIEventFactory.headlinesenseFind(
+                        name: headline.name,
+                        url: item.url ?? headline.openURL?.absoluteString ?? sourceURL.absoluteString,
+                        phase: phase,
+                        headline: sanitizeNetworkText(item.title)
+                    ),
                     session: headlineSession,
                     balloon: headlineBalloon
                 )
@@ -5435,7 +5613,7 @@ private struct UtataneRootView: View {
                 details: String(describing: error)
             )
             let handled = await playInstallationEvent(
-                .shiori(id: "OnHeadlinesenseFailure", references: [0: reason]),
+                SHIORIEventFactory.headlinesenseFailure(reason: reason),
                 session: headlineSession,
                 balloon: headlineBalloon
             )
@@ -6329,7 +6507,6 @@ private struct UtataneRootView: View {
         if operation != .check, candidates.contains(where: { $0.kind == .plugin }) {
             await pluginRuntime.unloadAll()
         }
-        let entryByTargetID = Dictionary(uniqueKeysWithValues: zip(targets, candidates).map { ($0.id, $1) })
         do {
             let result = try await ContentUpdateBatchJob().run(
                 targets: targets,
@@ -6359,17 +6536,22 @@ private struct UtataneRootView: View {
                     }
                 }
             )
-            for item in result.items {
-                guard let entry = entryByTargetID[item.target.id] else { continue }
-                broadcastContentUpdateResult(
-                    entry: entry,
-                    checkOnly: operation == .check,
+            let resultRecords = result.items.map { item in
+                ContentUpdateEventRecord(
+                    name: item.target.name,
+                    type: item.target.kind.rawValue,
                     succeeded: item.succeeded,
                     result: item.result.map { String($0.changedFiles.count) }
-                        ?? item.failureDescription
-                        ?? "fileio"
+                        ?? item.failureReason
+                        ?? "fileio",
+                    failurePath: item.failurePath
                 )
             }
+            await broadcastContentUpdateResults(
+                resultRecords,
+                checkOnly: operation == .check,
+                fromContentExplorer: operation != .check
+            )
             if operation != .check {
                 for kind in Set(candidates.map(\.kind)) {
                     await reloadContentCatalog(kind: kind)
@@ -6431,7 +6613,6 @@ private struct UtataneRootView: View {
         guard let homeURL = entry.updateURL else { return }
 
         isUpdatingContent = true
-        let reason = "manual"
         let statusToken = statusWindowController.show("「\(entry.name)」の更新を確認中…")
         defer {
             isUpdatingContent = false
@@ -6446,14 +6627,11 @@ private struct UtataneRootView: View {
                 homeURL: homeURL
             )
             let result = try await ContentUpdateJob().run(target: target, operation: .check)
-            let updateResult = result.changedFiles.isEmpty ? "none" : "changed"
-            broadcastEvent(.shiori(id: "OnUpdateCheckComplete", references: [
-                0: updateResult,
-                1: result.changedFiles.joined(separator: ","),
-                3: entry.kind.rawValue,
-                4: reason
-            ]))
-            broadcastContentUpdateResult(
+            broadcastEvent(SHIORIEventFactory.updateCheckComplete(
+                changedFiles: result.changedFiles,
+                updateType: entry.kind.rawValue
+            ))
+            await broadcastContentUpdateResult(
                 entry: entry,
                 checkOnly: true,
                 succeeded: true,
@@ -6468,12 +6646,8 @@ private struct UtataneRootView: View {
             )
         } catch {
             let failureReason = updateFailureReason(error)
-            broadcastEvent(.shiori(id: "OnUpdateCheckFailure", references: [
-                0: failureReason,
-                3: entry.kind.rawValue,
-                4: reason
-            ]))
-            broadcastContentUpdateResult(
+            broadcastEvent(SHIORIEventFactory.updateCheckFailure(failureReason: failureReason))
+            await broadcastContentUpdateResult(
                 entry: entry,
                 checkOnly: true,
                 succeeded: false,
@@ -6494,8 +6668,9 @@ private struct UtataneRootView: View {
         checkOnly: Bool,
         succeeded: Bool,
         result: String,
-        failurePath: String? = nil
-    ) {
+        failurePath: String? = nil,
+        fromContentExplorer: Bool = false
+    ) async {
         let record = ContentUpdateEventRecord(
             name: entry.name,
             type: entry.kind.rawValue,
@@ -6503,29 +6678,66 @@ private struct UtataneRootView: View {
             result: result,
             failurePath: failurePath
         )
-        broadcastEvent(.shiori(
-            id: checkOnly ? "OnUpdateCheckResultEx" : "OnUpdateResultEx",
-            references: [0: record.extendedValue]
-        ))
+        await broadcastContentUpdateResults(
+            [record],
+            checkOnly: checkOnly,
+            fromContentExplorer: fromContentExplorer
+        )
+    }
+
+    private func broadcastContentUpdateResults(
+        _ records: [ContentUpdateEventRecord],
+        checkOnly: Bool,
+        fromContentExplorer: Bool = false
+    ) async {
+        if fromContentExplorer, !checkOnly {
+            let event = SHIORIEventFactory.updateResultExplorer(
+                records: records.map(\.legacyValue)
+            )
+            if let session, let balloon {
+                _ = await playInstallationEvent(event, session: session, balloon: balloon)
+            }
+            for runtime in calledGhosts.values {
+                runtime.send(event)
+            }
+            return
+        }
+        let extended = SHIORIEventFactory.updateResultExtended(
+            records: records.map(\.extendedValue),
+            checkOnly: checkOnly
+        )
+        let legacy = SHIORIEventFactory.updateResultLegacy(
+            records: records.map(\.legacyValue),
+            checkOnly: checkOnly
+        )
+        if let session, let balloon {
+            let handled = await playInstallationEvent(extended, session: session, balloon: balloon)
+            if !handled {
+                _ = await playInstallationEvent(legacy, session: session, balloon: balloon)
+            }
+        }
+        for runtime in calledGhosts.values {
+            runtime.send(extended, fallingBackTo: legacy)
+        }
     }
 
     private func updateContentExplorerEntry(_ entry: ContentExplorerEntry) async {
         guard !isUpdatingContent, entry.canUpdate else { return }
 
         if entry.kind == .ghost, currentGhost?.rootDirectory == entry.directory {
-            await updateCurrentGhost()
+            await updateCurrentGhost(fromContentExplorer: true)
             refreshContentExplorer()
             return
         }
         if entry.kind == .balloon, balloon?.directory == entry.directory {
-            await updateCurrentBalloon()
+            await updateCurrentBalloon(fromContentExplorer: true)
             refreshContentExplorer()
             return
         }
         if entry.kind == .plugin,
            let plugin = installedPlugins.first(where: { $0.directory == entry.directory })
         {
-            await update(plugin: plugin)
+            await update(plugin: plugin, fromContentExplorer: true)
             refreshContentExplorer()
             return
         }
@@ -6539,12 +6751,12 @@ private struct UtataneRootView: View {
             statusWindowController.hide(token: statusToken)
         }
 
-        broadcastEvent(.shiori(id: "OnUpdateOtherBegin", references: [
-            0: entry.name,
-            1: entry.directory.path,
-            3: entry.kind.rawValue,
-            4: reason
-        ]))
+        broadcastEvent(SHIORIEventFactory.updateOtherBegin(
+            name: entry.name,
+            path: entry.directory.path,
+            updateType: entry.kind.rawValue,
+            reason: reason
+        ))
         do {
             let target = ContentUpdateTarget(
                 kind: contentUpdateKind(for: entry.kind),
@@ -6573,17 +6785,17 @@ private struct UtataneRootView: View {
                 category: "Update",
                 details: result.changedFiles.isEmpty ? nil : result.changedFiles.joined(separator: "\n")
             )
-            broadcastEvent(.shiori(id: "OnUpdateOtherComplete", references: [
-                0: result.changedFiles.isEmpty ? "none" : "changed",
-                1: result.changedFiles.joined(separator: ","),
-                3: entry.kind.rawValue,
-                4: reason
-            ]))
-            broadcastContentUpdateResult(
+            broadcastEvent(SHIORIEventFactory.updateOtherComplete(
+                changedFiles: result.changedFiles,
+                updateType: entry.kind.rawValue,
+                reason: reason
+            ))
+            await broadcastContentUpdateResult(
                 entry: entry,
                 checkOnly: false,
                 succeeded: true,
-                result: String(result.changedFiles.count)
+                result: String(result.changedFiles.count),
+                fromContentExplorer: true
             )
         } catch {
             AppLogStore.shared.error(
@@ -6591,18 +6803,19 @@ private struct UtataneRootView: View {
                 category: "Update",
                 details: String(describing: error)
             )
-            broadcastEvent(.shiori(id: "OnUpdateOtherFailure", references: [
-                0: updateFailureReason(error),
-                1: updateFailurePath(error) ?? "",
-                3: entry.kind.rawValue,
-                4: reason
-            ]))
-            broadcastContentUpdateResult(
+            broadcastEvent(SHIORIEventFactory.updateOtherFailure(
+                failureReason: updateFailureReason(error),
+                failurePath: updateFailurePath(error),
+                updateType: entry.kind.rawValue,
+                reason: reason
+            ))
+            await broadcastContentUpdateResult(
                 entry: entry,
                 checkOnly: false,
                 succeeded: false,
                 result: updateFailureReason(error),
-                failurePath: updateFailurePath(error)
+                failurePath: updateFailurePath(error),
+                fromContentExplorer: true
             )
             showError(error.localizedDescription)
         }
@@ -7093,28 +7306,6 @@ private func balloonSurfaceList(in directory: URL) -> String {
     }.joined(separator: " ")
 }
 
-func droppedFileMIMEType(_ url: URL) -> String {
-    if url.hasDirectoryPath {
-        return "inode/directory"
-    }
-    return UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-}
-
-func droppedFileViewerEventID(_ url: URL) -> String? {
-    guard let type = UTType(filenameExtension: url.pathExtension) else { return nil }
-    if type.conforms(to: .image) {
-        return "OnPictureViewerOpen"
-    }
-    if type.conforms(to: .audio) || type.conforms(to: .movie) {
-        return "OnMediaPlayerOpen"
-    }
-    let archiveExtensions = ["zip", "lzh", "lha", "rar", "7z", "tar", "gz", "bz2", "xz"]
-    if archiveExtensions.contains(url.pathExtension.lowercased()) {
-        return "OnArchiveViewerOpen"
-    }
-    return nil
-}
-
 enum URLDropDownloadError: Error {
     case httpStatus(Int)
     case invalidResponse
@@ -7595,8 +7786,8 @@ enum ContentRoot {
     }
 
     static func shioriModuleURL(for ghost: InstalledGhost) -> URL? {
-        guard let filename = ghost.shioriFilename?.replacingOccurrences(of: "\\", with: "/"),
-              !filename.isEmpty, !filename.hasPrefix("/")
+        let filename = ghost.effectiveShioriFilename.replacingOccurrences(of: "\\", with: "/")
+        guard !filename.isEmpty, !filename.hasPrefix("/")
         else { return nil }
         let masterDirectory = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
         let moduleURL = masterDirectory.appending(path: filename, directoryHint: .notDirectory).standardizedFileURL

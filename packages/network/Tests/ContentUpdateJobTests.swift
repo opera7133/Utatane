@@ -139,6 +139,8 @@ private actor FetchAttempts {
     #expect(result.failedCount == 1)
     #expect(result.succeededCount == 1)
     #expect(result.items[0].attempts == 1)
+    #expect(result.items[0].failureReason == "fileio")
+    #expect(result.items[0].failurePath == nil)
     #expect(result.items[1].attempts == 2)
 }
 

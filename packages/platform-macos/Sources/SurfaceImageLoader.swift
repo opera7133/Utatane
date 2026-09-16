@@ -10,6 +10,7 @@ struct SurfaceImageLoader {
     func load(
         _ surface: SurfaceAsset,
         usesSelfAlpha: Bool = false,
+        usesFullSelfAlpha: Bool = false,
         ignoresTransparency: Bool = false
     ) throws -> NSImage {
         if ignoresTransparency {
@@ -21,14 +22,18 @@ struct SurfaceImageLoader {
         guard let alphaMaskURL = surface.alphaMaskURL else {
             if usesSelfAlpha,
                let source = NSImage(contentsOf: surface.imageURL),
-               let representation = bestBitmapRepresentation(in: source),
-               representation.hasAlpha
+               let representation = bestBitmapRepresentation(in: source)
             {
-                let pixelSize = NSSize(width: representation.pixelsWide, height: representation.pixelsHigh)
-                representation.size = pixelSize
-                let image = NSImage(size: pixelSize)
-                image.addRepresentation(representation)
-                return image
+                if representation.hasAlpha {
+                    let pixelSize = NSSize(width: representation.pixelsWide, height: representation.pixelsHigh)
+                    representation.size = pixelSize
+                    let image = NSImage(size: pixelSize)
+                    image.addRepresentation(representation)
+                    return image
+                }
+                if usesFullSelfAlpha {
+                    return try applyingOpaqueAlpha(to: source, sourceURL: surface.imageURL)
+                }
             }
             return try loadUsingTopLeftTransparency(surface.imageURL)
         }

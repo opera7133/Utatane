@@ -38,6 +38,23 @@ func `loads an image only legacy shell`() throws {
 }
 
 @Test
+func `loads full self alpha mode`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: UUID().uuidString,
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data("seriko.use_self_alpha,full".utf8).write(to: root.appending(path: "descript.txt"))
+    try Data("surface0 {}".utf8).write(to: root.appending(path: "surfaces.txt"))
+
+    let shell = try ShellLoader().load(from: root)
+
+    #expect(shell.usesSelfAlpha)
+    #expect(shell.usesFullSelfAlpha)
+}
+
+@Test
 func `loads legacy per-surface animation and collision files`() throws {
     let root = FileManager.default.temporaryDirectory.appending(
         path: UUID().uuidString,

@@ -286,6 +286,46 @@ func `self alpha falls back to the top left key for a PNG without alpha`() throw
 
 @Test
 @MainActor
+func `full self alpha keeps a PNG without alpha opaque`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let url = directory.appending(path: "surface0.png")
+    let bitmap = try #require(NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: 2,
+        pixelsHigh: 1,
+        bitsPerSample: 8,
+        samplesPerPixel: 3,
+        hasAlpha: false,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 6,
+        bitsPerPixel: 24
+    ))
+    let bytes = try #require(bitmap.bitmapData)
+    bytes[0] = 255
+    bytes[1] = 255
+    bytes[2] = 255
+    bytes[3] = 0
+    bytes[4] = 0
+    bytes[5] = 0
+    try #require(bitmap.representation(using: .png, properties: [:])).write(to: url)
+
+    let image = try SurfaceImageLoader().load(
+        SurfaceAsset(id: 0, imageURL: url, alphaMaskURL: nil),
+        usesSelfAlpha: true,
+        usesFullSelfAlpha: true
+    )
+    let data = try #require(image.tiffRepresentation)
+    let output = try #require(NSBitmapImageRep(data: data))
+    #expect((output.colorAt(x: 0, y: 0)?.alphaComponent ?? 0) > 0.9)
+    #expect((output.colorAt(x: 1, y: 0)?.alphaComponent ?? 0) > 0.9)
+}
+
+@Test
+@MainActor
 func `overlay fast clips the new layer to the base alpha`() throws {
     let base = try makeTestImage(colors: [
         NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1),

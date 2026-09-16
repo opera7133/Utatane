@@ -80,6 +80,7 @@ public struct ShellLoader: Sendable {
             surfaces: document.surfaces,
             surfaceAliases: document.aliases,
             usesSelfAlpha: shellMetadata.usesSelfAlpha,
+            usesFullSelfAlpha: shellMetadata.usesFullSelfAlpha,
             defaultBindGroups: shellMetadata.defaultBindGroups,
             bindGroups: shellMetadata.bindGroups,
             bindOptions: shellMetadata.bindOptions,
@@ -185,6 +186,7 @@ public struct ShellLoader: Sendable {
 
     private func metadata(in shellDirectory: URL) -> (
         usesSelfAlpha: Bool,
+        usesFullSelfAlpha: Bool,
         defaultBindGroups: [Int: Set<Int>],
         bindGroups: [Int: [Int: ShellBindGroup]],
         bindOptions: [Int: [String: ShellBindOptions]],
@@ -197,9 +199,10 @@ public struct ShellLoader: Sendable {
     ) {
         let url = shellDirectory.appending(path: "descript.txt", directoryHint: .notDirectory)
         guard let text = try? readText(from: url) else {
-            return (false, [:], [:], [:], [:], [], [], [], nil, [:])
+            return (false, false, [:], [:], [:], [:], [], [], [], nil, [:])
         }
         var usesSelfAlpha = false
+        var usesFullSelfAlpha = false
         var defaultBindGroups: [Int: Set<Int>] = [:]
         var groupNames: [Int: [Int: (category: String, part: String, thumbnail: String)]] = [:]
         var groupAddIDs: [Int: [Int: Set<Int>]] = [:]
@@ -216,7 +219,9 @@ public struct ShellLoader: Sendable {
             }
             guard fields.count == 2 else { continue }
             if fields[0].caseInsensitiveCompare("seriko.use_self_alpha") == .orderedSame {
-                usesSelfAlpha = fields[1] == "1"
+                let value = fields[1].lowercased()
+                usesSelfAlpha = value == "1" || value == "true" || value == "full"
+                usesFullSelfAlpha = value == "full"
                 continue
             }
             let key = fields[0].lowercased()
@@ -342,6 +347,7 @@ public struct ShellLoader: Sendable {
         }
         return (
             usesSelfAlpha,
+            usesFullSelfAlpha,
             defaultBindGroups,
             bindGroups,
             bindOptions,

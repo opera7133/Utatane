@@ -27,18 +27,22 @@ final class SNTPEventCoordinator {
     }
 
     func start() async -> SakuraScript? {
-        let begin = await handleEvent("OnSNTPBegin", [0: server.absoluteString])
+        let begin = await handle(SHIORIEventFactory.sntpBegin(server: server.absoluteString))
         do {
             let comparison = try await client.compare(server: server)
             self.comparison = comparison
-            var compare = await handleEvent("OnSNTPCompareEx", comparison.extendedReferences)
+            var compare = await handle(SHIORIEventFactory.sntpCompareExtended(
+                references: comparison.extendedReferences
+            ))
             if compare == nil {
-                compare = await handleEvent("OnSNTPCompare", comparison.legacyReferences)
+                compare = await handle(SHIORIEventFactory.sntpCompare(
+                    references: comparison.legacyReferences
+                ))
             }
             return Self.join(begin, compare)
         } catch {
             comparison = nil
-            let failure = await handleEvent("OnSNTPFailure", [0: server.absoluteString])
+            let failure = await handle(SHIORIEventFactory.sntpFailure(server: server.absoluteString))
             return Self.join(begin, failure)
         }
     }
@@ -51,6 +55,11 @@ final class SNTPEventCoordinator {
         }
         self.comparison = nil
         return corrected
+    }
+
+    private func handle(_ event: GhostEvent) async -> SakuraScript? {
+        guard case let .shiori(id, references) = event else { return nil }
+        return await handleEvent(id, references)
     }
 
     private static func join(_ first: SakuraScript?, _ second: SakuraScript?) -> SakuraScript? {

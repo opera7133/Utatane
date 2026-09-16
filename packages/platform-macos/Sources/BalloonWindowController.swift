@@ -736,7 +736,11 @@ public final class BalloonWindowController {
             imageURL: url,
             alphaMaskURL: FileManager.default.fileExists(atPath: maskURL.path) ? maskURL : nil
         )
-        return try imageLoader.load(asset, usesSelfAlpha: balloon.usesSelfAlpha)
+        return try imageLoader.load(
+            asset,
+            usesSelfAlpha: balloon.usesSelfAlpha,
+            usesFullSelfAlpha: balloon.usesFullSelfAlpha
+        )
     }
 
     private func effectiveDisplayScale(scope: Int) -> CGFloat {

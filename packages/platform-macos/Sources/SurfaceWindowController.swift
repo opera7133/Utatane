@@ -107,7 +107,7 @@ public final class SurfaceWindowController {
     public var onURLDropping: (@MainActor (Int, URL) -> Void)?
     public var onURLDrop: (@MainActor (Int, URL) -> Void)?
     public var onTextDrop: (@MainActor (Int, String) -> Void)?
-    public var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
+    public var contextMenuItems: (@MainActor (Int) -> [SurfaceContextMenuItem])?
     public var onUserDressupChange: (@MainActor ([DressupChange]) -> Void)?
 
     public init(
@@ -816,7 +816,7 @@ public final class SurfaceWindowController {
             self?.onPresentationMove?(scope, delta, reason)
         }
         character.contextMenuItems = { [weak self] in
-            self?.contextMenuItems?() ?? []
+            self?.contextMenuItems?(scope) ?? []
         }
         character.setStayOnTop(stayOnTop)
         character.setCollisionMode(collisionMode.enabled, showsNames: collisionMode.showsNames)
@@ -2029,7 +2029,11 @@ private final class CharacterSurfaceController {
                 image = try render(elements: elements, shell: shell)
             } else {
                 let surface = try shellLoader.loadSurface(id: surfaceID, from: shell.directory)
-                image = try imageLoader.load(surface, usesSelfAlpha: shell.usesSelfAlpha)
+                image = try imageLoader.load(
+                    surface,
+                    usesSelfAlpha: shell.usesSelfAlpha,
+                    usesFullSelfAlpha: shell.usesFullSelfAlpha
+                )
             }
         } catch let error as ShellError {
             guard case .missingSurface = error,
@@ -2146,6 +2150,7 @@ private final class CharacterSurfaceController {
         var result = try imageLoader.load(
             shellLoader.loadElement(filename: first.filename, from: shell.directory),
             usesSelfAlpha: shell.usesSelfAlpha,
+            usesFullSelfAlpha: shell.usesFullSelfAlpha,
             ignoresTransparency: first.method.caseInsensitiveCompare("asis") == .orderedSame
         )
         for element in elements.dropFirst() {
@@ -2156,6 +2161,7 @@ private final class CharacterSurfaceController {
             let overlay = try imageLoader.load(
                 shellLoader.loadElement(filename: element.filename, from: shell.directory),
                 usesSelfAlpha: shell.usesSelfAlpha,
+                usesFullSelfAlpha: shell.usesFullSelfAlpha,
                 ignoresTransparency: ignoresTransparency
             )
             result = imageLoader.composite(
@@ -2279,6 +2285,7 @@ private final class CharacterSurfaceController {
             image = try imageLoader.load(
                 asset,
                 usesSelfAlpha: shell.usesSelfAlpha,
+                usesFullSelfAlpha: shell.usesFullSelfAlpha,
                 ignoresTransparency: ignoresTransparency
             )
         } else {
@@ -3264,10 +3271,12 @@ private final class SurfaceImageView: NSImageView {
     }
 
     private func buttonNumber(_ event: NSEvent) -> Int {
-        switch event.buttonNumber {
-        case 1: 1
-        case 2: 2
-        default: 0
+        let number = Int(event.buttonNumber)
+        switch event.type {
+        case .otherMouseDown, .otherMouseUp, .otherMouseDragged:
+            return max(2, number)
+        default:
+            return number
         }
     }
 

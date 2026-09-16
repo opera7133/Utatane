@@ -116,6 +116,7 @@ public struct BalloonLoader: Sendable {
 
     private func definition(in directory: URL, values: [String: String]) -> BalloonDefinition {
         let isVertical = boolean("vertical", in: values)
+        let selfAlpha = values["use_self_alpha"]?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let validRectLeft = integer("validrect.left", in: values, default: 14)
         let validRectTop = integer("validrect.top", in: values, default: 14)
         let validRectRight = values["validrect.right"].flatMap(Int.init)
@@ -176,7 +177,8 @@ public struct BalloonLoader: Sendable {
             ),
             numberRightX: integer("number.xr", in: values, default: -28),
             numberY: integer("number.y", in: values, default: -24),
-            usesSelfAlpha: boolean("use_self_alpha", in: values),
+            usesSelfAlpha: selfAlpha == "full" || boolean("use_self_alpha", in: values),
+            usesFullSelfAlpha: selfAlpha == "full",
             windowPositionX: windowPositionX(in: values),
             windowPositionY: integer("windowposition.y", in: values, default: 0),
             limitsWindowPosition: !values.keys.contains("windowposition.limit")

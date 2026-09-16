@@ -45,6 +45,23 @@ func `macOS SHIORI overrides an alias declaration and works without a common dec
 }
 
 @Test
+func `omitted SHIORI resolves to the traditional shiori dll default`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let master = root.appending(path: "ghost/master")
+    let shell = root.appending(path: "shell/master")
+    for directory in [master, shell] {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+    try Data("name,Default SHIORI Ghost\n".utf8).write(to: master.appending(path: "descript.txt"))
+    try Data("name,Master\n".utf8).write(to: shell.appending(path: "descript.txt"))
+
+    let ghost = try GhostPackageLoader().loadGhost(at: root)
+    #expect(ghost.shioriFilename == nil)
+    #expect(ghost.effectiveShioriFilename == "shiori.dll")
+}
+
+@Test
 func `loads and names every installed shell with master as default`() throws {
     let root = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

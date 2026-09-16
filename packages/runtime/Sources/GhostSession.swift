@@ -37,6 +37,14 @@ public actor GhostSession {
         return try await handleLogged(event: event)
     }
 
+    public func handle(event: GhostEvent, fallingBackTo fallback: GhostEvent) async throws -> SakuraScript? {
+        guard state == .running else { return nil }
+        if let script = try await handleLogged(event: event) {
+            return script
+        }
+        return try await handleLogged(event: fallback)
+    }
+
     public func response(for event: GhostEvent) async throws -> PersonalityResponse? {
         guard state == .running else { return nil }
         logRequest(event)
@@ -61,9 +69,12 @@ public actor GhostSession {
         case let .ghostChanging(name):
             .ghostChanging(name: name)
         case let .ghostChangingDetailed(name, mode, ghostName, path):
-            .shiori(id: "OnGhostChanging", references: [
-                0: name ?? "", 1: mode, 2: ghostName, 3: path
-            ])
+            SHIORIEventFactory.ghostChanging(
+                characterName: name ?? "",
+                mode: mode,
+                ghostName: ghostName,
+                ghostPath: path
+            )
         }
         do {
             let script = try await handleLogged(event: event)

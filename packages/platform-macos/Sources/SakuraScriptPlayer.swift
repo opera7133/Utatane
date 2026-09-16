@@ -85,6 +85,7 @@ public final class SakuraScriptPlayer {
     private var resourceBaseDirectory: URL?
     private var currentScriptRawValue = ""
     private var activatedLinkKind: BalloonTextLink.Kind?
+    private var enteredLinkKind: BalloonTextLink.Kind?
     private var preventsUserBreak = false
     private var interactionMode: SakuraScriptInteractionMode?
     private var speechHistoryStore: SpeechHistoryStore?
@@ -97,6 +98,7 @@ public final class SakuraScriptPlayer {
     public var onError: (@MainActor (Error) -> Void)?
     public var onChoice: (@MainActor (String, [String]) -> Void)?
     public var onChoiceSelectEx: (@MainActor (String, String, [String]) -> Void)?
+    public var onChoiceSelection: (@MainActor (String, String, [String]) -> Void)?
     public var onAnchorSelect: (@MainActor (String) -> Void)?
     public var onAnchorSelectEx: (@MainActor (String, String, [String]) -> Void)?
     public var onChoiceEnter: (@MainActor (String?, String?, [String]) -> Void)?
@@ -191,10 +193,9 @@ public final class SakuraScriptPlayer {
             activatedLinkKind = link.kind
             switch link.kind {
             case .choice:
-                // A plain \q choice is completed by OnChoiceSelect below. Sending
-                // OnChoiceSelectEx as well races the two SHIORI responses and can
-                // discard the follow-up script produced by the ordinary event.
-                if !link.arguments.isEmpty {
+                if let onChoiceSelection {
+                    onChoiceSelection(label, link.id, link.arguments)
+                } else if !link.arguments.isEmpty {
                     onChoiceSelectEx?(label, link.id, link.arguments)
                 }
             case .anchor:
@@ -221,7 +222,7 @@ public final class SakuraScriptPlayer {
                     // completes the choice. A non-empty response opens normally.
                     cancel(hidesBalloon: true)
                 }
-                if linkKind != .anchor {
+                if linkKind != .anchor, linkKind != .choice || onChoiceSelection == nil {
                     onChoice?(id, arguments)
                 }
             }
@@ -230,12 +231,18 @@ public final class SakuraScriptPlayer {
             guard let self else { return }
             switch link?.kind {
             case .choice:
+                enteredLinkKind = .choice
                 onChoiceEnter?(label, link?.id, link?.arguments ?? [])
             case .anchor:
+                enteredLinkKind = .anchor
                 onAnchorEnter?(label, link?.id, link?.arguments ?? [])
             case nil:
-                onChoiceEnter?(nil, nil, [])
-                onAnchorEnter?(nil, nil, [])
+                switch enteredLinkKind {
+                case .choice: onChoiceEnter?(nil, nil, [])
+                case .anchor: onAnchorEnter?(nil, nil, [])
+                case nil: break
+                }
+                enteredLinkKind = nil
             }
         }
         balloonWindowController.onLinkHover = { [weak self] link, label in

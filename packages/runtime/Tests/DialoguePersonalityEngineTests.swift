@@ -40,6 +40,34 @@ func `session can start with a ghost call event`() async throws {
     #expect(await engine.lastEvent == .shiori(id: "OnGhostCalled", references: [0: "caller"]))
 }
 
+@Test func `session sends boot only when the primary lifecycle event has no script`() async throws {
+    let fallbackEngine = LifecycleRecordingEngine(scripts: ["OnBoot": #"\0boot\e"#])
+    let fallbackSession = GhostSession(personalityEngine: fallbackEngine)
+    _ = try await fallbackSession.start(event: .shiori(id: "OnInitialize", references: [:]))
+    let fallback = try await fallbackSession.handle(
+        event: SHIORIEventFactory.firstBoot(vanishCount: 0),
+        fallingBackTo: SHIORIEventFactory.boot(shellName: "master")
+    )
+    #expect(fallback?.rawValue == #"\0boot\e"#)
+    #expect(await fallbackEngine.eventIDs == ["OnInitialize", "OnFirstBoot", "OnBoot"])
+
+    let handledEngine = LifecycleRecordingEngine(scripts: ["OnGhostCalled": #"\0called\e"#])
+    let handledSession = GhostSession(personalityEngine: handledEngine)
+    _ = try await handledSession.start(event: .shiori(id: "OnInitialize", references: [:]))
+    let handled = try await handledSession.handle(
+        event: SHIORIEventFactory.ghostCalled(
+            callerCharacterName: "Caller",
+            callerScript: "",
+            callerGhostName: "Caller Ghost",
+            callerGhostPath: "/ghost/caller",
+            shellName: "master"
+        ),
+        fallingBackTo: SHIORIEventFactory.boot(shellName: "master")
+    )
+    #expect(handled?.rawValue == #"\0called\e"#)
+    #expect(await handledEngine.eventIDs == ["OnInitialize", "OnGhostCalled"])
+}
+
 @Test @MainActor
 func `session records normalized SHIORI requests and responses`() async throws {
     let logStore = AppLogStore()
@@ -65,6 +93,24 @@ private actor RecordingPersonalityEngine: PersonalityEngine {
     func handle(event: GhostEvent) async throws -> SakuraScript? {
         lastEvent = event
         return nil
+    }
+}
+
+private actor LifecycleRecordingEngine: PersonalityEngine {
+    private(set) var eventIDs: [String] = []
+    private let scripts: [String: String]
+
+    init(scripts: [String: String]) {
+        self.scripts = scripts
+    }
+
+    func handle(event: GhostEvent) async throws -> SakuraScript? {
+        let eventID = switch event {
+        case let .shiori(id, _): id
+        default: "other"
+        }
+        eventIDs.append(eventID)
+        return scripts[eventID].map(SakuraScript.init(rawValue:))
     }
 }
 

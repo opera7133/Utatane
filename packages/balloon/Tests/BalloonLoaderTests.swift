@@ -216,6 +216,24 @@ func `loads marker number transparency and window placement settings`() throws {
 }
 
 @Test
+func `loads full self alpha mode`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    type,balloon
+    name,Full Alpha Balloon
+    use_self_alpha,full
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+
+    let balloon = try BalloonLoader().load(from: directory)
+
+    #expect(balloon.usesSelfAlpha)
+    #expect(balloon.usesFullSelfAlpha)
+}
+
+@Test
 func `loads input appearance and balloonc surface overrides`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

@@ -18,6 +18,42 @@ import Testing
     #expect(loaded.runtime == .nativeSHIORI(.yaya))
 }
 
+@Test func `explicit macOS filename overrides the plugin DLL and native detection`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let plugin = root.appending(path: "shared", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: plugin, withIntermediateDirectories: true)
+    try Data().write(to: plugin.appending(path: "yaya.txt"))
+    try Data().write(to: plugin.appending(path: "libplugin.dylib"))
+    try Data("""
+    charset,UTF-8
+    name,Shared Plugin
+    id,shared-plugin
+    filename,plugin.dll
+    filename.macos,libplugin.dylib
+    """.utf8).write(to: plugin.appending(path: "descript.txt"))
+
+    let loaded = try #require(PluginCatalog().load(from: [root]).first)
+    #expect(loaded.moduleURL.lastPathComponent == "libplugin.dylib")
+    #expect(loaded.runtime == .dynamicLibrary(loaded.moduleURL))
+}
+
+@Test func `missing explicit macOS filename does not fall back to the plugin DLL`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let plugin = root.appending(path: "broken", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: plugin, withIntermediateDirectories: true)
+    try Data().write(to: plugin.appending(path: "plugin.dll"))
+    try Data("""
+    name,Broken Override
+    id,broken-override
+    filename,plugin.dll
+    filename.macos,missing.dylib
+    """.utf8).write(to: plugin.appending(path: "descript.txt"))
+
+    #expect(try PluginCatalog().load(from: [root]).isEmpty)
+}
+
 @Test func `rejects traversal and duplicate IDs`() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
     defer { try? FileManager.default.removeItem(at: root) }

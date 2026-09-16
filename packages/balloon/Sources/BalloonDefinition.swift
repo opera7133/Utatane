@@ -34,6 +34,7 @@ public struct BalloonDefinition: Sendable, Equatable {
     public let numberRightX: Int
     public let numberY: Int
     public let usesSelfAlpha: Bool
+    public let usesFullSelfAlpha: Bool
     public let windowPositionX: BalloonWindowPositionX
     public let windowPositionY: Int
     public let limitsWindowPosition: Bool
@@ -85,6 +86,7 @@ public struct BalloonDefinition: Sendable, Equatable {
         numberRightX: Int = -28,
         numberY: Int = -24,
         usesSelfAlpha: Bool = false,
+        usesFullSelfAlpha: Bool = false,
         windowPositionX: BalloonWindowPositionX = .offset(0),
         windowPositionY: Int = 0,
         limitsWindowPosition: Bool = true,
@@ -135,6 +137,7 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.numberRightX = numberRightX
         self.numberY = numberY
         self.usesSelfAlpha = usesSelfAlpha
+        self.usesFullSelfAlpha = usesFullSelfAlpha
         self.windowPositionX = windowPositionX
         self.windowPositionY = windowPositionY
         self.limitsWindowPosition = limitsWindowPosition

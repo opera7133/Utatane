@@ -58,11 +58,23 @@ public struct PluginCatalog: Sendable {
               let name = metadata["name"], !name.isEmpty,
               let id = metadata["id"], isValidID(id),
               metadata["type"]?.lowercased() == nil || metadata["type"]?.lowercased() == "plugin",
-              let filename = metadata["filename"],
-              let moduleURL = safeFile(named: filename, in: root, mustExist: true)
+              let filename = metadata["filename"], !filename.isEmpty
         else { return nil }
 
-        let runtime = runtime(for: moduleURL, directory: root)
+        #if os(macOS)
+            let macOSFilename = metadata["filename.macos"].flatMap { $0.isEmpty ? nil : $0 }
+        #else
+            let macOSFilename: String? = nil
+        #endif
+        guard let moduleURL = safeFile(named: macOSFilename ?? filename, in: root, mustExist: true) else {
+            return nil
+        }
+
+        let runtime = runtime(
+            for: moduleURL,
+            directory: root,
+            allowsNativeDetection: macOSFilename == nil
+        )
         return InstalledPlugin(
             id: id,
             name: name,
@@ -82,8 +94,12 @@ public struct PluginCatalog: Sendable {
         )
     }
 
-    private static func runtime(for moduleURL: URL, directory: URL) -> InstalledPlugin.Runtime {
-        if let kind = nativeSHIORIKind(
+    private static func runtime(
+        for moduleURL: URL,
+        directory: URL,
+        allowsNativeDetection: Bool
+    ) -> InstalledPlugin.Runtime {
+        if allowsNativeDetection, let kind = nativeSHIORIKind(
             in: directory,
             declaredModuleFilename: moduleURL.lastPathComponent
         ) {

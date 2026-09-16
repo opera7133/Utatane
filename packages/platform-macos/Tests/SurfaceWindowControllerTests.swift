@@ -2301,7 +2301,6 @@ func `renders synchronized text and line breaks in both scopes`() async throws {
         surfaceWindowController: surfaceController,
         balloonWindowController: balloonController
     )
-
     await player.playAndWait(
         SakuraScript(rawValue: #"\0前\_s同期\n\_s後\e"#),
         balloon: makeBalloon(directory: directory),
@@ -3228,6 +3227,8 @@ func `keeps every speaker balloon until a completed dialogue is clicked`() async
         surfaceWindowController: surfaceController,
         balloonWindowController: balloonController
     )
+    var closedScript: String?
+    player.onBalloonClose = { closedScript = $0 }
     let balloon = BalloonDefinition(
         directory: directory,
         name: "test",
@@ -3239,8 +3240,9 @@ func `keeps every speaker balloon until a completed dialogue is clicked`() async
         fontColor: BalloonColor(red: 0, green: 0, blue: 0)
     )
 
+    let source = "\\0Sakura\\1Kero\\p[2]Charlie\\e"
     await player.playAndWait(
-        SakuraScript(rawValue: "\\0Sakura\\1Kero\\p[2]Charlie\\e"),
+        SakuraScript(rawValue: source),
         balloon: balloon,
         characterDelayMilliseconds: 0
     )
@@ -3248,6 +3250,7 @@ func `keeps every speaker balloon until a completed dialogue is clicked`() async
 
     player.advance()
     #expect(balloonController.visibleScopes.isEmpty)
+    #expect(closedScript == source)
 }
 
 @Test
@@ -3607,6 +3610,107 @@ func `plain choice dispatches only the ordinary choice event`() async throws {
     #expect(ordinaryChoice == "talkinterval")
     #expect(extendedChoice == nil)
     #expect(balloonController.visibleScopes.isEmpty)
+}
+
+@Test
+@MainActor
+func `unified choice callback suppresses independent legacy dispatch`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 180, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    var selection: (String, String, [String])?
+    var ordinaryChoice = false
+    var independentExtendedChoice = false
+    player.onChoiceSelection = { selection = ($0, $1, $2) }
+    player.onChoice = { _, _ in ordinaryChoice = true }
+    player.onChoiceSelectEx = { _, _, _ in independentExtendedChoice = true }
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\q[秋,LikeSeason,月見,菊]\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    let link = try #require(balloonController.textAndLinks(for: 0)?.1.first)
+    balloonController.onLinkActivate?(link, "秋")
+    balloonController.onLinkClick?(link.id, link.arguments)
+
+    #expect(selection?.0 == "秋")
+    #expect(selection?.1 == "LikeSeason")
+    #expect(selection?.2 == ["月見", "菊"])
+    #expect(!ordinaryChoice)
+    #expect(!independentExtendedChoice)
+}
+
+@Test
+@MainActor
+func `choice and anchor enter events preserve link references and exit kind`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 220, height: 120).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    var choiceEvents: [(String?, String?, [String])] = []
+    var anchorEvents: [(String?, String?, [String])] = []
+    player.onChoiceEnter = { choiceEvents.append(($0, $1, $2)) }
+    player.onAnchorEnter = { anchorEvents.append(($0, $1, $2)) }
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\q[選択肢,choice-id,extra]\n\_a[anchor-id,anchor-extra]アンカー\_a\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    let links = try #require(balloonController.textAndLinks(for: 0)?.1)
+    let choice = try #require(links.first { $0.kind == .choice })
+    let anchor = try #require(links.first { $0.kind == .anchor })
+    balloonController.onLinkEnter?(choice, "選択肢")
+    balloonController.onLinkEnter?(nil, nil)
+    balloonController.onLinkEnter?(anchor, "アンカー")
+    balloonController.onLinkEnter?(nil, nil)
+
+    #expect(choiceEvents.count == 2)
+    #expect(choiceEvents[0].0 == "選択肢")
+    #expect(choiceEvents[0].1 == "choice-id")
+    #expect(choiceEvents[0].2 == ["extra"])
+    #expect(choiceEvents[1].0 == nil)
+    #expect(anchorEvents.count == 2)
+    #expect(anchorEvents[0].0 == "アンカー")
+    #expect(anchorEvents[0].1 == "anchor-id")
+    #expect(anchorEvents[0].2 == ["anchor-extra"])
+    #expect(anchorEvents[1].0 == nil)
 }
 
 @Test
@@ -4118,7 +4222,9 @@ func `dismisses balloons before requesting surface restore`() async throws {
         surfaceRestoreDelayMilliseconds: 40
     )
     var didRequestSurfaceRestore = false
+    var timedOutScript: String?
     player.onSurfaceRestore = { didRequestSurfaceRestore = true }
+    player.onBalloonTimeout = { timedOutScript = $0 }
     let balloon = BalloonDefinition(
         directory: directory,
         name: "test",
@@ -4130,8 +4236,9 @@ func `dismisses balloons before requesting surface restore`() async throws {
         fontColor: BalloonColor(red: 0, green: 0, blue: 0)
     )
 
+    let source = "\\0\\s[1]Sakura\\1\\s[11]Kero\\e"
     player.play(
-        SakuraScript(rawValue: "\\0\\s[1]Sakura\\1\\s[11]Kero\\e"),
+        SakuraScript(rawValue: source),
         balloon: balloon,
         characterDelayMilliseconds: 0
     )
@@ -4144,6 +4251,7 @@ func `dismisses balloons before requesting surface restore`() async throws {
         try await Task.sleep(for: .milliseconds(20))
     }
     #expect(balloonController.visibleScopes.isEmpty)
+    #expect(timedOutScript == source)
     #expect(!didRequestSurfaceRestore)
     for _ in 0 ..< 100 where !didRequestSurfaceRestore {
         try await Task.sleep(for: .milliseconds(10))
@@ -4565,6 +4673,37 @@ func `balloons follow their surface while preserving independent balloon movemen
 @Suite(.serialized)
 struct SurfaceDragTests {
     @Test @MainActor
+    func `surface input emits boundary down double click and hover events`() async throws {
+        let fixture = try makeSurfaceDragFixture()
+        defer { fixture.cleanUp() }
+        let controller = fixture.controller
+        let window = fixture.window
+        let view = try #require(window.contentView)
+        let pointer = NSPoint(x: window.frame.midX, y: window.frame.midY)
+        var events: [GhostMouseEvent] = []
+        controller.onMouseEvent = { events.append($0) }
+
+        let movement = try surfaceDragEvent(.mouseMoved, pointer: pointer, window: window)
+        view.mouseEntered(with: movement)
+        view.mouseExited(with: movement)
+        try view.mouseDown(with: surfaceDragEvent(.leftMouseDown, pointer: pointer, window: window, clickCount: 2))
+        try view.mouseUp(with: surfaceDragEvent(.leftMouseUp, pointer: pointer, window: window, clickCount: 2))
+        try view.otherMouseDown(with: surfaceDragEvent(.otherMouseDown, pointer: pointer, window: window, clickCount: 2))
+        try view.otherMouseUp(with: surfaceDragEvent(.otherMouseUp, pointer: pointer, window: window, clickCount: 2))
+        view.mouseMoved(with: movement)
+        try await Task.sleep(for: .milliseconds(1100))
+
+        #expect(events.contains { $0.kind == .enterAll })
+        #expect(events.contains { $0.kind == .leaveAll })
+        #expect(events.contains { $0.kind == .down && $0.button == 0 })
+        #expect(events.contains { $0.kind == .up && $0.button == 0 })
+        #expect(events.contains { $0.kind == .doubleClick && $0.button == 0 })
+        #expect(events.contains { $0.kind == .down && $0.button == 2 })
+        #expect(events.contains { $0.kind == .doubleClick && $0.button == 2 })
+        #expect(events.contains { $0.kind == .hover })
+    }
+
+    @Test @MainActor
     func `surface drag dims only while dragging and reports actual desktop coordinates`() async throws {
         let fixture = try makeSurfaceDragFixture()
         defer { fixture.cleanUp() }
@@ -4754,9 +4893,14 @@ private func makeSurfaceDragFixture() throws -> SurfaceDragFixture {
 }
 
 @MainActor
-private func surfaceDragEvent(_ type: NSEvent.EventType, pointer: NSPoint, window: NSWindow) throws -> NSEvent {
+private func surfaceDragEvent(
+    _ type: NSEvent.EventType,
+    pointer: NSPoint,
+    window: NSWindow,
+    clickCount: Int = 1
+) throws -> NSEvent {
     try #require(NSEvent.mouseEvent(
         with: type, location: window.convertPoint(fromScreen: pointer), modifierFlags: [],
-        timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+        timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: clickCount, pressure: 1
     ))
 }

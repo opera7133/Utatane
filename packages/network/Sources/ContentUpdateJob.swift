@@ -68,6 +68,8 @@ public struct ContentUpdateBatchItemResult: Sendable, Equatable {
     public let target: ContentUpdateTarget
     public let result: ContentUpdateResult?
     public let failureDescription: String?
+    public let failureReason: String?
+    public let failurePath: String?
     public let attempts: Int
 
     public var succeeded: Bool {
@@ -78,11 +80,15 @@ public struct ContentUpdateBatchItemResult: Sendable, Equatable {
         target: ContentUpdateTarget,
         result: ContentUpdateResult?,
         failureDescription: String?,
+        failureReason: String? = nil,
+        failurePath: String? = nil,
         attempts: Int
     ) {
         self.target = target
         self.result = result
         self.failureDescription = failureDescription
+        self.failureReason = failureReason
+        self.failurePath = failurePath
         self.attempts = attempts
     }
 }
@@ -161,6 +167,7 @@ public struct ContentUpdateBatchJob: Sendable {
                     throw CancellationError()
                 } catch {
                     let failureDescription = error.localizedDescription
+                    let updateError = error as? ContentNetworkUpdateError
                     if attempt < attemptLimit, Self.isRetryable(error) {
                         await progress?(.targetRetry(
                             target: target,
@@ -173,6 +180,8 @@ public struct ContentUpdateBatchJob: Sendable {
                         target: target,
                         result: nil,
                         failureDescription: failureDescription,
+                        failureReason: updateError?.shioriFailureReason ?? "fileio",
+                        failurePath: updateError?.failurePath,
                         attempts: attempt
                     ))
                     await progress?(.targetFailure(

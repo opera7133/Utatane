@@ -91,6 +91,38 @@ public enum ContentNetworkUpdateError: LocalizedError, Equatable, Sendable {
         case let .conflictingPaths(lhs, rhs): "更新と削除のパスが競合している: \(lhs), \(rhs)"
         }
     }
+
+    public var shioriFailureReason: String {
+        switch self {
+        case .checksumMismatch:
+            "md5 miss"
+        case let .downloadFailed(_, underlyingError):
+            if underlyingError.localizedCaseInsensitiveContains("timed out")
+                || underlyingError.localizedCaseInsensitiveContains("timeout")
+            {
+                "timeout"
+            } else if let status = underlyingError
+                .split(whereSeparator: { !$0.isNumber })
+                .compactMap({ Int($0) })
+                .first(where: { 400 ... 599 ~= $0 })
+            {
+                String(status)
+            } else {
+                "fileio"
+            }
+        default:
+            "fileio"
+        }
+    }
+
+    public var failurePath: String? {
+        switch self {
+        case let .checksumMismatch(path), let .downloadFailed(path, _):
+            path
+        default:
+            nil
+        }
+    }
 }
 
 public struct ContentNetworkUpdater: Sendable {

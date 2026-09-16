@@ -5,6 +5,7 @@ public struct ShellDefinition: Sendable, Equatable {
     public let surfaces: [Int: SurfaceDefinition]
     public let surfaceAliases: [Int: [String: [Int]]]
     public let usesSelfAlpha: Bool
+    public let usesFullSelfAlpha: Bool
     public let defaultBindGroups: [Int: Set<Int>]
     public let bindGroups: [Int: [Int: ShellBindGroup]]
     public let bindOptions: [Int: [String: ShellBindOptions]]
@@ -24,6 +25,7 @@ public struct ShellDefinition: Sendable, Equatable {
         surfaces: [Int: SurfaceDefinition],
         surfaceAliases: [Int: [String: [Int]]] = [:],
         usesSelfAlpha: Bool = false,
+        usesFullSelfAlpha: Bool = false,
         defaultBindGroups: [Int: Set<Int>] = [:],
         bindGroups: [Int: [Int: ShellBindGroup]] = [:],
         bindOptions: [Int: [String: ShellBindOptions]] = [:],
@@ -35,6 +37,7 @@ public struct ShellDefinition: Sendable, Equatable {
             surfaces: surfaces,
             surfaceAliases: surfaceAliases,
             usesSelfAlpha: usesSelfAlpha,
+            usesFullSelfAlpha: usesFullSelfAlpha,
             defaultBindGroups: defaultBindGroups,
             bindGroups: bindGroups,
             bindOptions: bindOptions,
@@ -49,6 +52,7 @@ public struct ShellDefinition: Sendable, Equatable {
         surfaces: [Int: SurfaceDefinition],
         surfaceAliases: [Int: [String: [Int]]] = [:],
         usesSelfAlpha: Bool = false,
+        usesFullSelfAlpha: Bool = false,
         defaultBindGroups: [Int: Set<Int>] = [:],
         bindGroups: [Int: [Int: ShellBindGroup]] = [:],
         bindOptions: [Int: [String: ShellBindOptions]] = [:],
@@ -61,6 +65,7 @@ public struct ShellDefinition: Sendable, Equatable {
             surfaces: surfaces,
             surfaceAliases: surfaceAliases,
             usesSelfAlpha: usesSelfAlpha,
+            usesFullSelfAlpha: usesFullSelfAlpha,
             defaultBindGroups: defaultBindGroups,
             bindGroups: bindGroups,
             bindOptions: bindOptions,
@@ -76,6 +81,7 @@ public struct ShellDefinition: Sendable, Equatable {
         surfaces: [Int: SurfaceDefinition],
         surfaceAliases: [Int: [String: [Int]]] = [:],
         usesSelfAlpha: Bool = false,
+        usesFullSelfAlpha: Bool = false,
         defaultBindGroups: [Int: Set<Int>] = [:],
         bindGroups: [Int: [Int: ShellBindGroup]] = [:],
         bindOptions: [Int: [String: ShellBindOptions]] = [:],
@@ -94,6 +100,7 @@ public struct ShellDefinition: Sendable, Equatable {
         self.surfaces = surfaces
         self.surfaceAliases = surfaceAliases
         self.usesSelfAlpha = usesSelfAlpha
+        self.usesFullSelfAlpha = usesFullSelfAlpha
         self.defaultBindGroups = defaultBindGroups
         self.bindGroups = bindGroups
         self.bindOptions = bindOptions
