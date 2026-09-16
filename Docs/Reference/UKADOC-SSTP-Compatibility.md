@@ -1,6 +1,8 @@
 # UKADOC SSTP/1.x互換状況
 
-参照元はUKADOCの`SSTP/1.x`。UtataneではmacOSで利用可能なSocket SSTPとSSTP over HTTPを対象とし、Windowsの`WM_COPYDATA`に依存するDirect SSTPは対象外とする。
+外部のアプリからゴーストへ話しかけるSSTPについて、使える通信方式と命令をまとめています。基準はUKADOCの`SSTP/1.x`です。
+
+UtataneはSocket SSTPとSSTP over HTTPを扱います。Windowsの`WM_COPYDATA`を使うDirect SSTPは、macOSでは対象外です。
 
 調査日: 2026-08-25
 調査結果: ✅ 18 / 🟡 2 / ❌ 0 / ➖ 3
@@ -26,7 +28,7 @@
 | GIVE | ✅ | DocumentをOnCommunicate、SongをOnMusicPlayへ変換 |
 | EXECUTE | ✅ | 下記portable commandを実行。未知commandは501 |
 
-SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを選択できる。`IfGhost`と直後の`Script`の組を出現順に評価し、該当しなければdefault Scriptを使う。`Option: nobreak`は現在の再生完了後へキューイングする。`nodescript`はUtataneに専用SSTPマーカーがないため結果に差がない。`notranslate`は、SSTPで受け取ったScriptを現在のMAKOTO経路へ渡していないため、指定の有無で差がない。
+SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを選択できます。`IfGhost`と直後の`Script`の組を出現順に評価し、該当しなければdefault Scriptを使います。`Option: nobreak`は現在の再生完了後へキューイングします。`nodescript`はUtataneに専用SSTPマーカーがないため結果に差はありません。`notranslate`は、SSTPで受け取ったScriptを現在のMAKOTO経路へ渡していないため、指定の有無で差はありません。
 
 ## EXECUTE command
 
@@ -36,7 +38,7 @@ SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを�
 | GetGhostName／GetShellName／GetBalloonName | ✅ | 選択対象の現在値 |
 | GetVersion／GetShortVersion | ✅ | Utataneのbundle version |
 | GetGhostNameList／GetShellNameList／GetBalloonNameList／GetHeadlineNameList | ✅ | 認識済みコンテンツ一覧 |
-| GetPluginNameList | ✅ | 認識済みプラグイン名を改行区切りで返す |
+| GetPluginNameList | ✅ | 認識済みプラグイン名を改行区切りで返します |
 | Quiet／Restore | ✅ | 16秒またはRestoreまで通常SSTP再生を409で抑止 |
 | SetCookie／GetCookie | ✅ | Sender単位の実行中メモリ保存 |
 | SetProperty／GetProperty | ✅ | Property Systemへ接続。読み取り専用値への書込は420 |
@@ -45,4 +47,4 @@ SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを�
 | GetFMO／ReceiverGhostHWnd | ➖ | WindowsのFMO／HWND依存のためmacOS対象外 |
 | MoveAsync／SetTrayIcon／SetTrayBalloon | ➖ | macOSに同等のSSP tray／HWND機構がないため対象外 |
 
-`Command[param1,param2]`と`Reference0`以降の両方の引数形式を受理する。レスポンス追加データはUKADOCどおりヘッダー後の空行に続けて返す。
+`Command[param1,param2]`と`Reference0`以降の両方の引数形式を受理します。レスポンス追加データはUKADOCどおりヘッダー後の空行に続けて返します。

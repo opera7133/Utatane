@@ -1,32 +1,55 @@
 # Realtime音声会話
 
-Utataneは、OpenAI Realtime APIと、そのWebRTC call作成方式に対応する互換APIへ接続できる。利用者がBase URL、model、voice、API keyを設定することもできる。
+マイクで話しかけ、音声で返事を受け取る実験的な機能です。OpenAI Realtime API、または同じWebRTC接続方式に対応する互換APIを使います。
+
+通常のゴーストの会話や読み上げとは別の機能です。まずは接続先の設定を済ませてから、会話を開始してください。
 
 ## 設定
 
-「設定」→「ネットワーク」→「リアルタイム音声会話」で次を設定する。
+「本体設定」→「ネットワーク」→「リアルタイム音声会話」で、接続先の情報を入力します。
 
-- プロバイダー: `OpenAI Realtime`または`OpenAI Realtime互換`
-- モデル: OpenAIでは`gpt-realtime`等、互換APIでは提供されるmodel ID
-- Voice: providerが受け付けるvoice ID
-- Base URL: OpenAIでは空欄可。互換APIではサービスのURL
-- APIキー: macOS Keychainへ保存し、WebViewやゴーストcontentへ渡さない
+- プロバイダー: `OpenAI Realtime`または`OpenAI Realtime互換`を選びます。
+- モデル: 接続先が提供するモデルID。OpenAIでは`gpt-realtime`などです。
+- Voice: 接続先が受け付ける声のIDを入力します。
+- Base URL: OpenAIでは空欄にできます。互換APIではサービスのURLを入力します。
+- APIキー: 接続先のAPIキーを入力します。macOSのKeychainに保存し、WebViewやゴーストのデータには渡しません。
 
-設定後、ゴーストの右クリックメニューから「機能」→「リアルタイム音声会話…」を開く。明示的に「会話を開始」を押した時だけマイクを取得する。
+1. 右クリックの「機能」→「音声」→「リアルタイム音声会話…」を開きます。
+2. 「会話を開始」を押します。この時点でマイクを使い始めます。
+3. 会話画面で接続状態とマイク入力を確認し、話しかけます。
+
+設定画面を開くだけで、いきなり会話が始まることはありません。
 
 ## 通信
 
-Utataneは`POST /v1/realtime/calls`へ、`sdp`と`session`をmultipartで送信する。`session`には`type: realtime`、model、audio output voiceを含める。Bearer API keyを付けるHTTP signalingはnative `URLSession`で行うため、providerがBrowser向けCORS headerを返す必要はない。
+接続先の実装を確認する人向けの説明です。普段の利用では、この節の設定を追加する必要はありません。
 
-音声と`oai-events` DataChannelはWKWebViewのWebRTC接続を通る。API keyはWebViewへ渡さない。終了時はcall IDを取得できた場合に`POST /v1/realtime/calls/{call_id}/hangup`を送信する。
+接続開始時に、`POST /v1/realtime/calls`へ`sdp`と`session`をmultipart形式で送ります。`session`には`type: realtime`、モデル、出力音声のVoiceを含めます。
+
+APIキーを付けるHTTP通信はmacOS側の`URLSession`で行います。この通信について、接続先がブラウザ向けのCORSヘッダーを返す必要はありません。
+
+音声と`oai-events` DataChannelは、WKWebViewのWebRTC接続を使います。APIキーはWebViewへ渡しません。終了時は、call IDを取得できていれば`POST /v1/realtime/calls/{call_id}/hangup`を送ります。
 
 ## ゴーストとの連携
 
-`response.audio_transcript.delta`または`response.output_audio_transcript.delta`を受信すると、届いた差分を累積して現在のゴーストのバルーンへ逐次表示する。対応する`done`で確定文へ置き換える。文字列はSakuraScriptとして解釈されないようescapeする。
+AIの返事は、音声だけでなく現在のゴーストのバルーンにも表示します。文章が届くたびに表示を更新し、最後に確定した文章へ置き換えます。受け取った文章をSakuraScriptの命令として実行することはありません。
 
-`conversation.item.input_audio_transcription.delta`と`completed`はイベントログと応答遅延の計測に使い、バルーンには表示しない。音声会話画面にはマイク入力レベル、WebRTC RTT、ユーザー発話終了から最初のモデルtranscriptまでの応答遅延を表示する。入力レベルは−25 dBFS以上を「入力あり」と判定する（表示上の目安で、送信音声にはゲートを掛けない）。出力音量はWeb Audio Gainで50〜500%に調整できる。
+表示に使うイベントは`response.audio_transcript.delta`、`response.output_audio_transcript.delta`と、それぞれの`done`です。
 
-ゴーストの`ghost/master/realtime.json`に表情を設定すると、`response.created`で`thinking`、音声transcriptの開始で`speaking`へ変更し、応答完了時に元のsurfaceへ戻す。未設定または不正なmanifestでは表情を変更しない。
+自分が話した内容の文字起こしは、ログと返事までの時間の計測に使います。バルーンには表示しません。対応するイベントは`conversation.item.input_audio_transcription.delta`と`completed`です。
+
+会話画面では、次の状態を確認できます。
+
+- マイク入力レベル。−25 dBFS以上を「入力あり」と表示します。あくまで表示の目安で、小さい音を送信から除外するものではありません。
+- WebRTC RTT。接続の往復にかかる時間です。
+- 応答遅延。話し終わってから、AIの最初の文字起こしが届くまでの時間です。
+- 出力音量。Web Audio Gainで50〜500%に調整できます。
+
+ゴースト制作者は、`ghost/master/realtime.json`で会話中の表情を指定できます。設定がない場合や読み取れない場合は、表情を変更しません。
+
+- `thinking`: `response.created`を受け取り、返事を作り始めたときの表情です。
+- `speaking`: 音声の文字起こしが届き始めたときの表情です。
+- 応答が完了すると、会話前のサーフェスへ戻ります。
 
 ```json
 {
@@ -38,11 +61,11 @@ Utataneは`POST /v1/realtime/calls`へ、`sdp`と`session`をmultipartで送信�
 }
 ```
 
-API eventからsurface番号を直接受け取らず、このmanifestに明示された対応だけを使用する。`restore`は設定できず、Utataneが応答開始前のsurfaceを記録して戻す。
+サーフェス番号はこの設定ファイルだけから読みます。APIのイベントから直接指定することはできません。`restore`は設定項目ではなく、Utataneが会話前のサーフェスを覚えて戻します。
 
 ## 現在の制限
 
-- OpenAI Realtime API全体の完全互換を要求しない。WebRTC call、audio track、`oai-events`、transcript、hangupを利用する。
-- `oai-events`の到着順で表示するため、transcriptは会話ログとして低遅延に見えるが、音声再生位置との厳密な字幕同期は保証しない。
-- providerごとのTURN、組織policy、rate limit、課金、音声保存条件はprovider側の設定に従う。
-- 自動testとDebug buildはHTTP request生成とアプリへの組み込みを確認するが、実マイク、OpenAI、互換providerへのlive接続は別途確認する。
+- API全体を扱う機能ではありません。WebRTC call、audio track、`oai-events`、文字起こし、hangupを使います。
+- 文章はイベントが届いた順に表示します。音声の再生位置と厳密に揃う字幕ではありません。
+- TURN、組織ポリシー、利用量の上限、料金、音声の保存条件は、接続先サービスの設定に従います。
+- 自動テストでは接続要求の生成などを確認しています。マイクや外部サービスへの実接続は、利用する環境で別途確認が必要です。

@@ -43,6 +43,16 @@ final class CalledGhostRuntime {
     private(set) var shell: InstalledShell
     private(set) var balloon: BalloonDefinition
 
+    var layoutPresetStageFrame: CGRect? {
+        presentationSession?.layoutPresetStageFrame
+    }
+
+    func restoreLayoutPreset(_ preset: LayoutPresetGhost) {
+        presentationSession?.restoreLayoutPresetStageFrame(preset.stageFrame)
+        surfaceController.restoreLayoutPresetPositions(preset.positions)
+        balloonController.restoreLayoutPresetPositions(preset.balloonPositions)
+    }
+
     var contextMenuItems: (() -> [SurfaceContextMenuItem])? {
         didSet { surfaceController.contextMenuItems = { [weak self] in self?.contextMenuItems?() ?? [] } }
     }

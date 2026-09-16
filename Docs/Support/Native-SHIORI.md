@@ -30,7 +30,9 @@ UtataneがmacOS上でSHIORI・SAORIを実行する仕組みと、実装済みの
 
 ## SHIORIの選択
 
-独自SHIORIの両OS向け配布では、`ghost/master/descript.txt`の`shiori`にWindows用DLL、`shiori.macos`に汎用ABIのmacOS用モジュールまたは`shiolink.dll`を併記できます。空でない`shiori.macos`は内蔵エンジンの自動判定より優先し、指定先の読み込み失敗時は別のエンジンへ戻りません。詳しくは[開発者向けガイド](../Creators/SHIORI-Development.md#windowsとmacosを同じゴーストで配布する)を参照してください。
+独自SHIORIの両OS向け配布では、`ghost/master/descript.txt`の`shiori`にWindows用DLL、`shiori.macos`に汎用ABIのmacOS用モジュールまたは`shiolink.dll`を併記できます。空でない`shiori.macos`は内蔵エンジンの自動判定より優先し、指定先の読み込み失敗時は別のエンジンへ戻りません。
+
+詳しくは[開発者向けガイド](../Creators/SHIORI-Development.md#windowsとmacosを同じゴーストで配布する)を参照してください。
 
 識別子、別名、代表的なDLL名、実行方式、追加ランタイムの要否は`UtataneCore`のSHIORIカタログで管理しています。設定の「SHIORI対応状況」も同じ情報を表示します。UtataneはSHIORIの検索・ダウンロード・更新は行いません。
 
@@ -105,7 +107,9 @@ mise run test --filter NativeKawariSessionTests
 
 ### 翡翠（Hisui、実験的）
 
-`hisui.dll`をロードせずSwift実装を使います。TLKの複数候補、条件とフォールバック、変数と`\formula`、`%if` / `elseif` / `else`、トークン呼び出し、主要な参照・文字列・乱数・時刻関数を解釈します。`hisuiconf.xml`と旧`hisui_preference.def`から辞書・学習ディレクトリ、会話間隔、誕生日、感情境界、標準単語カテゴリを読み、UTF-16を含む`.mem`単語辞書を展開します。式は括弧と四則演算に対応し、変更した変数・感情値・数値指定の会話間隔は、ゴースト本体ではなくApplication Supportへ保存します。
+`hisui.dll`をロードせずSwift実装を使います。TLKの複数候補、条件とフォールバック、変数と`\formula`、`%if` / `elseif` / `else`、トークン呼び出し、主要な参照・文字列・乱数・時刻関数を解釈します。`hisuiconf.xml`と旧`hisui_preference.def`から辞書・学習ディレクトリ、会話間隔、誕生日、感情境界、標準単語カテゴリを読み、UTF-16を含む`.mem`単語辞書を展開します。
+
+式は括弧と四則演算に対応し、変更した変数・感情値・数値指定の会話間隔は、ゴースト本体ではなくApplication Supportへ保存します。
 
 `gosji_06`で起動、時間帯分岐、当たり判定付きダブルクリック、メニュー、選択肢、自由トーク、リソース応答を自動テストしています。辞書が明示的に変更する感情値を設定上の境界へ収め、`emotionlimiter`で候補を制限します。旧翡翠自身の同梱readmeでも感情系は開発途上とされているため、クリック等から感情値を自動学習する独自規則は補っていません。実ゴーストで確認できない組み込み関数とSAORI呼び出し構文は未実装です。
 
@@ -149,13 +153,18 @@ charmode = UTF-8
 
 ### 里珠 / Proxy（実験的）
 
-`rishu_proxy.dll`と`rishu_remote.pl`を持つゴーストではDLLをロードせず、macOSの`/usr/bin/perl`でゴースト側スクリプトを起動します。`UTATANE_RISHU_PERL_EXECUTABLE`を設定するとperlbrew等の別バージョンを指定できます。里珠1.1の`PROXY LOAD` / `REQUEST` / `UNLOAD`電文を使い、返された元のSHIORI応答をUtataneへ戻します。タイムアウト、応答サイズ、Shift_JIS変換も外部プロセス経路で検査します。
+`rishu_proxy.dll`と`rishu_remote.pl`を持つゴーストではDLLをロードせず、macOSの`/usr/bin/perl`でゴースト側スクリプトを起動します。`UTATANE_RISHU_PERL_EXECUTABLE`を設定するとperlbrew等の別バージョンを指定できます。
+
+里珠1.1の`PROXY LOAD` / `REQUEST` / `UNLOAD`電文を使い、返された元のSHIORI応答をUtataneへ戻します。タイムアウト、応答サイズ、Shift_JIS変換も外部プロセス経路で検査します。
 
 `References/Local/rishu-1.1.32`のプロトコル実装を基に、最小Perlプロセスで中継を確認していますが、付属サンプルそのものは現行macOSのPerlで応答を取得できず、実ゴーストも未確認です。停止されていた旧Direct方式の`rishu.dll`は対象外で、古いPerlモジュールやWindows固有処理を使うスクリプトもそのまま動くとは限りません。
 
 ### 結奈
 
-`yuhna.dll`をロードせず、非暗号化のYDF/1.07辞書から通常イベント、ランダム候補、条件付きルールを読みます。`OnYuhnaRandomTalk`、話者別のクリック・ダブルクリック・ホイール・接触イベントへ変換し、`%refN`をSHIORI Referenceで展開します。`%refN` / `%sel`の等値・不等値・数値比較と`&`による複合条件に対応し、選択肢IDから条件付きルールへ移る基本的な分岐も実行します。解析できないレコードは誤った会話として扱わず読み飛ばし、起動ログにルール数・条件付きルール数・未解析件数を表示します。
+`yuhna.dll`をロードせず、非暗号化のYDF/1.07辞書から通常イベント、ランダム候補、条件付きルールを読みます。`OnYuhnaRandomTalk`、話者別のクリック・ダブルクリック・ホイール・接触イベントへ変換し、`%refN`をSHIORI Referenceで展開します。
+
+`%refN` / `%sel`の等値・不等値・数値比較と`&`による複合条件に対応し、選択肢IDから条件付きルールへ移る基本的な分岐も実行します。解析できないレコードは誤った会話として扱わず読み飛ばし、起動ログにルール数・条件付きルール数・未解析件数を表示します。
+
 
 手元の`Yuhna-10th`では、原DLLをWineで実行した`OnBoot`と同じ会話、ランダムトーク、部位別クリック、ランダムトーク間隔メニューの選択肢分岐をネイティブ辞書から取得しています。`$i[...]`はネイティブ側の秒タイマーへ反映してゴースト別に保存し、`$n`は名前入力を開いて`%username`を保存します。波括弧による単純な変数代入・参照、加算、`%[d6]`にも対応しています。
 
@@ -171,7 +180,9 @@ macOS用SHIORIは標準ABIで直接読み込みます。Windows用SHIORI / SAORI
 
 `makoto.dll`と`makoto.ini`の`[ParticleMakoto]`を検出すると、DLLをロードせずSwift実装で韓国語のパッチムを判定し、助詞記法をSHIORI応答上で変換します。
 
-`makoto.dll`と`makoto0.lst`を持つ`Makoto Basic with Select and Repeat`も別実装として検出します。`makoto0.lst` / `makoto1.lst`の文字列置換と、旧SakuraScriptの`\h` / `\u`による辞書切替をSwiftで行います。原DLLの`load` / `execute` / `unload`をWineで比較し、複数カンマを含む置換規則と話者切替を照合しています。専用のselect / repeat記法は使用例を確認できていないため未対応です。
+`makoto.dll`と`makoto0.lst`を持つ`Makoto Basic with Select and Repeat`も別実装として検出します。`makoto0.lst` / `makoto1.lst`の文字列置換と、旧SakuraScriptの`\h` / `\u`による辞書切替をSwiftで行います。
+
+原DLLの`load` / `execute` / `unload`をWineで比較し、複数カンマを含む置換規則と話者切替を照合しています。専用のselect / repeat記法は使用例を確認できていないため未対応です。
 
 ## 検証範囲
 

@@ -10,25 +10,25 @@
 
 | 方式 | 向いている用途 | Utataneで必要なもの |
 | --- | --- | --- |
-| macOS用モジュール | C / C++などで実装し、ゴーストに同梱して配布する | Mach-Oの`.dylib`、`.so`、`.bundle`と、以下の汎用ABI |
-| SHIOLINK | スクリプト言語や別プロセスで開発・検証する | 実行可能なプログラム、SHIOLINK通信、利用者ごとのコマンド設定 |
-| Windows DLL | Windows版を先に開発している | WineとDLLホストの追加設定。通常のmacOS向け配布には別途移植を検討 |
+| macOS用モジュール | C / C++などで実装し、ゴーストに同梱して配布します | Mach-Oの`.dylib`、`.so`、`.bundle`と、以下の汎用ABI |
+| SHIOLINK | スクリプト言語や別プロセスで開発・検証します | 実行可能なプログラム、SHIOLINK通信、利用者ごとのコマンド設定 |
+| Windows DLL | Windows版の先行開発 | WineとDLLホストの追加設定。通常のmacOS向け配布には別途移植を検討 |
 
 `.dll`を`.dylib`へ改名しても動きません。`.so`でもmacOS用の実体が必要です。新しい独自SHIORIには独自の名前を付け、既知SHIORIのDLL名・辞書ファイル名を識別用に流用しないでください。Utataneは汎用モジュールの読み込みより先に、内蔵エンジンや専用経路を判定します。
 
 ## 既存SHIORIを対応させる場合
 
-1. SHIORI電文の解析と辞書評価を、Windows API・DLLエントリポイントから分離する。
-2. Windows用の`HGLOBAL`などを使う受け渡し部分を、macOS用のC ABIに置き換える。
-3. レジストリ、COM、HWND、外部EXE、依存SAORIを洗い出し、macOS用実装または代替動作を用意する。
-4. 最初はmacOS用ファイル名を明示したテスト用ゴーストで、読み込みと短い応答を確認する。
-5. 同じ辞書・状態データを両OSで使えるか確認し、最後に配布構成を決める。
+1. SHIORI電文の解析と辞書評価を、Windows API・DLLエントリポイントから分離します。
+2. Windows用の`HGLOBAL`などを使う受け渡し部分を、macOS用のC ABIに置き換えます。
+3. レジストリ、COM、HWND、外部EXE、依存SAORIを洗い出し、macOS用実装または代替動作を用意します。
+4. 最初はmacOS用ファイル名を明示したテスト用ゴーストで、読み込みと短い応答を確認します。
+5. 同じ辞書・状態データを両OSで使えるか確認し、最後に配布構成を決めます。
 
 両OS向け配布は、次の`shiori.macos`指定でロード先を分けられます。SHIOLINKならWindows用の`SHIOLINK.INI`を残し、Utatane用の`SHIOLINK.utatane.ini`で起動設定を分けられます。
 
 ## WindowsとmacOSを同じゴーストで配布する
 
-`shiori.macos`は現在のリポジトリで追加した未リリースの機能です。利用者へ配布する際は、この指定に対応したUtataneのバージョンをリリースノートで確認し、必要バージョンをREADMEに書いてください。
+`shiori.macos`はUtatane 0.2.4以降で利用できます。配布するゴーストのREADMEにも、必要なUtataneのバージョンを書いてください。
 
 `ghost/master/descript.txt`にWindows用の`shiori`を残し、Utatane向けの追加指定を書きます。
 
@@ -88,7 +88,9 @@ endif()
 target_compile_features(example PRIVATE cxx_std_17)
 ```
 
-次は`.github/workflows/build-shiori-macos.yml`へ置く例です。ビルドとアップロードだけを行い、リリースへの公開はしません。**これは制作者のリポジトリへ導入する雛形で、この文書の編集でGitHub上の実行を確認したものではありません。**
+次の例を、制作者のリポジトリの`.github/workflows/build-shiori-macos.yml`へ置きます。ビルドしたファイルはActionsからダウンロードでき、リリースとしては公開しません。
+
+これは設定の雛形です。自分のソースや依存ライブラリに合わせて調整し、Actions上で成功することを確認してください。掲載例のGitHub上での実行は未確認です。
 
 ```yaml
 name: Build macOS SHIORI
@@ -141,16 +143,18 @@ Utataneでの表示、イベント順序、マウス操作、再読み込み、�
 
 ## プログラミング言語ごとの接続方法
 
-言語よりも、C ABI・整数の幅・バッファ所有権を満たすことが重要です。以下は実装経路の説明で、各言語製のSHIORIをすべてUtataneで実行検証した一覧ではありません。
+どの言語でも、公開する関数の型、整数の幅、メモリの受け渡しをUtataneに合わせる必要があります。ここが合っていれば、辞書を評価する処理には好きな言語を使えます。
+
+以下は接続方法の一覧です。各言語のSHIORIをすべてUtataneで実行確認した一覧ではありません。
 
 | 言語 | macOSモジュールとして作る場合 | 外部プロセスとして作る場合 |
 | --- | --- | --- |
-| C / C++ | macOSのClangで共有ライブラリ化。C++では`extern "C"`で公開し、例外をABI境界から外へ出さない。Windows用ABIとは別の薄い層を用意 | 通常の実行ファイルにSHIOLINK入出力を追加 |
-| Rust | `cdylib`と`extern "C"`の関数を使用。`i32`と生ポインタでABIを揃え、応答はCの`malloc`で確保。`Vec`や`CString::into_raw`をそのまま渡さない | 通常のバイナリにSHIOLINKを実装。プロセス方式ならC ABI用の割り当ては不要 |
-| Go | cgoと`-buildmode=c-shared`、C互換の公開関数を使用。応答はC側のメモリへコピーし、Go管理のポインタを返さない。cgoを含むクロスビルドにはCクロスコンパイラも必要 | 実行ファイルへSHIOLINKを実装。純Goの部分とOS依存部分を分ける |
-| C# / .NET | Native AOTの共有ライブラリと、`UnmanagedCallersOnly`のCエントリポイントを使用する経路がある。GC管理の文字列を直接返さず、macOSの`free`と互換な領域へコピー。通常の管理DLLは直接ロードできない | .NETランタイムが必要な方式か、自己完結の実行ファイルかを選び、SHIOLINKを追加 |
-| Swift | C互換のエントリポイントと共有ライブラリを用意。Swiftの`String`や`Int`をABIへ直接公開せず、32-bit整数と生ポインタへ変換。コンパイラのC連携機能とランタイム依存を確認 | macOS用実行ファイルにSHIOLINKを追加 |
-| Python / JavaScript / Luaなど | 通常のスクリプトを`.dylib`に改名しても読み込めない。直接ロードするならインタプリタを埋め込むC ABI層と依存ランタイムの管理が必要 | インタプリタまたはパッケージ化した実行ファイルでSHIOLINKを実装。絶対パスの設定と必要ランタイムを案内 |
+| C / C++ | macOSのClangで共有ライブラリを作ります。C++の公開関数には`extern "C"`を使い、例外はABIの外へ出しません。Windows用の受け渡し部分とは分けます | 通常の実行ファイルにSHIOLINKの入出力を追加します |
+| Rust | `cdylib`と`extern "C"`を使います。整数は`i32`、応答はCの`malloc`で確保した領域にします。`Vec`や`CString::into_raw`をそのまま渡すことはできません | 通常のバイナリにSHIOLINKを実装します。C ABI向けのメモリ確保は不要です |
+| Go | cgoと`-buildmode=c-shared`を使います。応答はC側のメモリへコピーし、Goが管理するポインタは返しません。クロスビルドにはCクロスコンパイラも必要です | 実行ファイルにSHIOLINKを実装し、純Goの処理とOS依存の処理を分けます |
+| C# / .NET | Native AOTの共有ライブラリと`UnmanagedCallersOnly`を使う方式です。応答はmacOSの`free`と互換な領域へコピーします。通常の管理DLLは直接ロードできません | .NETランタイムを必要とする方式か、自己完結の実行ファイルかを選び、SHIOLINKを追加します |
+| Swift | C互換の公開関数を用意します。Swiftの`String`や`Int`を直接公開せず、32-bit整数と生ポインタに変換します。C連携とランタイム依存の確認も必要です | macOS用の実行ファイルにSHIOLINKを追加します |
+| Python / JavaScript / Luaなど | スクリプトを`.dylib`に改名しても読み込めません。直接ロードするなら、インタプリタを埋め込むC ABI層とランタイムの管理が必要です | インタプリタやパッケージ化した実行ファイルでSHIOLINKを実装します。実行ファイルの絶対パスと必要なランタイムを案内します |
 
 Rustは[公式FFIガイド](https://doc.rust-lang.org/nomicon/ffi.html)、Goは[ビルドモード](https://go.dev/cmd/go/)と[cgoの制約](https://go.dev/cmd/cgo/)、.NETは[Native AOTライブラリ](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/libraries)と[ネイティブ連携](https://learn.microsoft.com/en-us/dotnet/core/deploying/native-aot/interop)、Swiftは[公式C連携の説明](https://developer.apple.com/documentation/swift/c-interoperability)を参照してください。関数名が公開できても、Utataneの所有権の契約を満たさなければ正常に動きません。
 
@@ -183,9 +187,9 @@ void *request(void *message, int32_t *length);
 
 | 関数 | 現在のUtataneからの呼び出し |
 | --- | --- |
-| `loadu` / `load` | UTF-8のmasterディレクトリと、そのバイト数を渡す。非0で成功、0で失敗 |
-| `request` | UTF-8の要求を渡す。`*length`は入力時に要求のバイト数、出力時に応答のバイト数。応答バッファを返す |
-| `unload` | セッション破棄時に呼ぶ。戻り値は現在使用しない |
+| `loadu` / `load` | UTF-8のmasterディレクトリと、そのバイト数を渡します。非0で成功、0で失敗 |
+| `request` | UTF-8の要求を渡します。`*length`は入力時に要求のバイト数、出力時に応答のバイト数。応答バッファを返します |
+| `unload` | セッション破棄時に呼びます。戻り値は現在使用しません |
 
 **汎用経路では`load`を使ってもUTF-8です。** `loadu`がある場合はそちらを優先します。ディレクトリ文字列の末尾に`/`があることを前提にせず、パス結合で辞書を開いてください。プロセス全体の作業ディレクトリがmasterになる保証もありません。
 
@@ -200,6 +204,8 @@ void *request(void *message, int32_t *length);
 呼び出しはセッション内で直列化されますが、同じモジュールの複数セッションを識別するIDは、この汎用ABIにはありません。静的・グローバル状態を使う実装は、複数ゴーストの同時利用と再読み込みで状態が混ざらないか確認してください。モジュールはアプリ内で実行されるため、クラッシュやメモリ破壊はUtatane本体へ影響します。
 
 ### ビルドと読み込みの確認
+
+Utataneの「情報」→「SHIORI読み込み診断…」で、対象ゴーストの指定、CPU、公開シンボル、依存ライブラリと、このアプリ起動中の実際の初期化結果をまとめて確認できます。「再診断」は静的検査だけをやり直し、SHIORIを追加でロードしません。変更したモジュールの動作確認には「機能」→「復旧操作」→「現在のゴーストを再読み込み」を使います。[診断と報告](../Support/Troubleshooting.md#診断と報告)も参照してください。
 
 Apple Siliconではarm64、Intelではx86_64が必要です。両方へ配布する場合はUniversal Binaryを作り、依存ライブラリも両方に対応させます。例えばCのソースをビルドする場合は次の形です。
 
@@ -243,7 +249,9 @@ Value: \0Utataneで起動しました。\e
 
 最初は`OnBoot`、`OnAITalk`、`OnClose`、次にマウス反応と`OnChoiceSelect`を確認します。終了会話の`OnClose`と、モジュールの後片付けの`unload`は役割が違います。状態保存が終了会話にだけ依存しないよう、再読み込みや異常終了も考慮します。
 
-SHIORI/2.xへの再試行は汎用外部SHIORI経路にありますが、新規実装はSHIORI/3.0を基本にしてください。各イベントのReferenceと対応範囲は[SHIORIイベント互換表](../Reference/UKADOC-SHIORI-Event-Compatibility.md)、返すスクリプトは[SakuraScript互換表](../Reference/UKADOC-SakuraScript-Compatibility.md)で確認します。すべてのSSPイベントやWindows由来の値が同じように提供されるわけではありません。
+SHIORI/2.xへの再試行は汎用外部SHIORI経路にありますが、新規実装はSHIORI/3.0を基本にしてください。各イベントのReferenceと対応範囲は[SHIORIイベント互換表](../Reference/UKADOC-SHIORI-Event-Compatibility.md)、返すスクリプトは[SakuraScript互換表](../Reference/UKADOC-SakuraScript-Compatibility.md)で確認します。
+
+すべてのSSPイベントやWindows由来の値が同じように提供されるわけではありません。
 
 ## SHIOLINKとして実装する
 
@@ -259,10 +267,10 @@ Utataneは`SHIOLINK.utatane.ini`を`SHIOLINK.INI`より優先します。実行�
 
 単に標準入力でSHIORI電文を受け取るだけでは接続できません。現在のUtataneは次の同期手順を使います。
 
-1. 起動後、Utataneから`*L:<masterの絶対パス>/\r\n`を受信する。
-2. 要求ごとに`*S:<取引ID>\r\n`を受信し、同じ行を標準出力へ返してflushする。
-3. 続いてSHIORI要求を空行まで読み、SHIORI応答をCRLFと終端空行付きで返してflushする。
-4. 正常終了時の`*U:\r\n`を受信したら後片付けして終了する。入力のEOFでも終了できるようにする。
+1. 起動後、Utataneから`*L:<masterの絶対パス>/\r\n`を受信します。
+2. 要求ごとに`*S:<取引ID>\r\n`を受信し、同じ行を標準出力へ返してflushします。
+3. 続いてSHIORI要求を空行まで読み、SHIORI応答をCRLFと終端空行付きで返してflushします。
+4. 正常終了時の`*U:\r\n`を受信したら後片付けして終了します。入力のEOFでも終了できるようにします。
 
 標準出力は通信専用です。起動メッセージやログを混ぜると取引IDの不一致や応答解析エラーになります。診断ログは標準エラーまたはファイルへ出します。現在の既定の要求待ちは10秒、フレームの上限は約8 MiBです。重い処理で同期応答を止めないようにしてください。
 
@@ -285,13 +293,13 @@ Utataneは`SHIOLINK.utatane.ini`を`SHIOLINK.INI`より優先します。実行�
 
 確認用ゴーストは[制作ガイドの手順](Content-Authoring.md#utataneでの確認方法)でインストールし、「現在のゴーストを再読み込み」で繰り返し試せます。Utatane側のログに加え、SHIORI側でも受信ID・要求と応答のバイト数・初期化と終了を記録すると、読み込みと電文処理を分けて調べられます。
 
-- 完成したNARから新規インストールし、日本語や空白を含む配置パスでも起動する。
-- 会話、選択肢、通知、未知イベント、再読み込み、アプリ再起動を確認する。
-- 複数ゴーストで利用し、状態が混ざらないことを確認する。
-- 対象CPUごとに、同梱の依存ライブラリ・SAORIまで含めて確認する。
-- 開発環境の絶対パスや追加ランタイムへ依存する場合は、必要な設定をREADMEに書く。
-- SSPも対象にする場合は、同じ配布物のWindows版経路も別途確認する。
-- READMEに確認したUtataneのバージョン、対象CPU、確認済み操作、既知の制約を書く。
+- 完成したNARから新規インストールし、日本語や空白を含む配置パスでも起動します。
+- 会話、選択肢、通知、未知イベント、再読み込み、アプリ再起動を確認します。
+- 複数ゴーストで利用し、状態が混ざらないことを確認します。
+- 対象CPUごとに、同梱の依存ライブラリ・SAORIまで含めて確認します。
+- 開発環境の絶対パスや追加ランタイムへ依存する場合は、必要な設定をREADMEに書きます。
+- SSPも対象にする場合は、同じ配布物のWindows版経路も別途確認します。
+- READMEに確認したUtataneのバージョン、対象CPU、確認済み操作、既知の制約を書きます。
 
 ## 実装を追う場合
 

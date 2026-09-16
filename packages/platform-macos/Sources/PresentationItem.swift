@@ -1447,6 +1447,27 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
     private var activeHost: any PresentationHosting
     private var handles: [WeakHandle] = []
 
+    var layoutPresetStageFrame: CGRect? {
+        (activeHost as? WindowModePresentationHost)?.window.frame
+    }
+
+    func restoreLayoutPresetStageFrame(_ frame: CGRect) {
+        guard let window = (activeHost as? WindowModePresentationHost)?.window,
+              frame.origin.x.isFinite, frame.origin.y.isFinite,
+              frame.width.isFinite, frame.height.isFinite, frame.width > 0, frame.height > 0
+        else { return }
+        let screens = NSScreen.screens.map(\.visibleFrame)
+        let visible = screens.first { $0.intersects(frame) } ?? screens.first
+        var target = frame
+        if let visible {
+            target.size.width = min(max(target.width, window.minSize.width), visible.width)
+            target.size.height = min(max(target.height, window.minSize.height), visible.height)
+            target.origin.x = min(max(target.minX, visible.minX), visible.maxX - target.width)
+            target.origin.y = min(max(target.minY, visible.minY), visible.maxY - target.height)
+        }
+        window.setFrame(target, display: true)
+    }
+
     init(initialHost: any PresentationHosting) {
         activeHost = initialHost
     }
@@ -1786,6 +1807,16 @@ public final class GhostPresentationSession {
 
     public var geometryProvider: any PresentationGeometryProviding {
         presentationHost
+    }
+
+    public var layoutPresetStageFrame: CGRect? {
+        presentationHost.layoutPresetStageFrame
+    }
+
+    public func restoreLayoutPresetStageFrame(_ frame: CGRect?) {
+        if let frame {
+            presentationHost.restoreLayoutPresetStageFrame(frame)
+        }
     }
 
     fileprivate init(

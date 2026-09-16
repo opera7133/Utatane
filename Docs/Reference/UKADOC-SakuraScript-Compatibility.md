@@ -1,19 +1,21 @@
-# UKADOC compatibility matrix
+# UKADOC SakuraScript互換状況
 
-Utatane の実装状況を [UKADOC](https://ssp.shillest.net/ukadoc/manual/) と比較するための内部資料。
-2026-08-21 時点のソースコードを基準とし、実機で未確認の項目は「対応」にしない。
+SakuraScriptの命令について、Utataneで使える範囲とSSPとの差をまとめた対応表です。[UKADOC](https://ssp.shillest.net/ukadoc/manual/)の項目を基準にしています。
+
+元の表は2026-08-21時点のソースコードを基に作成しています。各節の調査日と備考で、確認した範囲を確認してください。実機で未確認の項目は「対応」に含めません。
 
 ## 判定
 
 | 記号 | 意味 |
 | --- | --- |
-| ✅ | 主要な構文を解析し、実行結果まで確認できる |
+| ✅ | 主要な構文を解析し、実行結果まで確認できます |
 | 🟡 | 一部の構文・引数・描画だけ対応 |
-| ❌ | 未実装。現在は `unknown` として無視されるか、文字列として扱われる |
+| ❌ | 未実装。現在は `unknown` として無視されるか、文字列として扱われます |
 | ➖ | macOS では意味が薄い、危険、または別機能として設計判断が必要 |
 
-「パーサーが受理する」だけでは対応扱いにしない。Parser、Player、通常ゴースト、呼び出しゴーストなど必要な経路まで接続されていることを確認する。
-macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対して妥当な代替を作れない機能を除き、最終的にはすべて「✅」または意図を明記した「➖」にする。
+命令を読み取れるだけでは「対応」にしません。読み取りから再生までつながり、メインゴーストと呼び出したゴーストなど、必要な場面で動くことを確認します。
+
+対応を進める際は、各項目を「✅」または理由付きの「➖」にすることを目指します。macOSで実現できない機能やSSP固有の画面、安全な代替方法を用意できない機能は、理由を明記します。
 
 ## SakuraScript
 
@@ -57,7 +59,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\![set/reset,position...]` | ✅ | `set,position,x,y,scope`で指定scopeをスクリーン座標へ移動してドラッグ固定し、`reset,position`で全scopeの固定を解除 |
 | `\![set/reset,zorder...]` | ✅ | `\![set,zorder,スコープ...]` によるサーフェス・バルーンウィンドウの重なり順序（Z-Order）指定と、`\![reset,zorder]` による解除に対応 |
 | `\![set/reset,sticky-window...]` | ✅ | `\![set,sticky-window,スコープ...]` による複数キャラクターウィンドウの連動ドラッグ移動と、`\![reset,sticky-window]` による解除に対応 |
-| `\![execute,resetwindowpos]` | ✅ | 保存済みの全scopeのサーフェス・バルーン位置を消去し、表示中ウィンドウを初期配置へ戻す |
+| `\![execute,resetwindowpos]` | ✅ | 保存済みの全scopeのサーフェス・バルーン位置を消去し、表示中ウィンドウを初期配置へ戻します |
 | `\![vanishbymyself]` | ✅ | 現在のゴーストを安全に終了してmacOSのゴミ箱へ移動。切り替え先ゴースト名と`--option=query`による確認画面にも対応 |
 
 ### バルーンとテキスト
@@ -65,13 +67,13 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\bID`, `\b[ID]` | ✅ | scope別のバルーンsurface変更に対応。括弧なしは1桁、複数桁は括弧形式。`\b[-1]` によるバルーン非表示に対応 |
-| `\_b[ファイル,...]` 全形式 | 🟡 | `\_b[画像パス,inline]` と `\_b[画像パス,x,y]` によるバルーン内画像描画（相対パスおよび `data:image/...;base64,...` 画像）に対応。`opaque` / `--option=opaque`も解釈する。拡大縮小・切り抜き・前面固定などの追加オプションは未対応 |
+| `\_b[ファイル,...]` 全形式 | 🟡 | `\_b[画像パス,inline]` と `\_b[画像パス,x,y]` によるバルーン内画像描画（相対パスおよび `data:image/...;base64,...` 画像）に対応。`opaque` / `--option=opaque`も解釈します。拡大縮小・切り抜き・前面固定などの追加オプションは未対応 |
 | `\n` | ✅ | 改行 |
 | `\n[half]`, `\n[百分率]` | ✅ | `half`と数値・`%`付き百分率を改行文字の行高へ反映 |
 | `\_n` | ✅ | 次の`\_n`まで現scopeの自動折返しを停止し、スクリプト終了時に復帰 |
 | `\c` | ✅ | 現scopeの本文とリンクを消去 |
 | `\c[char/line,...]` | ✅ | カーソル直前または0始まり開始位置から文字数・行数を消去。後続のリンク・文字装飾範囲も補正 |
-| `\_l[x,y]` | 🟡 | ピクセル・em・lh・%と`@`相対指定を解釈し、文字描画範囲左上を基準に配置。%は文字描画範囲の幅・高さを基準にする。同じ行の左へ戻って後続を右揃えする指定は右タブとして扱い、左右に分かれたメニューを同一行へ配置。縦書きでの座標配置は未検証 |
+| `\_l[x,y]` | 🟡 | ピクセル・em・lh・%と`@`相対指定を解釈し、文字描画範囲左上を基準に配置。%は文字描画範囲の幅・高さを基準にします。同じ行の左へ戻って後続を右揃えする指定は右タブとして扱い、左右に分かれたメニューを同一行へ配置。縦書きでの座標配置は未検証 |
 | `\C` | ✅ | スクリプト先頭では直前の表示内容・リンク・装飾を維持してscope 0から追記。途中では全scopeを消去。Playerテストで確認 |
 | `\![set,autoscroll,...]` | ✅ | `disable` / `enable` をスコープ単位で反映 |
 | `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset（絶対・`@`相対構文）、left/center(top)/right/bottom/none配置、下部marker、受信数表示を実装。offset・marker・numはスクリプト終了時に解除、alignはゴースト終了まで保持。シェル・surfaces.txt固有offsetとの合成は未対応 |
@@ -82,8 +84,8 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | online / nouserbreak mode | 🟡 | `enter` / `leave`を解析。onlineは現scopeのバルーンを強制表示して簡易オンライン印を表示し、nouserbreakは区間中の別スクリプトによる割込みを拒否。SSPの専用マーカー画像とOwned SSTP判定は未対応 |
 | balloon repaint / move lock | ✅ | `balloonrepaint`は描画を保留してunlock時に最新内容を反映。通常lockは終端解除、manualは維持。`balloonmove`は明示解除までドラッグを抑止 |
 | `\_!`, `\_?` | ✅ | 区間内のタグ・環境変数を解釈せずそのまま表示。閉じタグがない場合は末尾までを対象にしParserテストで確認 |
-| `\__v` | ✅ | `disable`で音声合成と発話履歴への記録を一時停止し、`alternate,テキスト`で読み上げと履歴へ残す代替文を指定。引数なしで通常動作へ戻る |
-| `\![execute,resetballoonpos]` | ✅ | 保存済みの全scopeのバルーン位置を消去し、表示中バルーンをサーフェス近傍へ戻す |
+| `\__v` | ✅ | `disable`で音声合成と発話履歴への記録を一時停止し、`alternate,テキスト`で読み上げと履歴へ残す代替文を指定。引数なしで通常動作へ戻ります |
+| `\![execute,resetballoonpos]` | ✅ | 保存済みの全scopeのバルーン位置を消去し、表示中バルーンをサーフェス近傍へ戻します |
 
 ### 文字装飾
 
@@ -107,7 +109,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\_w[時間]` | ✅ | ミリ秒待ち |
 | `\__w[時間]` | ✅ | 再生開始／クリック待ち／clearからの累計ミリ秒まで待機し、Parser・Player経路で確認 |
 | `\x`, `\x[noclear]` | ✅ | クリック待ちと消去有無。通常の`\x`はクリック時にバルーンを消し、`noclear`は表示を保持 |
-| `\t` | ✅ | 実行後からスクリプト終了・キャンセルまで、通常・呼び出しゴーストのサーフェスマウスイベントをSHIORIへ通知しない。Player状態と配送経路をテスト |
+| `\t` | ✅ | 実行後からスクリプト終了・キャンセルまで、通常・呼び出しゴーストのサーフェスマウスイベントをSHIORIへ通知しません。Player状態と配送経路をテスト |
 | `\_q`, quicksection | ✅ | トグル形式と明示的なtrue/false・1/0に対応。文字ウェイトだけを省略し、明示ウェイトは実行 |
 | `\_s`, `\_s[ID...]` | ✅ | 無引数はscope 0・1、ID指定は列挙scopeへ、区間内の文字と改行を同時表示。scope別の文字装飾も保持しPlayerテストで確認 |
 | syncobject の wait / set / reset | 🟡 | Utatane内の通常・呼び出しゴースト間で共有する名前付きシグナルとしてset・reset・waitとtimeoutを実装。WindowsのMutex・Semaphore種別判定と`--reset`は未対応 |
@@ -117,8 +119,8 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\q[タイトル,ID]` | ✅ | クリック可能 |
-| `\q[タイトル,OnID,r0...]` | ✅ | 追加引数を渡す |
-| `\q[タイトル,ID1,ID2...]` | 🟡 | 2番目をID、以降を引数として扱う。旧形式固有の意味とは未照合 |
+| `\q[タイトル,OnID,r0...]` | ✅ | 追加引数を渡します |
+| `\q[タイトル,ID1,ID2...]` | 🟡 | 2番目をID、以降を引数として扱います。旧形式固有の意味とは未照合 |
 | `script:` 選択肢 | ✅ | 通常・範囲選択肢でクリック時に指定SakuraScriptを直接再生し、SHIORI選択イベントを発生させないことをPlayerテストで確認 |
 | `\q[ID][タイトル]`, `\q*[ID][タイトル]` | ✅ | 旧仕様の選択肢（`\q*[...]` はマーカー付き）を受理し、自動改行付きで標準選択肢へ正規化 |
 | `\__q[ID,...]...\__q` | ✅ | 範囲選択肢と引数に対応。終了時には暗黙の改行を挿入せず、空白で区切った複数リンクを同一行へ配置可能 |
@@ -145,10 +147,10 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `\v`, `\![set,windowstate,stayontop/!stayontop]` | ✅ | 最前面表示（`.floating` / `.normal`）のトグルと明示指定に対応。サーフェス・バルーン両方に反映しテストで確認 |
 | windowstate (その他) / wallpaper / tray | ➖ | macOSでの代替仕様を決める必要あり |
 | otherghosttalk / othersurfacechange | 🟡 | 呼び出し中ゴースト間の独自連携は実装。UKADOCの `\![set,otherghosttalk,...]` / `\![set,othersurfacechange,...]` による通知制御は未実装 |
-| `\![raise,...]` | ✅ | SHIORIイベントを発生させ、元スクリプトの残りを破棄して応答スクリプトへ切り替える |
-| `\![embed,...]` | ✅ | SHIORIイベントの戻り値を現在の再生列へ埋め込む |
+| `\![raise,...]` | ✅ | SHIORIイベントを発生させ、元スクリプトの残りを破棄して応答スクリプトへ切り替えます |
+| `\![embed,...]` | ✅ | SHIORIイベントの戻り値を現在の再生列へ埋め込みます |
 | timerraise / raiseother / timerraiseother | 🟡 | `timerraise`、`raiseother`、`timerraiseother`に対応。他ゴーストは名前指定と全ゴースト指定が可能。プラグイン宛は未対応 |
-| notify / timernotify / timernotifyother | 🟡 | 自ゴーストへの`notify`・`timernotify`と`notifyother`・`timernotifyother`に対応し、SHIORI応答は表示しない。プラグイン宛は未対応 |
+| notify / timernotify / timernotifyother | 🟡 | 自ゴーストへの`notify`・`timernotify`と`notifyother`・`timernotifyother`に対応し、SHIORI応答は表示しません。プラグイン宛は未対応 |
 
 ### サウンド
 
@@ -160,17 +162,17 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\j[ID]`, `\![open,browser,...]` | 🟡 | メイン／呼び出しゴーストともHTTP・HTTPSを既定ブラウザで開く。`file:`・`mailto:`は未対応 |
+| `\j[ID]`, `\![open,browser,...]` | 🟡 | メイン／呼び出しゴーストともHTTP・HTTPSを既定ブラウザで開きます。`file:`・`mailto:`は未対応 |
 | mailer / addressbar / editor / explorer | ➖ | macOSでの代替と安全境界が必要 |
 | teachbox / communicatebox | ✅ | `\![open,communicatebox,初期値]` / `\![open,teachbox,初期値]` に対応し、入力値を `OnCommunicate` / `OnTeach` イベントとして SHIORI へ通知 |
-| `\![open,inputbox,...]` | 🟡 | ID、timeout、初期値を解析し、入力値を指定されたIDのSHIORIイベントへ `Reference0` として返す。timeoutの実動作と全オプションは未対応 |
+| `\![open,inputbox,...]` | 🟡 | ID、timeout、初期値を解析し、入力値を指定されたIDのSHIORIイベントへ `Reference0` として返します。timeoutの実動作と全オプションは未対応 |
 | password/date/slider/time/ip input | 🟡 | inputbox互換の入力プロンプトとして受付 |
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
-| configuration / 各explorer / graph / calendar | 🟡 | `\![open,configurationdialog]`で設定画面、`ghostexplorer`／`shellexplorer`／`balloonexplorer`／`headlinesensorexplorer`／`pluginexplorer`で共通コンテンツエクスプローラ、`calendar`でカレンダーを開く。graphとdressup explorerは未実装 |
-| help / messenger / readme / terms / file | 🟡 | `\![open,messenger]`でIP Messenger画面を開く。`\![open,readme]`、`\![open,help]`、`\![open,file,パス]`、`\![open,folder,パス]`では該当ドキュメントやファイルを外部アプリ／Finderで開く |
+| configuration / 各explorer / graph / calendar | 🟡 | `\![open,configurationdialog]`で設定画面、`ghostexplorer`／`shellexplorer`／`balloonexplorer`／`headlinesensorexplorer`／`pluginexplorer`で共通コンテンツエクスプローラ、`calendar`でカレンダーを開きます。graphとdressup explorerは未実装 |
+| help / messenger / readme / terms / file | 🟡 | `\![open,messenger]`でIP Messenger画面を開きます。`\![open,readme]`、`\![open,help]`、`\![open,file,パス]`、`\![open,folder,パス]`では該当ドキュメントやファイルを外部アプリ／Finderで開きます |
 | open/save/folder/color dialog、close dialog | 🟡 | `open` / `save` / `folder` / `color` とID指定・全ダイアログのcloseに対応。title、dir、filter、ext、name、color、idを受け取り、結果を `OnSystemDialog` / `OnSystemDialogCancel` または指定イベントへ通知。filterは拡張子ワイルドカードのみ、実UIは未確認 |
-| surfacetest / aigraph / developer / shiorirequest / errorlog | 🟡 | `developer`／`surfacetest`で開発用パレット、`shiorirequest`でイベントID・Referenceを指定するSHIORI Request画面、`errorlog`でエラー絞り込み済みログを開く。aigraphは未実装 |
-| `\![open,backlogviewer]` | ✅ | 通常・呼び出しゴーストとも対象ゴーストの発話履歴を開く。ウィンドウモードでは設定に応じて下部へ統合表示 |
+| surfacetest / aigraph / developer / shiorirequest / errorlog | 🟡 | `developer`／`surfacetest`で開発用パレット、`shiorirequest`でイベントID・Referenceを指定するSHIORI Request画面、`errorlog`でエラー絞り込み済みログを開きます。aigraphは未実装 |
+| `\![open,backlogviewer]` | ✅ | 通常・呼び出しゴーストとも対象ゴーストの発話履歴を開きます。ウィンドウモードでは設定に応じて下部へ統合表示 |
 | dressup / picture / archive | ❌ | 未実装 |
 
 ### Property System
@@ -185,7 +187,7 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\![execute,http-get,URL,...]` | 🟡 | `--async`はSakuraScriptを継続して完了イベントを後から通知し、`--sync`は完了まで再生を停止。param、主要header、timeout、no-cache、file/nofileも実装。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行って `Reference3` へ返す。同一URLの並行実行、multipart、streaming、progressは未対応 |
+| `\![execute,http-get,URL,...]` | 🟡 | `--async`はSakuraScriptを継続して完了イベントを後から通知し、`--sync`は完了まで再生を停止。param、主要header、timeout、no-cache、file/nofileも実装。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行って `Reference3` へ返します。同一URLの並行実行、multipart、streaming、progressは未対応 |
 | http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded bodyと主要共通オプションに対応。multipart、入力ファイル、証明書検証無効化は未対応 |
 | `\![execute,rss-get/rss-post,URL,...]` | 🟡 | RSS/Atomの取得・基本パースと完了/失敗通知に対応。日時形式・全オプション・SSL情報は未照合 |
 | websocket execute/send/close/cancel | 🟡 | URL単位のws/wss接続、HTTP 101確立後のOpen通知、header・subprotocol、テキスト/バイナリ送受信、close/cancelを実装。自動再接続とSSLInfoは未対応 |
@@ -212,13 +214,13 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 | `%username`, `%selfname`, `%selfname2`, `%keroname` | 🟡 | macOSユーザー名とゴーストのキャラクター名へ置換。`selfname2`専用キー未保持のため本体名へフォールバック |
 | `%screenwidth`, `%screenheight` | ✅ | 現在のメインスクリーンのポイント単位サイズへ置換 |
 | `%exh`, `%et`, `%wronghour` | ✅ | `%exh`をOS連続起動秒、`%et`を間違った連続起動時間文字列、`%wronghour`を正しくない現在時へ置換 |
-| `%ms/%mz/%ml/%mc/%mh/%mt/%me/%mp/%m?` | 🟡 | UKADOCの各ランダム単語カテゴリをUtatane内蔵語彙で置換。SSPの語彙集合とは異なる |
+| `%ms/%mz/%ml/%mc/%mh/%mt/%me/%mp/%m?` | 🟡 | UKADOCの各ランダム単語カテゴリをUtatane内蔵語彙で置換。SSPの語彙集合とは異なります |
 | `%dms`, `%lastghostname`, `%lastobjectname` | ✅ | `%dms`はUtatane内蔵の「～に～する～」相当語彙で置換。`%lastghostname` / `%lastobjectname` はNARインストール完了時に直近のインストール対象名で環境変数を更新 |
 | `%*` | ✅ | `\![*]` と同じバルーンマーカーを表示 |
 
 ## SakuraScript以外のUKADOC領域
 
-これは個々のキーやイベントを網羅する表ではなく、次に詳細対応表を作るべき領域の棚卸し。各領域を実装する時に別表へ展開する。
+SakuraScript以外の仕様について、対応を進める領域をまとめています。個々のキーやイベントの一覧ではありません。詳しい確認結果は、各領域の対応表へ分けて記載します。
 
 | UKADOC領域 | 状況 | 現在の範囲・主な不足 |
 | --- | --- | --- |
@@ -239,11 +241,11 @@ macOSで成立しない機能、SSP固有の管理・開発UI、危険性に対�
 2. 既存Utatane機能へ接続する update、change ghost/shell/balloon、headline、install。
 3. `surfaces.txt`、Balloon/Ghost/Shell `descript.txt`、SHIORI Eventの詳細対応表。
 4. HTTPの高度なオプション、timerraise、Property Systemなど高度な互換機能。
-5. Windows・SSP固有UIに依存する項目は、macOS向け代替仕様を決めてから実装可否を判定する。
+5. Windows・SSP固有UIに依存する項目は、macOS向け代替仕様を決めてから実装可否を判定します。
 
 ## 更新ルール
 
-- 実装PRでは該当行を同時に更新する。
-- 「✅」へ変更する時はテストまたは実機確認の根拠を書く。
-- UKADOCの項目追加を定期的に確認し、確認日を冒頭で更新する。
-- SSPとの差異を意図的に残す場合は「未対応」ではなく理由付きの「対象外候補」とする。
+- 実装PRでは該当行を同時に更新します。
+- 「✅」へ変更する時はテストまたは実機確認の根拠を書きます。
+- UKADOCの項目追加を定期的に確認し、確認日を冒頭で更新します。
+- SSPとの差異を意図的に残す場合は「未対応」ではなく理由付きの「対象外候補」とします。

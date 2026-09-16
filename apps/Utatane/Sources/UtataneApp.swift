@@ -37,6 +37,8 @@ private extension Notification.Name {
     static let showUtataneContentExplorer = Notification.Name("dev.utatane.showContentExplorer")
     static let restoreUtataneSurfaces = Notification.Name("dev.utatane.restoreSurfaces")
     static let showUtataneSpeechHistory = Notification.Name("dev.utatane.showSpeechHistory")
+    static let showUtataneLayoutPresets = Notification.Name("dev.utatane.showLayoutPresets")
+    static let showUtataneSHIORIDiagnostics = Notification.Name("dev.utatane.showSHIORIDiagnostics")
 }
 
 @main
@@ -204,6 +206,13 @@ struct UtataneApp: App {
                     Text("全ゴーストをまとめて1枚").tag(GhostWindowMode.shared)
                     Text("ゴーストごとに1枚").tag(GhostWindowMode.perGhost)
                 }
+                Divider()
+                Button("配置プリセット…") {
+                    NotificationCenter.default.post(name: .showUtataneLayoutPresets, object: nil)
+                }
+                Button("SHIORI読み込み診断…") {
+                    NotificationCenter.default.post(name: .showUtataneSHIORIDiagnostics, object: nil)
+                }
             }
             CommandGroup(replacing: .help) {
                 Button("Utataneヘルプ") {
@@ -312,6 +321,11 @@ private struct UtataneRootView: View {
     @State private var isUpdatingContent = false
     @State private var contentUpdateTask: Task<Void, Never>?
     @State private var debugWindow: NSWindow?
+    @State private var shioriDiagnosticsController: SHIORIDiagnosticsWindowController?
+    @State private var shioriInitializationResults: [URL: String] = [:]
+    @StateObject private var layoutPresetStore = LayoutPresetStore()
+    @State private var layoutPresetController: LayoutPresetWindowController?
+    @State private var isRestoringLayoutPreset = false
     @State private var developerPalettePane: DebugConsoleView.Pane = .logs
     @State private var developerLogLevelFilter: DebugConsoleView.LevelFilter = .all
     @State private var showsOnboarding = false
@@ -559,6 +573,8 @@ private struct UtataneRootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .showUtataneSpeechHistory)) { _ in
             showSpeechHistory()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showUtataneLayoutPresets)) { _ in showLayoutPresets() }
+        .onReceive(NotificationCenter.default.publisher(for: .showUtataneSHIORIDiagnostics)) { _ in showSHIORIDiagnostics(for: .primary) }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "display-settings", id: "\(networkSettings.shellScalePercent)-\(networkSettings.automaticallyFitsLargeSurfaces)-\(networkSettings.balloonScalePercent)-\(networkSettings.linksBalloonScale)-\(networkSettings.balloonTextScalePercent)-\(networkSettings.locksShellToDesktopBottom)-\(networkSettings.keepsShellOnScreen)") {
             configureDisplay()
         }
@@ -729,7 +745,7 @@ private struct UtataneRootView: View {
             }
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "ghost-selection", id: selectedGhostID) {
-            guard let selectedGhostID,
+            guard !isRestoringLayoutPreset, let selectedGhostID,
                   let ghost = model.ghosts.first(where: { $0.id == selectedGhostID })
             else { return }
             await transition(to: ghost)
@@ -2230,7 +2246,14 @@ private struct UtataneRootView: View {
     }
 
     private func personalityEngine(for ghost: InstalledGhost) throws -> any PersonalityEngine {
-        let base = try basePersonalityEngine(for: ghost)
+        let base: any PersonalityEngine
+        do {
+            base = try basePersonalityEngine(for: ghost)
+            shioriInitializationResults[ghost.id] = "\(Date().formatted()): OK — \(String(reflecting: type(of: base)))"
+        } catch {
+            shioriInitializationResults[ghost.id] = "\(Date().formatted()): FAILED — \(error.localizedDescription)"
+            throw error
+        }
         let masterDirectory = ghost.rootDirectory.appending(
             path: "ghost/master",
             directoryHint: .isDirectory
@@ -3807,119 +3830,218 @@ private struct UtataneRootView: View {
         }
     }
 
+    private func showSHIORIDiagnostics(for target: GhostContextMenuTarget) {
+        shioriDiagnosticsController?.close()
+        let controller = SHIORIDiagnosticsWindowController(
+            targets: shioriDiagnosticTargets(), selectedID: menuGhost(for: target)?.id.path,
+            refresh: shioriDiagnosticTargets
+        )
+        shioriDiagnosticsController = controller
+        controller.showWindow(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func shioriDiagnosticTargets() -> [SHIORIDiagnosticTarget] {
+        model.ghosts.map { ghost in
+            let master = ghost.rootDirectory.appending(path: "ghost/master")
+            let descriptor = ShioriCatalog.identify(
+                masterDirectory: master, declaredModuleFilename: ghost.shioriFilename,
+                macOSModuleFilename: ghost.shioriMacOSFilename
+            )
+            var module: URL?
+            if descriptor?.execution == .bundledNativeModule {
+                let resolver = POSIXShioriModuleResolver()
+                if let kind = resolver.kind(for: master) {
+                    module = resolver.moduleURL(for: kind, masterDirectoryURL: master)
+                }
+            } else if descriptor?.execution == .dynamicLibrary || descriptor?.execution == .windowsDLL {
+                if let filename = ghost.shioriFilename?.replacingOccurrences(of: "\\", with: "/"), !filename.hasPrefix("/") {
+                    let url = master.appending(path: filename).standardizedFileURL
+                    if url.path.hasPrefix(master.standardizedFileURL.path + "/") {
+                        module = url
+                    }
+                }
+            }
+            return SHIORIDiagnosticTarget(
+                id: ghost.id.path, name: ghost.name, selectedFilename: ghost.shioriFilename,
+                macOSOverride: ghost.shioriMacOSFilename, moduleURL: module,
+                runtimeResult: shioriInitializationResults[ghost.id] ?? "No startup attempt in this app session."
+            )
+        }
+    }
+
+    private func showLayoutPresets() {
+        layoutPresetController?.close()
+        let controller = LayoutPresetWindowController(
+            store: layoutPresetStore, canCapture: session != nil && !isTransitioningGhost && !isRestoringLayoutPreset,
+            capture: captureLayoutPreset,
+            restore: { preset in
+                layoutPresetController?.close()
+                Task {
+                    do { try await restoreLayoutPreset(preset) }
+                    catch { showError(error.localizedDescription) }
+                }
+            }
+        )
+        layoutPresetController = controller
+        controller.showWindow(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    private func captureLayoutPreset(_ name: String, replacing id: UUID?) {
+        guard let currentGhost, let selectedShell, let balloon, session != nil,
+              !isTransitioningGhost, !isRestoringLayoutPreset
+        else { return }
+        let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        var ghosts = [LayoutPresetGhost(
+            ghostPath: currentGhost.id.path, shellPath: selectedShell.directory.path, balloonPath: balloon.directory.path,
+            positions: surfaceWindowController.layoutPresetPositions,
+            balloonPositions: balloonWindowController.layoutPresetPositions,
+            stageFrame: mainPresentationSession.layoutPresetStageFrame
+        )]
+        ghosts += calledGhosts.values.sorted { $0.ghost.id.path < $1.ghost.id.path }.map { runtime in
+            LayoutPresetGhost(
+                ghostPath: runtime.ghost.id.path, shellPath: runtime.shell.directory.path, balloonPath: runtime.balloon.directory.path,
+                positions: runtime.surfaceController.layoutPresetPositions,
+                balloonPositions: runtime.balloonController.layoutPresetPositions,
+                stageFrame: runtime.layoutPresetStageFrame
+            )
+        }
+        layoutPresetStore.save(LayoutPreset(
+            id: id ?? UUID(), name: name, ghosts: ghosts, windowMode: networkSettings.windowMode.rawValue,
+            shellPercent: networkSettings.shellScalePercent, balloonPercent: networkSettings.balloonScalePercent,
+            textPercent: networkSettings.balloonTextScalePercent, linksBalloonScale: networkSettings.linksBalloonScale,
+            automaticallyFitsLargeSurfaces: networkSettings.automaticallyFitsLargeSurfaces
+        ))
+        configureContextMenu()
+    }
+
+    private func restoreLayoutPreset(_ preset: LayoutPreset) async throws {
+        guard !isRestoringLayoutPreset, !isTransitioningGhost, !isClosingCurrentGhost else { return }
+        guard let mode = GhostWindowMode(rawValue: preset.windowMode), !preset.ghosts.isEmpty else {
+            throw AppError.missingResource("layout preset")
+        }
+        // Resolve every asset before closing or modifying the current set of ghosts.
+        let resolved = try preset.ghosts.map { entry -> (LayoutPresetGhost, InstalledGhost, InstalledShell, BalloonDefinition) in
+            guard let ghost = model.ghosts.first(where: { $0.id.path == entry.ghostPath }),
+                  let shell = ghost.shells.first(where: { $0.directory.path == entry.shellPath }),
+                  let balloon = installedBalloons.first(where: { $0.directory.path == entry.balloonPath })
+            else { throw AppError.missingResource(entry.ghostPath + " / " + entry.shellPath + " / " + entry.balloonPath) }
+            _ = try shellLoader.load(from: shell.directory)
+            guard FileManager.default.fileExists(atPath: balloon.directory.path) else { throw AppError.missingResource(entry.balloonPath) }
+            return (entry, ghost, shell, balloon)
+        }
+        guard Set(resolved.map(\.1.id)).count == resolved.count else { throw AppError.missingResource("duplicate ghost in layout preset") }
+        isRestoringLayoutPreset = true
+        defer { isRestoringLayoutPreset = false; configureContextMenu() }
+        let token = statusWindowController.show("「\(preset.name)」の配置を復元中…")
+        defer { statusWindowController.hide(token: token) }
+        for runtime in Array(calledGhosts.values) {
+            calledGhosts.removeValue(forKey: runtime.ghost.id)
+            _ = await runtime.stop()
+        }
+        networkSettings.windowMode = mode
+        presentationCoordinator.setMode(mode)
+        for (_, ghost, shell, balloon) in resolved {
+            selectionStore.setShellDirectoryName(shell.directory.lastPathComponent, for: ghost.id)
+            selectionStore.setBalloonDirectoryName(balloon.directory.lastPathComponent, for: ghost.id)
+        }
+        let primary = resolved[0]
+        selectedGhostID = primary.1.id
+        await transition(to: primary.1, forceReload: currentGhost?.id == primary.1.id)
+        guard currentGhost?.id == primary.1.id, session != nil else { throw AppError.missingResource(primary.1.name) }
+        // activateGhost loads per-ghost settings, so restore the captured scales afterwards.
+        networkSettings.shellScalePercent = preset.shellPercent
+        networkSettings.balloonScalePercent = preset.balloonPercent
+        networkSettings.balloonTextScalePercent = preset.textPercent
+        networkSettings.linksBalloonScale = preset.linksBalloonScale
+        networkSettings.automaticallyFitsLargeSurfaces = preset.automaticallyFitsLargeSurfaces
+        configureDisplay()
+        mainPresentationSession.restoreLayoutPresetStageFrame(primary.0.stageFrame)
+        surfaceWindowController.restoreLayoutPresetPositions(primary.0.positions)
+        balloonWindowController.restoreLayoutPresetPositions(primary.0.balloonPositions)
+        for (entry, ghost, _, _) in resolved.dropFirst() {
+            try await startCalledGhost(ghost)
+            calledGhosts[ghost.id]?.restoreLayoutPreset(entry)
+        }
+        AppLogStore.shared.info("配置プリセットを復元しました", category: "Layout", details: preset.name)
+    }
+
     private func functionMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
         var items: [SurfaceContextMenuItem] = [
-            .action(
-                title: String(localized: "カレンダー"),
-                handler: { calendarWindowController.showCalendar() }
-            ),
-            .action(
-                title: String(localized: "IP Messenger"),
-                handler: { ipMessengerWindowController.showMessenger() }
-            ),
-            .action(
-                title: String(localized: "発話履歴"),
-                handler: {
-                    switch target {
-                    case .primary:
-                        showSpeechHistory()
-                    case let .called(runtime):
-                        runtime.showSpeechHistory()
-                    }
+            .action(title: String(localized: "カレンダー"), handler: { calendarWindowController.showCalendar() }),
+            .action(title: String(localized: "IP Messenger"), handler: { ipMessengerWindowController.showMessenger() }),
+            .action(title: String(localized: "エクスプローラ"), handler: { showContentExplorer() }),
+            .action(title: String(localized: "発話履歴"), handler: {
+                switch target {
+                case .primary: showSpeechHistory()
+                case let .called(runtime): runtime.showSpeechHistory()
                 }
-            ),
-            .action(
-                title: String(localized: "エクスプローラ"),
-                handler: { showContentExplorer() }
-            ),
-            .action(
-                title: String(localized: "本体更新をチェック"),
-                isEnabled: appUpdater.canCheckForUpdates,
-                handler: { appUpdater.checkForUpdates() }
-            )
+            })
         ]
         if case .primary = target {
-            items.append(contentsOf: [
-                .action(
-                    title: String(localized: "音声合成"),
-                    isSelected: networkSettings.speechSynthesisEnabled,
-                    handler: {
-                        networkSettings.speechSynthesisEnabled.toggle()
-                    }
-                ),
-                .action(
-                    title: String(localized: "音声認識"),
-                    isSelected: networkSettings.speechRecognitionEnabled,
-                    handler: {
-                        networkSettings.speechRecognitionEnabled.toggle()
-                    }
-                ),
-                .action(
-                    title: String(localized: "音声設定…"),
-                    handler: { showSettingsPane(.voice) }
-                )
-            ])
-            items.append(.action(
-                title: String(localized: "リアルタイム音声会話…"),
-                handler: showRealtimeVoice
-            ))
+            items.append(.separator)
+            items.append(.submenu(title: String(localized: "音声"), items: [
+                .action(title: String(localized: "音声合成"), isSelected: networkSettings.speechSynthesisEnabled,
+                        handler: { networkSettings.speechSynthesisEnabled.toggle() }),
+                .action(title: String(localized: "音声認識"), isSelected: networkSettings.speechRecognitionEnabled,
+                        handler: { networkSettings.speechRecognitionEnabled.toggle() }),
+                .separator,
+                .action(title: String(localized: "リアルタイム音声会話…"), handler: showRealtimeVoice)
+            ]))
+            items.append(.submenu(title: String(localized: "ウィンドウモード"), items: GhostWindowMode.allCases.map { mode in
+                let title = switch mode {
+                case .off: String(localized: "切")
+                case .shared: String(localized: "全ゴーストをまとめて1枚")
+                case .perGhost: String(localized: "ゴーストごとに1枚")
+                }
+                return .action(title: title, isSelected: networkSettings.windowMode == mode,
+                               handler: { networkSettings.windowMode = mode })
+            }))
+            items.append(.separator)
+            items.append(.submenu(title: String(localized: "コンテンツ管理"), items: [
+                .action(title: String(localized: "NARをインストール…"), handler: selectAndInstallNar),
+                .action(title: String(localized: "SSPフォルダから取り込む…"), handler: selectAndImportSSPDirectory),
+                .separator,
+                .action(title: String(localized: "Finderで表示"), handler: showContentFolder)
+            ]))
         }
-        let canPlayRandomTalk: Bool = switch target {
-        case .primary: session != nil
-        case .called: true
-        }
-        items.append(contentsOf: [
-            .action(
-                title: String(localized: "ランダムトーク"),
-                isEnabled: canPlayRandomTalk,
-                handler: {
-                    switch target {
-                    case .primary:
-                        sendEvent(.randomTalk)
-                    case let .called(runtime):
-                        runtime.send(.randomTalk)
-                    }
+        items.append(.action(title: String(localized: "本体更新をチェック"), isEnabled: appUpdater.canCheckForUpdates,
+                             handler: { appUpdater.checkForUpdates() }))
+        items.append(.separator)
+        items.append(.action(title: String(localized: "ランダムトーク"), isEnabled: menuGhost(for: target) != nil,
+                             handler: {
+                                 switch target {
+                                 case .primary: sendEvent(.randomTalk)
+                                 case let .called(runtime): runtime.send(.randomTalk)
+                                 }
+                             }))
+        var recovery: [SurfaceContextMenuItem] = [
+            .action(title: String(localized: "バルーンを閉じる"), handler: {
+                switch target {
+                case .primary: scriptPlayer.cancel()
+                case let .called(runtime): runtime.player.cancel()
                 }
-            ),
-            .action(
-                title: String(localized: "バルーンを閉じる"),
-                handler: {
-                    switch target {
-                    case .primary:
-                        scriptPlayer.cancel()
-                    case let .called(runtime):
-                        runtime.player.cancel()
-                    }
+            }),
+            .action(title: String(localized: "ウインドウ位置を初期化"), handler: {
+                switch target {
+                case .primary:
+                    sendEvent(.shiori(id: "OnResetWindowPos", references: [:]))
+                    surfaceWindowController.resetWindowPositions()
+                    balloonWindowController.resetWindowPositions()
+                case let .called(runtime): runtime.resetWindowPositions()
                 }
-            ),
-            .action(
-                title: String(localized: "ウインドウ位置を初期化"),
-                handler: {
-                    switch target {
-                    case .primary:
-                        sendEvent(.shiori(id: "OnResetWindowPos", references: [:]))
-                        surfaceWindowController.resetWindowPositions()
-                        balloonWindowController.resetWindowPositions()
-                    case let .called(runtime):
-                        runtime.resetWindowPositions()
-                    }
-                }
-            )
-        ])
+            })
+        ]
         if case .primary = target {
-            items.append(.submenu(
-                title: String(localized: "コンテンツ管理"),
-                items: [
-                    .action(title: String(localized: "NARをインストール…"), handler: selectAndInstallNar),
-                    .action(title: String(localized: "SSPフォルダから取り込む…"), handler: selectAndImportSSPDirectory),
-                    .action(title: String(localized: "Finderで表示"), handler: showContentFolder)
-                ]
-            ))
+            recovery.append(.separator)
+            recovery.append(.action(title: String(localized: "現在のゴーストを再読み込み"),
+                                    isEnabled: currentGhost != nil && !isTransitioningGhost && !isRestoringLayoutPreset,
+                                    handler: { reloadCurrentGhost() }))
         }
-        return .submenu(
-            title: String(localized: "機能"),
-            items: items
-        )
+        items.append(.submenu(title: String(localized: "復旧操作"), items: recovery))
+        return .submenu(title: String(localized: "機能"), items: items)
     }
 
     private func showRealtimeVoice() {
@@ -3998,37 +4120,24 @@ private struct UtataneRootView: View {
 
     private func settingsMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
         var items: [SurfaceContextMenuItem] = [
-            .action(title: String(localized: "本体設定"), handler: {
-                showSettingsPane(.general)
-            }),
-            .action(title: String(localized: "喋り / バルーン"), handler: {
-                showSettingsPane(.talkAndBalloon)
-            }),
-            .action(title: String(localized: "ネットワーク設定"), handler: {
-                showSettingsPane(.network)
-            }),
-            .action(title: String(localized: "詳細設定"), handler: {
-                showSettingsPane(.advanced)
-            }),
-            .separator,
-            .action(
-                title: String(localized: "開発用パレットを表示"),
-                isSelected: networkSettings.showsDebugWindow,
-                handler: {
-                    networkSettings.showsDebugWindow.toggle()
-                    updateDebugWindowVisibility(bringForward: networkSettings.showsDebugWindow)
-                }
-            )
+            .action(title: String(localized: "本体設定"), handler: { showSettingsPane(.general) })
         ]
         if case .primary = target {
-            items.insert(.action(title: String(localized: "ゴーストごとの設定"), handler: {
-                showSettingsPane(.ghost)
-            }), at: 1)
-            items.append(.action(
-                title: String(localized: "現在のゴーストを再読み込み"),
-                isEnabled: currentGhost != nil && !isTransitioningGhost,
-                handler: { reloadCurrentGhost() }
-            ))
+            items.append(.action(title: String(localized: "ゴーストごとの設定"), handler: { showSettingsPane(.ghost) }))
+        }
+        items.append(.submenu(title: String(localized: "設定画面"), items: [
+            .action(title: String(localized: "コンテンツ"), handler: { showSettingsPane(.content) }),
+            .action(title: String(localized: "喋り / バルーン"), handler: { showSettingsPane(.talkAndBalloon) }),
+            .action(title: String(localized: "音声設定…"), handler: { showSettingsPane(.voice) }),
+            .action(title: "SHIORI", handler: { showSettingsPane(.shiori) }),
+            .action(title: String(localized: "ネットワーク設定"), handler: { showSettingsPane(.network) }),
+            .action(title: String(localized: "詳細設定"), handler: { showSettingsPane(.advanced) })
+        ]))
+        if case .primary = target {
+            items.append(.separator)
+            items.append(.action(title: String(localized: "配置プリセット…"),
+                                 isEnabled: !isRestoringLayoutPreset && !isTransitioningGhost,
+                                 handler: showLayoutPresets))
         }
         return .submenu(title: String(localized: "設定"), items: items)
     }
@@ -4038,7 +4147,13 @@ private struct UtataneRootView: View {
             title: String(localized: "情報"),
             items: [
                 .submenu(title: "README", items: readmeMenuItems(for: target)),
-                .action(title: String(localized: "Utataneヘルプ"), handler: { UtataneHelp.open() })
+                .action(title: String(localized: "Utataneヘルプ"), handler: { UtataneHelp.open() }),
+                .separator,
+                .action(title: String(localized: "SHIORI読み込み診断…"), handler: { showSHIORIDiagnostics(for: target) }),
+                .action(title: String(localized: "開発用パレットを表示"), isSelected: networkSettings.showsDebugWindow, handler: {
+                    networkSettings.showsDebugWindow.toggle()
+                    updateDebugWindowVisibility(bringForward: networkSettings.showsDebugWindow)
+                })
             ]
         )
     }
@@ -4298,117 +4413,123 @@ private struct UtataneRootView: View {
     }
 
     private func call(_ ghost: InstalledGhost) {
-        guard let caller = currentGhost, calledGhosts[ghost.id] == nil else { return }
+        guard !isRestoringLayoutPreset else { return }
         Task {
-            do {
-                sendEvent(.shiori(id: "OnGhostCalling", references: [
-                    0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
-                    1: "manual",
-                    2: ghost.name,
-                    3: ghost.rootDirectory.path
-                ]))
-                let calledPresentationSession = presentationCoordinator.makeSession(
-                    title: ghost.name,
-                    identifier: ghost.id.path
-                )
-                let runtime = try CalledGhostRuntime(
-                    ghost: ghost,
-                    balloons: installedBalloons,
-                    shellLoader: shellLoader,
-                    selectionStore: selectionStore,
-                    defaultBalloonDirectoryName: networkSettings.defaultBalloonDirectoryName,
-                    personalityEngine: personalityEngine(for: ghost),
-                    characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
-                    dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000,
-                    speechSynthesisEnabled: networkSettings.speechSynthesisEnabled,
-                    speechVoiceSettingsByScope: networkSettings.speechVoiceSettingsByScope,
-                    speechRecognitionEnabled: networkSettings.speechRecognitionEnabled,
-                    speechHistoryStore: speechHistoryStore,
-                    integratesSpeechHistory: networkSettings.windowMode != .off
-                        && networkSettings.integratesSpeechHistoryInWindowMode,
-                    windowMode: networkSettings.windowMode,
-                    presentationSession: calledPresentationSession
-                )
-                runtime.onError = { showError($0.localizedDescription) }
-                runtime.onNarDrop = { installNars(from: $0) }
-                runtime.onOpenMessenger = { ipMessengerWindowController.showMessenger() }
-                runtime.onCommunication = { target, sentence in
-                    deliverCommunication(from: ghost, target: target, sentence: sentence)
-                }
-                runtime.onContentAction = { action in
-                    handleContentAction(action, calledRuntime: runtime)
-                }
-                runtime.onOtherEvent = { target, id, arguments, reflectsResponse in
-                    await handleOtherEvent(
-                        target: target,
-                        id: id,
-                        arguments: arguments,
-                        reflectsResponse: reflectsResponse,
-                        excluding: ghost.id
-                    )
-                }
-                runtime.onOtherGhostTalk = { target, script in
-                    handleOtherGhostTalk(target: target, script: script, excluding: ghost.id)
-                }
-                runtime.onOtherSurfaceChange = { target, scope, surfaceID in
-                    handleOtherSurfaceChange(target: target, scope: scope, surfaceID: surfaceID, excluding: ghost.id)
-                }
-                runtime.onSurfaceChanged = { scope, previous, current in
-                    notifyOtherGhostsSurfaceChange(
-                        ghost: ghost,
-                        controller: runtime.surfaceController,
-                        scope: scope,
-                        previous: previous,
-                        current: current,
-                        excluding: ghost.id
-                    )
-                }
-                runtime.onSpeechSynthesisActivity = { active in
-                    updateSpeechSynthesisActivity(active)
-                }
-                runtime.configureDisplay(
-                    shellPercent: networkSettings.shellScalePercent,
-                    automaticallyFitsLargeSurfaces: networkSettings.automaticallyFitsLargeSurfaces,
-                    balloonPercent: networkSettings.linksBalloonScale
-                        ? networkSettings.shellScalePercent
-                        : networkSettings.balloonScalePercent,
-                    textPercent: networkSettings.balloonTextScalePercent,
-                    windowLevelBehavior: networkSettings.windowLevelBehavior
-                )
-                calledGhosts[ghost.id] = runtime
-                configureContextMenu()
-                let startupScript = try await runtime.start(
-                    caller: caller,
-                    desktopWallpaperEvent: desktopWallpaperSampler.sample()?.initialEvent()
-                ) ?? ""
-                siteMenuResources[ghost.id] = await loadSiteMenuResources(from: runtime.session)
-                recentContentStore.record(
-                    kind: .ghost,
-                    identifier: ghost.rootDirectory.path,
-                    name: ghost.name
-                )
-                configureContextMenu()
-                sendEvent(.shiori(id: "OnGhostCallComplete", references: [
-                    0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
-                    1: startupScript,
-                    2: ghost.name,
-                    3: ghost.rootDirectory.path,
-                    7: runtime.shell.name
-                ]))
-                let otherGhostReferences = [
-                    0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
-                    1: startupScript,
-                    2: ghost.name,
-                    7: runtime.shell.name
-                ]
-                for otherRuntime in calledGhosts.values where otherRuntime.ghost.id != ghost.id {
-                    otherRuntime.send(.shiori(id: "OnOtherGhostBooted", references: otherGhostReferences))
-                }
-            } catch {
-                calledGhosts[ghost.id] = nil
-                configureContextMenu()
-                showError(error.localizedDescription)
+            do { try await startCalledGhost(ghost) }
+            catch { showError(error.localizedDescription) }
+        }
+    }
+
+    private func startCalledGhost(_ ghost: InstalledGhost) async throws {
+        guard let caller = currentGhost, calledGhosts[ghost.id] == nil else { return }
+        do {
+            sendEvent(.shiori(id: "OnGhostCalling", references: [
+                0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                1: "manual",
+                2: ghost.name,
+                3: ghost.rootDirectory.path
+            ]))
+            let calledPresentationSession = presentationCoordinator.makeSession(
+                title: ghost.name,
+                identifier: ghost.id.path
+            )
+            let runtime = try CalledGhostRuntime(
+                ghost: ghost,
+                balloons: installedBalloons,
+                shellLoader: shellLoader,
+                selectionStore: selectionStore,
+                defaultBalloonDirectoryName: networkSettings.defaultBalloonDirectoryName,
+                personalityEngine: personalityEngine(for: ghost),
+                characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
+                dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000,
+                speechSynthesisEnabled: networkSettings.speechSynthesisEnabled,
+                speechVoiceSettingsByScope: networkSettings.speechVoiceSettingsByScope,
+                speechRecognitionEnabled: networkSettings.speechRecognitionEnabled,
+                speechHistoryStore: speechHistoryStore,
+                integratesSpeechHistory: networkSettings.windowMode != .off
+                    && networkSettings.integratesSpeechHistoryInWindowMode,
+                windowMode: networkSettings.windowMode,
+                presentationSession: calledPresentationSession
+            )
+            runtime.onError = { showError($0.localizedDescription) }
+            runtime.onNarDrop = { installNars(from: $0) }
+            runtime.onOpenMessenger = { ipMessengerWindowController.showMessenger() }
+            runtime.onCommunication = { target, sentence in
+                deliverCommunication(from: ghost, target: target, sentence: sentence)
             }
+            runtime.onContentAction = { action in
+                handleContentAction(action, calledRuntime: runtime)
+            }
+            runtime.onOtherEvent = { target, id, arguments, reflectsResponse in
+                await handleOtherEvent(
+                    target: target,
+                    id: id,
+                    arguments: arguments,
+                    reflectsResponse: reflectsResponse,
+                    excluding: ghost.id
+                )
+            }
+            runtime.onOtherGhostTalk = { target, script in
+                handleOtherGhostTalk(target: target, script: script, excluding: ghost.id)
+            }
+            runtime.onOtherSurfaceChange = { target, scope, surfaceID in
+                handleOtherSurfaceChange(target: target, scope: scope, surfaceID: surfaceID, excluding: ghost.id)
+            }
+            runtime.onSurfaceChanged = { scope, previous, current in
+                notifyOtherGhostsSurfaceChange(
+                    ghost: ghost,
+                    controller: runtime.surfaceController,
+                    scope: scope,
+                    previous: previous,
+                    current: current,
+                    excluding: ghost.id
+                )
+            }
+            runtime.onSpeechSynthesisActivity = { active in
+                updateSpeechSynthesisActivity(active)
+            }
+            runtime.configureDisplay(
+                shellPercent: networkSettings.shellScalePercent,
+                automaticallyFitsLargeSurfaces: networkSettings.automaticallyFitsLargeSurfaces,
+                balloonPercent: networkSettings.linksBalloonScale
+                    ? networkSettings.shellScalePercent
+                    : networkSettings.balloonScalePercent,
+                textPercent: networkSettings.balloonTextScalePercent,
+                windowLevelBehavior: networkSettings.windowLevelBehavior
+            )
+            calledGhosts[ghost.id] = runtime
+            configureContextMenu()
+            let startupScript = try await runtime.start(
+                caller: caller,
+                desktopWallpaperEvent: desktopWallpaperSampler.sample()?.initialEvent()
+            ) ?? ""
+            siteMenuResources[ghost.id] = await loadSiteMenuResources(from: runtime.session)
+            recentContentStore.record(
+                kind: .ghost,
+                identifier: ghost.rootDirectory.path,
+                name: ghost.name
+            )
+            configureContextMenu()
+            sendEvent(.shiori(id: "OnGhostCallComplete", references: [
+                0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                1: startupScript,
+                2: ghost.name,
+                3: ghost.rootDirectory.path,
+                7: runtime.shell.name
+            ]))
+            let otherGhostReferences = [
+                0: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                1: startupScript,
+                2: ghost.name,
+                7: runtime.shell.name
+            ]
+            for otherRuntime in calledGhosts.values where otherRuntime.ghost.id != ghost.id {
+                otherRuntime.send(.shiori(id: "OnOtherGhostBooted", references: otherGhostReferences))
+            }
+        } catch {
+            calledGhosts[ghost.id] = nil
+            configureContextMenu()
+            throw error
         }
     }
 

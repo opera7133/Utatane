@@ -41,8 +41,8 @@ AUDITED_EVENTS = {
     "OnKeyPress": ("🟡", "Utataneがアクティブな時のkeyDownを文字・macOS keyCode・repeat・scope・修飾キーで通知。Reference1はWin32仮想キーコードではない"),
     "OnScreenSaverEnd": ("🟡", "macOS分散通知でスクリーンセーバ終了を検出。名称は固定、実行ファイルと待ち時間は空欄"),
     "OnScreenSaverStart": ("🟡", "macOS分散通知でスクリーンセーバ開始を検出。名称は固定、実行ファイルと待ち時間は空欄"),
-    "OnSessionDisconnect": ("🟡", "macOSユーザーセッションが非アクティブになった時にLockと併せて通知。簡易ユーザー切替と画面ロックを区別しない"),
-    "OnSessionReconnect": ("🟡", "macOSユーザーセッションがアクティブへ戻った時にUnlockと併せて通知。簡易ユーザー切替と画面ロックを区別しない"),
+    "OnSessionDisconnect": ("🟡", "macOSユーザーセッションが非アクティブになった時にLockと併せて通知。簡易ユーザー切替と画面ロックを区別しません"),
+    "OnSessionReconnect": ("🟡", "macOSユーザーセッションがアクティブへ戻った時にUnlockと併せて通知。簡易ユーザー切替と画面ロックを区別しません"),
     "OnAnchorEnter": ("🟡", "アンカーへの出入りでラベル・ID・追加引数を通知し、外れた時はReferenceなし。実動未確認"),
     "OnAnchorHover": ("🟡", "アンカー上で1秒静止した時にラベル・ID・追加引数を通知。SSPの静止時間との完全一致は未確認"),
     "OnBalloonScaling": ("🟡", "設定でバルーン倍率が変わった時に新旧の縦横パーセントをReference0〜3へ通知。縦横個別設定は未実装"),
@@ -253,10 +253,10 @@ def render(ukadoc_file: Path) -> str:
     for status, _ in AUDITED_EVENTS.values():
         status_counts[status] += 1
     lines = [
-        "# SHIORI Event compatibility matrix",
+        "# UKADOC SHIORIイベント互換状況",
         "",
-        "Utatane が発行する SHIORI Event を UKADOC の一覧と比較するための詳細表。",
-        "項目名と分類は `Scripts/generate-shiori-event-compatibility.py` によりローカルの UKADOC から生成する。",
+        "ゴーストへ送るSHIORIイベントについて、Utataneが通知する条件と、SSPとの違いをまとめています。",
+        "項目名と分類の生成には`Scripts/generate-shiori-event-compatibility.py`と、ローカルに保存したUKADOCを使います。各行の判定と備考は、実装や確認結果に合わせて更新します。",
         "",
         "基準: [SHIORI Eventリスト](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html)",
         "",
@@ -273,11 +273,11 @@ def render(ukadoc_file: Path) -> str:
         "| ❌ | 発生させる機能・経路が未実装であることを確認済み |",
         "| ➖ | macOSでは意味が薄い、または代替仕様の設計判断が必要 |",
         "",
-        "名前がソースに現れるだけでは対応としない。🟡候補についても、発生条件とReferenceをUKADOCに照らしてから✅へ変更する。",
-        "任意IDを中継できる経路（raise、inputbox、HTTP等）は、そのイベントをベースウェアが自動発行する実装とは数えない。",
-        "全290件を本番Swiftコード（テストコードを除く）の固定IDおよびイベント生成経路と静的照合した。✅は既存テストまたは実動確認の根拠があるものに限定する。",
-        "❌には、イベント通知だけでなく、その発生元となる本体機能自体が未実装の項目も含む。前提機能の実装後にイベント経路を追加する。",
-        "難度はUtataneの現状を基準にした暫定評価で、UKADOC照合だけなら低、OS監視や新規UIを伴うものは中、アカウント・外部サービス・大きな新機能を伴うものは高とする。",
+        "名前がソースに現れるだけでは対応としません。🟡候補についても、発生条件とReferenceをUKADOCに照らしてから✅へ変更します。",
+        "任意IDを中継できる経路（raise、inputbox、HTTP等）は、そのイベントをベースウェアが自動発行する実装とは数えません。",
+        "全290件を本番Swiftコード（テストコードを除く）の固定IDおよびイベント生成経路と静的照合しました。✅は既存テストまたは実動確認の根拠があるものに限定します。",
+        "❌には、イベント通知だけでなく、その発生元となる本体機能自体が未実装の項目も含みます。前提機能の実装後にイベント経路を追加します。",
+        "難度はUtataneの現状を基準にした暫定評価で、UKADOC照合だけなら低、OS監視や新規UIを伴うものは中、アカウント・外部サービス・大きな新機能を伴うものは高とします。",
         "",
     ]
     for title, event_ids in sections:
@@ -302,11 +302,11 @@ def render(ukadoc_file: Path) -> str:
     lines.extend([
         "## 更新ルール",
         "",
-        "- 実装または調査時に、発生条件・Reference・GET/NOTIFY・応答利用の4点を確認する。",
-        "- 難度は実装調査で随時更新し、対応状況とは独立して扱う。",
-        "- ✅へ変更する場合は、テストまたは実機確認の根拠を備考に残す。",
-        "- UKADOC側の増減確認には生成スクリプトを使い、既存の手動判定を上書きしないよう差分を確認する。",
-        "- 外部からのSHIORI EventとSHIORI Resourceは、この表とは分けて管理する。",
+        "- 実装または調査時に、発生条件・Reference・GET/NOTIFY・応答利用の4点を確認します。",
+        "- 難度は実装調査で随時更新し、対応状況とは独立して扱います。",
+        "- ✅へ変更する場合は、テストまたは実機確認の根拠を備考に残します。",
+        "- UKADOC側の増減確認には生成スクリプトを使い、既存の手動判定を上書きしないよう差分を確認します。",
+        "- 外部からのSHIORI EventとSHIORI Resourceは、この表とは分けて管理します。",
         "",
     ])
     return "\n".join(lines)

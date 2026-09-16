@@ -514,5 +514,20 @@
   "送信" : "Send",
   "確認待ち" : "Awaiting Receipt",
   "配信済み" : "Delivered",
-  "未確認" : "Unconfirmed"
+  "未確認" : "Unconfirmed",
+  "配置プリセット" : "Layout Presets",
+  "配置プリセット…" : "Layout Presets…",
+  "SHIORI読み込み診断" : "SHIORI Loading Diagnostics",
+  "SHIORI読み込み診断…" : "SHIORI Loading Diagnostics…",
+  "復旧操作" : "Recovery",
+  "設定画面" : "Settings Pages",
+  "起動するゴースト、シェル、バルーン、倍率と表示位置を保存します。" : "Save running ghosts, shells, balloons, scales and positions.",
+  "保存したプリセットはありません。" : "No saved presets.",
+  "名前" : "Name",
+  "現在の配置を保存" : "Save Current Layout",
+  "現在の配置で上書き" : "Overwrite with Current Layout",
+  "名前を変更" : "Rename",
+  "配置を復元" : "Restore Layout",
+  "復元すると、現在のゴースト一式を保存した構成に切り替えます。" : "Restoring replaces the running set of ghosts with the saved configuration.",
+  "再診断" : "Inspect Again"
 }

@@ -56,11 +56,17 @@ FTPS接続には次のGitHub Actions Secretsを使用します。コアサーバ
 - `DEPLOY_PASSWORD`
 - `DEPLOY_PATH`（例: `/public_html/utatane`）
 
-配布サイトは`website/`のAstro + Starlightプロジェクトと`Docs/`の原稿から生成します。`main`へサイト、Docs、生成スクリプト、検査、デプロイworkflowの変更をpushすると、`Deploy website` workflowが5言語の紹介ページ、ドキュメント、同梱ヘルプ、リリース取得、内部リンク、公開メタデータを検査してからビルド結果をアップロードします。上記4つに加えて、リポジトリへ次のGitHub Actions Secretを設定します。
+配布サイトは`website/`のAstro + Starlightプロジェクトと`Docs/`の原稿から生成します。`main`へサイト、Docs、生成スクリプト、検査、デプロイworkflowの変更をpushすると、`Deploy website` workflowが5言語の紹介ページ、ドキュメント、同梱ヘルプ、リリース取得、内部リンク、公開メタデータを検査してからビルド結果をアップロードします。
+
+上記4つに加えて、リポジトリへ次のGitHub Actions Secretを設定します。
 
 - `WEBSITE_DEPLOY_PATH`（例: `/public_html`）
 
-Web公開処理ではアプリのビルドを行いません。Explicit FTPSのreverse mirrorで生成済みの`website/dist/`を同期します。原稿やnode_modulesは送信しません。削除オプションは使わないため、公開ルートにだけ存在する更新フィードやコンテンツ配信などの既存ファイルは削除しません。標準では`utatane/`に5言語の紹介ページ、`utatane/docs/`にドキュメントを配置し、サイトマップ、robots.txt、llms.txtも生成します。旧`utatane.html`や`utatane-modern.html`などの転送規則はサーバー側で管理します。[編集・ビルド・将来のURL移行](Documentation.md)も参照してください。
+Web公開処理ではアプリのビルドを行いません。Explicit FTPSのreverse mirrorで生成済みの`website/dist/`を同期します。原稿やnode_modulesは送信しません。削除オプションは使わないため、公開ルートにだけ存在する更新フィードやコンテンツ配信などの既存ファイルは削除しません。
+
+標準では`utatane/`に5言語の紹介ページ、`utatane/docs/`にドキュメントを配置し、サイトマップ、robots.txt、llms.txtも生成します。旧`utatane.html`や`utatane-modern.html`などの転送規則はサーバー側で管理します。
+
+[編集・ビルド・将来のURL移行](Documentation.md)も参照してください。
 
 以前の設定が`/public_html/utatane/appcast.xml`なら、ファイル名を外した`/public_html/utatane`へ変更してください。公開先では次の構成になります。
 

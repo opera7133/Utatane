@@ -1,6 +1,6 @@
 # UKADOC テキストファイル互換状況
 
-UKADOCに掲載されているゴースト関連の設定・配布用テキストファイルと、Utataneの読み込み・利用状況をまとめる。
+ゴーストの設定や配布に使うテキストファイルについて、Utataneが読み取る項目と、実際の動作に使う項目をまとめています。項目の基準はUKADOCです。
 
 調査日: 2026-08-24  
 調査対象: ローカルの `/Users/wamo/ws/ukadoc/manual` とUtatane本番Swiftコード
@@ -9,11 +9,11 @@ UKADOCに掲載されているゴースト関連の設定・配布用テキス�
 
 | 記号 | 意味 |
 | --- | --- |
-| ✅ | UKADOCにある構文・項目を一通り読み込み、対応する機能で利用する |
-| 🟡 | ファイルは読み込むが、未使用の項目・構文・挙動が残る |
+| ✅ | UKADOCにある構文・項目を一通り読み込み、対応する機能で利用します |
+| 🟡 | ファイルは読み込むが、未使用の項目・構文・挙動が残ります |
 | ❌ | ファイルまたは対応する本体機能が未実装 |
 
-単にカンマ区切りを辞書へ格納できるだけでは対応扱いにしない。値がモデルや実行時の挙動へ反映されることを基準にした。
+設定を読み取るだけでは「対応」にしません。その値が表示や動作に反映されることを判定の基準にしています。
 
 ## 全体
 
@@ -28,12 +28,12 @@ UKADOCに掲載されているゴースト関連の設定・配布用テキス�
 | `delete.txt` | ✅ | UTF-8／Shift_JIS、charset行、Windows区切りの相対ファイル・ディレクトリを事前検証し、更新ファイルの置換と同じロールバック境界で安全に削除 | — |
 | `developer_options.txt` | 🟡 | `noupdate`／`nonar`に加え、`.narignore`／`.updateignore`／`.narinclude`／`.updateinclude`の主要gitignore構文と`include:`を各生成処理へ反映 | 文字クラス・エスケープ等、gitignoreの全細則は未対応 |
 | `surfaces.txt`／`surfaces*.txt` | 🟡 | 複数ファイル結合、surface selector、append、alias、element、rect／polygon collision、主要animation | 後述のSERIKO構文・描画メソッド・surface属性が多数未対応 |
-| `surfaces2.txt` | 🟡 | `surfaces`で始まるため読み込む | SSP用上書きではなく、他のsurfacesファイルとファイル名順で単純結合する |
+| `surfaces2.txt` | 🟡 | `surfaces`で始まるため読み込みます | SSP用上書きではなく、他のsurfacesファイルとファイル名順で単純結合します |
 | `alias.txt` | 🟡 | surfaces文書として追加読込し、sakura／kero／char scope aliasを利用 | alias以外の互換挙動は未照合 |
 | `surfacetable.txt` | ✅ | charset、version、option、group、scope、surface IDと名前を解析。`DisableNoDefineSurfaces`、`__disabled`、`__parts`も利用 | 実機UIでの全表示差は未確認 |
 | `updates2.dau` | 🟡 | path・MD5・size・date・charsetを解析し、取得・サイズ／MD5検証・`delete.txt`を含むロールバック更新。生成はCRLFで拡張フィールドも出力 | date・charsetは保持のみ |
 | `updates.txt` | 🟡 | `charset,`と`file,`行、path・MD5・拡張フィールド、未知行の無視に対応 | Version 3形式の生成は未対応 |
-| `readme.txt`／`readme.md` | 🟡 | Ghost／選択中Shell／Balloon／Headlineのdescript.txtにあるreadme指定と既定候補を安全に解決し、macOSの関連アプリで開く。readme.charsetも保持 | Markdownの独自表示はせず、文字コードの最終的な解釈は関連アプリに依存 |
+| `readme.txt`／`readme.md` | 🟡 | Ghost／選択中Shell／Balloon／Headlineのdescript.txtにあるreadme指定と既定候補を安全に解決し、macOSの関連アプリで開きます。readme.charsetも保持 | Markdownの独自表示はせず、文字コードの最終的な解釈は関連アプリに依存 |
 
 現状は ✅ 1 / 🟡 13 / ❌ 1。
 
@@ -50,7 +50,7 @@ UKADOC掲載は74項目。汎用パーサーはコメントと空行を除いた
 | 別経路で利用 | `homeurl`、`readme`、`readme.charset` |
 | 未反映 | charset宣言、作者・ID・title、配置・alignment、SSTP設定、SHIORI version/cache/encoding、イベント抑制、カーソル、メニュー、アイコン、推奨balloon関連 |
 
-文字コードはファイル内`charset`ではなく、UTF-8を試してからShift_JISへフォールバックする。
+文字コードはファイル内`charset`ではなく、UTF-8を試してからShift_JISへフォールバックします。
 
 ## Shell descript.txt
 
@@ -65,10 +65,10 @@ UKADOC掲載は102項目。現在利用するのはかなり限定的。
 | 利用 | scope別`seriko.alignmenttodesktop`、`defaultleft/top`、balloonの`offsetx/y/xl/xr/yl/yr`・`alignment`・`dontmove`・`syncscale` |
 | 保持 | scope別`defaultx/defaulty` |
 | 別経路で利用 | `readme`、`readme.charset` |
-| macOS代替 | menuのフォント・色・背景・サイドバー画像は、アクセシビリティとOSテーマに従うmacOS標準メニューを使用するためオーナードローしない |
+| macOS代替 | menuのフォント・色・背景・サイドバー画像は、アクセシビリティとOSテーマに従うmacOS標準メニューを使用するためオーナードローしません |
 | 未反映 | 基本メタデータ、名前上書き、画像ベース座標の全用途、DPI、透過・crossfade、アイコン枠色 |
 
-保存済みの利用者位置がある場合はそちらを優先し、未保存時だけShell `descript.txt`の初期位置を使う。
+保存済みの利用者位置がある場合はそちらを優先し、未保存時だけShell `descript.txt`の初期位置を使います。
 
 ## Balloon descript.txt
 
@@ -87,13 +87,13 @@ UKADOC掲載は162項目。現在の実利用項目は以下。
 | 別経路で利用 | `readme`、`readme.charset` |
 | 未反映 | disable.font、blendmethod、SSTP／online markerの座標・間隔・文字、入力画像上のボタン自体のオーナードロー、`use_self_alpha,full`、recommended ghost |
 
-`origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックする。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置する。入力欄は従来どおり横書き。
+`origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックします。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置します。入力欄は従来どおり横書き。
 
 ## Headline descript.txt
 
-UKADOC掲載9項目のうち、`charset`、`name`、`dllname`、`url`、`openurl`、`alwaysdisplay`をカタログで利用する。`homeurl`は共通のネットワーク更新URL探索で利用し、`readme`と`readme.charset`は設定画面のREADME表示導線で利用する。
+UKADOC掲載9項目のうち、`charset`、`name`、`dllname`、`url`、`openurl`、`alwaysdisplay`をカタログで利用します。`homeurl`は共通のネットワーク更新URL探索で利用し、`readme`と`readme.charset`は設定画面のREADME表示導線で利用します。
 
-RSS型についてはUKADOCのHEADLINE DLL項目に加え、`type,rss`と`feed,URL`をUtatane拡張として扱う。
+RSS型についてはUKADOCのHEADLINE DLL項目に加え、`type,rss`と`feed,URL`をUtatane拡張として扱います。
 
 ## install.txt
 
@@ -113,7 +113,7 @@ UKADOC掲載の主要15項目・構文に対する状況。
 | `*.refresh`／`*.refreshundeletemask` | ✅ | 同梱balloon・headline・plugin・calendar.skin・calendar.pluginの各項目に対応 |
 | developer_optionsの相対パス規則 | ✅ | `noupdate`／`nonar`のファイル・フォルダ・glob指定を各生成処理へ反映 |
 
-アーカイブについてはWindows式バックスラッシュを区切りとして安全に正規化してから、パストラバーサル、絶対パス、正規化後の衝突、シンボリックリンク、特殊ファイル、過大な件数・容量を拒否し、途中失敗時は作成済み項目を戻す。これはUKADOC互換とは別の安全策。
+アーカイブについてはWindows式バックスラッシュを区切りとして安全に正規化してから、パストラバーサル、絶対パス、正規化後の衝突、シンボリックリンク、特殊ファイル、過大な件数・容量を拒否し、途中失敗時は作成済み項目を戻します。これはUKADOC互換とは別の安全策。
 
 ## surfaces.txt・alias.txt
 
@@ -123,7 +123,7 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | --- | --- | --- |
 | surface選択 | 🟡 | 単一ID、範囲、列挙、除外、`surface.append` |
 | alias | 🟡 | sakura、kero、char scopeの名前→surface ID候補 |
-| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱う。`seriko.use_self_alpha,1`でもアルファチャンネルのないPNGは左上色透過へフォールバック。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つAPNG同士の合成後も再生情報を維持する。極端に長い最小公倍周期と全描画オプションは未網羅 |
+| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱います。`seriko.use_self_alpha,1`でもアルファチャンネルのないPNGは左上色透過へフォールバック。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つAPNG同士の合成後も再生情報を維持します。極端に長い最小公倍周期と全描画オプションは未網羅 |
 | collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用 |
 | animation基本 | 🟡 | name、interval文字列、pattern、wait、座標。複数animationを独立したTaskとレイヤー状態で並行再生し、base・overlay系・asis・moveと各種制御を反映 |
 | interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能 |
@@ -133,26 +133,26 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | cursor定義 | 🟡 | sakura／kero／char scopeのmouseup、mousedown、mouserightdown、mousewheel、mousehoverをcollision名ごとに反映。system cursor 10種と、AppKitで画像として読めるカーソルファイルに対応。system:wait／move／helpはmacOSの近似表示 |
 | tooltip定義 | ✅ | sakura／kero／char scopeのcollision別テキストをmacOS標準ツールチップとして表示 |
 
-`surfaces*.txt`は全てファイル名順に連結する。`surfaces2.txt`の「SSPだけへ上書き」という優先規則は専用実装していない。
+`surfaces*.txt`は全てファイル名順に連結します。`surfaces2.txt`の「SSPだけへ上書き」という優先規則は専用実装していません。
 
 ## surfacetable.txt
 
-UKADOC掲載6構文（charset、version、option、group、scope、surface ID行）は全て解析対象。UI用のgroupと名前、未定義surface非表示、disabled group、parts表示をモデルへ保持するため、この一覧では✅とした。
+UKADOC掲載6構文（charset、version、option、group、scope、surface ID行）は全て解析対象。UI用のgroupと名前、未定義surface非表示、disabled group、parts表示をモデルへ保持するため、この一覧では✅としました。
 
 ## 更新定義
 
-読み込みでは`updates2.dau`を先に試し、取得できなければ`updates.txt`へフォールバックする。pathと32桁MD5を検証し、変更ファイルだけを一時領域へ取得してから置換する。
+読み込みでは`updates2.dau`を先に試し、取得できなければ`updates.txt`へフォールバックします。pathと32桁MD5を検証し、変更ファイルだけを一時領域へ取得してから置換します。
 
-size／date／charset拡張フィールドとVersion 3の`charset,`・未知行を解析し、sizeとMD5はダウンロード結果の検証にも使う。生成するVersion 2はsize／date、先頭行のcharset、CRLFを出力する。
+size／date／charset拡張フィールドとVersion 3の`charset,`・未知行を解析し、sizeとMD5はダウンロード結果の検証にも使います。生成するVersion 2はsize／date、先頭行のcharset、CRLFを出力します。
 
-`delete.txt`はcharset行・コメントを除いたWindows区切りの相対パスを読み、更新後にファイルまたはディレクトリを削除する。絶対パス・空要素・`.`・`..`は拒否し、更新済みファイルの置換と削除処理を同じロールバック境界で扱う。
+`delete.txt`はcharset行・コメントを除いたWindows区切りの相対パスを読み、更新後にファイルまたはディレクトリを削除します。絶対パス・空要素・`.`・`..`は拒否し、更新済みファイルの置換と削除処理を同じロールバック境界で扱います。
 
-更新定義生成は`noupdate`とupdate ignore／include、NAR生成は`nonar`とnar ignore／includeを反映する。否定、`*`／`**`／`?`、ルート・フォルダ指定、`include:`に対応するが、文字クラスやエスケープ等のgitignore全細則は今後の課題。
+更新定義生成は`noupdate`とupdate ignore／include、NAR生成は`nonar`とnar ignore／includeを反映します。否定、`*`／`**`／`?`、ルート・フォルダ指定、`include:`に対応するが、文字クラスやエスケープ等のgitignore全細則は今後の課題。
 
 ## 優先度
 
-1. Ghost／Shell descript.txtの配置・balloon offset・alignmentを既存ウインドウ機能へ接続する。
-2. `install.txt`のrefresh、複数同梱オブジェクトを実装する。
-3. Balloon descript.txtのmarker配置・入力欄・透過方式を既存描画へ接続する。
-4. surfaces.txtのanimation option、surface属性、未対応pattern methodを段階的に追加する。
-5. developer_options.txtを更新定義生成と将来のNAR生成で共通利用する。
+1. Ghost／Shell descript.txtの配置・balloon offset・alignmentを既存ウインドウ機能へ接続します。
+2. `install.txt`のrefresh、複数同梱オブジェクトを実装します。
+3. Balloon descript.txtのmarker配置・入力欄・透過方式を既存描画へ接続します。
+4. surfaces.txtのanimation option、surface属性、未対応pattern methodを段階的に追加します。
+5. developer_options.txtを更新定義生成と将来のNAR生成で共通利用します。

@@ -16,6 +16,8 @@
 | ネットワークタブ | [設定](../Guide/Settings.md#ネットワーク)、[IP Messenger](../Guide/IP-Messenger.md)、[Realtime](../Guide/Realtime-Voice.md) |
 | 詳細タブ・開発用パレット・診断 | [設定](../Guide/Settings.md#詳細)、[困ったとき](../Support/Troubleshooting.md) |
 | ウィンドウモード・背景・スクリーンショット・履歴 | [ウィンドウモード](../Guide/Window-Mode.md) |
+| 配置プリセット | [配置の保存と復元](../Guide/Features.md#配置プリセット) |
+| SHIORI読み込み診断 | [診断と報告](../Support/Troubleshooting.md#診断と報告)、[SHIORI開発](../Creators/SHIORI-Development.md#ビルドと読み込みの確認) |
 | カレンダー・RSS・プラグイン・音楽・本体更新 | [機能](../Guide/Features.md) |
 | README・本体ヘルプ・ショートカット | [基本操作](../Guide/Basic-Operations.md)、[メニュー](../Guide/Shortcuts.md) |
 | 保存場所・復元・バックアップ | [保存場所](../Guide/Storage.md) |

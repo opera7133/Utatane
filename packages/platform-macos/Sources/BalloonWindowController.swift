@@ -213,6 +213,23 @@ public final class BalloonWindowController {
         presentations[scope]?.item.frame
     }
 
+    public var layoutPresetPositions: [Int: CGPoint] {
+        presentations.mapValues { $0.item.frame.origin }
+    }
+
+    public func restoreLayoutPresetPositions(_ positions: [Int: CGPoint]) {
+        for (scope, origin) in positions where origin.x.isFinite && origin.y.isFinite {
+            positionStore.save(origin, for: .balloon, scope: scope, coordinateSpace: geometryProvider.coordinateSpace)
+            if let item = presentations[scope]?.item {
+                let restored = positionStore.restoredOrigin(
+                    for: .balloon, scope: scope, windowSize: item.frame.size,
+                    visibleFrames: geometryProvider.visibleFrames, coordinateSpace: geometryProvider.coordinateSpace
+                ) ?? origin
+                item.setFrameOrigin(restored)
+            }
+        }
+    }
+
     func style(for scope: Int) -> Int? {
         presentations[scope]?.style
     }

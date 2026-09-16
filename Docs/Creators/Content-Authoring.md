@@ -8,9 +8,9 @@ Utataneは開発中で、SSPの全機能を再現しているわけではあり�
 
 | 作るもの | 新規に作る場合 | SSP向けの既存資産がある場合 |
 | --- | --- | --- |
-| ゴースト | Utatane内蔵のYAYA、里々、華和梨、美坂などを使うと、Windows DLLを同梱したままでも辞書をmacOS上で実行できる | 構成を変えずにNARまたはSSPフォルダから取り込み、内蔵SHIORIで動く範囲を先に確認する |
-| SHIORI | 辞書型の既知SHIORIを使うか、標準SHIORI ABIのmacOS用dylib、またはSHIOLINK外部プロセスとして作る | Windows固有コードを分離してmacOS用dylibを追加する。未移植DLLは設定済みWineでの互換確認に限られる |
-| SAORI | 既存の内蔵SAORIを使うか、標準SAORI ABIのmacOS用dylibとして作る | SHIORIから送るSAORI/1.0電文を維持し、Windows API部分だけをmacOS向けに移植する |
+| ゴースト | Utatane内蔵のYAYA、里々、華和梨、美坂などを使うと、Windows DLLを同梱したままでも辞書をmacOS上で実行できます | 構成を変えずにNARまたはSSPフォルダから取り込み、内蔵SHIORIで動く範囲を先に確認します |
+| SHIORI | 辞書型の既知SHIORIを使うか、標準SHIORI ABIのmacOS用dylib、またはSHIOLINK外部プロセスとして作ります | Windows固有コードを分離してmacOS用dylibを追加します。未移植DLLは設定済みWineでの互換確認に限られます |
+| SAORI | 既存の内蔵SAORIを使うか、標準SAORI ABIのmacOS用dylibとして作ります | SHIORIから送るSAORI/1.0電文を維持し、Windows API部分だけをmacOS向けに移植します |
 
 「Windows版を残しつつUtataneにも対応する」なら、OSごとに配布物を完全分離する前に、同じ辞書・設定を両方で使えるか試すのが近道です。Utataneの内蔵SHIORIは、代表的なWindows DLL名と辞書構成を見てネイティブ実装を選びます。
 
@@ -37,11 +37,11 @@ example-ghost/
 
 最初は次の小さい動作だけを作り、順番に増やすと原因を分けやすくなります。
 
-1. `OnBoot`で短いSakuraScriptを返す
-2. `OnClose`、`OnAITalk`を返す
-3. `OnMouseDoubleClick`と`OnChoiceSelect`を追加する
-4. サーフェス、SERIKO、着せ替えを追加する
-5. SAORI、ネットワーク更新、ゴースト間通信など外部要素を追加する
+1. `OnBoot`で短いSakuraScriptを返します。
+2. `OnClose`、`OnAITalk`を返します。
+3. `OnMouseDoubleClick`と`OnChoiceSelect`を追加します。
+4. サーフェス、SERIKO、着せ替えを追加します。
+5. SAORI、ネットワーク更新、ゴースト間通信など外部要素を追加します。
 
 SakuraScriptやイベントごとの差は、[SakuraScript互換表](../Reference/UKADOC-SakuraScript-Compatibility.md)と[SHIORIイベント互換表](../Reference/UKADOC-SHIORI-Event-Compatibility.md)で確認してください。
 
@@ -54,11 +54,17 @@ SakuraScriptやイベントごとの差は、[SakuraScript互換表](../Referenc
 3. ランダムトーク、クリック、選択肢が動くか
 4. 終了と再読み込み後に変数が保たれるか
 5. 追加シェル、バルーン、着せ替え、更新が動くか
-6. SAORIや外部プログラムを使う機能だけを個別に試す
+6. SAORIや外部プログラムを使う機能だけを個別に試します。
 
 起動しない場合は、まず`ghost/master/descript.txt`の`shiori`、ファイル名の大文字小文字、辞書の文字コードを確認します。macOSのファイルシステムでは、配布先によって大文字小文字の違いが問題になることがあります。
 
-Windows DLL、EXE、COM、レジストリ、Windowsのウィンドウハンドルに依存する機能は、そのままでは動きません。内蔵互換実装があるSAORIへ置き換える、該当機能を使わない代替分岐を用意する、macOS版モジュールを追加する、の順で検討してください。Wine経路は利用者側の追加設定が必要なので、通常機能の唯一の実装にはしないほうが安全です。
+Windows DLL、EXE、COM、レジストリ、Windowsのウィンドウハンドルに依存する機能は、そのままでは動きません。問題がある機能ごとに、次の順で検討してください。
+
+1. 同じ機能を持つ内蔵SAORIへ置き換えます。
+2. その機能を使わずに済む代替動作を用意します。
+3. 必要ならmacOS版モジュールを追加します。
+
+Wineは利用者側の追加設定が必要です。通常の会話までWineを必須にする前に、内蔵実装で動く範囲を確認してください。
 
 SSPとUtataneで応答を変える必要がある場合でも、まず実際に異なる項目だけに限定してください。OS判定、HWND、プロセス操作などは互換値や未対応値になることがあります。共通のSHIORIイベントとSakuraScriptで済む処理は共通化します。
 
@@ -84,11 +90,11 @@ macOS用モジュールは`ghost/master`へ配置します。両OS向けに配�
 
 注意点は次の通りです。
 
-- モジュールと相対パスは`ghost/master`内へ置く
-- macOS版はUTF-8の`loadu`を優先する
-- `Result`、`Value`、`ArgumentN`など、元のSAORIが返すヘッダーをテストする
-- 外部EXE、COM、独自ウィンドウ、Windows HWNDを前提にしない
-- 失敗や未対応操作は、空の成功応答ではなく呼び出し側が判別できる応答にする
+- モジュールと相対パスは`ghost/master`内へ置きます。
+- macOS版はUTF-8の`loadu`を優先します。
+- `Result`、`Value`、`ArgumentN`など、元のSAORIが返すヘッダーをテストします。
+- 外部EXE、COM、独自ウィンドウ、Windows HWNDを前提にしません。
+- 失敗や未対応操作は、空の成功応答ではなく呼び出し側が判別できる応答にします。
 
 Windows版とmacOS版でファイル名を変える場合は、利用するSHIORI側でOSに応じてロード先を選ぶ必要があります。Utataneが任意のWindows SAORI名からmacOS版を自動推測するわけではありません。
 
@@ -96,9 +102,9 @@ Windows版とmacOS版でファイル名を変える場合は、利用するSHIOR
 
 配布前の確認には、NARを使う方法と展開済みフォルダを使う方法があります。
 
-- 利用者と同じ条件: NARをUtataneへドラッグ＆ドロップして新規インストールする
-- 既存環境から確認: Utataneの「SSPフォルダから取り込む」を使う
-- 繰り返し編集: UtataneのコンテンツフォルダをFinderで開き、対象を編集して「現在のゴーストを再読み込み」する
+- 利用者と同じ条件: NARをUtataneへドラッグ＆ドロップして新規インストールします。
+- 既存環境から確認: Utataneの「SSPフォルダから取り込む」を使います。
+- 繰り返し編集: UtataneのコンテンツフォルダをFinderで開き、対象を編集して「現在のゴーストを再読み込み」します。
 - Utatane本体のDebugビルドで確認: `Content/Local/Ghosts/`へ置く（配布条件のある実物はコミットしない）
 
 NARには一般的な`install.txt`を入れ、少なくとも`charset`、`type`、`name`、`directory`を設定します。Utatane専用のインストール定義は必要ありません。`refresh`、同梱シェル・バルーンなど対応済み項目と制約は[テキストファイル互換表](../Reference/UKADOC-Text-File-Compatibility.md#installtxt)で確認してください。
@@ -115,13 +121,15 @@ NARには一般的な`install.txt`を入れ、少なくとも`charset`、`type`�
 
 ## 配布前チェックリスト
 
-- SSPとUtataneの両方を配布対象にする場合、完成したNARからそれぞれ新規インストールできる
-- `OnBoot`、`OnClose`、ランダムトーク、マウス反応、選択肢を確認した
-- 再読み込みとアプリ再起動後の状態を確認した
-- ファイル名の大文字小文字と文字コードを確認した
-- Windows専用機能に代替動作または分かる説明がある
-- arm64 / x86_64を配布対象にする場合、macOSモジュールの両アーキテクチャを確認した
-- 更新URLを使う場合、新規インストールだけでなく更新も確認した
-- READMEにUtataneで確認したバージョン、対応範囲、既知の制約を書いた
+配布するNARが完成したら、次を確認してください。
+
+- SSPとUtataneの両方が対象なら、それぞれで新規インストールできること。
+- 起動・終了、ランダムトーク、マウス反応、選択肢が動くこと。
+- 再読み込みとアプリ再起動後も、保存した状態が保たれること。
+- ファイル名の大文字小文字と文字コードが正しいこと。
+- Windows専用機能に代替動作があるか、利用できないことを説明していること。
+- Apple Silicon・Intelの両方が対象なら、macOSモジュールも両CPUに対応していること。
+- 更新URLを使う場合は、インストール済みの環境からも更新できること。
+- READMEに、確認したUtataneのバージョン、動く範囲、既知の制約を記載していること。
 
 完全互換を確認できていない場合は、「Utatane対応」とだけ書くより、確認済みの操作と動かない機能を具体的に記載してください。問題報告や対応追加の相談では、再配布できないゴースト本体をリポジトリへ追加せず、最小の再現データとログを添えると調査しやすくなります。

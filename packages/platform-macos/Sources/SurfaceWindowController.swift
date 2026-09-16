@@ -306,6 +306,30 @@ public final class SurfaceWindowController {
         characters[scope]?.windowFrame
     }
 
+    public var layoutPresetPositions: [Int: CGPoint] {
+        characters.compactMapValues { $0.windowFrame?.origin }
+    }
+
+    public func restoreLayoutPresetPositions(_ positions: [Int: CGPoint]) {
+        for (scope, origin) in positions {
+            guard let character = characters[scope], let frame = character.windowFrame,
+                  origin.x.isFinite, origin.y.isFinite
+            else { continue }
+            let visible = geometryProvider.visibleFrames
+            let target = visible.first { $0.intersects(CGRect(origin: origin, size: frame.size)) } ?? visible.first
+            let constrained: CGPoint = if let target {
+                CGPoint(
+                    x: min(max(origin.x, target.minX), max(target.minX, target.maxX - frame.width)),
+                    y: min(max(origin.y, target.minY), max(target.minY, target.maxY - frame.height))
+                )
+            } else {
+                origin
+            }
+            character.setOrigin(constrained)
+            positionStore.save(constrained, for: .surface, scope: scope, coordinateSpace: geometryProvider.coordinateSpace)
+        }
+    }
+
     public func surfaceID(for scope: Int) -> Int? {
         characters[scope]?.currentSurfaceID
     }
