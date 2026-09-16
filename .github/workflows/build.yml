@@ -45,6 +45,9 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Test release note generation
+        run: python3 Scripts/test-release-notes.py
+
       - name: Test bundled kagari inputs
         run: python3 tools/native-shiori/test-bundle-kagari.py
 
@@ -341,6 +344,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      - name: Prepare changelog release notes
+        run: python3 Scripts/generate-release-notes.py --tag "$GITHUB_REF_NAME" > release_notes.md
+
       - name: Install release tools
         run: brew install lftp
 
@@ -471,28 +477,21 @@ jobs:
               dist/update-feed/appcast.xml \
               --clobber
 
-            existing_body=$(gh release view "$GITHUB_REF_NAME" --json body -q .body)
-            clean_body=$(printf '%s\n' "$existing_body" | sed '/### 🛡️ VirusTotal Scan/,$d' | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')
           else
             gh release create "$GITHUB_REF_NAME" \
               dist/Utatane-macOS.zip \
               dist/update-feed/appcast.xml \
               --title "$GITHUB_REF_NAME" \
-              --generate-notes
-
-            existing_body=$(gh release view "$GITHUB_REF_NAME" --json body -q .body)
-            clean_body=$(printf '%s\n' "$existing_body" | sed -e :a -e '/^\n*$/{$d;N;};/\n$/ba')
+              --notes-file release_notes.md
           fi
 
           {
-            if [ -n "$clean_body" ]; then
-              printf '%s\n\n' "$clean_body"
-            fi
+            echo
             echo "### 🛡️ VirusTotal Scan"
             echo "- **Status:** $VT_STATUS"
             echo "- **SHA-256:** \`$VT_SHA256\`"
             echo "- **Report:** $VT_URL"
-          } > release_notes.md
+          } >> release_notes.md
 
           gh release edit "$GITHUB_REF_NAME" --notes-file release_notes.md
 

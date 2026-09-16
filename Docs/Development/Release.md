@@ -10,6 +10,18 @@ git tag v0.1.5
 git push origin v0.1.5
 ```
 
+## リリースノート
+
+タグを付ける前に、`CHANGELOG.md`へ対象バージョンの見出し（例: `## [0.2.4] - 2026-09-16`）、変更内容、末尾の比較リンクを追加してください。CIはそのバージョンの項目をリリースノートへ自動で載せ、比較リンクとVirusTotalの結果を添えます。対象の項目がない、空、または重複している場合は、公開前にエラーになります。
+
+既存のReleaseを再実行する場合も、タグのchangelogからノートを作り直します。リリースページだけを手直しすると再実行時に戻るため、変更内容はchangelogで管理してください。
+
+公開するノートは次のコマンドで確認できます。
+
+```sh
+python3 Scripts/generate-release-notes.py --tag v0.2.4
+```
+
 ## Sparkle署名鍵
 
 現在のworkflowは新規Releaseを通常Releaseとして作成します。既存Releaseのpre-release指定は自動変更しません。プレビュー配布を再開する場合はCIとappcastの配信方針を別途変更してください。
