@@ -130,7 +130,7 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能 |
 | pattern method | 🟡 | base、overlay、overlay-fast、replace、interpolate、reduce、bind、add、auto、asis、move、scaling、insert、start／stop、alternative／parallel系、APNG／GIF／WebPのimportに加え、multiply／screen／overlay／add／soft-light／hard-light／color-dodge／color-burn／color／luminosity／hue／saturation／darken／lighten／difference／exclusion系と旧名・fast名を実装。alternative／parallelの括弧・角括弧とカンマ・ピリオド区切り、scalingの小数倍率に対応。`overlaymultiply`／`blend-multiply-fast`はベースの不透明度でクリップ。AppKitに同一演算がないvivid-light等の一部は近似 |
 | animation option／collision | 🟡 | exclusive（全体・対象ID指定）、background、shared-indexを再生へ反映。animation固有のrect／ellipse／circle／polygon collisionをbind中・アニメーション実行中のマウス判定に利用。animation collisionのregionは未対応。bindとexclusiveの併用はUKADOC同様に未定義 |
-| surface属性 | 🟡 | 共通／sakura／kero balloon offsetは倍率を含め実配置へ反映。collision-sortは当たり判定優先順、animation-sortは初期合成順へ反映。surface name、center／kinoko.center／basepos point、icon.rect、maxwidthは解析・保持だけで、`\s[名前]`、位置保存、履歴サムネイルなどの用途へ接続していません |
+| surface属性 | 🟡 | surface nameは`\s[名前]`の解決に利用し、共通／sakura／kero balloon offsetは倍率を含め実配置へ反映。collision-sortは当たり判定優先順、animation-sortは初期合成順へ反映。center／kinoko.center／basepos point、icon.rect、maxwidthは解析・保持だけで、位置保存や履歴サムネイルなどの用途へ接続していません |
 | cursor定義 | 🟡 | sakura／kero／char scopeのmouseup、mousedown、mouserightdown、mousewheel、mousehoverをcollision名ごとに反映。system cursor 10種と、AppKitで画像として読めるカーソルファイルに対応。system:wait／move／helpはmacOSの近似表示 |
 | tooltip定義 | ✅ | sakura／kero／char scopeのcollision別テキストをmacOS標準ツールチップとして表示 |
 
@@ -152,7 +152,7 @@ size／date／charset拡張フィールドとVersion 3の`charset,`・未知行�
 
 ## 優先度
 
-1. surface nameを`\s[名前]`へ、point.baseposを位置保存へ、icon.rectを履歴サムネイルへ接続します。
+1. point.baseposを位置保存へ、icon.rectを履歴サムネイルへ接続します。
 2. collisionexのregionと、ベースsurface／elementのGIF・WebPを実装します。
 3. `surfaces*.txt`ごとのdescript設定と、単純連結ではない`surfaces2.txt`の優先規則を整理します。
 4. Balloon descript.txtのSSTP／online markerとarrow0表示を既存描画へ接続します。

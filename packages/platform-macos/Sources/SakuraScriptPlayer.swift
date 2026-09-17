@@ -502,6 +502,7 @@ public final class SakuraScriptPlayer {
         var balloonMarkerScopes: Set<Int> = []
         var balloonNumberScopes: Set<Int> = []
         var balloonOffsetScopes: Set<Int> = []
+        var balloonOffsetsByScope: [Int: (x: SakuraScriptBalloonCoordinate, y: SakuraScriptBalloonCoordinate)] = [:]
         var currentCharacterDelayMilliseconds = characterDelayMilliseconds
         var preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
         var isSerikoTalkEnabled = true
@@ -612,13 +613,28 @@ public final class SakuraScriptPlayer {
             )
         }
 
-        func activate(scope: Int, style: Int) throws {
+        func surfaceFrameForBalloon(
+            scope: Int,
+            scriptOffset: (x: SakuraScriptBalloonCoordinate, y: SakuraScriptBalloonCoordinate)?
+        ) -> NSRect? {
             guard var surfaceFrame = surfaceWindowController.windowFrame(for: scope)
                 ?? surfaceWindowController.windowFrame
-            else { return }
+            else { return nil }
             let surfaceBalloonOffset = surfaceWindowController.balloonOffset(for: scope)
-            surfaceFrame.origin.x += surfaceBalloonOffset.x
-            surfaceFrame.origin.y -= surfaceBalloonOffset.y
+            if scriptOffset?.x.isRelative != false {
+                surfaceFrame.origin.x += surfaceBalloonOffset.x
+            }
+            if scriptOffset?.y.isRelative != false {
+                surfaceFrame.origin.y -= surfaceBalloonOffset.y
+            }
+            return surfaceFrame
+        }
+
+        func activate(scope: Int, style: Int) throws {
+            guard let surfaceFrame = surfaceFrameForBalloon(
+                scope: scope,
+                scriptOffset: balloonOffsetsByScope[scope]
+            ) else { return }
             let speaker: BalloonSpeaker = switch scope {
             case 0: .sakura
             case 1: .kero
@@ -668,7 +684,10 @@ public final class SakuraScriptPlayer {
                 balloonWindowController.setNumber(file: "", current: "", maximum: "", scope: numberScope)
             }
             for offsetScope in balloonOffsetScopes {
-                balloonWindowController.resetOffset(scope: offsetScope)
+                balloonWindowController.resetOffset(
+                    scope: offsetScope,
+                    near: surfaceFrameForBalloon(scope: offsetScope, scriptOffset: nil)
+                )
             }
         }
 
@@ -883,9 +902,13 @@ public final class SakuraScriptPlayer {
                     )
                 case let .balloonOffset(x, y):
                     balloonOffsetScopes.insert(scope)
+                    balloonOffsetsByScope[scope] = (x, y)
                     balloonWindowController.setOffset(
                         x: Int(x.value.rounded()),
                         y: Int(y.value.rounded()),
+                        isRelativeX: x.isRelative,
+                        isRelativeY: y.isRelative,
+                        near: surfaceFrameForBalloon(scope: scope, scriptOffset: (x, y)),
                         scope: scope
                     )
                 case let .balloonAlignment(alignment):

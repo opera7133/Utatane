@@ -92,6 +92,12 @@ public enum BalloonWindowAlignment: Sendable, Equatable {
 
 @MainActor
 public final class BalloonWindowController {
+    private struct RuntimeOffset {
+        let point: NSPoint
+        let isRelativeX: Bool
+        let isRelativeY: Bool
+    }
+
     private let balloonLoader = BalloonLoader()
     private let imageLoader = SurfaceImageLoader()
     private let positionStore: WindowPositionStore
@@ -102,7 +108,7 @@ public final class BalloonWindowController {
     private var movementLockedScopes: Set<Int> = []
     private var markerTextByScope: [Int: String] = [:]
     private var numberTextByScope: [Int: String] = [:]
-    private var offsetByScope: [Int: NSPoint] = [:]
+    private var offsetByScope: [Int: RuntimeOffset] = [:]
     private var alignmentByScope: [Int: BalloonWindowAlignment] = [:]
     private var shellPresentationSettings: [Int: ShellScopePresentationSettings] = [:]
     private var displayScale: CGFloat = 1
@@ -271,7 +277,7 @@ public final class BalloonWindowController {
     }
 
     func offset(scope: Int) -> NSPoint? {
-        offsetByScope[scope]
+        offsetByScope[scope]?.point
     }
 
     func alignment(scope: Int) -> BalloonWindowAlignment? {
@@ -375,7 +381,9 @@ public final class BalloonWindowController {
         item.contentView = contentView
         item.setContentSize(scaledSize)
         configureDragging(contentView, item: item)
-        if let existingOrigin {
+        if offsetByScope[scope] != nil {
+            place(item, near: surfaceFrame, scope: scope, balloon: effectiveBalloon)
+        } else if let existingOrigin {
             item.setFrameOrigin(existingOrigin)
         } else if let restoredOrigin = positionStore.restoredOrigin(
             for: .balloon,
@@ -556,12 +564,29 @@ public final class BalloonWindowController {
         presentations[scope]?.contentView.setNumberText(text)
     }
 
-    public func setOffset(x: Int, y: Int, scope: Int) {
-        offsetByScope[scope] = NSPoint(x: x, y: y)
+    public func setOffset(
+        x: Int,
+        y: Int,
+        isRelativeX: Bool = true,
+        isRelativeY: Bool = true,
+        near surfaceFrame: NSRect? = nil,
+        scope: Int
+    ) {
+        if let surfaceFrame {
+            presentations[scope]?.surfaceFrame = surfaceFrame
+        }
+        offsetByScope[scope] = RuntimeOffset(
+            point: NSPoint(x: x, y: y),
+            isRelativeX: isRelativeX,
+            isRelativeY: isRelativeY
+        )
         reposition(scope: scope)
     }
 
-    public func resetOffset(scope: Int) {
+    public func resetOffset(scope: Int, near surfaceFrame: NSRect? = nil) {
+        if let surfaceFrame {
+            presentations[scope]?.surfaceFrame = surfaceFrame
+        }
         offsetByScope.removeValue(forKey: scope)
         reposition(scope: scope)
     }
@@ -708,19 +733,21 @@ public final class BalloonWindowController {
             x = surfaceFrame.minX - item.frame.width - spacing
             y = surfaceFrame.maxY - item.frame.height
         }
-        let runtimeOffset = offsetByScope[scope] ?? .zero
+        let runtimeOffset = offsetByScope[scope]
         let shellOffset = effectiveShellOffset(scope: scope, alignment: alignment)
         let balloonOffsetX: CGFloat = switch balloon.windowPositionX {
         case let .offset(value): CGFloat(value) * effectiveDisplayScale(scope: scope)
         case .center, .bottom: 0
         }
-        x += runtimeOffset.x + shellOffset.x
+        x += (runtimeOffset?.point.x ?? 0)
+            + (runtimeOffset?.isRelativeX == false ? 0 : shellOffset.x)
         if alignment == .left {
             x += balloonOffsetX
         } else if alignment == .right {
             x -= balloonOffsetX
         }
-        y -= runtimeOffset.y + shellOffset.y
+        y -= (runtimeOffset?.point.y ?? 0)
+            + (runtimeOffset?.isRelativeY == false ? 0 : shellOffset.y)
             + CGFloat(balloon.windowPositionY) * effectiveDisplayScale(scope: scope)
         if balloon.limitsWindowPosition {
             x = min(max(visibleFrame.minX, x), visibleFrame.maxX - item.frame.width)

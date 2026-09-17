@@ -158,6 +158,133 @@ func `shell defaults configure balloon alignment movement and synchronized scale
 
 @Test
 @MainActor
+func `changes to a surface by its surfaces txt name`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 50, height: 90).write(to: directory.appending(path: "surface0005.png"))
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [
+            0: SurfaceDefinition(id: 0, name: "normal", collisions: [], animations: []),
+            5: SurfaceDefinition(id: 5, name: "smile", collisions: [], animations: [])
+        ]
+    )
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    defer { controller.hideAll() }
+
+    try controller.show(shell: shell, surfaceID: 0)
+    try controller.changeSurface(named: "smile")
+
+    #expect(controller.surfaceID(for: 0) == 5)
+    #expect(controller.windowFrame(for: 0)?.size == NSSize(width: 50, height: 90))
+}
+
+@Test
+@MainActor
+func `combines shell surface and SakuraScript balloon offsets`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 100, height: 200).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 120, height: 80).write(to: directory.appending(path: "balloons0.png"))
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [
+            0: SurfaceDefinition(
+                id: 0,
+                balloonOffset: SurfacePoint(x: 30, y: 40),
+                collisions: [],
+                animations: []
+            )
+        ],
+        surfaceTable: nil,
+        maximumSurfaceWidth: nil,
+        presentationSettings: [
+            0: ShellScopePresentationSettings(
+                balloonOffsets: ShellBalloonOffsets(leftX: 10, leftY: 20),
+                balloonAlignment: .left
+            )
+        ]
+    )
+    let surfaces = SurfaceWindowController(positionStore: positionStore)
+    surfaces.setPlacement(locksToDesktopBottom: false, keepsOnScreen: false)
+    try surfaces.show(shell: shell, surfaceID: 0)
+    await surfaces.setFixedPosition(x: 500, y: 300, scope: 0)
+    let balloons = BalloonWindowController(positionStore: positionStore)
+    balloons.configure(shell: shell)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaces,
+        balloonWindowController: balloons
+    )
+    defer { player.cancel(); surfaces.hideAll(); balloons.hideAll() }
+
+    player.play(
+        SakuraScript(rawValue: #"\0\![set,balloonoffset,@5,@6]hello\x\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    try await requireEventually {
+        balloons.visibleScopes.contains(0)
+            && balloons.displayedText(for: 0) == "hello"
+    }
+
+    #expect(balloons.offset(scope: 0) == NSPoint(x: 5, y: 6))
+    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 417, y: 354))
+
+    player.advance()
+    try await requireEventually {
+        balloons.offset(scope: 0) == nil
+    }
+
+    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 412, y: 360))
+
+    player.play(
+        SakuraScript(rawValue: #"\0\![set,balloonoffset,5,6]hello\x\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    try await requireEventually {
+        balloons.visibleScopes.contains(0)
+            && balloons.displayedText(for: 0) == "hello"
+    }
+
+    #expect(balloons.offset(scope: 0) == NSPoint(x: 5, y: 6))
+    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 377, y: 414))
+
+    player.advance()
+    try await requireEventually {
+        balloons.offset(scope: 0) == nil
+    }
+
+    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 412, y: 360))
+
+    player.play(
+        SakuraScript(rawValue: #"\0hello\![set,balloonoffset,5,6]\x\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    try await requireEventually {
+        balloons.offset(scope: 0) == NSPoint(x: 5, y: 6)
+    }
+
+    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 377, y: 414))
+
+    player.advance()
+    try await requireEventually {
+        balloons.offset(scope: 0) == nil
+    }
+}
+
+@Test
+@MainActor
 func `renders a virtual surface from ordered elements`() throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

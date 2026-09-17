@@ -182,6 +182,23 @@ func `parses ranges exclusions append definitions and aliases`() {
 }
 
 @Test
+func `resolves a surface name like an alias`() {
+    let shell = ShellDefinition(
+        directory: URL(filePath: "/tmp/named-surface-test"),
+        surfaces: [
+            0: SurfaceDefinition(id: 0, name: "normal", collisions: [], animations: []),
+            5: SurfaceDefinition(id: 5, name: "smile", collisions: [], animations: [])
+        ],
+        surfaceAliases: [0: ["alias": [0]]]
+    )
+
+    #expect(shell.resolveSurface("smile", scope: 0) == 5)
+    #expect(shell.resolveSurface("alias", scope: 0) == 0)
+    #expect(shell.resolveSurface("5", scope: 0) == 5)
+    #expect(shell.resolveSurface("missing", scope: 0) == nil)
+}
+
+@Test
 func `parses extended rectangle and polygon collisions`() throws {
     let source = """
     surface0

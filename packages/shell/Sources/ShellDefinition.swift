@@ -120,6 +120,12 @@ public struct ShellDefinition: Sendable, Equatable {
         if let aliasedSurfaceID = surfaceAliases[scope]?[identifier]?.randomElement() {
             return aliasedSurfaceID
         }
+        let namedSurfaceIDs = surfaces.values.compactMap { surface in
+            surface.name == identifier ? surface.id : nil
+        }
+        if let namedSurfaceID = namedSurfaceIDs.randomElement() {
+            return namedSurfaceID
+        }
         return Int(identifier)
     }
 
