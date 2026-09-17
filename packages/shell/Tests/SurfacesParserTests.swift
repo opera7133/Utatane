@@ -247,6 +247,25 @@ func `parses curved and animation specific collisions and options`() throws {
 }
 
 @Test
+func `parses image color collision regions`() throws {
+    let surface = try #require(SurfacesParser().parse("""
+    surface0
+    {
+    collisionex0,red,region,hit.png,255,0,0
+    animation2.interval,bind
+    animation2.collisionex0,not-blue,region,parts\\hit.png,0,0,255,true
+    }
+    """)[0])
+
+    #expect(surface.collisions.first?.shape == .region(
+        filename: "hit.png", red: 255, green: 0, blue: 0, inverted: false
+    ))
+    #expect(surface.animations.first?.collisions.first?.shape == .region(
+        filename: "parts\\hit.png", red: 0, green: 0, blue: 255, inverted: true
+    ))
+}
+
+@Test
 func `parses surface names offsets points and icon rectangle`() throws {
     let surface = try #require(SurfacesParser().parse("""
     surface0

@@ -300,6 +300,7 @@ public struct SurfaceCollision: Sendable, Equatable {
         case ellipse
         case circle(center: SurfacePoint, radius: Int)
         case polygon
+        case region(filename: String, red: Int, green: Int, blue: Int, inverted: Bool)
     }
 
     public let id: Int
@@ -358,6 +359,10 @@ public struct SurfaceCollision: Sendable, Equatable {
             let dx = x - center.x
             let dy = y - center.y
             return dx * dx + dy * dy <= radius * radius
+        case .region:
+            // Region collisions need the shell image file and are evaluated by
+            // the platform hit tester.
+            return false
         default:
             return (min(left, right) ... max(left, right)).contains(x)
                 && (min(top, bottom) ... max(top, bottom)).contains(y)

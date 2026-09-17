@@ -95,6 +95,29 @@ func `preserves APNG frames and timing when the animation uses alpha`() throws {
 
 @Test
 @MainActor
+func `loads animated GIF and WebP surface images`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let gifURL = directory.appending(path: "surface0.gif")
+    let webPURL = directory.appending(path: "element.webp")
+    try makeAnimatedGIFData(durations: [0.1, 0.2]).write(to: gifURL)
+    try #require(Data(base64Encoded: webPBase64)).write(to: webPURL)
+
+    let loader = SurfaceImageLoader()
+    let gif = try loader.load(SurfaceAsset(id: 0, imageURL: gifURL, alphaMaskURL: nil))
+    let webP = try loader.load(SurfaceAsset(id: -1, imageURL: webPURL, alphaMaskURL: nil))
+
+    #expect(loader.frameCount(of: gif) == 2)
+    #expect(gif.size == NSSize(width: 1, height: 1))
+    #expect(webP.size == NSSize(width: 2, height: 2))
+    let composited = loader.composite(base: webP, overlay: gif, x: 0, y: 0)
+    #expect(loader.frameCount(of: composited) == 2)
+}
+
+@Test
+@MainActor
 func `preserves APNG frames and timing after applying a PNA mask`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)
@@ -384,7 +407,10 @@ private func makeAnimatedTestImage(durations: [TimeInterval]) throws -> NSImage 
     CGImageDestinationSetProperties(destination, [
         kCGImagePropertyPNGDictionary: [kCGImagePropertyAPNGLoopCount: 0]
     ] as CFDictionary)
-    let colors: [NSColor] = [.red, .blue]
+    let colors = [
+        NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1),
+        NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    ]
     for (index, duration) in durations.enumerated() {
         let frame = try makeTestImage(colors: [colors[index % colors.count]])
         let image = try #require(frame.cgImage(forProposedRect: nil, context: nil, hints: nil))
@@ -397,6 +423,35 @@ private func makeAnimatedTestImage(durations: [TimeInterval]) throws -> NSImage 
     }
     #expect(CGImageDestinationFinalize(destination))
     return try #require(NSImage(data: data as Data))
+}
+
+private func makeAnimatedGIFData(durations: [TimeInterval]) throws -> Data {
+    let data = NSMutableData()
+    let destination = try #require(CGImageDestinationCreateWithData(
+        data,
+        "com.compuserve.gif" as CFString,
+        durations.count,
+        nil
+    ))
+    CGImageDestinationSetProperties(destination, [
+        kCGImagePropertyGIFDictionary: [kCGImagePropertyGIFLoopCount: 0]
+    ] as CFDictionary)
+    let colors = [
+        NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1),
+        NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    ]
+    for (index, duration) in durations.enumerated() {
+        let frame = try makeTestImage(colors: [colors[index % colors.count]])
+        let image = try #require(frame.cgImage(forProposedRect: nil, context: nil, hints: nil))
+        CGImageDestinationAddImage(destination, image, [
+            kCGImagePropertyGIFDictionary: [
+                kCGImagePropertyGIFDelayTime: duration,
+                kCGImagePropertyGIFUnclampedDelayTime: duration
+            ]
+        ] as CFDictionary)
+    }
+    #expect(CGImageDestinationFinalize(destination))
+    return data as Data
 }
 
 private func makeMaskPNG(
@@ -470,3 +525,4 @@ private extension NSBitmapImageRep {
 }
 
 let animatedPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAACXBIWXMAAAAAAAAAAQCEeRdzAAAACGFjVEwAAAACAAAAAPONk3AAAAAaZmNUTAAAAAAAAAAEAAAABAAAAAAAAAAAAAEABQAAXC5E3AAAACRJREFUeJxjfMPF8J8BCKLc7BlBNAsDGmCJcIfI8PzgYcCqAgDqiATS2a3PlwAAABpmY1RMAAAAAQAAAAQAAAAEAAAAAAAAAAAAAQAFAADHXa4IAAAAJGZkQVQAAAACeJxj1BVUZACBt7zfwTQLAxpggcm8fvTkP1YVAB/oB//52BKiAAAAAElFTkSuQmCC"
+let webPBase64 = "UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoCAAIAAgA0JaACdLoB+AADsAD+8MQL/yC5YXXI1/8gP+QH/ID/+PIAAAA="

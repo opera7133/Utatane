@@ -22,6 +22,31 @@ func `loads an APNG base surface`() throws {
 }
 
 @Test
+func `loads GIF and WebP base surfaces and elements`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: UUID().uuidString,
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let gif = root.appending(path: "surface0.gif", directoryHint: .notDirectory)
+    let webP = root.appending(path: "surface1.webp", directoryHint: .notDirectory)
+    let gifElement = root.appending(path: "blink.gif", directoryHint: .notDirectory)
+    let webPElement = root.appending(path: "badge.webp", directoryHint: .notDirectory)
+    for url in [gif, webP, gifElement, webPElement] {
+        try Data().write(to: url)
+    }
+
+    let shell = try ShellLoader().load(from: root)
+
+    #expect(shell.surfaces.keys.sorted() == [0, 1])
+    #expect(try ShellLoader().loadSurface(id: 0, from: root).imageURL == gif)
+    #expect(try ShellLoader().loadSurface(id: 1, from: root).imageURL == webP)
+    #expect(try ShellLoader().loadElement(filename: "blink.gif", from: root).imageURL == gifElement)
+    #expect(try ShellLoader().loadElement(filename: "badge.webp", from: root).imageURL == webPElement)
+}
+
+@Test
 func `loads an image only legacy shell`() throws {
     let root = FileManager.default.temporaryDirectory.appending(
         path: UUID().uuidString,

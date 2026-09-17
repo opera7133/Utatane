@@ -22,6 +22,8 @@ public enum ShellError: LocalizedError, Equatable {
 }
 
 public struct ShellLoader: Sendable {
+    private static let surfaceImageExtensions = ["png", "apng", "gif", "webp"]
+
     private let parser = SurfacesParser()
     private let surfaceTableParser = SurfaceTableParser()
 
@@ -105,7 +107,7 @@ public struct ShellLoader: Sendable {
         let fileManager = FileManager.default
 
         for basename in candidates {
-            guard let imageURL = ["png", "apng"]
+            guard let imageURL = Self.surfaceImageExtensions
                 .map({ shellDirectory.appending(path: "\(basename).\($0)", directoryHint: .notDirectory) })
                 .first(where: { fileManager.fileExists(atPath: $0.path) })
             else { continue }
@@ -131,7 +133,7 @@ public struct ShellLoader: Sendable {
             .appending(path: normalizedFilename, directoryHint: .notDirectory)
             .standardizedFileURL
             .resolvingSymlinksInPath()
-        guard ["png", "apng"].contains(imageURL.pathExtension.lowercased()),
+        guard Self.surfaceImageExtensions.contains(imageURL.pathExtension.lowercased()),
               imageURL.path.hasPrefix(root.path + "/"),
               FileManager.default.fileExists(atPath: imageURL.path)
         else {
@@ -403,7 +405,7 @@ public struct ShellLoader: Sendable {
     private func surfaceID(fromImageFilename filename: String) -> Int? {
         let lowercased = filename.lowercased()
         guard lowercased.hasPrefix("surface") else { return nil }
-        let extensions = [".png", ".apng"]
+        let extensions = Self.surfaceImageExtensions.map { ".\($0)" }
         guard let suffix = extensions.first(where: lowercased.hasSuffix) else { return nil }
         return Int(lowercased.dropFirst("surface".count).dropLast(suffix.count))
     }

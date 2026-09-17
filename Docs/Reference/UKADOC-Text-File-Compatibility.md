@@ -27,7 +27,7 @@
 | `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストールに加え、refreshとrefreshundeletemaskをバックアップ付き置換で実装 | supplement・languageは未対応 |
 | `delete.txt` | ✅ | UTF-8／Shift_JIS、charset行、Windows区切りの相対ファイル・ディレクトリを事前検証し、更新ファイルの置換と同じロールバック境界で安全に削除 | — |
 | `developer_options.txt` | 🟡 | `noupdate`／`nonar`に加え、`.narignore`／`.updateignore`／`.narinclude`／`.updateinclude`の主要gitignore構文と`include:`を各生成処理へ反映 | 文字クラス・エスケープ等、gitignoreの全細則は未対応 |
-| `surfaces.txt`／`surfaces*.txt` | 🟡 | 複数ファイル結合、surface selector、append、alias、element、rect／ellipse／circle／polygon collision、主要animationとoption | region collision、surface nameなど保持だけの属性、ベース画像のGIF／WebP、ファイルごとのdescript設定が未対応 |
+| `surfaces.txt`／`surfaces*.txt` | 🟡 | 複数ファイル結合、surface selector、append、alias、PNG／APNG／GIF／WebPのelement、rect／ellipse／circle／polygon／region collision、主要animationとoption | 保持だけのsurface属性、ファイルごとのdescript設定が未対応 |
 | `surfaces2.txt` | 🟡 | `surfaces`で始まるため読み込みます | SSP用上書きではなく、他のsurfacesファイルとファイル名順で単純結合します |
 | `alias.txt` | 🟡 | surfaces文書として追加読込し、sakura／kero／char scope aliasを利用 | alias以外の互換挙動は未照合 |
 | `surfacetable.txt` | ✅ | charset、version、option、group、scope、surface IDと名前を解析。`DisableNoDefineSurfaces`、`__disabled`、`__parts`も利用 | 実機UIでの全表示差は未確認 |
@@ -124,12 +124,12 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | --- | --- | --- |
 | surface選択 | ✅ | 単一ID、範囲、列挙、`!`による除外、`surface.append`を解析し、定義の追加・上書きへ反映 |
 | alias | ✅ | sakura、kero、char scopeの名前からsurface ID候補を選び、`\s[識別子]`の解決に利用 |
-| element | 🟡 | PNG／APNG／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱います。`seriko.use_self_alpha,1`ではアルファチャンネルのないPNGを左上色透過へフォールバックし、`full`では全面を不透明として扱います。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つAPNG同士の合成後も再生情報を維持します。ベースsurfaceとelementのGIF／WebPは未対応で、GIF／WebPはanimationのimportに限って利用できます |
-| collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用。画像の指定色から判定領域を作るregionは未対応 |
+| element | ✅ | PNG／APNG／GIF／WebPとPNA、base・overlay系・asisに対応。elementでは適用外の描画メソッドをSSP同様overlayとして扱います。`seriko.use_self_alpha,1`ではアルファチャンネルのない画像を左上色透過へフォールバックし、`full`では全面を不透明として扱います。アニメーション画像はフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つ画像同士の合成後も再生情報を維持します |
+| collision | ✅ | 矩形とcollisionex rect／ellipse／circle／polygon／regionを実際のマウス判定に利用。regionはShell内の画像にある指定RGB色、または反転指定時は指定色以外の画素を判定領域にします |
 | animation基本 | 🟡 | name、interval文字列、pattern、wait、座標。複数animationを独立したTaskとレイヤー状態で並行再生し、base・overlay系・asis・moveと各種制御を反映 |
 | interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能 |
 | pattern method | 🟡 | base、overlay、overlay-fast、replace、interpolate、reduce、bind、add、auto、asis、move、scaling、insert、start／stop、alternative／parallel系、APNG／GIF／WebPのimportに加え、multiply／screen／overlay／add／soft-light／hard-light／color-dodge／color-burn／color／luminosity／hue／saturation／darken／lighten／difference／exclusion系と旧名・fast名を実装。alternative／parallelの括弧・角括弧とカンマ・ピリオド区切り、scalingの小数倍率に対応。`overlaymultiply`／`blend-multiply-fast`はベースの不透明度でクリップ。AppKitに同一演算がないvivid-light等の一部は近似 |
-| animation option／collision | 🟡 | exclusive（全体・対象ID指定）、background、shared-indexを再生へ反映。animation固有のrect／ellipse／circle／polygon collisionをbind中・アニメーション実行中のマウス判定に利用。animation collisionのregionは未対応。bindとexclusiveの併用はUKADOC同様に未定義 |
+| animation option／collision | ✅ | exclusive（全体・対象ID指定）、background、shared-indexを再生へ反映。animation固有のrect／ellipse／circle／polygon／region collisionをbind中・アニメーション実行中のマウス判定に利用。bindとexclusiveの併用はUKADOC同様に未定義 |
 | surface属性 | 🟡 | surface nameは`\s[名前]`の解決に利用し、共通／sakura／kero balloon offsetは倍率を含め実配置へ反映。collision-sortは当たり判定優先順、animation-sortは初期合成順へ反映。center／kinoko.center／basepos point、icon.rect、maxwidthは解析・保持だけで、位置保存や履歴サムネイルなどの用途へ接続していません |
 | cursor定義 | 🟡 | sakura／kero／char scopeのmouseup、mousedown、mouserightdown、mousewheel、mousehoverをcollision名ごとに反映。system cursor 10種と、AppKitで画像として読めるカーソルファイルに対応。system:wait／move／helpはmacOSの近似表示 |
 | tooltip定義 | ✅ | sakura／kero／char scopeのcollision別テキストをmacOS標準ツールチップとして表示 |
@@ -153,7 +153,6 @@ size／date／charset拡張フィールドとVersion 3の`charset,`・未知行�
 ## 優先度
 
 1. point.baseposを位置保存へ、icon.rectを履歴サムネイルへ接続します。
-2. collisionexのregionと、ベースsurface／elementのGIF・WebPを実装します。
-3. `surfaces*.txt`ごとのdescript設定と、単純連結ではない`surfaces2.txt`の優先規則を整理します。
-4. Balloon descript.txtのSSTP／online markerとarrow0表示を既存描画へ接続します。
-5. pattern methodの近似描画を実画像で比較し、互換差が大きい演算を優先して補正します。
+2. `surfaces*.txt`ごとのdescript設定と、単純連結ではない`surfaces2.txt`の優先規則を整理します。
+3. Balloon descript.txtのSSTP／online markerとarrow0表示を既存描画へ接続します。
+4. pattern methodの近似描画を実画像で比較し、互換差が大きい演算を優先して補正します。

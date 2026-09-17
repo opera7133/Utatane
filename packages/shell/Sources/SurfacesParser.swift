@@ -378,6 +378,16 @@ public struct SurfacesParser: Sendable {
                     name: name,
                     polygon: points
                 )
+            } else if shape == "region", values.count >= 6,
+                      let red = Int(values[3]), let green = Int(values[4]), let blue = Int(values[5])
+            {
+                builder.collisions[collisionID] = SurfaceCollision(
+                    id: collisionID, left: 0, top: 0, right: 0, bottom: 0, name: name,
+                    shape: .region(
+                        filename: values[2], red: red, green: green, blue: blue,
+                        inverted: values.dropFirst(6).first?.lowercased() == "true"
+                    )
+                )
             }
             return
         }
@@ -446,6 +456,16 @@ public struct SurfacesParser: Sendable {
                     id: collisionID, left: points.map(\.x).min() ?? 0, top: points.map(\.y).min() ?? 0,
                     right: points.map(\.x).max() ?? 0, bottom: points.map(\.y).max() ?? 0,
                     name: name, polygon: points
+                )
+            } else if shape == "region", values.count >= 6,
+                      let red = Int(values[3]), let green = Int(values[4]), let blue = Int(values[5])
+            {
+                animation.collisions[collisionID] = SurfaceCollision(
+                    id: collisionID, left: 0, top: 0, right: 0, bottom: 0, name: name,
+                    shape: .region(
+                        filename: values[2], red: red, green: green, blue: blue,
+                        inverted: values.dropFirst(6).first?.lowercased() == "true"
+                    )
                 )
             }
         } else if directive.hasPrefix("collision"),

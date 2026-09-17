@@ -2729,7 +2729,14 @@ private final class SurfaceImageView: NSImageView {
     var collisions: [SurfaceCollision] = []
     var cursorDefinitions: [SurfaceCursorDefinition] = []
     var tooltipDefinitions: [String: String] = [:]
-    var shellDirectory: URL?
+    var shellDirectory: URL? {
+        didSet {
+            guard shellDirectory != oldValue else { return }
+            regionBitmapCache.removeAll()
+            missingRegionURLs.removeAll()
+        }
+    }
+
     var coordinateScaleX: CGFloat = 1
     var coordinateScaleY: CGFloat = 1
     var coordinateScaleMultiplierX: CGFloat = 1
@@ -2765,6 +2772,8 @@ private final class SurfaceImageView: NSImageView {
     }
 
     private var collisionMode = (enabled: false, showsNames: true)
+    private var regionBitmapCache: [URL: NSBitmapImageRep] = [:]
+    private var missingRegionURLs: Set<URL> = []
     private var hoveredRegion: String?
     private var lastStrokePoint: NSPoint?
     private var lastStrokeRegion: String?
@@ -2864,6 +2873,19 @@ private final class SurfaceImageView: NSImageView {
     }
 
     private func collisionPath(_ collision: SurfaceCollision) -> NSBezierPath {
+        if case let .region(filename, red, green, blue, inverted) = collision.shape,
+           let bitmap = regionBitmap(filename: filename),
+           let bounds = regionPixelBounds(
+               bitmap: bitmap, red: red, green: green, blue: blue, inverted: inverted
+           )
+        {
+            let first = collisionPoint(x: bounds.minX, y: bounds.minY)
+            let second = collisionPoint(x: bounds.maxX + 1, y: bounds.maxY + 1)
+            return NSBezierPath(rect: NSRect(
+                x: min(first.x, second.x), y: min(first.y, second.y),
+                width: abs(second.x - first.x), height: abs(second.y - first.y)
+            ))
+        }
         if collision.polygon.count >= 3 {
             let path = NSBezierPath()
             for (index, point) in collision.polygon.enumerated() {
@@ -3289,8 +3311,105 @@ private final class SurfaceImageView: NSImageView {
         let logicalY = flipsVertically ? point.y : bounds.height - point.y
         let surfaceX = Int((logicalX - coordinateOffsetX) / coordinateScaleX)
         let surfaceY = Int((logicalY - coordinateOffsetY) / coordinateScaleY)
-        let region = collisions.first { $0.contains(x: surfaceX, y: surfaceY) }?.name
+        let region = collisions.first { collisionContains($0, x: surfaceX, y: surfaceY) }?.name
         return (region, surfaceX, surfaceY)
+    }
+
+    private func collisionContains(_ collision: SurfaceCollision, x: Int, y: Int) -> Bool {
+        guard case let .region(filename, red, green, blue, inverted) = collision.shape else {
+            return collision.contains(x: x, y: y)
+        }
+        guard let bitmap = regionBitmap(filename: filename),
+              x >= 0, y >= 0, x < bitmap.pixelsWide, y < bitmap.pixelsHigh
+        else { return false }
+        let matches = pixel(bitmap, x: x, y: y, matchesRed: red, green: green, blue: blue)
+        return inverted ? !matches : matches
+    }
+
+    private func regionBitmap(filename: String) -> NSBitmapImageRep? {
+        guard let shellDirectory else { return nil }
+        let normalized = filename
+            .replacingOccurrences(of: "\\", with: "/")
+            .replacingOccurrences(of: "¥", with: "/")
+        let root = shellDirectory.standardizedFileURL.resolvingSymlinksInPath()
+        let url = shellDirectory.appending(path: normalized, directoryHint: .notDirectory)
+            .standardizedFileURL.resolvingSymlinksInPath()
+        guard url.path.hasPrefix(root.path + "/") else { return nil }
+        if let cached = regionBitmapCache[url] {
+            return cached
+        }
+        guard !missingRegionURLs.contains(url),
+              let data = try? Data(contentsOf: url),
+              let image = NSImage(data: data),
+              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+        else {
+            missingRegionURLs.insert(url)
+            return nil
+        }
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: cgImage.width,
+            pixelsHigh: cgImage.height,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bitmapFormat: [],
+            bytesPerRow: cgImage.width * 4,
+            bitsPerPixel: 32
+        ), let context = NSGraphicsContext(bitmapImageRep: bitmap)
+        else {
+            missingRegionURLs.insert(url)
+            return nil
+        }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height)).draw(
+            in: NSRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height)
+        )
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+        bitmap.size = NSSize(width: cgImage.width, height: cgImage.height)
+        regionBitmapCache[url] = bitmap
+        return bitmap
+    }
+
+    private func regionPixelBounds(
+        bitmap: NSBitmapImageRep,
+        red: Int,
+        green: Int,
+        blue: Int,
+        inverted: Bool
+    ) -> (minX: Int, minY: Int, maxX: Int, maxY: Int)? {
+        var result: (minX: Int, minY: Int, maxX: Int, maxY: Int)?
+        for y in 0 ..< bitmap.pixelsHigh {
+            for x in 0 ..< bitmap.pixelsWide {
+                let matches = pixel(bitmap, x: x, y: y, matchesRed: red, green: green, blue: blue)
+                guard inverted ? !matches : matches else { continue }
+                if let bounds = result {
+                    result = (min(bounds.minX, x), min(bounds.minY, y), max(bounds.maxX, x), max(bounds.maxY, y))
+                } else {
+                    result = (x, y, x, y)
+                }
+            }
+        }
+        return result
+    }
+
+    private func pixel(
+        _ bitmap: NSBitmapImageRep,
+        x: Int,
+        y: Int,
+        matchesRed red: Int,
+        green: Int,
+        blue: Int
+    ) -> Bool {
+        guard let pixels = bitmap.bitmapData else { return false }
+        let offset = y * bitmap.bytesPerRow + x * 4
+        return Int(pixels[offset]) == red
+            && Int(pixels[offset + 1]) == green
+            && Int(pixels[offset + 2]) == blue
     }
 
     private func buttonNumber(_ event: NSEvent) -> Int {

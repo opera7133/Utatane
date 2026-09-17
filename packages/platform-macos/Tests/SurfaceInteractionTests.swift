@@ -47,6 +47,67 @@ func `balloons follow their surface while preserving independent balloon movemen
 @Suite(.serialized)
 struct SurfaceDragTests {
     @Test @MainActor
+    func `image color collision regions drive mouse events`() throws {
+        let (defaults, positionStore) = makePositionStore()
+        defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+        let directory = FileManager.default.temporaryDirectory.appending(path: "utatane-region-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try makePNG(width: 20, height: 20).write(to: directory.appending(path: "surface0.png"))
+        let bitmap = try #require(NSBitmapImageRep(
+            bitmapDataPlanes: nil, pixelsWide: 20, pixelsHigh: 20, bitsPerSample: 8,
+            samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 80, bitsPerPixel: 32
+        ))
+        let red = NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+        let blue = NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+        for y in 0 ..< 20 {
+            for x in 0 ..< 20 {
+                bitmap.setColor(y < 10 ? red : blue, atX: x, y: y)
+            }
+        }
+        try #require(bitmap.representation(using: .png, properties: [:]))
+            .write(to: directory.appending(path: "hit.png"))
+        let collisions = [
+            SurfaceCollision(
+                id: 0, left: 0, top: 0, right: 0, bottom: 0, name: "Red",
+                shape: .region(filename: "hit.png", red: 255, green: 0, blue: 0, inverted: false)
+            ),
+            SurfaceCollision(
+                id: 1, left: 0, top: 0, right: 0, bottom: 0, name: "NotRed",
+                shape: .region(filename: "hit.png", red: 255, green: 0, blue: 0, inverted: true)
+            )
+        ]
+        let shell = ShellDefinition(
+            directory: directory,
+            surfaces: [0: SurfaceDefinition(id: 0, collisions: collisions, animations: [])]
+        )
+        let controller = SurfaceWindowController(positionStore: positionStore)
+        controller.setPlacement(locksToDesktopBottom: false, keepsOnScreen: false)
+        try controller.show(shell: shell, scope: 0, surfaceID: 0)
+        defer { controller.hideAll() }
+        let windowNumber = try #require(controller.windowNumbers.first)
+        let window = try #require(NSApp.window(withWindowNumber: windowNumber))
+        window.setFrameOrigin(NSPoint(x: 200, y: 200))
+        let view = try #require(window.contentView)
+        var clicks: [String?] = []
+        controller.onMouseEvent = { event in
+            if event.kind == .click {
+                clicks.append(event.region)
+            }
+        }
+
+        let redPoint = NSPoint(x: window.frame.minX + 5, y: window.frame.maxY - 5)
+        try view.mouseDown(with: surfaceDragEvent(.leftMouseDown, pointer: redPoint, window: window))
+        try view.mouseUp(with: surfaceDragEvent(.leftMouseUp, pointer: redPoint, window: window))
+        let bluePoint = NSPoint(x: window.frame.minX + 5, y: window.frame.maxY - 15)
+        try view.mouseDown(with: surfaceDragEvent(.leftMouseDown, pointer: bluePoint, window: window))
+        try view.mouseUp(with: surfaceDragEvent(.leftMouseUp, pointer: bluePoint, window: window))
+
+        #expect(clicks == ["Red", "NotRed"])
+    }
+
+    @Test @MainActor
     func `surface input emits boundary down double click and hover events`() async throws {
         let fixture = try makeSurfaceDragFixture()
         defer { fixture.cleanUp() }

@@ -6,13 +6,15 @@
 
 - `surfaces.txt`のsurfaceに付けた`name`をSakuraScriptの`\s[名前]`で選べるようにした
 - `\![set,balloonoffset]`で、`@`付き座標はShell・surface固有offsetへの加算、`@`なしは既定offsetを置き換えるSSP互換の配置にした
+- ベースsurfaceとelementにGIF／WebPを指定できるようにし、アニメーションGIFをほかのelementと合成した後も再生を維持するようにした
+- `collisionex`とanimation固有collisionの`region`に対応し、画像内の指定色または指定色以外をマウスの当たり判定に使えるようにした
 
 ### 開発・検証
 
 - macOS表示系の巨大なテストファイルを描画、ウィンドウモード、再生、配置、バルーン、入力操作へ分割し、非同期状態の確認を固定時間待ちから共通の条件待ちへ整理した。マウスホバーのテストは製品の待ち時間を変えずに即時実行できるようにした
 - ランダムに選ばれるYAYAトークへ一律の終端記号を要求していた不安定なテストを修正した
 - `Docs/Development`をローカル開発・フォーク・貢献者向けの内容に絞り、公式リリースとサイト運用、説明範囲の管理資料を`Internal-Docs`へ移した
-- surfaces.txt・SERIKO・Balloon descript.txtの互換表を、設定の解析だけでなく実際の描画・入力・配置への接続まで再監査し、surface name、region collision、GIF／WebP、各種markerなどの未接続範囲を明記した
+- surfaces.txt・SERIKO・Balloon descript.txtの互換表を、設定の解析だけでなく実際の描画・入力・配置への接続まで再監査し、未接続のsurface属性や各種markerなどの不足を明記した
 
 ## [0.2.5] - 2026-09-16
 
