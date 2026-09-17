@@ -21,8 +21,8 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 
 基準: [さくらスクリプトリスト](https://ssp.shillest.net/ukadoc/manual/list_sakura_script.html)
 
-調査日: 2026-09-12
-調査結果: ✅ 77 / 🟡 42 / ❌ 5 / ➖ 4
+調査日: 2026-09-17
+調査結果: ✅ 79 / 🟡 50 / ❌ 6 / ➖ 4
 
 ### 基本仕様
 
@@ -45,7 +45,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\sID`, `\s[ID]` | 🟡 | 数値IDに対応。UKADOCどおり括弧なしは1桁、複数桁は括弧形式 |
-| `\s[識別子]` | ✅ | named surface / aliasとして解決 |
+| `\s[識別子]` | 🟡 | sakura／kero／charのsurface aliasとして解決。`surfaces.txt`の各surfaceに書く`name`は解析するだけで、識別子解決には未接続 |
 | `\i[ID]`, `\i[ID,wait]` | ✅ | 数値IDと`animation*.name`のSERIKOアニメーション開始、実完了待ちに対応 |
 | `\![anim,clear/pause/resume/offset/add/stop,...]` | 🟡 | ID・名前指定の`clear`・`stop`・`pause`・`resume`・`offset`を実装。pause中はフレーム残り時間も停止。add・textは未実装 |
 | `\__w[animation,ID]` | ✅ | 現scopeで同じID・名前のアニメーションTaskが完了・停止するまで待機 |
@@ -76,7 +76,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 | `\_l[x,y]` | 🟡 | ピクセル・em・lh・%と`@`相対指定を解釈し、文字描画範囲左上を基準に配置。%は文字描画範囲の幅・高さを基準にします。同じ行の左へ戻って後続を右揃えする指定は右タブとして扱い、左右に分かれたメニューを同一行へ配置。縦書きでの座標配置は未検証 |
 | `\C` | ✅ | スクリプト先頭では直前の表示内容・リンク・装飾を維持してscope 0から追記。途中では全scopeを消去。Playerテストで確認 |
 | `\![set,autoscroll,...]` | ✅ | `disable` / `enable` をスコープ単位で反映 |
-| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset（絶対・`@`相対構文）、left/center(top)/right/bottom/none配置、下部marker、受信数表示を実装。offset・marker・numはスクリプト終了時に解除、alignはゴースト終了まで保持。シェル・surfaces.txt固有offsetとの合成は未対応 |
+| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset（絶対・`@`相対構文）、left/center(top)/right/bottom/none配置、下部marker、受信数表示を実装。offset・marker・numはスクリプト終了時に解除、alignはゴースト終了まで保持。Shell descript、surface固有、SakuraScriptのoffsetは実配置で合成しますが、組み合わせた座標の回帰テストとSSPとの符号・優先順位の照合が未完了 |
 | `\![set,balloontimeout,...]` | ✅ | 表示完了後のバルーン消去時間を指定。0以下で無効、選択肢タイムアウトとの競合は早い方を採用 |
 | `\![set,balloonwait,...]` | ✅ | 倍率・百分率・`ms` 絶対値に対応し、スクリプト終了時に復帰 |
 | `\![set,serikotalk,true/false]` | ✅ | 文字表示中に現在surfaceのSERIKO `talk` intervalを駆動。明示アニメーションとは競合させず、スクリプトごとにtrueへリセット |

@@ -2,8 +2,8 @@
 
 ゴーストの設定や配布に使うテキストファイルについて、Utataneが読み取る項目と、実際の動作に使う項目をまとめています。項目の基準はUKADOCです。
 
-調査日: 2026-08-24  
-調査対象: ローカルの `/Users/wamo/ws/ukadoc/manual` とUtatane本番Swiftコード
+調査日: 2026-09-17
+調査対象: [UKADOC](https://ssp.shillest.net/ukadoc/manual/)とUtatane本番Swiftコード・テスト
 
 ## 判定
 
@@ -27,7 +27,7 @@
 | `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストールに加え、refreshとrefreshundeletemaskをバックアップ付き置換で実装 | supplement・languageは未対応 |
 | `delete.txt` | ✅ | UTF-8／Shift_JIS、charset行、Windows区切りの相対ファイル・ディレクトリを事前検証し、更新ファイルの置換と同じロールバック境界で安全に削除 | — |
 | `developer_options.txt` | 🟡 | `noupdate`／`nonar`に加え、`.narignore`／`.updateignore`／`.narinclude`／`.updateinclude`の主要gitignore構文と`include:`を各生成処理へ反映 | 文字クラス・エスケープ等、gitignoreの全細則は未対応 |
-| `surfaces.txt`／`surfaces*.txt` | 🟡 | 複数ファイル結合、surface selector、append、alias、element、rect／polygon collision、主要animation | 後述のSERIKO構文・描画メソッド・surface属性が多数未対応 |
+| `surfaces.txt`／`surfaces*.txt` | 🟡 | 複数ファイル結合、surface selector、append、alias、element、rect／ellipse／circle／polygon collision、主要animationとoption | region collision、surface nameなど保持だけの属性、ベース画像のGIF／WebP、ファイルごとのdescript設定が未対応 |
 | `surfaces2.txt` | 🟡 | `surfaces`で始まるため読み込みます | SSP用上書きではなく、他のsurfacesファイルとファイル名順で単純結合します |
 | `alias.txt` | 🟡 | surfaces文書として追加読込し、sakura／kero／char scope aliasを利用 | alias以外の互換挙動は未照合 |
 | `surfacetable.txt` | ✅ | charset、version、option、group、scope、surface IDと名前を解析。`DisableNoDefineSurfaces`、`__disabled`、`__parts`も利用 | 実機UIでの全表示差は未確認 |
@@ -78,14 +78,15 @@ UKADOC掲載は162項目。現在の実利用項目は以下。
 | --- | --- |
 | 利用 | `type`、`name`、`origin.x/y`、`validrect.left/top/right/bottom`、`wordwrappoint.x/y`、`vertical` |
 | 利用 | `font.name`、`font.height`、`font.color.r/g/b`、`font.shadowcolor.r/g/b`、`font.shadowstyle` |
-| 利用 | `font.bold`、`font.italic`、`font.underline`、`font.strike`、`font.outline`、`arrow0.x/y`、`arrow1.x/y`、`clickwaitmarker.x/y` |
+| 利用 | `font.bold`、`font.italic`、`font.underline`、`font.strike`、`font.outline`、`arrow1.x/y`、`clickwaitmarker.x/y` |
 | 利用 | `number.font.name/height/color`、`number.xr/y`、`use_self_alpha`（`full`を含む）、`windowposition.x`、`windowposition.y`、`windowposition.limit` |
 | 利用 | `communicatebox.font.name/height/color`、`communicatebox.background.color`、`communicatebox.x`、`communicatebox.y`、`communicatebox.width`、`communicatebox.height` |
 | 画像として利用 | `balloonc1.png`／`balloonc2.png`／`balloonc3.png`と対応する`balloonc*s.txt`を、communicatebox／teachbox／inputboxのネイティブ入力パネルへ反映 |
 | 利用 | cursor、cursor.notselect、anchor、anchor.notselect、anchor.visitedの`style`、font／pen／brush RGB。訪問済みアンカーはゴーストの実行中にID単位で保持 |
 | 画像として利用 | balloon画像、marker画像、clickwaitmarker／arrow画像。`balloons*s.txt`等のサーフェス別上書きと`marker.filename`／`clickwaitmarker.filename`／`arrow.filename`を反映 |
 | 別経路で利用 | `readme`、`readme.charset` |
-| 未反映 | disable.font、blendmethod、SSTP／online markerの座標・間隔・文字、入力画像上のボタン自体のオーナードロー、recommended ghost |
+| 保持のみ | `arrow0.x/y`。通常のスクロール方向表示にはまだ使いません |
+| 未反映 | disable.font、blendmethod、SSTP／online markerの座標・間隔・文字と画像、入力画像上のボタン自体のオーナードロー、recommended ghost |
 
 `origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックします。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置します。入力欄は従来どおり横書き。
 
@@ -121,15 +122,15 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 
 | 分類 | 状況 | 対応内容 |
 | --- | --- | --- |
-| surface選択 | 🟡 | 単一ID、範囲、列挙、除外、`surface.append` |
-| alias | 🟡 | sakura、kero、char scopeの名前→surface ID候補 |
-| element | 🟡 | PNG／APNG拡張子／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱います。`seriko.use_self_alpha,1`ではアルファチャンネルのないPNGを左上色透過へフォールバックし、`full`では全面を不透明として扱います。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つAPNG同士の合成後も再生情報を維持します。極端に長い最小公倍周期と全描画オプションは未網羅 |
-| collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用 |
+| surface選択 | ✅ | 単一ID、範囲、列挙、`!`による除外、`surface.append`を解析し、定義の追加・上書きへ反映 |
+| alias | ✅ | sakura、kero、char scopeの名前からsurface ID候補を選び、`\s[識別子]`の解決に利用 |
+| element | 🟡 | PNG／APNG／PNA、base・overlay系・asis。elementでは適用外の描画メソッドをSSP同様overlayとして扱います。`seriko.use_self_alpha,1`ではアルファチャンネルのないPNGを左上色透過へフォールバックし、`full`では全面を不透明として扱います。APNGはフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つAPNG同士の合成後も再生情報を維持します。ベースsurfaceとelementのGIF／WebPは未対応で、GIF／WebPはanimationのimportに限って利用できます |
+| collision | 🟡 | 矩形、collisionex rect／ellipse／circle／polygonを実際のマウス判定に利用。画像の指定色から判定領域を作るregionは未対応 |
 | animation基本 | 🟡 | name、interval文字列、pattern、wait、座標。複数animationを独立したTaskとレイヤー状態で並行再生し、base・overlay系・asis・moveと各種制御を反映 |
 | interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能 |
 | pattern method | 🟡 | base、overlay、overlay-fast、replace、interpolate、reduce、bind、add、auto、asis、move、scaling、insert、start／stop、alternative／parallel系、APNG／GIF／WebPのimportに加え、multiply／screen／overlay／add／soft-light／hard-light／color-dodge／color-burn／color／luminosity／hue／saturation／darken／lighten／difference／exclusion系と旧名・fast名を実装。alternative／parallelの括弧・角括弧とカンマ・ピリオド区切り、scalingの小数倍率に対応。`overlaymultiply`／`blend-multiply-fast`はベースの不透明度でクリップ。AppKitに同一演算がないvivid-light等の一部は近似 |
-| animation option／collision | 🟡 | exclusive（全体・対象ID指定）、background、shared-indexを再生へ反映。animation固有のrect／ellipse／circle／polygon collisionをbind中・アニメーション実行中のマウス判定に利用。bindとexclusiveの併用はUKADOC同様に未定義 |
-| surface属性 | 🟡 | surface name、共通／sakura／kero balloon offset、center／kinoko.center／basepos point、icon.rect、maxwidthを保持。balloon offsetは倍率を含め実配置へ反映。collision-sortは当たり判定優先順、animation-sortは初期合成順へ反映。maxwidthの表示制約とpoint・offsetの全用途は未対応 |
+| animation option／collision | 🟡 | exclusive（全体・対象ID指定）、background、shared-indexを再生へ反映。animation固有のrect／ellipse／circle／polygon collisionをbind中・アニメーション実行中のマウス判定に利用。animation collisionのregionは未対応。bindとexclusiveの併用はUKADOC同様に未定義 |
+| surface属性 | 🟡 | 共通／sakura／kero balloon offsetは倍率を含め実配置へ反映。collision-sortは当たり判定優先順、animation-sortは初期合成順へ反映。surface name、center／kinoko.center／basepos point、icon.rect、maxwidthは解析・保持だけで、`\s[名前]`、位置保存、履歴サムネイルなどの用途へ接続していません |
 | cursor定義 | 🟡 | sakura／kero／char scopeのmouseup、mousedown、mouserightdown、mousewheel、mousehoverをcollision名ごとに反映。system cursor 10種と、AppKitで画像として読めるカーソルファイルに対応。system:wait／move／helpはmacOSの近似表示 |
 | tooltip定義 | ✅ | sakura／kero／char scopeのcollision別テキストをmacOS標準ツールチップとして表示 |
 
@@ -151,8 +152,8 @@ size／date／charset拡張フィールドとVersion 3の`charset,`・未知行�
 
 ## 優先度
 
-1. Ghost／Shell descript.txtの配置・balloon offset・alignmentを既存ウインドウ機能へ接続します。
-2. `install.txt`のrefresh、複数同梱オブジェクトを実装します。
-3. Balloon descript.txtのmarker配置・入力欄・透過方式を既存描画へ接続します。
-4. surfaces.txtのanimation option、surface属性、未対応pattern methodを段階的に追加します。
-5. developer_options.txtを更新定義生成と将来のNAR生成で共通利用します。
+1. surface nameを`\s[名前]`へ、point.baseposを位置保存へ、icon.rectを履歴サムネイルへ接続します。
+2. collisionexのregionと、ベースsurface／elementのGIF・WebPを実装します。
+3. `surfaces*.txt`ごとのdescript設定と、単純連結ではない`surfaces2.txt`の優先規則を整理します。
+4. Balloon descript.txtのSSTP／online markerとarrow0表示を既存描画へ接続します。
+5. pattern methodの近似描画を実画像で比較し、互換差が大きい演算を優先して補正します。
