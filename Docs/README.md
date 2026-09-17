@@ -12,7 +12,7 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 | `Support/` | トラブル対処、ゴースト・SHIORIの互換性 |
 | `Creators/` | ゴースト、SHIORI、シェル、プラグインの制作 |
 | `Reference/` | 命令、イベント、ファイル、SSTPの対応表 |
-| `Development/` | 本体のビルド、リリース、ドキュメント運用 |
+| `Development/` | 本体のローカルビルド、変更、テスト、ドキュメントへの貢献 |
 
 ## はじめに・基本操作
 
@@ -50,12 +50,10 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 
 互換表の「対応」は、SSPの全挙動との完全一致を意味しません。配布前には、対象ゴーストで起動、会話、入力、シェル、更新、外部モジュールを実際に確認してください。
 
-## Utatane本体を開発する
+## Utatane本体の開発に参加する
 
-- [開発ガイド](Development/Development.md): 必要な環境、ビルド、テスト、コンテンツ検証CLI、ディレクトリ構成
-- [リリース手順](Development/Release.md): バージョン、配布アーカイブ、Sparkle署名、appcast、Webサイト公開
-- [ドキュメントの編集と公開](Development/Documentation.md): Web・同梱ヘルプの生成、スタイル、公開先の設定
-- [利用者向け説明の範囲](Development/Coverage.md): アプリの入口と説明ページの対応
+- [ローカル開発ガイド](Development/Development.md): 必要な環境、ビルド、テスト、コンテンツ検証CLI、ディレクトリ構成
+- [ドキュメントへの貢献](Development/Documentation.md): Web・同梱ヘルプの編集、ローカル確認、ページや画像の追加
 - [Native SHIORI / SAORI](Support/Native-SHIORI.md): 内蔵人格エンジンとモジュール実行経路
 
 ## 目的から探す
@@ -72,5 +70,5 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 | SHIORI・SAORIの実行方式を知りたい | [Native SHIORI / SAORI](Support/Native-SHIORI.md) |
 | nijigenerateをシェルで使いたい | [nijigenerateシェル拡張](Creators/nijigenerate-shell.md) |
 | macOS用プラグインを作りたい | [ネイティブプラグイン](Creators/Native-Plugins.md) |
-| ソースをビルド・検査したい | [開発ガイド](Development/Development.md) |
-| Utataneをリリースしたい | [リリース手順](Development/Release.md) |
+| ソースをビルド・検査したい | [ローカル開発ガイド](Development/Development.md) |
+| ドキュメントを修正したい | [ドキュメントへの貢献](Development/Documentation.md) |

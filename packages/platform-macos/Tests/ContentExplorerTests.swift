@@ -163,8 +163,8 @@ import Testing
     model.update(entries: [entry])
 
     model.validate(entry)
-    for _ in 0 ..< 100 where model.validationReports[entry.id] == nil {
-        try await Task.sleep(for: .milliseconds(10))
+    try await requireEventually {
+        model.validationReports[entry.id] != nil
     }
 
     #expect(model.validationReports[entry.id]?.errorCount == 1)

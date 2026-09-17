@@ -75,6 +75,7 @@ public final class SurfaceWindowController {
     private let dressupSelectionStore: DressupSelectionStore
     private let geometryProvider: any PresentationGeometryProviding
     private let presentationHost: any PresentationHosting
+    private let interactionHoverDelay: TimeInterval
     private var defaultSurfaceIDs: [Int: Int] = [:]
     private var enabledBindGroups: [Int: Set<Int>] = [:]
     private var presentationHidden = false
@@ -119,6 +120,7 @@ public final class SurfaceWindowController {
         self.dressupSelectionStore = dressupSelectionStore
         self.geometryProvider = geometryProvider
         presentationHost = DesktopPresentationHost(geometryProvider: geometryProvider)
+        interactionHoverDelay = 1
     }
 
     public init(
@@ -130,6 +132,7 @@ public final class SurfaceWindowController {
         self.dressupSelectionStore = dressupSelectionStore
         geometryProvider = presentationSession.geometryProvider
         presentationHost = presentationSession.presentationHost
+        interactionHoverDelay = 1
     }
 
     init(
@@ -141,6 +144,20 @@ public final class SurfaceWindowController {
         self.dressupSelectionStore = dressupSelectionStore
         geometryProvider = presentationHost.geometryProvider
         self.presentationHost = presentationHost
+        interactionHoverDelay = 1
+    }
+
+    init(
+        positionStore: WindowPositionStore = WindowPositionStore(),
+        dressupSelectionStore: DressupSelectionStore = DressupSelectionStore(),
+        geometryProvider: any PresentationGeometryProviding = SystemPresentationGeometryProvider(),
+        interactionHoverDelay: TimeInterval
+    ) {
+        self.positionStore = positionStore
+        self.dressupSelectionStore = dressupSelectionStore
+        self.geometryProvider = geometryProvider
+        presentationHost = DesktopPresentationHost(geometryProvider: geometryProvider)
+        self.interactionHoverDelay = interactionHoverDelay
     }
 
     public func setStayOnTop(_ stayOnTop: Bool) {
@@ -787,7 +804,8 @@ public final class SurfaceWindowController {
             displayScale: displayScale,
             automaticallyFitsLargeSurfaces: automaticallyFitsLargeSurfaces,
             locksToDesktopBottom: locksToDesktopBottom,
-            keepsOnScreen: keepsOnScreen
+            keepsOnScreen: keepsOnScreen,
+            interactionHoverDelay: interactionHoverDelay
         )
         character.setPresentationHidden(presentationHidden || startupPresentationHidden)
         character.onMouseClick = { [weak self] region in
@@ -901,6 +919,7 @@ private final class CharacterSurfaceController {
     private let positionStore: WindowPositionStore
     private let geometryProvider: any PresentationGeometryProviding
     private let presentationHost: any PresentationHosting
+    private let interactionHoverDelay: TimeInterval
     private let imageLoader = SurfaceImageLoader()
     private let shellLoader = ShellLoader()
     private var item: (any PresentationItem)?
@@ -992,7 +1011,8 @@ private final class CharacterSurfaceController {
         displayScale: CGFloat,
         automaticallyFitsLargeSurfaces: Bool,
         locksToDesktopBottom: Bool,
-        keepsOnScreen: Bool
+        keepsOnScreen: Bool,
+        interactionHoverDelay: TimeInterval
     ) {
         self.scope = scope
         self.positionStore = positionStore
@@ -1002,6 +1022,7 @@ private final class CharacterSurfaceController {
         self.automaticallyFitsLargeSurfaces = automaticallyFitsLargeSurfaces
         self.locksToDesktopBottom = locksToDesktopBottom
         self.keepsOnScreen = keepsOnScreen
+        self.interactionHoverDelay = interactionHoverDelay
     }
 
     var windowFrame: NSRect? {
@@ -2071,6 +2092,7 @@ private final class CharacterSurfaceController {
         imageView.locksVerticalMovement = [.top, .bottom].contains(desktopAlignment)
             || (desktopAlignment == .defaultValue && locksToDesktopBottom)
         imageView.isMovementLocked = isMovementLocked
+        imageView.hoverDelay = interactionHoverDelay
         imageView.collisions = effectiveCollisions(for: definition, shell: shell)
         imageView.cursorDefinitions = shell.cursorDefinitions[scope] ?? []
         imageView.tooltipDefinitions = shell.tooltips[scope] ?? [:]
@@ -2754,6 +2776,7 @@ private final class SurfaceImageView: NSImageView {
     private var parameterDragStart: (x: Int, y: Int)?
     private var didParameterDrag = false
     private var hoverWorkItem: DispatchWorkItem?
+    var hoverDelay: TimeInterval = 1
     var presentationFrame: (() -> NSRect?)?
     var setPresentationOrigin: ((NSPoint) -> Void)?
 
@@ -3168,7 +3191,7 @@ private final class SurfaceImageView: NSImageView {
             self?.setCursor(.mouseHover, for: hit.region)
         }
         hoverWorkItem = workItem
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: workItem)
+        DispatchQueue.main.asyncAfter(deadline: .now() + hoverDelay, execute: workItem)
     }
 
     private func cancelHoverEvent() {

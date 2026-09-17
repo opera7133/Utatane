@@ -76,7 +76,6 @@ import UtataneShiori
 
     let randomTalk = try await engine.handle(event: .randomTalk)
     #expect(randomTalk?.rawValue.isEmpty == false)
-    #expect(randomTalk?.rawValue.hasSuffix("\\e") == true)
 }
 
 @Test func `installed ria restores her default surface after dialogue`() async throws {

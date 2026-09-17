@@ -145,27 +145,17 @@
       ]
     },
     {
-      "label": "Utatane本体を開発する",
+      "label": "Utatane本体の開発に参加する",
       "pages": [
         {
           "file": "Development/Development.md",
           "slug": "develop/build",
-          "title": "ビルド・テスト・構成"
-        },
-        {
-          "file": "Development/Release.md",
-          "slug": "develop/release",
-          "title": "リリース手順"
+          "title": "ローカル開発・ビルド・テスト"
         },
         {
           "file": "Development/Documentation.md",
           "slug": "develop/documentation",
-          "title": "ドキュメントの編集と公開"
-        },
-        {
-          "file": "Development/Coverage.md",
-          "slug": "develop/coverage",
-          "title": "利用者向け説明の範囲"
+          "title": "ドキュメントへの貢献"
         }
       ]
     }

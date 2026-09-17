@@ -11,7 +11,7 @@ Macでゴーストを楽しむための使い方と、困ったときの調べ�
 - **困ったことを解決する** — [症状から調べる](Support/Troubleshooting.md)、[ゴーストの動作確認情報](Support/Compatibility.md)
 - **コンテンツを作る** — [新規制作・SSP向け資産への対応](Creators/Content-Authoring.md)、[命令やファイルの対応状況](Reference/UKADOC-SakuraScript-Compatibility.md)
 - **SHIORIを開発する** — [自作SHIORIの新規開発・移植](Creators/SHIORI-Development.md)
-- **本体を開発する** — [ビルドとテスト](Development/Development.md)、[ドキュメントの編集](Development/Documentation.md)
+- **本体の開発に参加する** — [ローカルでのビルドとテスト](Development/Development.md)、[ドキュメントへの貢献](Development/Documentation.md)
 
 ## このドキュメントについて
 
