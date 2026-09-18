@@ -295,7 +295,13 @@ public struct SakuraScriptParser: Sendable {
                     index += 1
                     if let argument = bracketArgument(in: characters, index: &index) {
                         let arguments = splitArguments(argument)
-                        if arguments.count == 2 {
+                        if arguments.count == 1,
+                           let x = Self.balloonCoordinate(arguments[0])
+                        {
+                            // Older ghosts use \_l[x] as a shorthand that keeps the
+                            // current vertical cursor position.
+                            tokens.append(.cursorMove(x: x, y: nil))
+                        } else if arguments.count == 2 {
                             let x = arguments[0].isEmpty ? nil : Self.balloonCoordinate(arguments[0])
                             let y = arguments[1].isEmpty ? nil : Self.balloonCoordinate(arguments[1])
                             if arguments[0].isEmpty || x != nil, arguments[1].isEmpty || y != nil {

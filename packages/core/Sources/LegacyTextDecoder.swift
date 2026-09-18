@@ -6,11 +6,13 @@ public enum LegacyTextDecoder {
     public static func decode(_ data: Data, preferredCharset: String? = nil) -> String? {
         let declaredCharset = preferredCharset ?? charsetDeclaration(in: data)
         let encodings = candidateEncodings(preferredCharset: declaredCharset)
-        let wholeFileEncodings: [EncodingCandidate] = if declaredCharset == nil {
-            [EncodingCandidate(name: "UTF-8", encoding: .utf8)] + encodings
-        } else {
-            Array(encodings.prefix(1))
-        }
+        // Legacy content sometimes keeps `charset,Shift_JIS` after the file itself
+        // has been converted to UTF-8. UTF-8 can be identified strictly, so prefer
+        // it even when the declaration says otherwise.
+        let utf8 = EncodingCandidate(name: "UTF-8", encoding: .utf8)
+        let wholeFileEncodings = declaredCharset == nil
+            ? [utf8] + encodings
+            : [utf8] + encodings.prefix(1)
         for candidate in wholeFileEncodings {
             if let text = decode(data, candidate: candidate) {
                 return text
@@ -21,9 +23,10 @@ public enum LegacyTextDecoder {
         let lines = data.split(separator: 0x0A, omittingEmptySubsequences: false)
         var decodedLines: [String] = []
         decodedLines.reserveCapacity(lines.count)
-        let lineEncodings = declaredCharset == nil
-            ? [EncodingCandidate(name: "UTF-8", encoding: .utf8)] + encodings
-            : encodings
+        // Once whole-file UTF-8 has failed, honor the declaration first for each
+        // line. Some mixed legacy files contain byte sequences that happen to be
+        // valid UTF-8 but mean something else in their declared encoding.
+        let lineEncodings = declaredCharset == nil ? [utf8] + encodings : encodings + [utf8]
         for line in lines {
             guard let text = lineEncodings.lazy.compactMap({ decode(Data(line), candidate: $0) }).first else {
                 return nil

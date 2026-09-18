@@ -33,3 +33,16 @@ func `decodes and encodes declared EUC JP through the portable fallback`() throw
     #expect(decoded.contains("craftmanw,세루리안"))
     #expect(decoded.contains("sakura.name,さくら"))
 }
+
+@Test func `prefers valid UTF 8 when the charset declaration is stale`() {
+    let data = Data("charset,Shift_JIS\nname,うたたね\n".utf8)
+
+    #expect(LegacyTextDecoder.decode(data)?.contains("name,うたたね") == true)
+}
+
+@Test func `falls back to Shift JIS when UTF 8 is declared incorrectly`() throws {
+    let shiftJIS = try #require(LegacyTextDecoder.encoding(named: "Shift_JIS"))
+    let data = try #require("charset,UTF-8\nname,うたたね\n".data(using: shiftJIS))
+
+    #expect(LegacyTextDecoder.decode(data)?.contains("name,うたたね") == true)
+}

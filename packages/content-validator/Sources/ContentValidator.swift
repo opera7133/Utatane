@@ -260,6 +260,10 @@ public struct ContentValidator: Sendable {
                 guard let script = probableSakuraScript(in: line) else { continue }
                 let unknown = scriptParser.parse(String(script)).compactMap { token -> String? in
                     guard case let .unknown(command) = token else { return nil }
+                    // Dictionary code often assembles parameterized commands over several
+                    // string fragments. A bare command here is not evidence of an
+                    // unsupported SakuraScript command.
+                    guard !["\\p", "\\q"].contains(command) else { return nil }
                     return command
                 }
                 for command in Set(unknown).sorted() {

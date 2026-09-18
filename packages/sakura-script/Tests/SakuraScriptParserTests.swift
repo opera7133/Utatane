@@ -408,7 +408,11 @@ func `parses automatic line break and partial clear commands`() {
 
 @Test
 func `parses numeric balloon cursor moves`() {
-    #expect(SakuraScriptParser().parse(#"\_l[0,0]\_l[,@12]\_l[@-30,]\_l[1.5em,@+70%]\_l[2lh,]"#) == [
+    #expect(SakuraScriptParser().parse(#"\_l[40]\_l[0,0]\_l[,@12]\_l[@-30,]\_l[1.5em,@+70%]\_l[2lh,]"#) == [
+        .cursorMove(
+            x: SakuraScriptBalloonCoordinate(value: 40, isRelative: false),
+            y: nil
+        ),
         .cursorMove(
             x: SakuraScriptBalloonCoordinate(value: 0, isRelative: false),
             y: SakuraScriptBalloonCoordinate(value: 0, isRelative: false)

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### 修正
+
+- Emily/Phase4.5が使うX座標だけの`\_l[x]`を再生できるようにし、辞書内で分割生成される`\p`・`\q`をvalidatorが未対応コマンドとして報告しないようにした
+- `surfaces.txt`のcharset宣言が実際のUTF-8／Shift_JISと食い違っていても、実データから読み直せるようにした
+
 ### 変更
 
 - `surfaces.txt`のsurfaceに付けた`name`をSakuraScriptの`\s[名前]`で選べるようにした

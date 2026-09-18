@@ -22,6 +22,28 @@ func `loads an APNG base surface`() throws {
 }
 
 @Test
+func `loads UTF 8 surfaces when its charset declaration is stale`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: UUID().uuidString,
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data().write(to: root.appending(path: "surface0.png"))
+    try Data("""
+    charset,Shift_JIS
+    surface0
+    {
+        collision0,0,0,10,10,頭
+    }
+    """.utf8).write(to: root.appending(path: "surfaces.txt"))
+
+    let shell = try ShellLoader().load(from: root)
+
+    #expect(shell.surfaces[0]?.collisions.first?.name == "頭")
+}
+
+@Test
 func `loads GIF and WebP base surfaces and elements`() throws {
     let root = FileManager.default.temporaryDirectory.appending(
         path: UUID().uuidString,
