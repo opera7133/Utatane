@@ -86,7 +86,16 @@ if (!is_string($signature) || !in_array($signature, ["PK\x03\x04", "PK\x05\x06",
     Http::error($requestId, 'upload.not-zip', 'NARまたはZIP形式のファイルを指定してください。', 400);
 }
 
-$slot = ValidationSlot::acquire($config->concurrency, $config->queueWaitSeconds);
+try {
+    $slot = ValidationSlot::acquire(
+        $config->runtimeDirectory,
+        $config->concurrency,
+        $config->queueWaitSeconds
+    );
+} catch (Throwable $error) {
+    error_log('[utatane-validator][' . $requestId . '] ' . $error->getMessage());
+    Http::error($requestId, 'validator.unavailable', '検査用の作業領域を準備できませんでした。', 500);
+}
 if ($slot === null) {
     header('Retry-After: 5');
     Http::error($requestId, 'service.busy', '現在ほかのファイルを検査中です。少し待って再試行してください。', 429);

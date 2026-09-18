@@ -245,15 +245,17 @@ public struct ContentValidator: Sendable {
         let extensions: Set = ["as", "azr", "dic", "txt", "yaml", "yml"]
         guard let enumerator = FileManager.default.enumerator(
             at: directory,
-            includingPropertiesForKeys: [.isRegularFileKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
             options: [.skipsHiddenFiles]
         ) else { return [] }
         var diagnostics: [ContentDiagnostic] = []
         for case let url as URL in enumerator {
             guard extensions.contains(url.pathExtension.lowercased()),
-                  (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                  let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true,
+                  let fileSize = values.fileSize,
+                  fileSize <= 16 * 1024 * 1024,
                   let data = try? Data(contentsOf: url),
-                  data.count <= 16 * 1024 * 1024,
                   let text = LegacyTextDecoder.decode(data)
             else { continue }
             for (offset, line) in text.components(separatedBy: .newlines).enumerated() {

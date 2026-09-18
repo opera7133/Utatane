@@ -15,9 +15,14 @@ final class ValidationSlot
         $this->handle = $handle;
     }
 
-    public static function acquire(int $concurrency, int $waitSeconds = 0): ?self
+    public static function acquire(
+        string $runtimeDirectory,
+        int $concurrency,
+        int $waitSeconds = 0
+    ): ?self
     {
-        $prefix = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+        $lockDirectory = RuntimeStorage::directory($runtimeDirectory, 'locks');
+        $prefix = $lockDirectory . DIRECTORY_SEPARATOR;
         $deadline = microtime(true) + max(0, $waitSeconds);
 
         do {

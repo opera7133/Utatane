@@ -24,13 +24,19 @@ curl -F file=@ghost.nar \
 | 環境変数 | 既定値 |
 | --- | ---: |
 | `UTATANE_VALIDATE_BINARY` | `bin/utatane-validate` |
+| `UTATANE_VALIDATE_RUNTIME_DIRECTORY` | `var` |
 | `UTATANE_VALIDATE_MAX_BYTES` | 52428800 |
 | `UTATANE_VALIDATE_TIMEOUT_SECONDS` | 15 |
 | `UTATANE_VALIDATE_MAX_OUTPUT_BYTES` | 2097152 |
+| `UTATANE_VALIDATE_MAX_MEMORY_BYTES` | 805306368 |
 | `UTATANE_VALIDATE_CONCURRENCY` | 2 |
 | `UTATANE_VALIDATE_QUEUE_WAIT_SECONDS` | 10 |
 
-アップロード容量はPHP全体の設定ではなく、アプリ内で50 MBに制限しています。PHPがスクリプト起動前にmultipart bodyを一時保存する点は避けられないため、公開時はCloudflare側にも同等以下のリクエスト上限を設定します。
+アップロード容量はPHP全体の設定ではなく、アプリ内で50 MBに制限しています。さらに`.htaccess`の`LimitRequestBody`を51 MiBに設定し、PHPがmultipart bodyを処理する前にも制限します。LiteSpeedでこの設定が反映されていることを公開後の413応答で確認してください。Cloudflare側にも同等以下のリクエスト上限を設定します。
+
+展開後は合計200 MiB、1ファイル64 MiB、検査対象のテキストは1ファイル8 MiB・合計32 MiB、5000エントリ、10000ディレクトリ、32階層までに制限します。作業ファイルと同時実行ロックはドキュメントルート外の`var/`へ0700で作成し、処理後に削除します。異常終了で残った作業領域は1時間後のリクエストで回収します。
+
+Linuxに`/usr/bin/prlimit`または`/bin/prlimit`がある場合、子プロセスには既定で768 MiBのアドレス空間、17秒のCPU時間、256 MiBの出力ファイル、64ファイル記述子の上限も適用します。サーバーで`command -v prlimit`を確認してください。
 
 同時実行枠が埋まっている場合、アップロード済みファイルを再送せずに済むよう最大10秒だけ空きを待ちます。それでも空かなければ`Retry-After: 5`付きのHTTP 429を返し、Web画面は最大2回まで再試行します。本格的な永続キューやFIFOは持ちません。
 

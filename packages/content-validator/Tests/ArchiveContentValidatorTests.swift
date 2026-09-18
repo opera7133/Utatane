@@ -69,6 +69,78 @@ func `enforces declared extracted size limit`() throws {
 }
 
 @Test
+func `enforces individual entry size limit`() throws {
+    let archiveURL = try makeArchive(entries: [
+        ("ghost/master/descript.txt", Data(repeating: 0x41, count: 32), .file),
+        ("shell/master/descript.txt", Data("name,Master\n".utf8), .file)
+    ])
+    defer { try? FileManager.default.removeItem(at: archiveURL) }
+    let limits = ContentArchiveValidationLimits(maximumEntryBytes: 16)
+
+    let report = ContentArchiveValidator(limits: limits).validate(archiveURL: archiveURL)
+
+    #expect(report.diagnostics.first?.code == "archive.entry-too-large")
+}
+
+@Test
+func `enforces text file size limit`() throws {
+    let archiveURL = try makeArchive(entries: [
+        ("ghost/master/descript.txt", Data(repeating: 0x41, count: 32), .file),
+        ("shell/master/descript.txt", Data("name,Master\n".utf8), .file)
+    ])
+    defer { try? FileManager.default.removeItem(at: archiveURL) }
+    let limits = ContentArchiveValidationLimits(maximumEntryBytes: 64, maximumTextFileBytes: 16)
+
+    let report = ContentArchiveValidator(limits: limits).validate(archiveURL: archiveURL)
+
+    #expect(report.diagnostics.first?.code == "archive.text-file-too-large")
+}
+
+@Test
+func `enforces total text size limit`() throws {
+    let archiveURL = try makeArchive(entries: [
+        ("ghost/master/one.dic", Data(repeating: 0x41, count: 12), .file),
+        ("ghost/master/two.dic", Data(repeating: 0x42, count: 12), .file)
+    ])
+    defer { try? FileManager.default.removeItem(at: archiveURL) }
+    let limits = ContentArchiveValidationLimits(
+        maximumEntryBytes: 32,
+        maximumTextFileBytes: 16,
+        maximumTextBytes: 20
+    )
+
+    let report = ContentArchiveValidator(limits: limits).validate(archiveURL: archiveURL)
+
+    #expect(report.diagnostics.first?.code == "archive.text-files-too-large")
+}
+
+@Test
+func `rejects deeply nested paths`() throws {
+    let archiveURL = try makeArchive(entries: [
+        ("one/two/three/file.bin", Data(), .file)
+    ])
+    defer { try? FileManager.default.removeItem(at: archiveURL) }
+    let limits = ContentArchiveValidationLimits(maximumPathComponents: 3)
+
+    let report = ContentArchiveValidator(limits: limits).validate(archiveURL: archiveURL)
+
+    #expect(report.diagnostics.first?.code == "archive.path-too-deep")
+}
+
+@Test
+func `limits implicit parent directories`() throws {
+    let archiveURL = try makeArchive(entries: [
+        ("one/two/file.bin", Data(), .file)
+    ])
+    defer { try? FileManager.default.removeItem(at: archiveURL) }
+    let limits = ContentArchiveValidationLimits(maximumDirectoryCount: 1)
+
+    let report = ContentArchiveValidator(limits: limits).validate(archiveURL: archiveURL)
+
+    #expect(report.diagnostics.first?.code == "archive.too-many-directories")
+}
+
+@Test
 func `rejects archives containing more than one ghost`() throws {
     let archiveURL = try makeArchive(entries: [
         ("one/ghost/master/descript.txt", Data("name,One\n".utf8), .file),

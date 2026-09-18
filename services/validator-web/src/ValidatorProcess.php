@@ -29,17 +29,46 @@ final class ValidatorProcess
             throw new RuntimeException('Validator binary is unavailable.');
         }
 
+        $workspace = RuntimeStorage::createWorkspace($this->config->runtimeDirectory);
+        try {
+            return $this->runInWorkspace($archivePath, $workspace);
+        } finally {
+            RuntimeStorage::removeTree($workspace);
+        }
+    }
+
+    private function runInWorkspace(string $archivePath, string $workspace): ValidatorProcessResult
+    {
+        $command = [$this->config->validatorBinary, '--json', '--archive', $archivePath];
+        $prlimit = self::prlimitBinary();
+        if ($prlimit !== null) {
+            $command = [
+                $prlimit,
+                '--as=' . $this->config->maximumProcessMemoryBytes,
+                '--cpu=' . ($this->config->validatorTimeoutSeconds + 2),
+                '--fsize=' . (256 * 1024 * 1024),
+                '--nofile=64',
+                '--',
+                ...$command,
+            ];
+        }
+
         $descriptors = [
             0 => ['pipe', 'r'],
             1 => ['pipe', 'w'],
             2 => ['pipe', 'w'],
         ];
+        $environment = getenv();
+        if (!is_array($environment)) {
+            $environment = [];
+        }
+        $environment['TMPDIR'] = $workspace;
         $process = proc_open(
-            [$this->config->validatorBinary, '--json', '--archive', $archivePath],
+            $command,
             $descriptors,
             $pipes,
             null,
-            null,
+            $environment,
             ['bypass_shell' => true]
         );
         if (!is_resource($process)) {
@@ -83,6 +112,9 @@ final class ValidatorProcess
             }
             $stdout .= stream_get_contents($pipes[1]) ?: '';
             $stderr .= stream_get_contents($pipes[2]) ?: '';
+            if (strlen($stdout) > $this->config->maximumOutputBytes || strlen($stderr) > 64 * 1024) {
+                throw new RuntimeException('Validator output exceeded its limit.');
+            }
         } finally {
             fclose($pipes[1]);
             fclose($pipes[2]);
@@ -93,5 +125,15 @@ final class ValidatorProcess
         }
 
         return new ValidatorProcessResult($exitCode, $stdout, $stderr, $timedOut);
+    }
+
+    private static function prlimitBinary(): ?string
+    {
+        foreach (['/usr/bin/prlimit', '/bin/prlimit'] as $candidate) {
+            if (is_file($candidate) && is_executable($candidate)) {
+                return $candidate;
+            }
+        }
+        return null;
     }
 }

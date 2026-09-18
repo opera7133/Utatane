@@ -4,21 +4,36 @@ import ZIPFoundation
 public struct ContentArchiveValidationLimits: Sendable {
     public var maximumArchiveBytes: UInt64
     public var maximumExtractedBytes: UInt64
+    public var maximumEntryBytes: UInt64
+    public var maximumTextFileBytes: UInt64
+    public var maximumTextBytes: UInt64
     public var maximumEntryCount: Int
     public var maximumPathBytes: Int
+    public var maximumPathComponents: Int
+    public var maximumDirectoryCount: Int
     public var timeout: TimeInterval
 
     public init(
         maximumArchiveBytes: UInt64 = 50 * 1024 * 1024,
         maximumExtractedBytes: UInt64 = 200 * 1024 * 1024,
+        maximumEntryBytes: UInt64 = 64 * 1024 * 1024,
+        maximumTextFileBytes: UInt64 = 8 * 1024 * 1024,
+        maximumTextBytes: UInt64 = 32 * 1024 * 1024,
         maximumEntryCount: Int = 5000,
         maximumPathBytes: Int = 1024,
+        maximumPathComponents: Int = 32,
+        maximumDirectoryCount: Int = 10000,
         timeout: TimeInterval = 10
     ) {
         self.maximumArchiveBytes = maximumArchiveBytes
         self.maximumExtractedBytes = maximumExtractedBytes
+        self.maximumEntryBytes = maximumEntryBytes
+        self.maximumTextFileBytes = maximumTextFileBytes
+        self.maximumTextBytes = maximumTextBytes
         self.maximumEntryCount = maximumEntryCount
         self.maximumPathBytes = maximumPathBytes
+        self.maximumPathComponents = maximumPathComponents
+        self.maximumDirectoryCount = maximumDirectoryCount
         self.timeout = timeout
     }
 }
@@ -63,9 +78,11 @@ public struct ContentArchiveValidator: Sendable {
                 throw ArchiveValidationError.unreadable("ZIPのエントリ一覧を最後まで読み取れません。")
             }
 
-            var prepared: [(entry: Entry, path: String)] = []
+            var prepared: [(entry: Entry, path: String, maximumBytes: UInt64)] = []
             var pathKeys = Set<String>()
+            var directoryKeys = Set<String>()
             var declaredExtractedBytes: UInt64 = 0
+            var declaredTextBytes: UInt64 = 0
             for entry in entries {
                 try checkDeadline(startedAt)
                 guard entry.type != .symlink else {
@@ -77,20 +94,50 @@ public struct ContentArchiveValidator: Sendable {
                 guard pathKeys.insert(key).inserted else {
                     throw ArchiveValidationError.unsafeEntry("正規化後に重複するパスがあります: \(path)")
                 }
+                for directory in directoryPrefixes(for: path, entryType: entry.type) {
+                    directoryKeys.insert(directory)
+                    guard directoryKeys.count <= limits.maximumDirectoryCount else {
+                        throw ArchiveValidationError.tooManyDirectories
+                    }
+                }
+                guard entry.uncompressedSize <= limits.maximumEntryBytes else {
+                    throw ArchiveValidationError.entryTooLarge(path)
+                }
+                let textFile = isTextFile(path)
+                let entryLimit = textFile
+                    ? limits.maximumTextFileBytes
+                    : limits.maximumEntryBytes
+                guard entry.uncompressedSize <= entryLimit else {
+                    throw ArchiveValidationError.textFileTooLarge(path)
+                }
+                if textFile {
+                    let (nextTextSize, textOverflow) = declaredTextBytes
+                        .addingReportingOverflow(entry.uncompressedSize)
+                    guard !textOverflow, nextTextSize <= limits.maximumTextBytes else {
+                        throw ArchiveValidationError.textFilesTooLarge
+                    }
+                    declaredTextBytes = nextTextSize
+                }
                 let (nextSize, overflow) = declaredExtractedBytes.addingReportingOverflow(entry.uncompressedSize)
                 guard !overflow, nextSize <= limits.maximumExtractedBytes else {
                     throw ArchiveValidationError.extractedTooLarge
                 }
                 declaredExtractedBytes = nextSize
-                prepared.append((entry, path))
+                prepared.append((entry, path, entryLimit))
             }
 
             let temporaryRoot = fileManager.temporaryDirectory
                 .appending(path: "utatane-validate-\(UUID().uuidString)", directoryHint: .isDirectory)
-            try fileManager.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+            try fileManager.createDirectory(
+                at: temporaryRoot,
+                withIntermediateDirectories: true,
+                attributes: [.posixPermissions: 0o700]
+            )
+            try fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: temporaryRoot.path)
             defer { try? fileManager.removeItem(at: temporaryRoot) }
 
             var extractedBytes: UInt64 = 0
+            var extractedTextBytes: UInt64 = 0
             for item in prepared {
                 try checkDeadline(startedAt)
                 let destination = temporaryRoot.appending(path: item.path)
@@ -102,13 +149,34 @@ public struct ContentArchiveValidator: Sendable {
                         at: destination.deletingLastPathComponent(),
                         withIntermediateDirectories: true
                     )
-                    guard fileManager.createFile(atPath: destination.path, contents: nil) else {
+                    guard fileManager.createFile(
+                        atPath: destination.path,
+                        contents: nil,
+                        attributes: [.posixPermissions: 0o600]
+                    ) else {
                         throw ArchiveValidationError.unreadable("一時ファイルを作成できません: \(item.path)")
                     }
                     let output = try FileHandle(forWritingTo: destination)
+                    var entryExtractedBytes: UInt64 = 0
                     do {
                         _ = try archive.extract(item.entry) { chunk in
                             try checkDeadline(startedAt)
+                            let (nextEntrySize, entryOverflow) = entryExtractedBytes
+                                .addingReportingOverflow(UInt64(chunk.count))
+                            guard !entryOverflow, nextEntrySize <= item.maximumBytes else {
+                                throw isTextFile(item.path)
+                                    ? ArchiveValidationError.textFileTooLarge(item.path)
+                                    : ArchiveValidationError.entryTooLarge(item.path)
+                            }
+                            entryExtractedBytes = nextEntrySize
+                            if isTextFile(item.path) {
+                                let (nextTextSize, textOverflow) = extractedTextBytes
+                                    .addingReportingOverflow(UInt64(chunk.count))
+                                guard !textOverflow, nextTextSize <= limits.maximumTextBytes else {
+                                    throw ArchiveValidationError.textFilesTooLarge
+                                }
+                                extractedTextBytes = nextTextSize
+                            }
                             let (nextSize, overflow) = extractedBytes.addingReportingOverflow(UInt64(chunk.count))
                             guard !overflow, nextSize <= limits.maximumExtractedBytes else {
                                 throw ArchiveValidationError.extractedTooLarge
@@ -191,10 +259,26 @@ public struct ContentArchiveValidator: Sendable {
         else {
             throw ArchiveValidationError.unsafeEntry("危険な相対パスが含まれています: \(path)")
         }
+        guard meaningfulComponents.count <= limits.maximumPathComponents else {
+            throw ArchiveValidationError.pathTooDeep(path)
+        }
         guard meaningfulComponents.first.map({ !$0.contains(":") }) ?? false else {
             throw ArchiveValidationError.unsafeEntry("ドライブ名を含むパスは使用できません: \(path)")
         }
         return path
+    }
+
+    private func isTextFile(_ path: String) -> Bool {
+        ["as", "azr", "dic", "txt", "yaml", "yml"].contains(
+            URL(fileURLWithPath: path).pathExtension.lowercased()
+        )
+    }
+
+    private func directoryPrefixes(for path: String, entryType: Entry.EntryType) -> [String] {
+        let components = path.split(separator: "/").map(String.init)
+        let directoryCount = entryType == .directory ? components.count : max(0, components.count - 1)
+        guard directoryCount > 0 else { return [] }
+        return (1 ... directoryCount).map { components.prefix($0).joined(separator: "/").lowercased() }
     }
 
     private func shouldPreferShiftJIS(defaultPath: String, shiftJISPath: String) -> Bool {
@@ -240,6 +324,11 @@ public struct ContentArchiveValidator: Sendable {
 private enum ArchiveValidationError: Error {
     case tooLarge
     case tooManyEntries
+    case tooManyDirectories
+    case pathTooDeep(String)
+    case entryTooLarge(String)
+    case textFileTooLarge(String)
+    case textFilesTooLarge
     case unsafeEntry(String)
     case unsupported(String)
     case extractedTooLarge
@@ -252,6 +341,11 @@ private enum ArchiveValidationError: Error {
         switch self {
         case .tooLarge: "archive.too-large"
         case .tooManyEntries: "archive.too-many-entries"
+        case .tooManyDirectories: "archive.too-many-directories"
+        case .pathTooDeep: "archive.path-too-deep"
+        case .entryTooLarge: "archive.entry-too-large"
+        case .textFileTooLarge: "archive.text-file-too-large"
+        case .textFilesTooLarge: "archive.text-files-too-large"
         case .unsafeEntry: "archive.unsafe-entry"
         case .unsupported: "archive.unsupported-entry"
         case .extractedTooLarge: "archive.extracted-too-large"
@@ -266,6 +360,11 @@ private enum ArchiveValidationError: Error {
         switch self {
         case .tooLarge: "アーカイブがアップロード上限を超えています。"
         case .tooManyEntries: "アーカイブ内のファイル数が上限を超えています。"
+        case .tooManyDirectories: "アーカイブ内のディレクトリ数が上限を超えています。"
+        case let .pathTooDeep(path): "階層が深すぎるパスがあります: \(path)"
+        case let .entryTooLarge(path): "1ファイルの展開後サイズが上限を超えています: \(path)"
+        case let .textFileTooLarge(path): "テキストファイルのサイズが上限を超えています: \(path)"
+        case .textFilesTooLarge: "テキストファイルの合計サイズが上限を超えています。"
         case let .unsafeEntry(message), let .unsupported(message), let .unreadable(message): message
         case .extractedTooLarge: "展開後の合計サイズが上限を超えています。"
         case .timeout: "アーカイブの検査が制限時間を超えました。"

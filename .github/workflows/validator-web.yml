@@ -62,6 +62,7 @@ jobs:
         run: |
           php services/validator-web/tests/ValidationSlotTest.php
           php services/validator-web/tests/HttpTest.php
+          php services/validator-web/tests/ValidatorProcessTest.php
 
       - name: Check browser JavaScript
         run: node --check services/validator-web/public/assets/app.js

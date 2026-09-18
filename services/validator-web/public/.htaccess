@@ -1,4 +1,9 @@
 Options -Indexes
+LimitRequestBody 53477376
+
+<IfModule mod_headers.c>
+    Header always set Strict-Transport-Security "max-age=31536000"
+</IfModule>
 
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f

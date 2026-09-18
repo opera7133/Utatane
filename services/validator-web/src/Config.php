@@ -8,9 +8,11 @@ final readonly class Config
 {
     public function __construct(
         public string $validatorBinary,
+        public string $runtimeDirectory,
         public int $maximumUploadBytes,
         public int $validatorTimeoutSeconds,
         public int $maximumOutputBytes,
+        public int $maximumProcessMemoryBytes,
         public int $concurrency,
         public int $queueWaitSeconds,
     ) {
@@ -23,9 +25,17 @@ final readonly class Config
                 'UTATANE_VALIDATE_BINARY',
                 $projectRoot . '/bin/utatane-validate'
             ),
+            runtimeDirectory: self::environmentString(
+                'UTATANE_VALIDATE_RUNTIME_DIRECTORY',
+                $projectRoot . '/var'
+            ),
             maximumUploadBytes: self::environmentInt('UTATANE_VALIDATE_MAX_BYTES', 50 * 1024 * 1024),
             validatorTimeoutSeconds: self::environmentInt('UTATANE_VALIDATE_TIMEOUT_SECONDS', 15),
             maximumOutputBytes: self::environmentInt('UTATANE_VALIDATE_MAX_OUTPUT_BYTES', 2 * 1024 * 1024),
+            maximumProcessMemoryBytes: self::environmentInt(
+                'UTATANE_VALIDATE_MAX_MEMORY_BYTES',
+                768 * 1024 * 1024
+            ),
             concurrency: self::environmentInt('UTATANE_VALIDATE_CONCURRENCY', 2),
             queueWaitSeconds: self::environmentNonNegativeInt('UTATANE_VALIDATE_QUEUE_WAIT_SECONDS', 10),
         );

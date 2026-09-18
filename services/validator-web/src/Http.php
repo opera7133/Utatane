@@ -12,6 +12,7 @@ final class Http
         header('Cache-Control: no-store');
         header("Content-Security-Policy: default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
         header('Referrer-Policy: no-referrer');
+        header('Strict-Transport-Security: max-age=31536000');
         header('X-Content-Type-Options: nosniff');
         header('X-Frame-Options: DENY');
         header('X-Request-Id: ' . $requestId);
