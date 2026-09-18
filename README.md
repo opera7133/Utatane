@@ -82,6 +82,8 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 
 同梱のりあ以外にも、次の方法でゴーストやバルーンを追加できます。
 
+手元のNARで使われているSHIORIと基本的な対応状況は、macOSがなくても[Utatane NAR検査](https://utatane-validate.wmsci.com/)で確認できます。
+
 - 配布されているゴーストのNARをインストールする
 - 展開済みのSSPフォルダから`ghost`と`balloon`を取り込む
 - UtataneのコンテンツフォルダをFinderで表示する

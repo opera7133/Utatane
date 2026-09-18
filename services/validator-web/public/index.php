@@ -86,9 +86,9 @@ if (!is_string($signature) || !in_array($signature, ["PK\x03\x04", "PK\x05\x06",
     Http::error($requestId, 'upload.not-zip', 'NARまたはZIP形式のファイルを指定してください。', 400);
 }
 
-$slot = ValidationSlot::acquire($config->concurrency);
+$slot = ValidationSlot::acquire($config->concurrency, $config->queueWaitSeconds);
 if ($slot === null) {
-    header('Retry-After: 10');
+    header('Retry-After: 5');
     Http::error($requestId, 'service.busy', '現在ほかのファイルを検査中です。少し待って再試行してください。', 429);
 }
 

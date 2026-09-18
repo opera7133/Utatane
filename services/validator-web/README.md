@@ -28,8 +28,17 @@ curl -F file=@ghost.nar \
 | `UTATANE_VALIDATE_TIMEOUT_SECONDS` | 15 |
 | `UTATANE_VALIDATE_MAX_OUTPUT_BYTES` | 2097152 |
 | `UTATANE_VALIDATE_CONCURRENCY` | 2 |
+| `UTATANE_VALIDATE_QUEUE_WAIT_SECONDS` | 10 |
 
 アップロード容量はPHP全体の設定ではなく、アプリ内で50 MBに制限しています。PHPがスクリプト起動前にmultipart bodyを一時保存する点は避けられないため、公開時はCloudflare側にも同等以下のリクエスト上限を設定します。
+
+同時実行枠が埋まっている場合、アップロード済みファイルを再送せずに済むよう最大10秒だけ空きを待ちます。それでも空かなければ`Retry-After: 5`付きのHTTP 429を返し、Web画面は最大2回まで再試行します。本格的な永続キューやFIFOは持ちません。
+
+## Cloudflare
+
+オリジンサーバーへ到達する前に濫用を抑えるため、`/api/v1/validate`にはCloudflareのRate limiting ruleも設定します。無料プランを基準に、URI Pathが`/api/v1/validate`と等しいリクエストをIPごとに数え、10秒間に3回を超えたら10秒間Blockする設定を初期値とします。プラン上選べる場合はHostを`utatane-validate.wmsci.com`、Methodを`POST`に限定します。
+
+通常利用の傾向が分かってから、Security Analytics / Eventsを見て閾値を調整します。Cloudflareのカウンター反映には遅延があり、指定件数を厳密にオリジン手前で止める仕組みではないため、PHP側の同時実行制限も残します。
 
 `/licenses`では、Utataneとバイナリに組み込まれるZIP FoundationのMIT Licenseを表示します。ライセンス本文は配布バンドルにも同梱します。
 

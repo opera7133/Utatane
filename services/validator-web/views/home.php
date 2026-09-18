@@ -52,7 +52,7 @@ $maximumMegabytes = (int) floor($config->maximumUploadBytes / 1024 / 1024);
 
         <div class="alert alert-info" id="progress" role="status" aria-live="polite" hidden>
             <span class="spinner" aria-hidden="true"></span>
-            <span>NARファイルを検査しています。</span>
+            <span id="progress-message">NARファイルを検査しています。</span>
         </div>
         <div class="alert alert-error" id="request-error" role="alert" hidden></div>
     </section>
@@ -80,7 +80,7 @@ $maximumMegabytes = (int) floor($config->maximumUploadBytes / 1024 / 1024);
         <p class="request-id" id="request-id"></p>
     </section>
 
-    <p class="file-note">アップロードされたファイルは検査後に削除します。</p>
+    <p class="file-note">アップロードされたファイルは検査後に自動で削除されます。</p>
 
     <section class="api-docs" aria-labelledby="api-title">
         <h2 id="api-title">API</h2>
@@ -107,6 +107,7 @@ $maximumMegabytes = (int) floor($config->maximumUploadBytes / 1024 / 1024);
 
         <h3><code>GET /api/v1/health</code></h3>
         <p>サービスの稼働状態と、現在の最大アップロードサイズを返します。</p>
+        <p>混雑時は短時間だけ空きを待ち、処理できない場合は<code>429 Too Many Requests</code>と<code>Retry-After</code>を返します。</p>
     </section>
 </main>
 

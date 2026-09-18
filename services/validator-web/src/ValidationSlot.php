@@ -15,18 +15,27 @@ final class ValidationSlot
         $this->handle = $handle;
     }
 
-    public static function acquire(int $concurrency): ?self
+    public static function acquire(int $concurrency, int $waitSeconds = 0): ?self
     {
         $prefix = rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
-        for ($index = 0; $index < $concurrency; ++$index) {
-            $handle = @fopen($prefix . 'utatane-validator-slot-' . $index . '.lock', 'c');
-            if ($handle !== false && flock($handle, LOCK_EX | LOCK_NB)) {
-                return new self($handle);
+        $deadline = microtime(true) + max(0, $waitSeconds);
+
+        do {
+            for ($index = 0; $index < $concurrency; ++$index) {
+                $handle = @fopen($prefix . 'utatane-validator-slot-' . $index . '.lock', 'c');
+                if ($handle !== false && flock($handle, LOCK_EX | LOCK_NB)) {
+                    return new self($handle);
+                }
+                if ($handle !== false) {
+                    fclose($handle);
+                }
             }
-            if ($handle !== false) {
-                fclose($handle);
+            if (microtime(true) >= $deadline) {
+                break;
             }
-        }
+            usleep(100_000);
+        } while (true);
+
         return null;
     }
 

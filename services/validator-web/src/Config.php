@@ -12,6 +12,7 @@ final readonly class Config
         public int $validatorTimeoutSeconds,
         public int $maximumOutputBytes,
         public int $concurrency,
+        public int $queueWaitSeconds,
     ) {
     }
 
@@ -26,6 +27,7 @@ final readonly class Config
             validatorTimeoutSeconds: self::environmentInt('UTATANE_VALIDATE_TIMEOUT_SECONDS', 15),
             maximumOutputBytes: self::environmentInt('UTATANE_VALIDATE_MAX_OUTPUT_BYTES', 2 * 1024 * 1024),
             concurrency: self::environmentInt('UTATANE_VALIDATE_CONCURRENCY', 2),
+            queueWaitSeconds: self::environmentNonNegativeInt('UTATANE_VALIDATE_QUEUE_WAIT_SECONDS', 10),
         );
     }
 
@@ -42,5 +44,14 @@ final readonly class Config
             return $default;
         }
         return max(1, (int) $value);
+    }
+
+    private static function environmentNonNegativeInt(string $name, int $default): int
+    {
+        $value = getenv($name);
+        if (!is_string($value) || filter_var($value, FILTER_VALIDATE_INT) === false) {
+            return $default;
+        }
+        return max(0, (int) $value);
     }
 }

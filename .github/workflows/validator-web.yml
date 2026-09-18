@@ -58,6 +58,9 @@ jobs:
       - name: Check PHP sources
         run: find services/validator-web -name '*.php' -print0 | xargs -0 -n1 php -l
 
+      - name: Test PHP concurrency control
+        run: php services/validator-web/tests/ValidationSlotTest.php
+
       - name: Check browser JavaScript
         run: node --check services/validator-web/public/assets/app.js
 

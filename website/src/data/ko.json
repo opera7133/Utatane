@@ -50,6 +50,7 @@
     "not-supported-yet": "아직 지원하지 않아요",
     "windows-specific-fmo-some-sakurascript-and-seriko-features-and-so": "Windows 전용 FMO, 일부 SakuraScript 및 SERIKO 기능, 일부 Windows용 외부 모듈.",
     "ghost-compatibility": "고스트별 호환성",
+    "check-a-nar-file": "NAR 파일 검사",
     "engines-and-dll-support": "엔진 및 DLL 지원 안내",
     "download-and-get-started": "다운로드하고 시작하세요.",
     "all-releases": "릴리스 목록",

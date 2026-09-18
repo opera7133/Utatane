@@ -28,6 +28,7 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 ## Utataneを使う
 
 - [ゴースト互換状況](Support/Compatibility.md): 実際に確認したゴースト、SHIORI、SAORIと既知の制約
+- [Utatane NAR検査](https://utatane-validate.wmsci.com/): NARをアップロードしてSHIORIと基本的な対応状況を確認
 - [ウィンドウモード](Guide/Window-Mode.md): 配信・画面収録向けの単一ウィンドウ表示、背景、スクリーンショット、発話履歴
 - [Realtime音声会話](Guide/Realtime-Voice.md): OpenAI Realtime APIまたは互換APIを使った音声会話の設定
 - [音声合成・音声認識](Guide/Speech.md): macOS標準、ローカル音声合成ソフト、クラウド音声合成と音声認識の設定
@@ -60,7 +61,7 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 
 | やりたいこと | 読むもの |
 | --- | --- |
-| 手元のゴーストが動くか知りたい | [ゴースト互換状況](Support/Compatibility.md) |
+| 手元のゴーストが動くか知りたい | [Utatane NAR検査](https://utatane-validate.wmsci.com/)、[ゴースト互換状況](Support/Compatibility.md) |
 | ゴーストをウィンドウ単位で収録したい | [ウィンドウモード](Guide/Window-Mode.md) |
 | ゴーストの発話を読み上げたい | [音声合成・音声認識](Guide/Speech.md) |
 | 同じLAN上のSSP・IP Messengerと会話したい | [IP Messenger](Guide/IP-Messenger.md) |

@@ -6,10 +6,12 @@ const fileName = document.querySelector('#file-name');
 const fileSize = document.querySelector('#file-size');
 const submitButton = document.querySelector('#submit-button');
 const progress = document.querySelector('#progress');
+const progressMessage = document.querySelector('#progress-message');
 const requestError = document.querySelector('#request-error');
 const results = document.querySelector('#results');
 const maximumBytes = Number(document.body.dataset.maximumBytes);
 let selected = null;
+const maximumBusyRetries = 2;
 
 const supportLabels = {
     supported: '対応',
@@ -92,16 +94,32 @@ form.addEventListener('submit', async (event) => {
     results.hidden = true;
     progress.hidden = false;
     submitButton.disabled = true;
-    const body = new FormData();
-    body.append('file', selected, selected.name);
+    progressMessage.textContent = 'NARファイルを検査しています。';
+    const file = selected;
 
     try {
-        const response = await fetch('/api/v1/validate', { method: 'POST', body });
-        const payload = await response.json().catch(() => null);
-        if (!response.ok || !payload?.ok) {
-            throw new Error(payload?.error?.message || '検査結果を受け取れませんでした。');
+        for (let attempt = 0; attempt <= maximumBusyRetries; attempt += 1) {
+            const body = new FormData();
+            body.append('file', file, file.name);
+            const response = await fetch('/api/v1/validate', { method: 'POST', body });
+            const payload = await response.json().catch(() => null);
+            const busy = response.status === 429;
+            if (busy && attempt < maximumBusyRetries) {
+                const retryAfter = retryAfterSeconds(response.headers.get('Retry-After'));
+                progressMessage.textContent = `混雑しています。${retryAfter}秒後に再試行します。`;
+                await wait(retryAfter * 1000);
+                progressMessage.textContent = 'NARファイルを再送しています。';
+                continue;
+            }
+            if (!response.ok || !payload?.ok) {
+                if (busy) {
+                    throw new Error(payload?.error?.message || 'アクセスが集中しています。しばらく待って再試行してください。');
+                }
+                throw new Error(payload?.error?.message || '検査結果を受け取れませんでした。');
+            }
+            renderReport(payload.report, payload.requestId);
+            return;
         }
-        renderReport(payload.report, payload.requestId);
     } catch (error) {
         showError(error instanceof Error ? error.message : '検査に失敗しました。');
     } finally {
@@ -109,6 +127,15 @@ form.addEventListener('submit', async (event) => {
         submitButton.disabled = false;
     }
 });
+
+function retryAfterSeconds(value) {
+    const seconds = Number(value);
+    return Number.isFinite(seconds) ? Math.min(30, Math.max(1, Math.round(seconds))) : 5;
+}
+
+function wait(milliseconds) {
+    return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
 function renderReport(report, requestId) {
     const diagnostics = Array.isArray(report.diagnostics) ? report.diagnostics : [];
