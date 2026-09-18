@@ -11,7 +11,26 @@ $maximumMegabytes = (int) floor($config->maximumUploadBytes / 1024 / 1024);
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="NARファイルをアップロードして、Utataneで利用できるか確認します。">
+    <meta name="robots" content="index,follow">
     <title>Utatane NAR検査</title>
+    <link rel="canonical" href="https://utatane-validate.wmsci.com/">
+    <link rel="icon" href="/assets/utatane-icon.png" type="image/png" sizes="512x512">
+    <link rel="apple-touch-icon" href="/assets/utatane-icon.png">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="ja_JP">
+    <meta property="og:site_name" content="Utatane NAR検査">
+    <meta property="og:title" content="Utatane NAR検査">
+    <meta property="og:description" content="NARファイルをアップロードして、ゴーストの構成、SHIORI、Utataneでの対応状況を確認できます。">
+    <meta property="og:url" content="https://utatane-validate.wmsci.com/">
+    <meta property="og:image" content="https://utatane-validate.wmsci.com/assets/utatane-icon.png">
+    <meta property="og:image:width" content="512">
+    <meta property="og:image:height" content="512">
+    <meta property="og:image:alt" content="Utataneのアプリアイコン">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Utatane NAR検査">
+    <meta name="twitter:description" content="NARファイルから、ゴーストの構成とUtataneでの対応状況を確認します。">
+    <meta name="twitter:image" content="https://utatane-validate.wmsci.com/assets/utatane-icon.png">
+    <meta name="twitter:image:alt" content="Utataneのアプリアイコン">
     <link rel="stylesheet" href="/assets/app.css">
     <script src="/assets/app.js" defer></script>
 </head>

@@ -12,7 +12,12 @@ $licenses = [
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Utatane NAR検査で使用しているソフトウェアのライセンスです。">
+    <meta name="robots" content="noindex,follow">
     <title>ライセンス - Utatane NAR検査</title>
+    <link rel="canonical" href="https://utatane-validate.wmsci.com/licenses">
+    <link rel="icon" href="/assets/utatane-icon.png" type="image/png" sizes="512x512">
+    <link rel="apple-touch-icon" href="/assets/utatane-icon.png">
     <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
