@@ -117,7 +117,7 @@ try {
 if (!is_array($report) || !isset($report['diagnostics'])) {
     Http::error($requestId, 'validator.invalid-response', '検査結果の形式が正しくありません。', 500);
 }
-$report['rootPath'] = 'uploaded.nar';
+$report = Http::sanitizeValidationReport($report, $temporaryPath);
 
 Http::json([
     'ok' => true,

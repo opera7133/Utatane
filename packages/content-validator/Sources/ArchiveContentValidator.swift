@@ -135,7 +135,7 @@ public struct ContentArchiveValidator: Sendable {
                 ghostName: report.ghostName,
                 shiori: report.shiori,
                 shioriAssessment: report.shioriAssessment,
-                diagnostics: report.diagnostics
+                diagnostics: sanitizedDiagnostics(report.diagnostics, ghostRoot: roots[0])
             )
         } catch let error as ArchiveValidationError {
             return failureReport(archiveURL: archiveURL, error: error)
@@ -150,6 +150,24 @@ public struct ContentArchiveValidator: Sendable {
     private func checkDeadline(_ startedAt: Date) throws {
         guard limits.timeout > 0, Date().timeIntervalSince(startedAt) <= limits.timeout else {
             throw ArchiveValidationError.timeout
+        }
+    }
+
+    private func sanitizedDiagnostics(
+        _ diagnostics: [ContentDiagnostic],
+        ghostRoot: URL
+    ) -> [ContentDiagnostic] {
+        let rootPath = ghostRoot.standardizedFileURL.path
+        return diagnostics.map { diagnostic in
+            ContentDiagnostic(
+                severity: diagnostic.severity,
+                code: diagnostic.code,
+                message: diagnostic.message
+                    .replacingOccurrences(of: rootPath + "/", with: "")
+                    .replacingOccurrences(of: rootPath, with: "."),
+                path: diagnostic.path,
+                line: diagnostic.line
+            )
         }
     }
 

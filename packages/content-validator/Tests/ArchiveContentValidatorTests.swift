@@ -122,6 +122,23 @@ func `rejects encrypted ZIP entries during preflight`() throws {
     #expect(report.diagnostics.first?.message.contains("暗号化") == true)
 }
 
+@Test
+func `does not expose temporary extraction paths in diagnostics`() throws {
+    let archiveURL = try makeArchive(entries: [
+        ("ghost/master/descript.txt", Data("name,Broken encoding\n".utf8), .file),
+        ("shell/master/descript.txt", Data("name,Master\n".utf8), .file),
+        ("shell/master/surfaces.txt", Data([0xFF]), .file)
+    ])
+    defer { try? FileManager.default.removeItem(at: archiveURL) }
+
+    let report = ContentArchiveValidator().validate(archiveURL: archiveURL)
+    let diagnostic = try #require(report.diagnostics.first { $0.code == "shell.load" })
+
+    #expect(diagnostic.message.contains("/tmp/") == false)
+    #expect(diagnostic.message.contains("utatane-validate-") == false)
+    #expect(diagnostic.message.contains("shell/master/surfaces.txt"))
+}
+
 private func makeArchive(entries: [(String, Data, Entry.EntryType)]) throws -> URL {
     let archiveURL = FileManager.default.temporaryDirectory
         .appending(path: "\(UUID().uuidString).nar")

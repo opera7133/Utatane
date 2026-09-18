@@ -59,7 +59,9 @@ jobs:
         run: find services/validator-web -name '*.php' -print0 | xargs -0 -n1 php -l
 
       - name: Test PHP concurrency control
-        run: php services/validator-web/tests/ValidationSlotTest.php
+        run: |
+          php services/validator-web/tests/ValidationSlotTest.php
+          php services/validator-web/tests/HttpTest.php
 
       - name: Check browser JavaScript
         run: node --check services/validator-web/public/assets/app.js
@@ -103,9 +105,6 @@ jobs:
             bash -lc "objdump -T dist/validator-web/bin/utatane-validate | grep -o 'GLIBCXX_[0-9.]*' | sort -Vu | tail -1")
           test "$required_glibc" = "GLIBC_2.17"
           test "$required_glibcxx" = "GLIBCXX_3.4.18"
-
-      - name: Pack bundle
-        run: tar -C dist -czf dist/utatane-validator-web-linux-x86_64.tar.gz validator-web
 
       - name: Upload bundle
         uses: actions/upload-artifact@v4

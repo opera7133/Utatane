@@ -37,4 +37,35 @@ final class Http
             'requestId' => $requestId,
         ], $status);
     }
+
+    /** @param array<string, mixed> $report @return array<string, mixed> */
+    public static function sanitizeValidationReport(array $report, string $uploadTemporaryPath): array
+    {
+        $report['rootPath'] = 'uploaded.nar';
+        if (!isset($report['diagnostics']) || !is_array($report['diagnostics'])) {
+            return $report;
+        }
+        foreach ($report['diagnostics'] as &$diagnostic) {
+            if (!is_array($diagnostic)) {
+                continue;
+            }
+            foreach (['message', 'path'] as $field) {
+                if (!isset($diagnostic[$field]) || !is_string($diagnostic[$field])) {
+                    continue;
+                }
+                $diagnostic[$field] = str_replace(
+                    $uploadTemporaryPath,
+                    'uploaded.nar',
+                    $diagnostic[$field]
+                );
+                $diagnostic[$field] = preg_replace(
+                    '~(?:/private)?/tmp/utatane-validate-[A-F0-9-]+/?~i',
+                    '',
+                    $diagnostic[$field]
+                ) ?? $diagnostic[$field];
+            }
+        }
+        unset($diagnostic);
+        return $report;
+    }
 }
