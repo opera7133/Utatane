@@ -1,0 +1,143 @@
+name: Build validator web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/Package.swift"
+      - "packages/Package.resolved"
+      - "packages/content-validator/**"
+      - "packages/content-validator-cli/**"
+      - "packages/core/**"
+      - "packages/ghost-kit/**"
+      - "packages/runtime/**"
+      - "packages/sakura-script/**"
+      - "packages/shell/**"
+      - "services/validator-web/**"
+      - "Scripts/build-validator-web-bundle.sh"
+      - ".github/workflows/validator-web.yml"
+  pull_request:
+    paths:
+      - "packages/Package.swift"
+      - "packages/Package.resolved"
+      - "packages/content-validator/**"
+      - "packages/content-validator-cli/**"
+      - "packages/core/**"
+      - "packages/ghost-kit/**"
+      - "packages/runtime/**"
+      - "packages/sakura-script/**"
+      - "packages/shell/**"
+      - "services/validator-web/**"
+      - "Scripts/build-validator-web-bundle.sh"
+      - ".github/workflows/validator-web.yml"
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Deploy the bundle to the configured rental server
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validator-web-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SWIFT_BUILD_IMAGE: swift:6.3.1-amazonlinux2
+
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Check PHP sources
+        run: find services/validator-web -name '*.php' -print0 | xargs -0 -n1 php -l
+
+      - name: Check browser JavaScript
+        run: node --check services/validator-web/public/assets/app.js
+
+      - name: Build Linux x86_64 bundle
+        run: |
+          docker run --platform linux/amd64 --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            "$SWIFT_BUILD_IMAGE" \
+            bash Scripts/build-validator-web-bundle.sh
+
+      - name: Create smoke-test NAR
+        working-directory: Content/Bundled/Ghosts/ria
+        run: zip -qr "$RUNNER_TEMP/ria.nar" .
+
+      - name: Smoke-test archive validation
+        run: |
+          docker run --platform linux/amd64 --rm \
+            -v "$PWD:/workspace:ro" \
+            -v "$RUNNER_TEMP:/test-input:ro" \
+            -w /workspace \
+            "$SWIFT_BUILD_IMAGE" \
+            dist/validator-web/bin/utatane-validate \
+              --json --archive /test-input/ria.nar \
+              > "$RUNNER_TEMP/report.json"
+          jq -e '
+            .ghostName == "りあ" and
+            .shioriAssessment.identifier == "yaya" and
+            .shioriAssessment.supportStatus == "supported" and
+            (.diagnostics | length) == 0
+          ' "$RUNNER_TEMP/report.json"
+
+      - name: Verify Linux compatibility floor
+        run: |
+          required_glibc=$(docker run --platform linux/amd64 --rm \
+            -v "$PWD:/workspace:ro" -w /workspace "$SWIFT_BUILD_IMAGE" \
+            bash -lc "objdump -T dist/validator-web/bin/utatane-validate | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -1")
+          required_glibcxx=$(docker run --platform linux/amd64 --rm \
+            -v "$PWD:/workspace:ro" -w /workspace "$SWIFT_BUILD_IMAGE" \
+            bash -lc "objdump -T dist/validator-web/bin/utatane-validate | grep -o 'GLIBCXX_[0-9.]*' | sort -Vu | tail -1")
+          test "$required_glibc" = "GLIBC_2.17"
+          test "$required_glibcxx" = "GLIBCXX_3.4.18"
+
+      - name: Pack bundle
+        run: tar -C dist -czf dist/utatane-validator-web-linux-x86_64.tar.gz validator-web
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: utatane-validator-web-linux-x86_64
+          path: dist/utatane-validator-web-linux-x86_64.tar.gz
+
+      - name: Install deployment client
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
+        run: sudo apt-get update && sudo apt-get install --yes lftp
+
+      - name: Deploy bundle
+        if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.deploy)
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          VALIDATOR_DEPLOY_PATH: /domains/utatane-validate.wmsci.com
+        shell: bash
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USERNAME"
+          test -n "$DEPLOY_PASSWORD"
+          test -n "$VALIDATOR_DEPLOY_PATH"
+          [[ "$VALIDATOR_DEPLOY_PATH" == /* ]]
+          [[ "$VALIDATOR_DEPLOY_PATH" != "/" ]]
+          DEPLOY_TARGET="${VALIDATOR_DEPLOY_PATH%/}"
+          lftp -u "$DEPLOY_USERNAME","$DEPLOY_PASSWORD" "ftp://$DEPLOY_HOST" <<LFTP
+          set cmd:fail-exit true
+          set ftp:ssl-force true
+          set ftp:ssl-protect-data true
+          set ssl:verify-certificate true
+          set net:max-retries 3
+          set net:timeout 20
+          mirror --reverse --verbose --parallel=4 --exclude-glob .DS_Store --exclude-glob '*/.DS_Store' dist/validator-web "$DEPLOY_TARGET"
+          chmod 755 "$DEPLOY_TARGET/bin/utatane-validate"
+          bye
+          LFTP

@@ -18,6 +18,7 @@ Internal-Docs
 dist
 build
 apps/Utatane/Resources/*Host
+services/validator-web/bin/utatane-validate
 
 # Web build inputs generated from Docs
 website/node_modules/

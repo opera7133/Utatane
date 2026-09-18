@@ -9,12 +9,21 @@ struct UtataneValidate {
             arguments.remove(at: index)
             return true
         } ?? false
+        let validatesArchive = arguments.firstIndex(of: "--archive").map { index in
+            arguments.remove(at: index)
+            return true
+        } ?? false
         guard arguments.count == 1, !arguments[0].hasPrefix("-") else {
-            FileHandle.standardError.write(Data("使い方: utatane-validate [--json] <ghost-directory>\n".utf8))
+            FileHandle.standardError.write(Data(
+                "使い方: utatane-validate [--json] [--archive] <ghost-directory-or-nar>\n".utf8
+            ))
             exit(64)
         }
 
-        let report = ContentValidator().validate(ghostRoot: URL(filePath: arguments[0], directoryHint: .isDirectory))
+        let inputURL = URL(filePath: arguments[0])
+        let report = validatesArchive
+            ? ContentArchiveValidator().validate(archiveURL: inputURL)
+            : ContentValidator().validate(ghostRoot: inputURL)
         if outputsJSON {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
@@ -24,8 +33,11 @@ struct UtataneValidate {
             }
         } else {
             print("\(report.ghostName ?? "ゴーストを読み込めなかった") — errors: \(report.errorCount), warnings: \(report.warningCount)")
-            if let shiori = report.shiori {
-                print("SHIORI: \(shiori)")
+            if let assessment = report.shioriAssessment {
+                print("SHIORI: \(assessment.displayName ?? "判定できなかった") [\(assessment.supportStatus.rawValue)]")
+                if let requirement = assessment.runtimeRequirement, requirement != .none {
+                    print("SHIORI runtime: \(requirement.rawValue)")
+                }
             }
             for item in report.diagnostics {
                 let location = item.line.map { "\(item.path):\($0)" } ?? item.path

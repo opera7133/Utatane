@@ -37,10 +37,22 @@ let package = Package(
         .executable(name: "utatane-mcp", targets: ["UtataneMCP"]),
         .executable(name: "utatane-validate", targets: ["UtataneValidate"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", exact: "0.9.20")
+    ],
     targets: [
         .target(
             name: "UtataneCore",
+            dependencies: ["UtataneLegacyTextCodec"],
             path: "core/Sources"
+        ),
+        .target(
+            name: "UtataneLegacyTextCodec",
+            path: "legacy-text-codec/Sources",
+            publicHeadersPath: "include",
+            linkerSettings: [
+                .linkedLibrary("iconv", .when(platforms: [.macOS]))
+            ]
         ),
         .target(
             name: "UtataneBalloon",
@@ -89,7 +101,8 @@ let package = Package(
                 "UtataneCore",
                 "UtataneGhostKit",
                 "UtataneSakuraScript",
-                "UtataneShell"
+                "UtataneShell",
+                .product(name: "ZIPFoundation", package: "ZIPFoundation")
             ],
             path: "content-validator/Sources"
         ),
@@ -435,7 +448,10 @@ let package = Package(
         ),
         .testTarget(
             name: "UtataneContentValidatorTests",
-            dependencies: ["UtataneContentValidator"],
+            dependencies: [
+                "UtataneContentValidator",
+                .product(name: "ZIPFoundation", package: "ZIPFoundation")
+            ],
             path: "content-validator/Tests"
         ),
         .testTarget(

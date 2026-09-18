@@ -31,10 +31,50 @@ public struct ContentDiagnostic: Codable, Equatable, Sendable {
     }
 }
 
+public struct ContentShioriAssessment: Codable, Equatable, Sendable {
+    public enum SupportStatus: String, Codable, Sendable {
+        case supported
+        case experimental
+        case compatibilityLayer
+        case unavailable
+        case unknown
+    }
+
+    public let identifier: String?
+    public let displayName: String?
+    public let declaredModuleFilename: String?
+    public let macOSModuleFilename: String?
+    public let supportStatus: SupportStatus
+    public let execution: ShioriDescriptor.Execution?
+    public let provisioning: ShioriDescriptor.Provisioning?
+    public let runtimeRequirement: ShioriDescriptor.RuntimeRequirement?
+
+    public init(
+        identifier: String?,
+        displayName: String?,
+        declaredModuleFilename: String?,
+        macOSModuleFilename: String?,
+        supportStatus: SupportStatus,
+        execution: ShioriDescriptor.Execution?,
+        provisioning: ShioriDescriptor.Provisioning?,
+        runtimeRequirement: ShioriDescriptor.RuntimeRequirement?
+    ) {
+        self.identifier = identifier
+        self.displayName = displayName
+        self.declaredModuleFilename = declaredModuleFilename
+        self.macOSModuleFilename = macOSModuleFilename
+        self.supportStatus = supportStatus
+        self.execution = execution
+        self.provisioning = provisioning
+        self.runtimeRequirement = runtimeRequirement
+    }
+}
+
 public struct ContentValidationReport: Codable, Equatable, Sendable {
     public let rootPath: String
     public let ghostName: String?
     public let shiori: String?
+    public let shioriAssessment: ContentShioriAssessment?
     public let diagnostics: [ContentDiagnostic]
 
     public var errorCount: Int {
@@ -63,6 +103,7 @@ public struct ContentValidator: Sendable {
                 rootPath: root.path,
                 ghostName: nil,
                 shiori: nil,
+                shioriAssessment: nil,
                 diagnostics: [diagnostic(
                     .error,
                     code: "ghost.load",
@@ -75,12 +116,13 @@ public struct ContentValidator: Sendable {
 
         var diagnostics: [ContentDiagnostic] = []
         let master = root.appending(path: "ghost/master", directoryHint: .isDirectory)
-        if let declared = ghost.shioriFilename {
-            let descriptor = ShioriCatalog.identify(
-                masterDirectory: master,
-                declaredModuleFilename: declared,
-                macOSModuleFilename: ghost.shioriMacOSFilename
-            )
+        let descriptor = ShioriCatalog.identify(
+            masterDirectory: master,
+            declaredModuleFilename: ghost.shioriFilename,
+            macOSModuleFilename: ghost.shioriMacOSFilename
+        )
+        let selectedModuleFilename = ghost.shioriMacOSFilename ?? ghost.shioriFilename
+        if let declared = selectedModuleFilename {
             if descriptor == nil {
                 diagnostics.append(diagnostic(
                     .warning,
@@ -135,12 +177,32 @@ public struct ContentValidator: Sendable {
         return ContentValidationReport(
             rootPath: root.path,
             ghostName: ghost.name,
-            shiori: ShioriCatalog.identify(
-                masterDirectory: master,
-                declaredModuleFilename: ghost.shioriFilename,
-                macOSModuleFilename: ghost.shioriMacOSFilename
-            )?.displayName ?? ghost.shioriFilename,
+            shiori: descriptor?.displayName ?? selectedModuleFilename,
+            shioriAssessment: shioriAssessment(for: ghost, descriptor: descriptor),
             diagnostics: diagnostics
+        )
+    }
+
+    private func shioriAssessment(
+        for ghost: InstalledGhost,
+        descriptor: ShioriDescriptor?
+    ) -> ContentShioriAssessment {
+        ContentShioriAssessment(
+            identifier: descriptor?.id.rawValue,
+            displayName: descriptor?.displayName ?? ghost.shioriMacOSFilename ?? ghost.shioriFilename,
+            declaredModuleFilename: ghost.shioriFilename,
+            macOSModuleFilename: ghost.shioriMacOSFilename,
+            supportStatus: descriptor.map { descriptor in
+                switch descriptor.support {
+                case .supported: .supported
+                case .experimental: .experimental
+                case .compatibilityLayer: .compatibilityLayer
+                case .knownUnavailable: .unavailable
+                }
+            } ?? .unknown,
+            execution: descriptor?.execution,
+            provisioning: descriptor?.provisioning,
+            runtimeRequirement: descriptor?.runtimeRequirement
         )
     }
 

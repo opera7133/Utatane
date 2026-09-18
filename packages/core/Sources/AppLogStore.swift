@@ -1,5 +1,11 @@
 import Foundation
-import OSLog
+
+#if canImport(Combine)
+    import Combine
+#endif
+#if canImport(OSLog)
+    import OSLog
+#endif
 
 public enum LogLevel: String, Sendable, Codable, CaseIterable, Comparable {
     case debug
@@ -67,11 +73,21 @@ public struct LogEntry: Identifiable, Sendable, Equatable {
     }
 }
 
-public final class AppLogStore: ObservableObject, @unchecked Sendable {
+#if canImport(Combine)
+    public typealias AppLogStoreObservable = ObservableObject
+#else
+    public protocol AppLogStoreObservable: AnyObject {}
+#endif
+
+public final class AppLogStore: AppLogStoreObservable, @unchecked Sendable {
     public static let shared = AppLogStore()
 
-    /// UI snapshot, refreshed explicitly by a visible console rather than by each log call.
-    @MainActor @Published public private(set) var entries: [LogEntry] = []
+    // UI snapshot, refreshed explicitly by a visible console rather than by each log call.
+    #if canImport(Combine)
+        @MainActor @Published public private(set) var entries: [LogEntry] = []
+    #else
+        @MainActor public private(set) var entries: [LogEntry] = []
+    #endif
 
     private let lock = NSLock()
     private var buffer: [LogEntry?]
@@ -185,19 +201,21 @@ public final class AppLogStore: ObservableObject, @unchecked Sendable {
     }
 
     private func emitOSLog(entry: LogEntry) {
-        let logger = Logger(subsystem: "dev.utatane.app", category: entry.category)
-        let ghostTag = entry.ghostName.map { "[\($0)] " } ?? ""
-        let fullMessage = "\(ghostTag)\(entry.message)\(entry.details.map { "\n\($0)" } ?? "")"
+        #if canImport(OSLog)
+            let logger = Logger(subsystem: "dev.utatane.app", category: entry.category)
+            let ghostTag = entry.ghostName.map { "[\($0)] " } ?? ""
+            let fullMessage = "\(ghostTag)\(entry.message)\(entry.details.map { "\n\($0)" } ?? "")"
 
-        switch entry.level {
-        case .debug:
-            logger.debug("\(fullMessage, privacy: .public)")
-        case .info:
-            logger.info("\(fullMessage, privacy: .public)")
-        case .warning:
-            logger.warning("\(fullMessage, privacy: .public)")
-        case .error:
-            logger.error("\(fullMessage, privacy: .public)")
-        }
+            switch entry.level {
+            case .debug:
+                logger.debug("\(fullMessage, privacy: .public)")
+            case .info:
+                logger.info("\(fullMessage, privacy: .public)")
+            case .warning:
+                logger.warning("\(fullMessage, privacy: .public)")
+            case .error:
+                logger.error("\(fullMessage, privacy: .public)")
+            }
+        #endif
     }
 }
