@@ -91,6 +91,7 @@ $maximumMegabytes = (int) floor($config->maximumUploadBytes / 1024 / 1024);
         </dl>
         <dl class="shiori-details" id="shiori-details"></dl>
         <p class="summary-text" id="summary-text"></p>
+        <p class="result-note">※ 検査結果は、必ずしもUtataneで問題なく動作することを保証するものではありません。</p>
 
         <details class="diagnostics-block" open>
             <summary>検査内容 <span id="diagnostic-count"></span></summary>

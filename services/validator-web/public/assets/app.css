@@ -71,6 +71,7 @@ h1 { margin: 0 0 8px; font-size: clamp(26px, 5vw, 34px); line-height: 1.25; }
 .shiori-details { margin: 16px 0 0; display: grid; grid-template-columns: 130px 1fr; gap: 8px 16px; }
 .shiori-details dd { margin: 0; font-size: 13px; overflow-wrap: anywhere; }
 .summary-text { margin: 18px 0 0; font-size: 14px; }
+.result-note { margin: 8px 0 0; color: var(--muted); font-size: 12px; line-height: 1.6; }
 
 .diagnostics-block { margin-top: 20px; border-top: 1px solid var(--border); }
 .diagnostics-block summary { padding: 16px 0; cursor: pointer; font-weight: 650; }
