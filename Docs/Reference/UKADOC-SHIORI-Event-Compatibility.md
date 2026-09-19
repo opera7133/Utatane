@@ -8,7 +8,7 @@
 
 UKADOC掲載イベント数: 290
 調査日: 2026-09-17
-調査結果: ✅ 99 / 🟡 140 / ❌ 47 / ➖ 4
+調査結果: ✅ 105 / 🟡 135 / ❌ 46 / ➖ 4
 
 ## 判定
 
@@ -132,14 +132,14 @@ UKADOC掲載イベント数: 290
 
 | イベント | 状況 | 前提 | 難度 | Utataneの挙動・不足 |
 | --- | --- | --- | --- | --- |
-| [`OnMouseClick`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseClick) | 🟡 | 通知経路のUKADOC照合 | 低 | Reference0〜6を通知。OnMouseUp応答後のフォールバック判定は未対応 |
-| [`OnMouseClickEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseClickEx) | 🟡 | 通知経路のUKADOC照合 | 低 | 中・拡張ボタンのクリックをボタン名付きReference0〜6で通知。OnMouseUpEx応答後のフォールバック判定は未対応 |
+| [`OnMouseClick`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseClick) | ✅ | — | — | Reference0〜6を通知。OnMouseUpが無応答の場合だけ発行する応答規則をテスト済み |
+| [`OnMouseClickEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseClickEx) | ✅ | — | — | 中・拡張ボタンのクリックをボタン名付きReference0〜6で通知。OnMouseUpExが無応答の場合だけ発行する応答規則をテスト済み |
 | [`OnMouseDoubleClick`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseDoubleClick) | ✅ | — | — | 左・右ボタンのダブルクリックをReference0〜6で通知。入力からSHIORI変換まで自動テスト済み |
 | [`OnMouseDoubleClickEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseDoubleClickEx) | ✅ | — | — | 中・拡張ボタンのダブルクリックをボタン名付きReference0〜6で通知。入力経路とSHIORI変換を自動テスト済み |
-| [`OnMouseMultipleClick`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseMultipleClick) | 🟡 | 通知経路のUKADOC照合 | 低 | 左・右ボタンの3連打以上を回数付きReference0〜7で通知。204時の通常Click系フォールバックは未対応 |
-| [`OnMouseMultipleClickEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseMultipleClickEx) | 🟡 | 通知経路のUKADOC照合 | 低 | 中・拡張ボタンの3連打以上を回数付きReference0〜7で通知。204時の通常Click系フォールバックは未対応 |
-| [`OnMouseUp`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseUp) | 🟡 | 通知経路のUKADOC照合 | 低 | 左・右ボタンが放された時にReference0〜6を通知。応答有無によるOnMouseClick抑制は未対応 |
-| [`OnMouseUpEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseUpEx) | 🟡 | 通知経路のUKADOC照合 | 低 | 中・拡張ボタンが放された時にボタン名付きReference0〜6で通知。応答有無によるClickEx抑制は未対応 |
+| [`OnMouseMultipleClick`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseMultipleClick) | ✅ | — | — | 左・右ボタンの3連打以上を回数付きReference0〜7で通知。無応答時は奇数回をClick、偶数回をDoubleClickへ戻す規則をテスト済み |
+| [`OnMouseMultipleClickEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseMultipleClickEx) | ✅ | — | — | 中・拡張ボタンの3連打以上を回数付きReference0〜7で通知。無応答時は通常のClickEx／DoubleClickExへ戻す規則をテスト済み |
+| [`OnMouseUp`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseUp) | ✅ | — | — | 左・右ボタンが放された時にReference0〜6を通知。応答があれば後続のClick系イベントを抑止する規則をテスト済み |
+| [`OnMouseUpEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseUpEx) | ✅ | — | — | 中・拡張ボタンが放された時にボタン名付きReference0〜6で通知。応答があれば後続のClickEx系イベントを抑止する規則をテスト済み |
 | [`OnMouseDown`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseDown) | ✅ | — | — | 左・右ボタンが押された時に座標・scope・collision・button・入力種別を通知。入力からSHIORI変換まで自動テスト済み |
 | [`OnMouseDownEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseDownEx) | ✅ | — | — | 中・拡張ボタンが押された時にボタン名付きReference0〜6で通知。入力経路とSHIORI変換を自動テスト済み |
 | [`OnMouseMove`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseMove) | 🟡 | 通知経路のUKADOC照合 | 低 | 移動量がcollision別の閾値を超えた時にReference0〜6を通知。SSPの全移動通知とは頻度が異なります |
@@ -415,9 +415,9 @@ UKADOC掲載イベント数: 290
 | [`OnSoundStop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundStop) | 🟡 | 通知経路のUKADOC照合 | 低 | SakuraScript音声の自然終了とstop操作でファイル名・end/closeを通知。ループ終了など全経路は未確認 |
 | [`OnSoundLoop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundLoop) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnSoundError`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundError) | 🟡 | 通知経路のUKADOC照合 | 低 | 音声ファイル解決・AVAudioPlayer生成・再生終了失敗時にplay・エラーコード・ファイル・説明を通知。実動未確認 |
-| [`OnMusicPlayEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMusicPlayEx) | 🟡 | macOSの「再生中」情報を監視 | 中 | 設定有効時、曲変更を検出して通知。無反応ならOnMusicPlayへフォールバック。現在はブラウザ由来の再生もこのイベントへ送るため、SSPの振り分けと異なる |
+| [`OnMusicPlayEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMusicPlayEx) | 🟡 | macOSの「再生中」情報を監視 | 中 | 設定有効時、ブラウザ以外の曲変更を検出して通知。無反応ならOnMusicPlayへフォールバック。判定不能な再生元もこちらへ送る。実アプリでの通知は未確認 |
 | [`OnMusicPlay`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMusicPlay) | ✅ | OnMusicPlayExのフォールバック | 低 | 拡張イベントへの無反応時にタイトル・アーティストを通知。SSTP/1.1のSongヘッダ経路も対応 |
-| [`OnVideoPlayEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVideoPlayEx) | ❌ | 再生元アプリの判定 | 中 | UKADOCではブラウザ内の動画・音楽再生をこのイベントへ送るが、現在はすべてOnMusicPlayExへ送っている。macOSの再生中情報からブラウザを安定して判定できるか調査が必要 |
+| [`OnVideoPlayEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVideoPlayEx) | 🟡 | macOSの「再生中」情報を監視 | 中 | MediaRemoteの親アプリまたは再生クライアントのbundle IDから主要ブラウザを判定し、動画・音楽を共通Referenceで通知。メイン・呼び出しゴーストの両経路へ接続済み。実ブラウザでの通知は未確認 |
 | [`OnTextDrop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTextDrop) | ✅ | — | — | サーフェスへのテキストDnDで改行をバイト値1に変換し本文とscopeを通知。イベント生成テストで確認 |
 | [`OnShellScaling`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnShellScaling) | 🟡 | 通知経路のUKADOC照合 | 低 | 設定でシェル倍率が変わった時に新旧の縦横パーセントをReference0〜3へ通知。縦横個別設定は未実装 |
 | [`OnBalloonScaling`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonScaling) | 🟡 | 通知経路のUKADOC照合 | 低 | 設定でバルーン倍率が変わった時に新旧の縦横パーセントをReference0〜3へ通知。縦横個別設定は未実装 |

@@ -22,6 +22,41 @@ import Testing
     ])
 }
 
+@Test func `browser bundle identifiers route playback to video event`() {
+    let safari = NowPlayingTrack(
+        title: "Video",
+        artist: "Channel",
+        sourceBundleIdentifier: "com.apple.WebKit.WebContent",
+        parentApplicationBundleIdentifier: "com.apple.Safari",
+        isPlaying: true
+    )
+    let chrome = NowPlayingTrack(
+        title: "Music",
+        artist: "Channel",
+        sourceBundleIdentifier: "com.google.Chrome.helper",
+        isPlaying: true
+    )
+
+    #expect(safari.sspEventRoute == .video)
+    #expect(chrome.sspEventRoute == .video)
+    #expect(safari.sspEventRoute.extendedEventID == "OnVideoPlayEx")
+    #expect(safari.sspEventRoute.legacyEventID == nil)
+}
+
+@Test func `music and unknown applications keep the music event fallback`() {
+    for bundleIdentifier in ["com.spotify.client", "com.apple.Music", nil] {
+        let track = NowPlayingTrack(
+            title: "Song",
+            artist: "Artist",
+            sourceBundleIdentifier: bundleIdentifier,
+            isPlaying: true
+        )
+        #expect(track.sspEventRoute == .music)
+        #expect(track.sspEventRoute.extendedEventID == "OnMusicPlayEx")
+        #expect(track.sspEventRoute.legacyEventID == "OnMusicPlay")
+    }
+}
+
 @Test func `change detector emits once per playing track`() {
     var detector = NowPlayingChangeDetector()
     let first = NowPlayingTrack(title: "One", artist: "Artist", isPlaying: true)

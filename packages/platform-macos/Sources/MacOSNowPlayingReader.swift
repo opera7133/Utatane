@@ -5,6 +5,8 @@ public struct NowPlayingTrack: Codable, Equatable, Sendable {
     public let artist: String
     public let album: String?
     public let source: String?
+    public let sourceBundleIdentifier: String?
+    public let parentApplicationBundleIdentifier: String?
     public let duration: Double?
     public let uniqueIdentifier: String?
     public let isPlaying: Bool
@@ -14,6 +16,8 @@ public struct NowPlayingTrack: Codable, Equatable, Sendable {
         artist: String,
         album: String? = nil,
         source: String? = nil,
+        sourceBundleIdentifier: String? = nil,
+        parentApplicationBundleIdentifier: String? = nil,
         duration: Double? = nil,
         uniqueIdentifier: String? = nil,
         isPlaying: Bool
@@ -22,6 +26,8 @@ public struct NowPlayingTrack: Codable, Equatable, Sendable {
         self.artist = artist
         self.album = album
         self.source = source
+        self.sourceBundleIdentifier = sourceBundleIdentifier
+        self.parentApplicationBundleIdentifier = parentApplicationBundleIdentifier
         self.duration = duration
         self.uniqueIdentifier = uniqueIdentifier
         self.isPlaying = isPlaying
@@ -49,11 +55,60 @@ public struct NowPlayingTrack: Codable, Equatable, Sendable {
         return references
     }
 
+    public var sspEventRoute: NowPlayingEventRoute {
+        NowPlayingSourceClassifier.isBrowser(bundleIdentifier: parentApplicationBundleIdentifier)
+            || NowPlayingSourceClassifier.isBrowser(bundleIdentifier: sourceBundleIdentifier)
+            ? .video
+            : .music
+    }
+
     fileprivate var eventIdentity: String {
-        [uniqueIdentifier, source, title, artist, album]
+        [uniqueIdentifier, parentApplicationBundleIdentifier, sourceBundleIdentifier, source, title, artist, album]
             .compactMap(\.self)
             .joined(separator: "\u{1F}")
     }
+}
+
+public enum NowPlayingEventRoute: Sendable, Equatable {
+    case music
+    case video
+
+    public var extendedEventID: String {
+        switch self {
+        case .music: "OnMusicPlayEx"
+        case .video: "OnVideoPlayEx"
+        }
+    }
+
+    public var legacyEventID: String? {
+        switch self {
+        case .music: "OnMusicPlay"
+        case .video: nil
+        }
+    }
+}
+
+public enum NowPlayingSourceClassifier {
+    public static func isBrowser(bundleIdentifier: String?) -> Bool {
+        guard let identifier = bundleIdentifier?.lowercased(), !identifier.isEmpty else { return false }
+        return browserBundleIdentifierPrefixes.contains { identifier.hasPrefix($0) }
+    }
+
+    private static let browserBundleIdentifierPrefixes = [
+        "app.zen-browser.zen",
+        "com.apple.safari",
+        "com.brave.browser",
+        "com.duckduckgo.macos.browser",
+        "com.google.chrome",
+        "com.kagi.kagimacos",
+        "com.microsoft.edgemac",
+        "com.operasoftware.opera",
+        "com.vivaldi.vivaldi",
+        "company.thebrowser.browser",
+        "org.chromium.chromium",
+        "org.mozilla.firefox",
+        "org.mozilla.nightly"
+    ]
 }
 
 public struct NowPlayingChangeDetector: Sendable {
@@ -129,12 +184,18 @@ public struct MacOSNowPlayingReader: Sendable {
         const playerPath = request.localNowPlayingPlayerPath;
         const client = playerPath && playerPath.client;
         const source = client && client.displayName ? ObjC.unwrap(client.displayName) : null;
+        const sourceBundleIdentifier = client && client.bundleIdentifier
+          ? ObjC.unwrap(client.bundleIdentifier) : null;
+        const parentApplicationBundleIdentifier = client && client.parentApplicationBundleIdentifier
+          ? ObjC.unwrap(client.parentApplicationBundleIdentifier) : null;
         const playbackRate = value(info, 'kMRMediaRemoteNowPlayingInfoPlaybackRate');
         return {
           title: String(title),
           artist: String(value(info, 'kMRMediaRemoteNowPlayingInfoArtist') || ''),
           album: value(info, 'kMRMediaRemoteNowPlayingInfoAlbum'),
           source: source,
+          sourceBundleIdentifier: sourceBundleIdentifier,
+          parentApplicationBundleIdentifier: parentApplicationBundleIdentifier,
           duration: value(info, 'kMRMediaRemoteNowPlayingInfoDuration'),
           uniqueIdentifier: value(info, 'kMRMediaRemoteNowPlayingInfoUniqueIdentifier'),
           isPlaying: playbackRate === null ? true : Number(playbackRate) > 0
@@ -156,6 +217,8 @@ public struct MacOSNowPlayingReader: Sendable {
           artist: String(track.artist() || ''),
           album: String(track.album() || ''),
           source: name,
+          sourceBundleIdentifier: name === 'Spotify' ? 'com.spotify.client' : 'com.apple.Music',
+          parentApplicationBundleIdentifier: null,
           duration: Number(track.duration() || 0),
           uniqueIdentifier: null,
           isPlaying: true

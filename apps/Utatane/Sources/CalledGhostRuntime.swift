@@ -38,6 +38,8 @@ final class CalledGhostRuntime {
     private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
     private var teachHistory: [String] = []
     private var pendingHourTimeSignal = false
+    private let periodicEventRunner = CoalescingTaskRunner()
+    private let mouseEventCoordinator = MouseEventResponseCoordinator()
     private var windowMode: GhostWindowMode
     private var windowLevelBehavior: GhostWindowLevelBehavior = .always
     private(set) var shell: InstalledShell
@@ -245,6 +247,36 @@ final class CalledGhostRuntime {
         send([event])
     }
 
+    private func dispatchMouseEvent(_ event: GhostMouseEvent) {
+        mouseEventCoordinator.submit(
+            event,
+            request: requestMouseEvent,
+            receive: receiveMouseResponse
+        )
+    }
+
+    private func requestMouseEvent(_ event: GhostEvent) async -> PersonalityResponse? {
+        do {
+            return try await session.response(for: event)
+        } catch {
+            AppLogStore.shared.error(
+                "マウスイベント処理エラー: \(error.localizedDescription)",
+                category: "SHIORI",
+                details: String(describing: error),
+                ghostName: ghost.name
+            )
+            onError?(error)
+            return nil
+        }
+    }
+
+    private func receiveMouseResponse(_ response: PersonalityResponse) {
+        if let script = response.script, !script.rawValue.isEmpty {
+            player.play(script, balloon: balloon)
+        }
+        forwardCommunication(response)
+    }
+
     func send(_ event: GhostEvent, fallingBackTo fallback: GhostEvent) {
         Task {
             do {
@@ -302,11 +334,12 @@ final class CalledGhostRuntime {
         }
     }
 
-    func sendMusicTrack(_ track: NowPlayingTrack) {
+    func sendNowPlayingTrack(_ track: NowPlayingTrack) {
+        let route = track.sspEventRoute
         Task {
             do {
                 let extended = try await session.response(for: .shiori(
-                    id: "OnMusicPlayEx",
+                    id: route.extendedEventID,
                     references: track.sspExtendedReferences
                 ))
                 if let extended {
@@ -316,17 +349,18 @@ final class CalledGhostRuntime {
                         return
                     }
                 }
-                guard let legacy = try await session.response(for: .shiori(
-                    id: "OnMusicPlay",
-                    references: [0: track.title, 1: track.artist]
-                )) else { return }
+                guard let legacyEventID = route.legacyEventID,
+                      let legacy = try await session.response(for: .shiori(
+                          id: legacyEventID,
+                          references: [0: track.title, 1: track.artist]
+                      )) else { return }
                 if let script = legacy.script, !script.rawValue.isEmpty {
                     player.play(script, balloon: balloon)
                 }
                 forwardCommunication(legacy)
             } catch {
                 AppLogStore.shared.error(
-                    "音楽再生イベント処理エラー: \(error.localizedDescription)",
+                    "再生情報イベント処理エラー: \(error.localizedDescription)",
                     category: "SHIORI",
                     details: "Title: \(track.title)\nError: \(error)",
                     ghostName: ghost.name
@@ -341,13 +375,13 @@ final class CalledGhostRuntime {
         var references = references
         // UKADOC / SSP standard: 1 for talkable, 0 while dialogue is being played.
         references[3] = canTalk ? "1" : "0"
-        Task {
+        periodicEventRunner.submit { [self] in
             do {
                 guard let response = try await session.response(for: .shiori(
                     id: "OnSecondChange",
                     references: references
                 )) else { return }
-                guard canTalk else { return }
+                guard !Task.isCancelled, canTalk else { return }
                 if let script = response.script {
                     player.play(script, balloon: balloon)
                 }
@@ -454,6 +488,8 @@ final class CalledGhostRuntime {
     }
 
     private func stop(reason: GhostStopReason) async -> String {
+        periodicEventRunner.cancel()
+        mouseEventCoordinator.cancel()
         await webSocketManager.cancelAll()
         cancelHTTP(url: nil)
         var finalScript = ""
@@ -627,7 +663,7 @@ final class CalledGhostRuntime {
     private func configureCallbacks() {
         surfaceController.onMouseEvent = { [weak self] event in
             guard let self, !player.isTimeCritical else { return }
-            send(.mouse(event))
+            dispatchMouseEvent(event)
         }
         surfaceController.onSurfaceChange = { [weak self] scope, previous, current in
             guard let self else { return }

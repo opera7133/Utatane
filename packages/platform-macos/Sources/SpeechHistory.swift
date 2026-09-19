@@ -321,9 +321,15 @@ public final class SpeechHistoryWindowController: NSWindowController {
     static let initialContentSize = NSSize(width: 720, height: 640)
     static let minimumContentSize = NSSize(width: 560, height: 480)
     private let store: SpeechHistoryStore
+    private let frameAutosaveName: String?
+    private var hostingController: NSHostingController<SpeechHistoryView>?
 
-    public init(store: SpeechHistoryStore) {
+    public init(
+        store: SpeechHistoryStore,
+        frameAutosaveName: String? = "UtataneSpeechHistory"
+    ) {
         self.store = store
+        self.frameAutosaveName = frameAutosaveName
         super.init(window: nil)
     }
 
@@ -339,9 +345,9 @@ public final class SpeechHistoryWindowController: NSWindowController {
             ghostName: ghostName,
             textScale: textScale
         )
-        if let window {
+        if let window, let hostingController {
             window.title = "\(String(localized: "発話履歴")) — \(ghostName)"
-            window.contentViewController = NSHostingController(rootView: content)
+            hostingController.rootView = content
         } else {
             let window = NSWindow(
                 contentRect: NSRect(origin: .zero, size: Self.initialContentSize),
@@ -351,9 +357,12 @@ public final class SpeechHistoryWindowController: NSWindowController {
             )
             window.contentMinSize = Self.minimumContentSize
             window.title = "\(String(localized: "発話履歴")) — \(ghostName)"
-            window.contentViewController = NSHostingController(rootView: content)
+            let hostingController = NSHostingController(rootView: content)
+            window.contentViewController = hostingController
             window.isReleasedWhenClosed = false
-            window.setFrameAutosaveName("UtataneSpeechHistory")
+            if let frameAutosaveName {
+                window.setFrameAutosaveName(frameAutosaveName)
+            }
             let contentSize = window.contentLayoutRect.size
             if contentSize.width < Self.minimumContentSize.width
                 || contentSize.height < Self.minimumContentSize.height
@@ -364,6 +373,7 @@ public final class SpeechHistoryWindowController: NSWindowController {
                 ))
             }
             window.center()
+            self.hostingController = hostingController
             self.window = window
         }
         showWindow(nil)

@@ -318,6 +318,10 @@ private struct UtataneRootView: View {
     @State private var installedHeadlines: [InstalledHeadline] = []
     @State private var installedPlugins: [InstalledPlugin] = []
     private let pluginRuntime = PluginRuntime()
+    @State private var randomTalkRunner = CoalescingTaskRunner()
+    @State private var secondChangeRunner = CoalescingTaskRunner()
+    @State private var pluginSecondChangeRunner = CoalescingTaskRunner()
+    @State private var mouseEventCoordinator = MouseEventResponseCoordinator()
     @State private var isUpdatingContent = false
     @State private var contentUpdateTask: Task<Void, Never>?
     @State private var debugWindow: NSWindow?
@@ -644,7 +648,9 @@ private struct UtataneRootView: View {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(interval * 60))
                 guard !Task.isCancelled else { return }
-                sendEvent(.randomTalk)
+                randomTalkRunner.submit {
+                    await sendEventsImmediately([.randomTalk])
+                }
             }
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "second-change") {
@@ -730,7 +736,7 @@ private struct UtataneRootView: View {
                     let track = try await nowPlayingReader.currentTrack()
                     hasLoggedReadError = false
                     if let changedTrack = nowPlayingChangeDetector.consume(track) {
-                        notifyMusicTrack(changedTrack)
+                        notifyNowPlayingTrack(changedTrack)
                     }
                 } catch {
                     if !hasLoggedReadError {
@@ -933,6 +939,37 @@ private struct UtataneRootView: View {
         sendEvents([event])
     }
 
+    private func dispatchMouseEvent(_ event: GhostMouseEvent) {
+        mouseEventCoordinator.submit(
+            event,
+            request: requestMouseEvent,
+            receive: receiveMouseResponse
+        )
+    }
+
+    private func requestMouseEvent(_ event: GhostEvent) async -> PersonalityResponse? {
+        guard !isTransitioningGhost, let session else { return nil }
+        do {
+            return try await session.response(for: event)
+        } catch {
+            AppLogStore.shared.error(
+                "マウスイベント処理エラー: \(error.localizedDescription)",
+                category: "SHIORI",
+                details: String(describing: error),
+                ghostName: currentGhost?.name
+            )
+            showError(error.localizedDescription)
+            return nil
+        }
+    }
+
+    private func receiveMouseResponse(_ response: PersonalityResponse) {
+        if let script = response.script, !script.rawValue.isEmpty, let balloon {
+            scriptPlayer.play(script, balloon: balloon)
+        }
+        forwardCommunication(from: currentGhost, response: response)
+    }
+
     private func playIPMessengerMessage(_ message: IPMessengerReceivedMessage) {
         guard !isTransitioningGhost, currentGhost != nil, let balloon else { return }
         scriptPlayer.play(
@@ -943,25 +980,30 @@ private struct UtataneRootView: View {
     }
 
     private func sendEvents(_ events: [GhostEvent]) {
-        guard !isTransitioningGhost, let session, let balloon else { return }
         Task {
-            do {
-                for event in events {
-                    guard let response = try await session.response(for: event) else { continue }
-                    if let script = response.script, !script.rawValue.isEmpty {
-                        scriptPlayer.play(script, balloon: balloon)
-                    }
-                    forwardCommunication(from: currentGhost, response: response)
+            await sendEventsImmediately(events)
+        }
+    }
+
+    private func sendEventsImmediately(_ events: [GhostEvent]) async {
+        guard !isTransitioningGhost, let session, let balloon else { return }
+        do {
+            for event in events {
+                guard let response = try await session.response(for: event) else { continue }
+                guard !Task.isCancelled else { return }
+                if let script = response.script, !script.rawValue.isEmpty {
+                    scriptPlayer.play(script, balloon: balloon)
                 }
-            } catch {
-                AppLogStore.shared.error(
-                    "SHIORIイベント処理エラー: \(error.localizedDescription)",
-                    category: "SHIORI",
-                    details: "Events: \(events)\nError: \(error)",
-                    ghostName: currentGhost?.name
-                )
-                showError(error.localizedDescription)
+                forwardCommunication(from: currentGhost, response: response)
             }
+        } catch {
+            AppLogStore.shared.error(
+                "SHIORIイベント処理エラー: \(error.localizedDescription)",
+                category: "SHIORI",
+                details: "Events: \(events)\nError: \(error)",
+                ghostName: currentGhost?.name
+            )
+            showError(error.localizedDescription)
         }
     }
 
@@ -1082,13 +1124,14 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func notifyMusicTrack(_ track: NowPlayingTrack) {
+    private func notifyNowPlayingTrack(_ track: NowPlayingTrack) {
         guard !isTransitioningGhost else { return }
+        let route = track.sspEventRoute
         if let session, let balloon {
             Task {
                 do {
                     let extended = try await session.response(for: .shiori(
-                        id: "OnMusicPlayEx",
+                        id: route.extendedEventID,
                         references: track.sspExtendedReferences
                     ))
                     if let extended {
@@ -1098,17 +1141,18 @@ private struct UtataneRootView: View {
                             return
                         }
                     }
-                    guard let legacy = try await session.response(for: .shiori(
-                        id: "OnMusicPlay",
-                        references: [0: track.title, 1: track.artist]
-                    )) else { return }
+                    guard let legacyEventID = route.legacyEventID,
+                          let legacy = try await session.response(for: .shiori(
+                              id: legacyEventID,
+                              references: [0: track.title, 1: track.artist]
+                          )) else { return }
                     if let script = legacy.script, !script.rawValue.isEmpty {
                         scriptPlayer.play(script, balloon: balloon)
                     }
                     forwardCommunication(from: currentGhost, response: legacy)
                 } catch {
                     AppLogStore.shared.error(
-                        "音楽再生イベント処理エラー: \(error.localizedDescription)",
+                        "再生情報イベント処理エラー: \(error.localizedDescription)",
                         category: "SHIORI",
                         details: "Title: \(track.title)\nError: \(error)",
                         ghostName: currentGhost?.name
@@ -1117,7 +1161,7 @@ private struct UtataneRootView: View {
             }
         }
         for runtime in calledGhosts.values {
-            runtime.sendMusicTrack(track)
+            runtime.sendNowPlayingTrack(track)
         }
     }
 
@@ -1374,13 +1418,13 @@ private struct UtataneRootView: View {
             var primaryReferences = references
             // UKADOC / SSP standard: 1 for talkable, 0 while dialogue is being played.
             primaryReferences[3] = canTalk ? "1" : "0"
-            Task {
+            secondChangeRunner.submit {
                 do {
                     guard let response = try await session.response(for: .shiori(
                         id: "OnSecondChange",
                         references: primaryReferences
                     )) else { return }
-                    guard canTalk else { return }
+                    guard !Task.isCancelled, canTalk else { return }
                     if let script = response.script, let balloon {
                         scriptPlayer.play(script, balloon: balloon)
                     }
@@ -1430,8 +1474,9 @@ private struct UtataneRootView: View {
     }
 
     private func sendPluginSecondChange() {
-        Task {
+        pluginSecondChangeRunner.submit {
             for (_, response) in await pluginRuntime.secondChangeResponses() {
+                guard !Task.isCancelled else { return }
                 if let script = await resolvePluginResponse(response), let balloon {
                     scriptPlayer.play(script, balloon: balloon)
                 }
@@ -1693,6 +1738,10 @@ private struct UtataneRootView: View {
 
     private func closeCurrentGhost(reason: GhostStopReason) async -> String {
         guard let activeSession = session else { return "" }
+        randomTalkRunner.cancel()
+        secondChangeRunner.cancel()
+        pluginSecondChangeRunner.cancel()
+        mouseEventCoordinator.cancel()
         if let currentGhost {
             _ = await pluginRuntime.broadcast(
                 method: "NOTIFY",
@@ -1776,7 +1825,7 @@ private struct UtataneRootView: View {
                 if case .click = event.kind {
                     lastClickedRegion = "scope \(event.scope): \(event.region ?? "範囲外")"
                 }
-                sendEvent(.mouse(event))
+                dispatchMouseEvent(event)
             }
             surfaceWindowController.onSurfaceChange = { scope, previous, current in
                 sendEvent(.shiori(

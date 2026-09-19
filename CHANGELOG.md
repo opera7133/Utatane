@@ -4,12 +4,16 @@
 
 ### 修正
 
+- `OnMouseUp`／`OnMouseUpEx`にSHIORIが応答した時は後続のClick系イベントを抑止し、MultipleClick系が無応答なら通常のClick／DoubleClickへ戻すようにした
+- 発話履歴を閉じて開き直した時、ウィンドウが最小サイズへ縮む問題を修正した
+- SHIORIやプラグインの応答が遅い時、毎秒の周期処理が重なってメモリ使用量と動作負荷が増え続ける問題を修正した
 - macOSネイティブSHIORIの`load`・`request`・`unload`実行中は、作業ディレクトリを`ghost/master`に設定するようにした
 - X座標だけの`\_l[x]`を再生できるようにし、辞書内で分割生成される`\p`・`\q`をvalidatorが未対応コマンドとして報告しないようにした
 - `surfaces.txt`のcharset宣言が実際のUTF-8／Shift_JISと食い違っていても、実データから読み直せるようにした
 
 ### 変更
 
+- macOSの「再生中」がSafari、Chrome、Firefoxなどのブラウザ由来の場合は`OnVideoPlayEx`、音楽アプリまたは判定不能なアプリの場合は`OnMusicPlayEx`へ通知するようにした
 - `surfaces.txt`のsurfaceに付けた`name`をSakuraScriptの`\s[名前]`で選べるようにした
 - `\![set,balloonoffset]`で、`@`付き座標はShell・surface固有offsetへの加算、`@`なしは既定offsetを置き換えるSSP互換の配置にした
 - ベースsurfaceとelementにGIF／WebPを指定できるようにし、アニメーションGIFをほかのelementと合成した後も再生を維持するようにした
