@@ -4,7 +4,8 @@
 
 ### 修正
 
-- Emily/Phase4.5が使うX座標だけの`\_l[x]`を再生できるようにし、辞書内で分割生成される`\p`・`\q`をvalidatorが未対応コマンドとして報告しないようにした
+- macOSネイティブSHIORIの`load`・`request`・`unload`実行中は、作業ディレクトリを`ghost/master`に設定するようにした
+- X座標だけの`\_l[x]`を再生できるようにし、辞書内で分割生成される`\p`・`\q`をvalidatorが未対応コマンドとして報告しないようにした
 - `surfaces.txt`のcharset宣言が実際のUTF-8／Shift_JISと食い違っていても、実データから読み直せるようにした
 
 ### 変更

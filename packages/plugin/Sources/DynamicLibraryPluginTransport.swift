@@ -1,6 +1,7 @@
 #if canImport(Darwin)
     import Darwin
     import Foundation
+    import UtataneCore
 
     public enum DynamicLibraryModuleError: LocalizedError, Sendable {
         case loadFailed(URL, String)
@@ -27,6 +28,7 @@
         private typealias StandardRequest = @convention(c) (UnsafeMutableRawPointer?, UnsafeMutablePointer<Int32>?) -> UnsafeMutableRawPointer?
 
         private let lock = NSLock()
+        private let directoryURL: URL
         private let handle: UnsafeMutableRawPointer
         private let unloadImplementation: () -> Void
         private let requestImplementation: (String) throws -> String
@@ -46,10 +48,13 @@
                 let load = unsafeBitCast(loadPointer, to: StandardLoad.self)
                 let unload = unsafeBitCast(unloadPointer, to: StandardUnload.self)
                 let request = unsafeBitCast(requestPointer, to: StandardRequest.self)
-                let directory = try Self.transferredBuffer(directoryURL.path)
-                guard load(directory.pointer, directory.length) != 0 else {
-                    throw DynamicLibraryModuleError.pluginLoadFailed
+                try ProcessWorkingDirectory.withDirectory(directoryURL) {
+                    let directory = try Self.transferredBuffer(directoryURL.path)
+                    guard load(directory.pointer, directory.length) != 0 else {
+                        throw DynamicLibraryModuleError.pluginLoadFailed
+                    }
                 }
+                self.directoryURL = directoryURL
                 self.handle = handle
                 unloadImplementation = { _ = unload() }
                 requestImplementation = { message in
@@ -73,14 +78,18 @@
 
         deinit {
             lock.withLock {
-                unloadImplementation()
+                try? ProcessWorkingDirectory.withDirectory(directoryURL) {
+                    unloadImplementation()
+                }
                 dlclose(handle)
             }
         }
 
         public func request(_ request: String) throws -> String {
             try lock.withLock {
-                try requestImplementation(request)
+                try ProcessWorkingDirectory.withDirectory(directoryURL) {
+                    try requestImplementation(request)
+                }
             }
         }
 

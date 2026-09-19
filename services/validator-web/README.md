@@ -29,7 +29,7 @@ curl -F file=@ghost.nar \
 | `UTATANE_VALIDATE_TIMEOUT_SECONDS` | 15 |
 | `UTATANE_VALIDATE_MAX_OUTPUT_BYTES` | 2097152 |
 | `UTATANE_VALIDATE_MAX_MEMORY_BYTES` | 805306368 |
-| `UTATANE_VALIDATE_CONCURRENCY` | 2 |
+| `UTATANE_VALIDATE_CONCURRENCY` | 4 |
 | `UTATANE_VALIDATE_QUEUE_WAIT_SECONDS` | 10 |
 
 アップロード容量はPHP全体の設定ではなく、アプリ内で50 MBに制限しています。さらに`.htaccess`の`LimitRequestBody`を51 MiBに設定し、PHPがmultipart bodyを処理する前にも制限します。LiteSpeedでこの設定が反映されていることを公開後の413応答で確認してください。Cloudflare側にも同等以下のリクエスト上限を設定します。

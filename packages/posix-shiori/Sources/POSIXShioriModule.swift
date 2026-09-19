@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import UtataneCore
 import UtataneShiori
 
 public enum POSIXShioriKind: String, Sendable {
@@ -120,6 +121,7 @@ public final class POSIXShioriSession: @unchecked Sendable {
     ) -> UnsafeMutablePointer<CChar>?
 
     private static let globalLock = NSLock()
+    private let masterDirectoryURL: URL
     private let moduleHandle: UnsafeMutableRawPointer
     private let instanceID: Int
     private let unload: (Int) -> Int32
@@ -159,12 +161,15 @@ public final class POSIXShioriSession: @unchecked Sendable {
                     request = { requester(Int32($0), $1, $2) }
                 }
                 let path = masterDirectoryURL.standardizedFileURL.path + "/"
-                let instanceID = try Self.withOwnedCString(path) { pointer, length in
-                    load(pointer, length)
+                let instanceID = try ProcessWorkingDirectory.withDirectory(masterDirectoryURL) {
+                    try Self.withOwnedCString(path) { pointer, length in
+                        load(pointer, length)
+                    }
                 }
                 guard kind == .kagari ? instanceID >= 0 : instanceID > 0 else { throw POSIXShioriError.shioriLoadFailed }
                 return (instanceID, unload, request)
             }
+            self.masterDirectoryURL = masterDirectoryURL
             instanceID = symbols.0
             unload = symbols.1
             requestFunction = symbols.2
@@ -177,7 +182,9 @@ public final class POSIXShioriSession: @unchecked Sendable {
     deinit {
         Self.globalLock.withLock {
             if !closed {
-                _ = unload(instanceID)
+                try? ProcessWorkingDirectory.withDirectory(masterDirectoryURL) {
+                    _ = unload(instanceID)
+                }
             }
             dlclose(moduleHandle)
         }
@@ -187,7 +194,9 @@ public final class POSIXShioriSession: @unchecked Sendable {
         Self.globalLock.withLock {
             guard !closed else { return }
             closed = true
-            _ = unload(instanceID)
+            try? ProcessWorkingDirectory.withDirectory(masterDirectoryURL) {
+                _ = unload(instanceID)
+            }
         }
     }
 
@@ -199,9 +208,11 @@ public final class POSIXShioriSession: @unchecked Sendable {
         try Self.globalLock.withLock {
             guard !closed else { throw POSIXShioriError.requestFailed }
             var responseLength = 0
-            let responseBuffer = try Self.withOwnedCString(request) { pointer, length in
-                responseLength = length
-                return requestFunction(instanceID, pointer, &responseLength)
+            let responseBuffer = try ProcessWorkingDirectory.withDirectory(masterDirectoryURL) {
+                try Self.withOwnedCString(request) { pointer, length in
+                    responseLength = length
+                    return requestFunction(instanceID, pointer, &responseLength)
+                }
             }
             guard let responseBuffer else { throw POSIXShioriError.requestFailed }
             defer { free(responseBuffer) }

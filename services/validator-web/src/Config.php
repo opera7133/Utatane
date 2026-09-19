@@ -36,7 +36,7 @@ final readonly class Config
                 'UTATANE_VALIDATE_MAX_MEMORY_BYTES',
                 768 * 1024 * 1024
             ),
-            concurrency: self::environmentInt('UTATANE_VALIDATE_CONCURRENCY', 2),
+            concurrency: self::environmentInt('UTATANE_VALIDATE_CONCURRENCY', 4),
             queueWaitSeconds: self::environmentNonNegativeInt('UTATANE_VALIDATE_QUEUE_WAIT_SECONDS', 10),
         );
     }
