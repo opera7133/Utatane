@@ -339,6 +339,21 @@ public final class SpeechHistoryWindowController: NSWindowController {
     }
 
     public func show(ghostIdentifier: String, ghostName: String, textScale: CGFloat = 1) {
+        let window = prepareWindow(
+            ghostIdentifier: ghostIdentifier,
+            ghostName: ghostName,
+            textScale: textScale
+        )
+        showWindow(nil)
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+
+    func prepareWindow(
+        ghostIdentifier: String,
+        ghostName: String,
+        textScale: CGFloat = 1
+    ) -> NSWindow {
         let content = SpeechHistoryView(
             store: store,
             ghostIdentifier: ghostIdentifier,
@@ -348,6 +363,7 @@ public final class SpeechHistoryWindowController: NSWindowController {
         if let window, let hostingController {
             window.title = "\(String(localized: "発話履歴")) — \(ghostName)"
             hostingController.rootView = content
+            return window
         } else {
             let window = NSWindow(
                 contentRect: NSRect(origin: .zero, size: Self.initialContentSize),
@@ -375,10 +391,8 @@ public final class SpeechHistoryWindowController: NSWindowController {
             window.center()
             self.hostingController = hostingController
             self.window = window
+            return window
         }
-        showWindow(nil)
-        window?.makeKeyAndOrderFront(nil)
-        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 }
 

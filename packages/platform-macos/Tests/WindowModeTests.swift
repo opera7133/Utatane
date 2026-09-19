@@ -378,16 +378,14 @@ func `opening speech history expands the stage before reserving its panel`() {
 
 @Test
 @MainActor
-func `standalone speech history uses a practical minimum window size`() throws {
+func `standalone speech history uses a practical minimum window size`() {
     let controller = SpeechHistoryWindowController(
         store: SpeechHistoryStore(),
         frameAutosaveName: nil
     )
     defer { controller.close() }
 
-    controller.show(ghostIdentifier: "ghost", ghostName: "Ghost")
-
-    let window = try #require(controller.window)
+    let window = controller.prepareWindow(ghostIdentifier: "ghost", ghostName: "Ghost")
     #expect(window.contentMinSize == SpeechHistoryWindowController.minimumContentSize)
     #expect(window.contentLayoutRect.width >= SpeechHistoryWindowController.minimumContentSize.width)
     #expect(window.contentLayoutRect.height >= SpeechHistoryWindowController.minimumContentSize.height)
@@ -395,20 +393,19 @@ func `standalone speech history uses a practical minimum window size`() throws {
 
 @Test
 @MainActor
-func `standalone speech history keeps its size when reopened`() throws {
+func `standalone speech history keeps its size when reopened`() {
     let controller = SpeechHistoryWindowController(
         store: SpeechHistoryStore(),
         frameAutosaveName: nil
     )
     defer { controller.close() }
 
-    controller.show(ghostIdentifier: "ghost", ghostName: "Ghost")
-    let window = try #require(controller.window)
+    let window = controller.prepareWindow(ghostIdentifier: "ghost", ghostName: "Ghost")
     let resizedContentSize = NSSize(width: 840, height: 700)
     window.setContentSize(resizedContentSize)
     window.close()
 
-    controller.show(ghostIdentifier: "ghost", ghostName: "Ghost")
+    _ = controller.prepareWindow(ghostIdentifier: "ghost", ghostName: "Ghost")
 
     #expect(abs(window.contentLayoutRect.width - resizedContentSize.width) < 1)
     #expect(abs(window.contentLayoutRect.height - resizedContentSize.height) < 1)
