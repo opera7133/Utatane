@@ -107,18 +107,29 @@ OnGhostChanged
 
 OnHeadlinesenseBegin
 {
+	ria_headline_titles = IARRAY
+	ria_headline_urls = IARRAY
 	"\0\s[103]%(reference0)の見出し、取ってくる。\w5少し待って。\e"
 }
 
 OnHeadlinesense.OnFind
 {
-	"\0\s[0]\b[2]\![set,choicetimeout,-1]%(reference3)\n\n\![*]\q[記事を開く,%(reference1)]"
-	--
-	if reference2 != 'Last' && reference2 != 'First and Last' {
-		'\n\![>]\q[次の見出し,]'
+	if reference2 == 'First' || reference2 == 'First and Last' || ISVAR('ria_headline_titles') == 0 {
+		ria_headline_titles = IARRAY
+		ria_headline_urls = IARRAY
 	}
-	--
-	'\n\![X]\q[ここまで,CANCEL_NOTALK]\e'
+	ria_headline_titles ,= reference3
+	ria_headline_urls ,= reference1
+
+	_txt = "\0\s[0]\b[2]\![set,choicetimeout,-1]%(reference0)\n\n"
+	for _i = 0 ; _i < ARRAYSIZE(ria_headline_titles) ; _i++ {
+		_txt += "\![*]\q[%(ria_headline_titles[_i]),%(ria_headline_urls[_i])]\n"
+	}
+	if reference2 != 'Last' && reference2 != 'First and Last' {
+		_txt += '\![>]\q[次の見出し,]\n'
+	}
+	_txt += '\n\![X]\q[ここまで,CANCEL_NOTALK]\e'
+	_txt
 }
 
 OnHeadlinesenseComplete
@@ -143,20 +154,19 @@ OnRSSBegin
 
 OnRSSComplete
 {
-	if ARRAYSIZE(reference) <= 2 {
+	if ARRAYSIZE(reference) < 2 {
 		'\0\s[103]RSSに新しい記事はなかった。\w5閉じて作業に戻れば。\e'
 		return
 	}
-	"\0\s[0]\b[2]\![set,choicetimeout,-1]%(reference0)\n\n"
-	--
-	for _i = 2 ; _i < ARRAYSIZE(reference) ; _i++ {
+	_txt = "\0\s[0]\b[2]\![set,choicetimeout,-1]%(reference0)\n\n"
+	for _i = 2 ; _i <= ARRAYSIZE(reference) ; _i++ {
 		_item = SPLIT(reference[_i], CHR(1))
 		if ARRAYSIZE(_item) >= 2 {
-			"\![*]\q[%(_item[0]),%(_item[1])]\n"
+			_txt += "\![*]\q[%(_item[0]),%(_item[1])]\n"
 		}
 	}
-	--
-	'\n\![X]\q[閉じる,CANCEL_NOTALK]\e'
+	_txt += '\n\![X]\q[閉じる,CANCEL_NOTALK]\e'
+	_txt
 }
 
 OnRSSFailure

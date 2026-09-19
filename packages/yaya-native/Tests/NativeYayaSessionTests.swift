@@ -187,17 +187,36 @@ import UtataneShiori
         id: "OnHeadlinesenseBegin",
         references: [0: "テストニュース", 1: "https://example.test/"]
     ))
-    let headlineItem = try await engine.handle(event: .shiori(
+    let headlineFirst = try await engine.handle(event: .shiori(
         id: "OnHeadlinesense.OnFind",
         references: [
-            0: "テストニュース", 1: "https://example.test/article", 2: "First and Last", 3: "見出し"
+            0: "テストニュース", 1: "https://example.test/first", 2: "First", 3: "最初の見出し"
+        ]
+    ))
+    _ = try await engine.handle(event: .shiori(
+        id: "OnHeadlinesense.OnFind",
+        references: [
+            0: "テストニュース", 1: "https://example.test/second", 2: "Next", 3: "次の見出し"
+        ]
+    ))
+    let headlineLast = try await engine.handle(event: .shiori(
+        id: "OnHeadlinesense.OnFind",
+        references: [
+            0: "テストニュース", 1: "https://example.test/last", 2: "Last", 3: "最後の見出し"
         ]
     ))
     let rss = try await engine.handle(event: .shiori(
         id: "OnRSSComplete",
         references: [
-            0: "テストフィード", 1: "https://example.test/", 2: "記事\u{1}https://example.test/article\u{1}\u{1}\u{1}概要"
+            0: "テストフィード",
+            1: "https://example.test/",
+            2: "新しい記事\u{1}https://example.test/new\u{1}\u{1}\u{1}新しい概要",
+            3: "前の記事\u{1}https://example.test/previous\u{1}\u{1}\u{1}前の概要"
         ]
+    ))
+    let rssNoUpdate = try await engine.handle(event: .shiori(
+        id: "OnRSSComplete",
+        references: [0: "no update"]
     ))
     let scriptLab = try await engine.handle(event: .shiori(id: "OnRiaChoiceScriptLab", references: [:]))
     let shellChange = try await engine.handle(event: .shiori(
@@ -277,10 +296,18 @@ import UtataneShiori
     #expect(installFailure?.rawValue.contains("展開できなかった") == true)
     #expect(ghostChanging?.rawValue.contains("テストゴースト") == true)
     #expect(headlineBegin?.rawValue.contains("テストニュース") == true)
-    #expect(headlineItem?.rawValue.contains("見出し") == true)
-    #expect(headlineItem?.rawValue.contains("https://example.test/article") == true)
-    #expect(rss?.rawValue.contains("記事") == true)
-    #expect(rss?.rawValue.contains("https://example.test/article") == true)
+    #expect(headlineFirst?.rawValue.contains("最初の見出し") == true)
+    #expect(headlineLast?.rawValue.contains("最初の見出し") == true)
+    #expect(headlineLast?.rawValue.contains("https://example.test/first") == true)
+    #expect(headlineLast?.rawValue.contains("次の見出し") == true)
+    #expect(headlineLast?.rawValue.contains("https://example.test/second") == true)
+    #expect(headlineLast?.rawValue.contains("最後の見出し") == true)
+    #expect(headlineLast?.rawValue.contains("https://example.test/last") == true)
+    #expect(rss?.rawValue.contains("新しい記事") == true)
+    #expect(rss?.rawValue.contains("https://example.test/new") == true)
+    #expect(rss?.rawValue.contains("前の記事") == true)
+    #expect(rss?.rawValue.contains("https://example.test/previous") == true)
+    #expect(rssNoUpdate?.rawValue.contains("新しい記事はなかった") == true)
     #expect(scriptLab?.rawValue.contains("\\_q") == true)
     #expect(scriptLab?.rawValue.contains("\\_a[OnRiaScriptLabAnchor]") == true)
     #expect(shellChange?.rawValue.contains("テストシェル") == true)
