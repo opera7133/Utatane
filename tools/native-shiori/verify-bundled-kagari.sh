@@ -27,5 +27,5 @@ for license in kagari-MIT.txt sol2-MIT.txt lua-header-with-license.txt; do
     grep -q 'Copyright' "$bundled/licenses/$license"
 done
 
-cmp "$bundled/licenses/kagari-MIT.txt" "$repository/packages/kagari-native/Vendor/kagari/LICENSE"
+cmp "$bundled/licenses/kagari-MIT.txt" "$repository/packages/shiori/native/kagari/Vendor/kagari/LICENSE"
 cmp "$bundled/dependencies.json" "$repository/tools/native-shiori/kagari-dependencies.json"

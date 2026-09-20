@@ -2,7 +2,7 @@
 
 `first.dll`を32-bit Windows環境でロードする検証ツール兼、Utatane接続用の開発用常駐ホスト。かなり専用品。
 
-解析済みのオリジナル版FIRSTは`packages/first-native`でWineなしに動くため、このホストは通常利用には不要。現在は本物のSHIORI応答を隔離環境で観測する場合だけに残しており、リリース版には同梱しない。
+解析済みのオリジナル版FIRSTは`packages/shiori/native/first`でWineなしに動くため、このホストは通常利用には不要。現在は本物のSHIORI応答を隔離環境で観測する場合だけに残しており、リリース版には同梱しない。
 
 ## Build
 

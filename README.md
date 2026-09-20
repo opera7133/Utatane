@@ -151,7 +151,7 @@ kagariはアプリのビルド時にLuaとともにコンパイル・同梱し�
 
 | ソフトウェア | 著作権表示 | ライセンス |
 | --- | --- | --- |
-| kagari（macOSフォーク） | Copyright (c) 2019 Tatakinov | [MIT](packages/kagari-native/Vendor/kagari/LICENSE) |
+| kagari（macOSフォーク） | Copyright (c) 2019 Tatakinov | [MIT](packages/shiori/native/kagari/Vendor/kagari/LICENSE) |
 | Lua 5.4.9 | Copyright (C) 1994-2026 Lua.org, PUC-Rio | [MIT](https://www.lua.org/license.html) |
 | sol2 3.5.0 | Copyright (c) 2013-2022 Rapptz, ThePhD, and contributors | [MIT](https://github.com/ThePhD/sol2/blob/v3.5.0/LICENSE.txt) |
 

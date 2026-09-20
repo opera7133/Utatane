@@ -1,0 +1,779 @@
+import Foundation
+import Testing
+import UtataneCore
+import UtataneSakuraScript
+import UtataneShiori
+@testable import UtataneYayaNative
+
+@Test func `installed YAYA plugin answers PLUGIN menu request`() throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let pluginURL = repositoryRoot
+        .appendingPathComponent("Content/Local/Plugins/wallet_of_unyu", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: pluginURL.path) else { return }
+
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.copyItem(at: pluginURL, to: temporaryRoot)
+    let session = try NativeYayaSession(masterDirectoryURL: temporaryRoot)
+    let response = try ShioriMessageParser.parseResponse(session.request(
+        "GET PLUGIN/2.0\r\nCharset: UTF-8\r\nSender: Ria\r\nID: OnMenuExec\r\nReference0: 0\r\nReference1: Ria\r\n\r\n"
+    ))
+
+    #expect(response.statusCode == 200)
+    #expect(response.headers["Script"]?.contains("所持金") == true)
+    #expect(response.headers["Event"] == "OnWalletOfUnyu")
+}
+
+@Test func `native YAYA loads Emily and answers OnBoot`() throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let masterURL = repositoryRoot
+        .appendingPathComponent("Content/Local/Ghosts/emily4/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: masterURL.path) else {
+        return
+    }
+
+    let session = try NativeYayaSession(masterDirectoryURL: masterURL)
+    var headers = ShioriHeaders()
+    headers.append(name: "Charset", value: "UTF-8")
+    headers.append(name: "Sender", value: "Utatane")
+    headers.append(name: "SecurityLevel", value: "local")
+    headers.append(name: "ID", value: "OnBoot")
+    for index in 0 ..< 8 {
+        headers.append(name: "Reference\(index)", value: "")
+    }
+
+    let response = try session.request(ShioriRequest(method: "GET", headers: headers))
+    #expect(response.statusCode == 200)
+    #expect(response.value?.contains("\\h") == true)
+    #expect(response.value?.hasSuffix("\\e") == true)
+}
+
+@Test func `native YAYA personality maps boot to SakuraScript`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let masterURL = repositoryRoot
+        .appendingPathComponent("Content/Local/Ghosts/emily4/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: masterURL.path) else {
+        return
+    }
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    let script = try await engine.handle(event: .boot)
+
+    #expect(script?.rawValue.contains("\\h") == true)
+    #expect(script?.rawValue.hasSuffix("\\e") == true)
+
+    let randomTalk = try await engine.handle(event: .randomTalk)
+    #expect(randomTalk?.rawValue.isEmpty == false)
+}
+
+@Test func `installed ria restores her default surface after dialogue`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: installedMasterURL.path) else {
+        return
+    }
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+    let variableURL = masterURL.appending(path: "yaya_variable.cfg")
+    var variables = try String(contentsOf: variableURL, encoding: .utf8)
+    variables += "ria_recent_memory_kind_saved,\"bookstore\",\",\",\n"
+    variables += "ria_recent_memory_variant_saved,0,\",\",\n"
+    variables += "ria_recent_memory_at_saved,\(Int(Date().timeIntervalSince1970)),\",\",\n"
+    try variables.write(to: variableURL, atomically: true, encoding: .utf8)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+    let quickClose = try await engine.handle(event: .close)
+    let script = try await engine.handle(event: .shiori(id: "OnSurfaceRestore", references: [:]))
+    let state = try await engine.handle(event: .shiori(id: "OnRiaChoiceState", references: [:]))
+    let activity = try await engine.handle(event: .shiori(id: "OnRiaChoiceActivity", references: [:]))
+    let recentMemory = try await engine.handle(event: .shiori(id: "OnRiaChoiceRecentMemory", references: [:]))
+    let lifeEpisode = try await engine.handle(event: .shiori(id: "OnRiaChoiceLifeEpisode", references: [:]))
+    let developerMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceDeveloper", references: [:]))
+    let outingMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceGoOut", references: [:]))
+    let idleTalk = try await engine.handle(event: .shiori(
+        id: "OnAITalkNewEvent",
+        references: [4: "600"]
+    ))
+    for region in ["Head", "Face", "Bust", "Hand", "Leg", "Unknown"] {
+        let doubleClick = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .doubleClick,
+            scope: 0,
+            region: region,
+            x: 100,
+            y: 50
+        )))
+        #expect(doubleClick?.rawValue.isEmpty == false, "missing double-click response for \(region)")
+    }
+    var secretTalk: SakuraScript?
+    for region in ["Head", "Hand", "Head", "Face"] {
+        secretTalk = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .doubleClick,
+            scope: 0,
+            region: region,
+            x: 100,
+            y: 50
+        )))
+    }
+    _ = try await engine.handle(event: .mouse(GhostMouseEvent(
+        kind: .doubleClick,
+        scope: 0,
+        region: "Bust",
+        x: 100,
+        y: 150
+    )))
+    let repeatedBustClick = try await engine.handle(event: .mouse(GhostMouseEvent(
+        kind: .doubleClick,
+        scope: 0,
+        region: "Bust",
+        x: 100,
+        y: 150
+    )))
+    for _ in 0 ..< 3 {
+        _ = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .doubleClick,
+            scope: 0,
+            region: "Bust",
+            x: 100,
+            y: 150
+        )))
+    }
+    let annoyedState = try await engine.handle(event: .shiori(id: "OnRiaChoiceState", references: [:]))
+    let apology = try await engine.handle(event: .shiori(id: "OnRiaChoiceApology", references: [:]))
+    let annoyedHeadClick = try await engine.handle(event: .mouse(GhostMouseEvent(
+        kind: .doubleClick,
+        scope: 0,
+        region: "Head",
+        x: 100,
+        y: 50
+    )))
+    _ = try await engine.handle(event: .shiori(id: "OnRiaChoiceApology", references: [:]))
+    let repeatedApology = try await engine.handle(event: .shiori(id: "OnRiaChoiceApology", references: [:]))
+    let profile = try await engine.handle(event: .shiori(id: "OnRiaChoiceProfile", references: [:]))
+    let installBegin = try await engine.handle(event: .shiori(id: "OnInstallBegin", references: [:]))
+    let installComplete = try await engine.handle(event: .shiori(
+        id: "OnInstallCompleteEx",
+        references: [0: "ghost", 1: "テストゴースト"]
+    ))
+    let installFailure = try await engine.handle(event: .shiori(
+        id: "OnInstallFailure",
+        references: [0: "extraction"]
+    ))
+    let ghostChanging = try await engine.handle(event: .ghostChanging(name: "テストゴースト"))
+    let headlineBegin = try await engine.handle(event: .shiori(
+        id: "OnHeadlinesenseBegin",
+        references: [0: "テストニュース", 1: "https://example.test/"]
+    ))
+    let headlineFirst = try await engine.handle(event: .shiori(
+        id: "OnHeadlinesense.OnFind",
+        references: [
+            0: "テストニュース", 1: "https://example.test/first", 2: "First", 3: "最初の見出し"
+        ]
+    ))
+    _ = try await engine.handle(event: .shiori(
+        id: "OnHeadlinesense.OnFind",
+        references: [
+            0: "テストニュース", 1: "https://example.test/second", 2: "Next", 3: "次の見出し"
+        ]
+    ))
+    let headlineLast = try await engine.handle(event: .shiori(
+        id: "OnHeadlinesense.OnFind",
+        references: [
+            0: "テストニュース", 1: "https://example.test/last", 2: "Last", 3: "最後の見出し"
+        ]
+    ))
+    let rss = try await engine.handle(event: .shiori(
+        id: "OnRSSComplete",
+        references: [
+            0: "テストフィード",
+            1: "https://example.test/",
+            2: "新しい記事\u{1}https://example.test/new\u{1}\u{1}\u{1}新しい概要",
+            3: "前の記事\u{1}https://example.test/previous\u{1}\u{1}\u{1}前の概要"
+        ]
+    ))
+    let rssNoUpdate = try await engine.handle(event: .shiori(
+        id: "OnRSSComplete",
+        references: [0: "no update"]
+    ))
+    let scriptLab = try await engine.handle(event: .shiori(id: "OnRiaChoiceScriptLab", references: [:]))
+    let shellChange = try await engine.handle(event: .shiori(
+        id: "OnShellChanged",
+        references: [0: "テストシェル"]
+    ))
+    let balloonChange = try await engine.handle(event: .shiori(
+        id: "OnBalloonChange",
+        references: [0: "テストバルーン"]
+    ))
+    let communicate = try await engine.handle(event: .shiori(
+        id: "OnCommunicate",
+        references: [0: "こんにちは"]
+    ))
+    let outfitMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceOutfit", references: [:]))
+    let winter = try await engine.handle(event: .shiori(id: "OnRiaChoiceOutfitWinter", references: [:]))
+    let winterRestore = try await engine.handle(event: .shiori(id: "OnSurfaceRestore", references: [:]))
+    let outing = try await engine.handle(event: .shiori(id: "OnRiaChoiceGoWalk", references: [:]))
+    let weatherMenu = try await engine.handle(event: .shiori(id: "OnRiaChoiceWeather", references: [:]))
+    let weather = try await engine.handle(event: .shiori(
+        id: "OnRiaWeatherResult",
+        references: [0: "ok", 1: "61", 2: "18.5", 3: "1"]
+    ))
+    var receivedHeadPetResponse = false
+    for x in 0 ..< 80 {
+        let response = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .move,
+            scope: 0,
+            region: "Head",
+            x: 80 + (x % 20),
+            y: 50
+        )))
+        if response?.rawValue.isEmpty == false {
+            receivedHeadPetResponse = true
+        }
+    }
+    var receivedHairStrokeResponse = false
+    for x in 0 ..< 80 {
+        let response = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .move,
+            scope: 0,
+            region: "Hair",
+            x: 80 + (x % 20),
+            y: 50
+        )))
+        if response?.rawValue.isEmpty == false {
+            receivedHairStrokeResponse = true
+        }
+    }
+    #expect(["\\0\\s[0]\\e", "\\0\\s[10000]\\e", "\\0\\s[20000]\\e"].contains(script?.rawValue))
+    #expect(["もう閉じる", "起動してすぐ閉じる"].contains {
+        quickClose?.rawValue.contains($0) == true
+    })
+    #expect(state?.rawValue.isEmpty == false)
+    #expect(activity?.rawValue.isEmpty == false)
+    #expect(recentMemory?.rawValue.contains("本") == true)
+    #expect(["課題", "短編集", "プレイリスト", "プリン"].contains {
+        lifeEpisode?.rawValue.contains($0) == true
+    })
+    #expect(developerMenu?.rawValue.contains("表示の実験") == true)
+    #expect(outingMenu?.rawValue.contains("本屋") == true)
+    #expect(outingMenu?.rawValue.contains("大学に忘れ物") == true)
+    #expect(idleTalk?.rawValue.isEmpty == false)
+    #expect(secretTalk?.rawValue.contains("隠し") == true)
+    #expect(["\\s[9]", "\\s[10009]"].contains {
+        repeatedBustClick?.rawValue.contains($0) == true
+    })
+    #expect(annoyedState?.rawValue.isEmpty == false)
+    #expect(apology?.rawValue.isEmpty == false)
+    #expect(["機嫌直して", "ごまかそう"].contains {
+        annoyedHeadClick?.rawValue.contains($0) == true
+    })
+    #expect(repeatedApology?.rawValue.contains("言葉より次の行動") == true)
+    #expect(profile?.rawValue.contains("起動回数") == true)
+    #expect(installBegin?.rawValue.isEmpty == false)
+    #expect(installComplete?.rawValue.contains("テストゴースト") == true)
+    #expect(installFailure?.rawValue.contains("展開できなかった") == true)
+    #expect(ghostChanging?.rawValue.contains("テストゴースト") == true)
+    #expect(headlineBegin?.rawValue.contains("テストニュース") == true)
+    #expect(headlineFirst?.rawValue.contains("最初の見出し") == true)
+    #expect(headlineLast?.rawValue.contains("最初の見出し") == true)
+    #expect(headlineLast?.rawValue.contains("https://example.test/first") == true)
+    #expect(headlineLast?.rawValue.contains("次の見出し") == true)
+    #expect(headlineLast?.rawValue.contains("https://example.test/second") == true)
+    #expect(headlineLast?.rawValue.contains("最後の見出し") == true)
+    #expect(headlineLast?.rawValue.contains("https://example.test/last") == true)
+    #expect(rss?.rawValue.contains("新しい記事") == true)
+    #expect(rss?.rawValue.contains("https://example.test/new") == true)
+    #expect(rss?.rawValue.contains("前の記事") == true)
+    #expect(rss?.rawValue.contains("https://example.test/previous") == true)
+    #expect(rssNoUpdate?.rawValue.contains("新しい記事はなかった") == true)
+    #expect(scriptLab?.rawValue.contains("\\_q") == true)
+    #expect(scriptLab?.rawValue.contains("\\_a[OnRiaScriptLabAnchor]") == true)
+    #expect(shellChange?.rawValue.contains("テストシェル") == true)
+    #expect(balloonChange?.rawValue.isEmpty == false)
+    #expect(communicate?.rawValue.contains("こんにちは") == true)
+    #expect(outfitMenu?.rawValue.contains("外出着") == true)
+    #expect(outfitMenu?.rawValue.contains("冬服") == true)
+    #expect(winter?.rawValue.contains("\\s[20000]") == true)
+    #expect(winterRestore?.rawValue == "\\0\\s[20000]\\e")
+    #expect(outing?.rawValue.contains("\\s[-1]") == true)
+    #expect(weatherMenu?.rawValue.contains("\\![execute,weather-get,--async=OnRiaWeatherResult]") == true)
+    #expect(weather?.rawValue.contains("雨") == true)
+    #expect(weather?.rawValue.contains("18.5度") == true)
+    #expect(receivedHeadPetResponse)
+    #expect(receivedHairStrokeResponse)
+    let apologyAfterPet = try await engine.handle(event: .shiori(id: "OnRiaChoiceApology", references: [:]))
+    #expect(apologyAfterPet?.rawValue.contains("言葉より次の行動") == false)
+}
+
+@Test func `installed ria offers a broad random talk pool`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-talk-pool-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+    var talks = Set<String>()
+    for _ in 0 ..< 600 {
+        if let talk = try await engine.handle(event: .randomTalk), !talk.rawValue.isEmpty {
+            talks.insert(talk.rawValue)
+        }
+    }
+
+    #expect(talks.count >= 150)
+    #expect(talks.contains { $0.contains("講義") || $0.contains("課題") })
+    #expect(talks.contains { $0.contains("コード") || $0.contains("テスト") || $0.contains("エラー") })
+    #expect(talks.contains { $0.contains("お兄") })
+}
+
+@Test func `installed ria distinguishes reload and familiar ghost changes`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-ghost-change-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+
+    let reload = try await engine.handle(event: .shiori(
+        id: "OnGhostChanging",
+        references: [0: "りあ", 2: "りあ"]
+    ))
+    let reloadComplete = try await engine.handle(event: .shiori(
+        id: "OnGhostChanged",
+        references: [0: "りあ", 2: "りあ"]
+    ))
+    let emily = try await engine.handle(event: .shiori(
+        id: "OnGhostChanging",
+        references: [0: "Emily", 2: "Emily/Phase4.5"]
+    ))
+    let mayura = try await engine.handle(event: .shiori(
+        id: "OnGhostChanged",
+        references: [0: "まゆら", 2: "まゆらと黒うにゅう"]
+    ))
+
+    #expect(reload?.rawValue.contains("再読み込み") == true)
+    #expect(reloadComplete?.rawValue.contains("再読み込み終わり") == true)
+    #expect(emily?.rawValue.contains("Emily") == true)
+    #expect(mayura?.rawValue.contains("まゆら") == true)
+}
+
+@Test func `installed ria responds to now playing events with track details`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-now-playing-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+    let extended = try await engine.handle(event: .shiori(
+        id: "OnMusicPlayEx",
+        references: [
+            0: "Test Song",
+            1: "Test Artist",
+            2: "album\u{01}Test Album",
+            3: "source\u{01}Spotify"
+        ]
+    ))
+    let legacy = try await engine.handle(event: .shiori(
+        id: "OnMusicPlay",
+        references: [0: "Legacy Song", 1: "Legacy Artist"]
+    ))
+
+    #expect(extended?.rawValue.contains("Test Song") == true)
+    #expect(extended?.rawValue.contains("Test Artist") == true)
+    #expect(extended?.rawValue.contains("Test Album") == true)
+    #expect(extended?.rawValue.contains("Spotify") == true)
+    #expect(legacy?.rawValue.contains("Legacy Song") == true)
+    #expect(legacy?.rawValue.contains("Legacy Artist") == true)
+}
+
+@Test func `installed ria resets pet count after idle or event`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: installedMasterURL.path) else {
+        return
+    }
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-pet-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+
+    // Pet head 7+ times to trigger too-much-pet state
+    var tooMuchPetTriggered = false
+    for _ in 0 ..< 15 {
+        for x in 0 ..< 80 {
+            if let response = try await engine.handle(event: .mouse(GhostMouseEvent(
+                kind: .move,
+                scope: 0,
+                region: "Head",
+                x: 80 + (x % 20),
+                y: 50
+            ))) {
+                if ["撫ですぎ", "十分", "一回離して"].contains(where: { response.rawValue.contains($0) }) {
+                    tooMuchPetTriggered = true
+                }
+                break
+            }
+        }
+        if tooMuchPetTriggered {
+            break
+        }
+    }
+    #expect(tooMuchPetTriggered)
+
+    let stateAfterManyPets = try await engine.handle(event: .shiori(id: "OnRiaChoiceState", references: [:]))
+    #expect(stateAfterManyPets?.rawValue.contains("髪が気になる") == true)
+
+    // Trigger AI talk event (simulates idle elapsed time)
+    _ = try await engine.handle(event: .shiori(id: "OnAITalkNewEvent", references: [4: "600"]))
+
+    let stateAfterReset = try await engine.handle(event: .shiori(id: "OnRiaChoiceState", references: [:]))
+    #expect(stateAfterReset?.rawValue.contains("髪が気になる") == false)
+
+    // Petting again should no longer trigger the too-much-pet response
+    var resetPetResponse = false
+    for _ in 0 ..< 5 {
+        for x in 0 ..< 80 {
+            if let response = try await engine.handle(event: .mouse(GhostMouseEvent(
+                kind: .move,
+                scope: 0,
+                region: "Head",
+                x: 80 + (x % 20),
+                y: 50
+            ))) {
+                if !["撫ですぎ", "十分", "一回離して"].contains(where: { response.rawValue.contains($0) }) {
+                    resetPetResponse = true
+                }
+                break
+            }
+        }
+        if resetPetResponse {
+            break
+        }
+    }
+    #expect(resetPetResponse)
+}
+
+@Test func `native YAYA receives Emily double click and stroke events`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let masterURL = repositoryRoot
+        .appendingPathComponent("Content/Local/Ghosts/emily4/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: masterURL.path) else {
+        return
+    }
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    let doubleClick = try await engine.handle(event: .mouse(GhostMouseEvent(
+        kind: .doubleClick,
+        scope: 0,
+        region: "Head",
+        x: 100,
+        y: 50
+    )))
+    #expect(doubleClick?.rawValue.isEmpty == false)
+
+    var receivedStrokeResponse = false
+    for x in 0 ..< 80 {
+        if let response = try await engine.handle(event: .mouse(GhostMouseEvent(
+            kind: .move,
+            scope: 0,
+            region: "Head",
+            x: 80 + (x % 40),
+            y: 50
+        ))) {
+            receivedStrokeResponse = !response.rawValue.isEmpty
+            break
+        }
+    }
+    #expect(receivedStrokeResponse)
+}
+
+@Test func `native YAYA receives Emily installation events`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let masterURL = repositoryRoot
+        .appendingPathComponent("Content/Local/Ghosts/emily4/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: masterURL.path) else {
+        return
+    }
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    let begin = try await engine.handle(event: .shiori(id: "OnInstallBegin", references: [:]))
+    #expect(begin?.rawValue.isEmpty == false)
+
+    let complete = try await engine.handle(event: .shiori(
+        id: "OnInstallCompleteEx",
+        references: [0: "ghost", 1: "Test Ghost", 2: "test-ghost"]
+    ))
+    #expect(complete?.rawValue.contains("インストール") == true)
+
+    let failure = try await engine.handle(event: .shiori(
+        id: "OnInstallFailure",
+        references: [0: "unsupported"]
+    ))
+    #expect(failure?.rawValue.isEmpty == false)
+}
+
+@Test func `installed ria respects canTalk reference in OnSecondChange`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: installedMasterURL.path) else {
+        return
+    }
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-talkable-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+
+    let silent = try await engine.handle(event: .shiori(
+        id: "OnSecondChange",
+        references: [0: "0", 1: "0", 2: "0", 3: "0"]
+    ))
+    #expect(silent == nil)
+}
+
+@Test func `ria produces a scheduled random talk on a talkable second change`() throws {
+    let master = try makeRiaLifecycleFixture()
+    defer { try? FileManager.default.removeItem(at: master) }
+    let session = try NativeYayaSession(masterDirectoryURL: master)
+    _ = try riaLifecycleRequest(session, id: "OnBoot")
+    _ = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestAITalkDue")
+
+    let talk = try riaLifecycleRequest(session, id: "OnSecondChange", references: [
+        0: "0", 1: "0", 2: "0", 3: "1", 4: "600"
+    ])
+    #expect(talk.value?.isEmpty == false)
+    #expect(talk.value?.contains(#"\0"#) == true)
+    #expect(talk.value?.hasSuffix(#"\e"#) == true)
+}
+
+@Test func `installed ria responds to OnSysSuspend and OnSysResume`() async throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let installedMasterURL = repositoryRoot
+        .appendingPathComponent("Content/Bundled/Ghosts/ria/ghost/master", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: installedMasterURL.path) else {
+        return
+    }
+    let temporaryRoot = FileManager.default.temporaryDirectory.appending(
+        path: "utatane-ria-suspend-resume-test-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: temporaryRoot) }
+    try FileManager.default.createDirectory(at: temporaryRoot, withIntermediateDirectories: true)
+    let masterURL = temporaryRoot.appending(path: "master", directoryHint: .isDirectory)
+    try FileManager.default.copyItem(at: installedMasterURL, to: masterURL)
+
+    let engine = try NativeYayaPersonalityEngine(masterDirectoryURL: masterURL)
+    _ = try await engine.handle(event: .boot)
+
+    let suspend = try await engine.handle(event: .shiori(id: "OnSysSuspend", references: [:]))
+    #expect(suspend != nil)
+    #expect(suspend?.rawValue.isEmpty == false)
+    #expect(suspend?.rawValue.hasSuffix("\\e") == true)
+
+    let resume = try await engine.handle(event: .shiori(id: "OnSysResume", references: [0: "normal"]))
+    #expect(resume != nil)
+    #expect(resume?.rawValue.isEmpty == false)
+    #expect(resume?.rawValue.hasSuffix("\\e") == true)
+}
+
+@Test func `ria first boot initializes her state and speaks`() throws {
+    let master = try makeRiaLifecycleFixture()
+    defer { try? FileManager.default.removeItem(at: master) }
+    let session = try NativeYayaSession(masterDirectoryURL: master)
+    let response = try riaLifecycleRequest(session, id: "OnFirstBoot", references: [0: "0"])
+    #expect(response.value?.contains("りあ。お兄の妹。") == true)
+    let state = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestState")
+    #expect(state.value == "1,0")
+}
+
+@Test(arguments: [("Walk", 120), ("Store", 180), ("Bookstore", 240), ("University", 300)])
+func `ria waits for a talkable tick before returning from an outing`(choice: String, duration: Int) throws {
+    let master = try makeRiaLifecycleFixture()
+    defer { try? FileManager.default.removeItem(at: master) }
+    let session = try NativeYayaSession(masterDirectoryURL: master)
+    _ = try riaLifecycleRequest(session, id: "OnBoot")
+    let departure = try riaLifecycleRequest(session, id: "OnRiaChoiceGo\(choice)")
+    #expect(departure.value?.contains(#"\s[-1]"#) == true)
+    let remaining = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestRemaining")
+    #expect((duration - 2 ... duration).contains(Int(remaining.value ?? "") ?? -1))
+    let early = try riaLifecycleRequest(session, id: "OnSecondChange", references: [3: "1"])
+    #expect(early.value == nil)
+    _ = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestExpire")
+    let busy = try riaLifecycleRequest(session, id: "OnSecondChange", references: [3: "0"])
+    #expect(busy.value == nil)
+    let pending = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestState")
+    #expect(pending.value == "1,1")
+    let returned = try riaLifecycleRequest(session, id: "OnSecondChange", references: [3: "1"])
+    #expect(returned.value?.contains("ただいま") == true || returned.value?.contains("戻った") == true, "Return response: \(String(describing: returned.value))")
+    let home = try riaLifecycleRequest(session, id: "OnRiaLifecycleTestState")
+    #expect(home.value == "1,0")
+    let repeated = try riaLifecycleRequest(session, id: "OnSecondChange", references: [3: "1"])
+    #expect(repeated.value == nil)
+}
+
+private func riaLifecycleRequest(
+    _ session: NativeYayaSession, id: String, references: [Int: String] = [:]
+) throws -> ShioriResponse {
+    let headers = references.sorted { $0.key < $1.key }.map { "Reference\($0.key): \($0.value)\r\n" }.joined()
+    return try ShioriMessageParser.parseResponse(session.request(
+        "GET SHIORI/3.0\r\nCharset: UTF-8\r\nSender: Utatane\r\nID: \(id)\r\n\(headers)\r\n"
+    ))
+}
+
+private func makeRiaLifecycleFixture() throws -> URL {
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let master = FileManager.default.temporaryDirectory.appending(path: "utatane-ria-lifecycle-\(UUID().uuidString)")
+    try FileManager.default.copyItem(at: root.appending(path: "Content/Bundled/Ghosts/ria/ghost/master"), to: master)
+    // Only remove state and private extensions from the temporary copy.
+    for file in ["yaya_variable.cfg", "dic/local.dic"] {
+        let url = master.appending(path: file)
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+    }
+    let lifecycle = master.appending(path: "dic/lifecycle.dic")
+    let fixture = #"""
+
+    OnRiaLifecycleTestState
+    {
+        "%(TOINT(ria_boot_count_saved)),%(TOINT(ria_away))"
+    }
+    OnRiaLifecycleTestRemaining
+    {
+        "%(TOINT(ria_away_until) - GETSECCOUNT())"
+    }
+    OnRiaLifecycleTestExpire
+    {
+        ria_away_until = GETSECCOUNT() - 1
+    }
+    OnRiaLifecycleTestAITalkDue
+    {
+        aitalkinterval = 1
+        SHIORI3FW.LastAITalkTime = GETSECCOUNT() - 2
+        SHIORI3FW.LastTalkTime = GETSECCOUNT() - 10
+        SHIORI3FW.TalkEndTime = GETSECCOUNT() - 10
+        SHIORI3FW.IsAITalkComplete = 0
+    }
+    """#
+    try (String(contentsOf: lifecycle, encoding: .utf8) + fixture).write(to: lifecycle, atomically: true, encoding: .utf8)
+    return master
+}

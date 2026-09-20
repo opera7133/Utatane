@@ -8,7 +8,7 @@ fi
 lua_source=$(cd "$1/src" && pwd)
 sol_include=$(cd "$2/include" && pwd)
 repository=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
-kagari_source="$repository/packages/kagari-native/Vendor/kagari"
+kagari_source="$repository/packages/shiori/native/kagari/Vendor/kagari"
 output_directory=${3:-"$HOME/Library/Application Support/Utatane/NativeShiori/kagari"}
 if ! grep -Eq '^#define LUA_VERSION_NUM[[:space:]]+504$' "$lua_source/lua.h"; then
     echo "Lua 5.4 sources are required." >&2

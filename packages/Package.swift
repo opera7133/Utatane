@@ -162,7 +162,7 @@ let package = Package(
                 "UtataneShiori",
                 "UtataneNetwork"
             ],
-            path: "windows-shiori/Sources"
+            path: "shiori/external/windows/Sources"
         ),
         .target(
             name: "UtatanePOSIXShiori",
@@ -172,7 +172,7 @@ let package = Package(
                 "UtataneSakuraScript",
                 "UtataneShiori"
             ],
-            path: "posix-shiori/Sources"
+            path: "shiori/external/posix/Sources"
         ),
         .target(
             name: "UtatanePlugin",
@@ -181,7 +181,7 @@ let package = Package(
         ),
         .target(
             name: "CKawariNative",
-            path: "kawari-native/Sources/CKawariNative",
+            path: "shiori/native/kawari/Sources/CKawariNative",
             sources: [
                 "KawariBridge.cpp",
                 "Vendor/KAWARI/build/src/shiori/kawari_shiori.cpp",
@@ -238,11 +238,11 @@ let package = Package(
                 "UtataneSakuraScript",
                 "UtataneShiori"
             ],
-            path: "kawari-native/Sources/UtataneKawariNative"
+            path: "shiori/native/kawari/Sources/UtataneKawariNative"
         ),
         .target(
             name: "CYayaNative",
-            path: "yaya-native/Sources/CYayaNative",
+            path: "shiori/native/yaya/Sources/CYayaNative",
             sources: [
                 "YayaBridge.cpp",
                 "Vendor/YAYA/aya5.cpp",
@@ -295,11 +295,11 @@ let package = Package(
                 "UtataneSakuraScript",
                 "UtataneShiori"
             ],
-            path: "yaya-native/Sources/UtataneYayaNative"
+            path: "shiori/native/yaya/Sources/UtataneYayaNative"
         ),
         .target(
             name: "CSatoriNative",
-            path: "satori-native/Sources/CSatoriNative",
+            path: "shiori/native/satori/Sources/CSatoriNative",
             sources: [
                 "SatoriBridge.cpp",
                 "CharsetPOSIX.cpp",
@@ -348,12 +348,12 @@ let package = Package(
                 "UtataneSakuraScript",
                 "UtataneShiori"
             ],
-            path: "satori-native/Sources/UtataneSatoriNative"
+            path: "shiori/native/satori/Sources/UtataneSatoriNative"
         ),
         .target(
             name: "UtataneFirstNative",
             dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript"],
-            path: "first-native/Sources"
+            path: "shiori/native/first/Sources"
         ),
         .target(
             name: "UtataneNativeSaori",
@@ -369,37 +369,37 @@ let package = Package(
                 "UtataneSakuraScript",
                 "UtataneShiori"
             ],
-            path: "misaka-native/Sources"
+            path: "shiori/native/misaka/Sources"
         ),
         .target(
             name: "UtataneAkariNative",
             dependencies: ["UtataneCore", "UtataneNativeSaori", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "akari-native/Sources"
+            path: "shiori/native/akari/Sources"
         ),
         .target(
             name: "UtataneEseShioriNative",
             dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "ese-shiori-native/Sources"
+            path: "shiori/native/ese-shiori/Sources"
         ),
         .target(
             name: "UtataneNiseShioriNative",
             dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "nise-shiori-native/Sources"
+            path: "shiori/native/nise-shiori/Sources"
         ),
         .target(
             name: "UtataneShinoNative",
             dependencies: ["UtataneCore", "UtataneNativeSaori", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "shino-native/Sources"
+            path: "shiori/native/shino/Sources"
         ),
         .target(
             name: "UtataneHisuiNative",
             dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "hisui-native/Sources"
+            path: "shiori/native/hisui/Sources"
         ),
         .target(
             name: "UtataneYuhnaNative",
             dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "yuhna-native/Sources"
+            path: "shiori/native/yuhna/Sources"
         ),
         .testTarget(
             name: "UtataneBalloonTests",
@@ -482,12 +482,12 @@ let package = Package(
         .testTarget(
             name: "UtataneWindowsShioriTests",
             dependencies: ["UtataneWindowsShiori"],
-            path: "windows-shiori/Tests"
+            path: "shiori/external/windows/Tests"
         ),
         .testTarget(
             name: "UtatanePOSIXShioriTests",
             dependencies: ["UtatanePOSIXShiori"],
-            path: "posix-shiori/Tests"
+            path: "shiori/external/posix/Tests"
         ),
         .testTarget(
             name: "UtatanePluginTests",
@@ -497,22 +497,22 @@ let package = Package(
         .testTarget(
             name: "UtataneKawariNativeTests",
             dependencies: ["UtataneCore", "UtataneKawariNative", "UtataneShiori"],
-            path: "kawari-native/Tests"
+            path: "shiori/native/kawari/Tests"
         ),
         .testTarget(
             name: "UtataneYayaNativeTests",
             dependencies: ["UtataneCore", "UtataneShiori", "UtataneYayaNative"],
-            path: "yaya-native/Tests"
+            path: "shiori/native/yaya/Tests"
         ),
         .testTarget(
             name: "UtataneSatoriNativeTests",
             dependencies: ["UtataneCore", "UtataneShiori", "UtataneSatoriNative"],
-            path: "satori-native/Tests"
+            path: "shiori/native/satori/Tests"
         ),
         .testTarget(
             name: "UtataneFirstNativeTests",
             dependencies: ["UtataneFirstNative"],
-            path: "first-native/Tests"
+            path: "shiori/native/first/Tests"
         ),
         .testTarget(
             name: "UtataneNativeSaoriTests",
@@ -522,37 +522,37 @@ let package = Package(
         .testTarget(
             name: "UtataneMisakaNativeTests",
             dependencies: ["UtataneCore", "UtataneMisakaNative", "UtataneNativeSaori", "UtataneShiori"],
-            path: "misaka-native/Tests"
+            path: "shiori/native/misaka/Tests"
         ),
         .testTarget(
             name: "UtataneAkariNativeTests",
             dependencies: ["UtataneAkariNative", "UtataneCore", "UtataneNativeSaori"],
-            path: "akari-native/Tests"
+            path: "shiori/native/akari/Tests"
         ),
         .testTarget(
             name: "UtataneEseShioriNativeTests",
             dependencies: ["UtataneCore", "UtataneEseShioriNative", "UtataneShiori"],
-            path: "ese-shiori-native/Tests"
+            path: "shiori/native/ese-shiori/Tests"
         ),
         .testTarget(
             name: "UtataneNiseShioriNativeTests",
             dependencies: ["UtataneCore", "UtataneNiseShioriNative"],
-            path: "nise-shiori-native/Tests"
+            path: "shiori/native/nise-shiori/Tests"
         ),
         .testTarget(
             name: "UtataneShinoNativeTests",
             dependencies: ["UtataneCore", "UtataneGhostKit", "UtataneShinoNative"],
-            path: "shino-native/Tests"
+            path: "shiori/native/shino/Tests"
         ),
         .testTarget(
             name: "UtataneHisuiNativeTests",
             dependencies: ["UtataneCore", "UtataneHisuiNative"],
-            path: "hisui-native/Tests"
+            path: "shiori/native/hisui/Tests"
         ),
         .testTarget(
             name: "UtataneYuhnaNativeTests",
             dependencies: ["UtataneCore", "UtataneYuhnaNative"],
-            path: "yuhna-native/Tests"
+            path: "shiori/native/yuhna/Tests"
         )
     ],
     swiftLanguageModes: [.v6],

@@ -80,24 +80,17 @@ packages/platform-macos/   サーフェス・バルーン描画、SakuraScript�
 packages/network/          更新、RSS、HEADLINE、SSTP、WebSocket、時刻取得・ネットワーク診断
 packages/ai/               プロバイダー非依存のAI人格エンジン
 packages/realtime/         Realtime APIのSDP接続要求、会話イベント・トランスクリプト処理
-packages/shiori/           SHIORIメッセージとイベント変換
+packages/shiori/           SHIORIメッセージ、外部ローダー、各ネイティブ実装
 packages/makoto/           MAKOTOトランスレータと人格応答への変換処理
 packages/plugin/           プラグイン検出、要求・イベント配送、dylib接続
 packages/native-saori/     ネイティブSHIORI共通のSAORIレジストリ
-packages/yaya-native/      YAYA本体とSwiftブリッジ、AYA互換の読み込み
-packages/satori-native/    SATORI本体とSwiftブリッジ
-packages/kawari-native/    KAWARI本体とSwiftブリッジ
-packages/misaka-native/    MISAKA辞書のSwift実装
-packages/akari-native/     灯のイベント資源、AZR、AMBのSwift実装
-packages/ese-shiori-native/ ese-shiori 3.03辞書の復号とSwift実装
-packages/first-native/     利用者所有のfirst.dllを読む専用人格
-packages/posix-shiori/     macOS外部SHIORIのdylibローダー、SHIOLINK外部プロセス接続
-packages/windows-shiori/   Wine互換ホストとWindows DLLの通信
+packages/shiori/native/    YAYA、SATORI、KAWARIなどのネイティブ人格実装
+packages/shiori/external/  macOS外部SHIORIとWine上のWindows DLLへの接続
 packages/mcp-server/       Utatane操作用のstdio MCPサーバー
-packages/kagari-native/    kagariの上流ソース（Xcodeビルド時にdylibを同梱、SwiftPMターゲットではない）
+packages/shiori/native/kagari/ kagariの上流ソース（Xcodeビルド時にdylibを同梱、SwiftPMターゲットではない）
 ```
 
-`packages/`は[Package.swift](../../packages/Package.swift)を持つ単一のSwift Packageです。機能ごとのディレクトリをTargetとして登録し、依存方向と公開Productをこのファイルで管理します。パーサーや本体処理は各モジュールへ置き、SwiftUIアプリ固有の結線は`apps/Utatane`、再利用するmacOS表示・再生処理は`platform-macos`へ分けます。YAYA、SATORI、KAWARIの上流コードとC/C++ブリッジも、それぞれの`*-native`ディレクトリ内で管理します。
+`packages/`は[Package.swift](../../packages/Package.swift)を持つ単一のSwift Packageです。機能ごとのディレクトリをTargetとして登録し、依存方向と公開Productをこのファイルで管理します。パーサーや本体処理は各モジュールへ置き、SwiftUIアプリ固有の結線は`apps/Utatane`、再利用するmacOS表示・再生処理は`platform-macos`へ分けます。SHIORIの共通電文、ネイティブ実装、外部モジュール接続は`packages/shiori`内で管理します。
 
 周辺のビルド・調査用コードは次の場所にあります。
 

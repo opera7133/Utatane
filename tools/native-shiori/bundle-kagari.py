@@ -15,7 +15,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT_DIRECTORY = Path(__file__).resolve().parent
 DEPENDENCIES_FILE = SCRIPT_DIRECTORY / "kagari-dependencies.json"
-KAGARI = ROOT / "packages/kagari-native/Vendor/kagari"
+KAGARI = ROOT / "packages/shiori/native/kagari/Vendor/kagari"
 LIBRARIES = ("libkagari.dylib", "liblua5.4.dylib")
 
 

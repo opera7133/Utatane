@@ -306,4 +306,4 @@ Utataneは`SHIOLINK.utatane.ini`を`SHIOLINK.INI`より優先します。実行�
 - [汎用モジュールのローダー](../../packages/plugin/Sources/DynamicLibraryPluginTransport.swift)：関数の型、UTF-8、バッファの所有権
 - [外部SHIORIのイベント処理](../../apps/Utatane/Sources/ExternalModuleRuntime.swift)：応答ステータス、SHIORI/2.x再試行
 - [イベントから電文への変換](../../packages/shiori/Sources/GhostEventShioriAdapter.swift)：IDとReference、GET / NOTIFY
-- [SHIOLINK設定](../../packages/posix-shiori/Sources/ShiolinkConfiguration.swift)と[セッション](../../packages/posix-shiori/Sources/ShiolinkSession.swift)：起動・同期・終了
+- [SHIOLINK設定](../../packages/shiori/external/posix/Sources/ShiolinkConfiguration.swift)と[セッション](../../packages/shiori/external/posix/Sources/ShiolinkSession.swift)：起動・同期・終了

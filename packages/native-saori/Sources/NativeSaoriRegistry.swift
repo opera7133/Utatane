@@ -36,6 +36,7 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
     private let lock = NSLock()
     private let baseDirectoryURL: URL
     private let textCopyPasteboardName: String?
+    private let textCopyHandler: (@Sendable (String) -> Void)?
     private let windowController: (any NativeSaoriWindowControlling)?
     private let externalModuleFactory: (@Sendable (URL) -> (any ExternalSaoriModule)?)?
     private var modules: [String: any NativeSaoriModule] = [:]
@@ -44,11 +45,13 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
     public init(
         baseDirectoryURL: URL,
         textCopyPasteboardName: String? = nil,
+        textCopyHandler: (@Sendable (String) -> Void)? = nil,
         windowController: (any NativeSaoriWindowControlling)? = nil,
         externalModuleFactory: (@Sendable (URL) -> (any ExternalSaoriModule)?)? = nil
     ) {
         self.baseDirectoryURL = baseDirectoryURL
         self.textCopyPasteboardName = textCopyPasteboardName
+        self.textCopyHandler = textCopyHandler
         self.windowController = windowController
         self.externalModuleFactory = externalModuleFactory
     }
@@ -65,7 +68,8 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
         case "kenonoke.dll": modules[key] = NativeKeyword(moduleURL: resolvedModuleURL(path))
         case "mciaudior.dll": modules[key] = NativeMciAudioR(baseDirectoryURL: baseDirectoryURL)
         case "wmove.dll": modules[key] = NativeWmove(windowController: windowController)
-        case "textcopy2.dll": modules[key] = NativeTextCopy(pasteboardName: textCopyPasteboardName)
+        case "textcopy2.dll":
+            modules[key] = NativeTextCopy(pasteboardName: textCopyPasteboardName, handler: textCopyHandler)
         default:
             if let moduleURL = safeExternalModuleURL(path),
                let module = externalModuleFactory?(moduleURL)
@@ -235,13 +239,19 @@ private final class NativeKeyword: NativeSaoriModule {
 
 private final class NativeTextCopy: NativeSaoriModule {
     private let pasteboardName: String?
+    private let handler: (@Sendable (String) -> Void)?
 
-    init(pasteboardName: String?) {
+    init(pasteboardName: String?, handler: (@Sendable (String) -> Void)?) {
         self.pasteboardName = pasteboardName
+        self.handler = handler
     }
 
     func call(_ arguments: [String]) -> String {
         guard let text = arguments.first else { return "" }
+        if let handler {
+            handler(text)
+            return arguments.dropFirst().first == "1" ? text : ""
+        }
         let pasteboardName = pasteboardName
         let operation = { @MainActor in
             let pasteboard = pasteboardName.map { NSPasteboard(name: .init($0)) } ?? .general
