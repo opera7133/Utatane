@@ -98,7 +98,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case otherTimerEvent(target: String, milliseconds: Int, repeats: Bool, reflectsResponse: Bool, id: String, arguments: [String])
     case archive(SakuraScriptArchiveCommand)
     case cancelHTTP(url: String?)
-    case inputBox(id: String, timeoutMilliseconds: Int?, initialValue: String)
+    case inputBox(SakuraScriptInputCommand)
     case systemDialog(SakuraScriptSystemDialogCommand)
     case closeSystemDialog(id: String)
     case communicateBox(initialValue: String)
@@ -117,6 +117,59 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case clearAll
     case end
     case unknown(String)
+}
+
+public struct SakuraScriptInputCommand: Sendable, Equatable {
+    public enum Kind: Sendable, Equatable {
+        case text
+        case password
+        case date
+        case slider(minimum: Int, maximum: Int)
+        case time
+        case ipAddress
+    }
+
+    public let kind: Kind
+    public let id: String
+    public let timeoutMilliseconds: Int?
+    public let initialValue: String
+    public let maximumLength: Int?
+    public let references: [String]
+    public let options: [String]
+
+    public init(
+        kind: Kind,
+        id: String,
+        timeoutMilliseconds: Int?,
+        initialValue: String,
+        maximumLength: Int? = nil,
+        references: [String] = [],
+        options: [String] = []
+    ) {
+        self.kind = kind
+        self.id = id
+        self.timeoutMilliseconds = timeoutMilliseconds
+        self.initialValue = initialValue
+        self.maximumLength = maximumLength
+        self.references = references
+        self.options = options
+    }
+
+    public var supplementalValue: String {
+        guard case let .slider(minimum, maximum) = kind else { return "" }
+        return "\(minimum),\(maximum)"
+    }
+
+    public var inputTypeName: String {
+        switch kind {
+        case .text: "inputbox"
+        case .password: "passwordinput"
+        case .date: "dateinput"
+        case .slider: "sliderinput"
+        case .time: "timeinput"
+        case .ipAddress: "ipinput"
+        }
+    }
 }
 
 public enum SakuraScriptComponent: Sendable, Equatable {
@@ -346,6 +399,7 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case changeCalendarSkin(String)
     case updateGhost
     case updateBalloon
+    case updatePlatform
     case vanishByMyself(replacement: String?, asksConfirmation: Bool)
     case headline(String)
     case closeGhost

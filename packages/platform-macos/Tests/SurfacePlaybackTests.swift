@@ -902,8 +902,8 @@ func `runs input box and asynchronous HTTP commands`() async {
         balloonWindowController: BalloonWindowController(positionStore: positionStore)
     )
     var calls: [String] = []
-    player.onInputBox = { id, timeout, initialValue in
-        calls.append("input:\(id):\(timeout ?? -1):\(initialValue)")
+    player.onInputBox = { command in
+        calls.append("input:\(command.id):\(command.timeoutMilliseconds ?? -1):\(command.initialValue)")
         return nil
     }
     player.onHTTP = { request in

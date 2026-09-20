@@ -31,7 +31,12 @@ func `parses initial playback command set`() {
     )
 
     #expect(tokens == [
-        .inputBox(id: "OnNameInput", timeoutMilliseconds: 0, initialValue: "おにいちゃん"),
+        .inputBox(SakuraScriptInputCommand(
+            kind: .text,
+            id: "OnNameInput",
+            timeoutMilliseconds: 0,
+            initialValue: "おにいちゃん"
+        )),
         .http(SakuraScriptHTTPRequest(
             method: "GET",
             url: "https://example.com/feed.json",
@@ -39,6 +44,32 @@ func `parses initial playback command set`() {
             waitsForCompletion: false
         )),
         .weatherGet(eventID: "OnWeather")
+    ])
+}
+
+@Test func `parses specialized input boxes and modern options`() {
+    let tokens = SakuraScriptParser().parse(
+        #"\![open,passwordinput,OnPassword,--timeout=1500,--text=secret,--limit=8,--reference=extra]\![open,dateinput,date,0,2026,9,20]\![open,sliderinput,volume,--text="50,0,100"]\![open,timeinput,time,0,23,45,12]\![open,ipinput,address,0,192,168,0,1]"#
+    )
+
+    #expect(tokens == [
+        .inputBox(.init(
+            kind: .password,
+            id: "OnPassword",
+            timeoutMilliseconds: 1500,
+            initialValue: "secret",
+            maximumLength: 8,
+            references: ["extra"]
+        )),
+        .inputBox(.init(kind: .date, id: "date", timeoutMilliseconds: 0, initialValue: "2026,9,20")),
+        .inputBox(.init(
+            kind: .slider(minimum: 0, maximum: 100),
+            id: "volume",
+            timeoutMilliseconds: nil,
+            initialValue: "50"
+        )),
+        .inputBox(.init(kind: .time, id: "time", timeoutMilliseconds: 0, initialValue: "23,45,12")),
+        .inputBox(.init(kind: .ipAddress, id: "address", timeoutMilliseconds: 0, initialValue: "192,168,0,1"))
     ])
 }
 
@@ -563,7 +594,7 @@ func `parses online user break and sync object controls`() {
 
 @Test
 func `parses content actions`() {
-    #expect(SakuraScriptParser().parse(#"\+\_+\![change,ghost,Ria]\![call,ghost,Emily]\![change,shell,master]\![change,balloon,origin]\![updatebymyself]\![update,balloon]\![execute,headline,recall]"#) == [
+    #expect(SakuraScriptParser().parse(#"\+\_+\![change,ghost,Ria]\![call,ghost,Emily]\![change,shell,master]\![change,balloon,origin]\![updatebymyself]\![update,balloon]\![update,platform]\![execute,headline,recall]"#) == [
         .contentAction(.randomGhost),
         .contentAction(.nextGhost),
         .contentAction(.changeGhost("Ria")),
@@ -572,6 +603,7 @@ func `parses content actions`() {
         .contentAction(.changeBalloon("origin")),
         .contentAction(.updateGhost),
         .contentAction(.updateBalloon),
+        .contentAction(.updatePlatform),
         .contentAction(.headline("recall"))
     ])
 }

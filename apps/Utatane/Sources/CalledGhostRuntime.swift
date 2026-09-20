@@ -1001,37 +1001,48 @@ final class CalledGhostRuntime {
         player.onCloseSystemDialog = { [weak self] id in
             self?.systemDialogController.close(id: id)
         }
-        player.onInputBox = { [weak self] id, timeoutMilliseconds, initialValue in
+        player.onInputBox = { [weak self] command in
             guard let self else { return nil }
             let autocomplete = try? await session.handle(event: .shiori(
                 id: "inputbox.autocomplete",
-                references: [0: "inputbox", 1: id]
+                references: [0: command.inputTypeName, 1: command.id]
             ))
-            guard let value = await textInputWindowController.showPrompt(
-                id: id,
+            let result = await textInputWindowController.showInput(
+                id: command.id,
                 title: String(localized: "文字を入力"),
-                initialValue: initialValue,
+                initialValue: command.initialValue,
+                inputKind: .init(command.kind),
+                maximumLength: command.maximumLength,
                 autocompleteValues: TextInputWindowController.autocompleteValues(
                     from: autocomplete?.rawValue
                 ),
-                actionTitle: String(localized: "OK"),
                 appearance: textInputAppearance(style: .input),
-                timeoutMilliseconds: timeoutMilliseconds
-            ) else {
+                timeoutMilliseconds: command.timeoutMilliseconds
+            )
+            guard case let .submitted(value) = result else {
+                let timedOut = result == .cancelled(timedOut: true)
                 return try? await session.handle(event: .shiori(
                     id: "OnUserInputCancel",
-                    references: [0: id, 1: "close", 2: ""]
+                    references: [0: command.id, 1: timedOut ? "timeout" : "close", 2: ""]
                 ))
             }
-            if id.hasPrefix("On") {
+            if command.id.hasPrefix("On") {
+                var references = [0: value, 1: command.supplementalValue]
+                for (offset, reference) in command.references.enumerated() {
+                    references[offset + 2] = reference
+                }
                 return try? await session.handle(event: .shiori(
-                    id: id,
-                    references: [0: value, 1: ""]
+                    id: command.id,
+                    references: references
                 ))
+            }
+            var references = [0: command.id, 1: value, 2: command.supplementalValue]
+            for (offset, reference) in command.references.enumerated() {
+                references[offset + 3] = reference
             }
             return try? await session.handle(event: .shiori(
                 id: "OnUserInput",
-                references: [0: id, 1: value, 2: ""]
+                references: references
             ))
         }
         player.onCloseInputBox = { [weak self] id in

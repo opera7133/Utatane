@@ -1,9 +1,35 @@
 import AppKit
 import SwiftUI
 import UtataneBalloon
+import UtataneSakuraScript
 
 @MainActor
 public final class TextInputWindowController: NSObject, NSWindowDelegate {
+    public enum InputKind: Sendable, Equatable {
+        case text
+        case password
+        case date
+        case slider(minimum: Int, maximum: Int)
+        case time
+        case ipAddress
+
+        public init(_ kind: SakuraScriptInputCommand.Kind) {
+            switch kind {
+            case .text: self = .text
+            case .password: self = .password
+            case .date: self = .date
+            case let .slider(minimum, maximum): self = .slider(minimum: minimum, maximum: maximum)
+            case .time: self = .time
+            case .ipAddress: self = .ipAddress
+            }
+        }
+    }
+
+    public enum InputResult: Sendable, Equatable {
+        case submitted(String)
+        case cancelled(timedOut: Bool)
+    }
+
     public struct Appearance: Sendable, Equatable {
         public let fontName: String?
         public let fontHeight: Int
@@ -33,6 +59,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         public let title: String
         public let prompt: String?
         public let initialValue: String
+        public let inputKind: InputKind
+        public let maximumLength: Int?
         public let autocompleteValues: [String]
         public let placeholder: String?
         public let actionTitle: String
@@ -46,6 +74,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             title: String,
             prompt: String? = nil,
             initialValue: String = "",
+            inputKind: InputKind = .text,
+            maximumLength: Int? = nil,
             autocompleteValues: [String] = [],
             placeholder: String? = nil,
             actionTitle: String = String(localized: "OK"),
@@ -58,6 +88,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             self.title = title
             self.prompt = prompt
             self.initialValue = initialValue
+            self.inputKind = inputKind
+            self.maximumLength = maximumLength
             self.autocompleteValues = autocompleteValues
             self.placeholder = placeholder
             self.actionTitle = actionTitle
@@ -71,6 +103,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
     private var window: NSWindow?
     private var currentRequest: Request?
     private var timeoutTask: Task<Void, Never>?
+    private var timeoutHandler: (@MainActor () -> Void)?
 
     override public init() {
         super.init()
@@ -159,6 +192,43 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    public func showInput(
+        id: String,
+        title: String,
+        initialValue: String,
+        inputKind: InputKind,
+        maximumLength: Int?,
+        autocompleteValues: [String],
+        appearance: Appearance?,
+        timeoutMilliseconds: Int?
+    ) async -> InputResult {
+        await withCheckedContinuation { continuation in
+            show(Request(
+                id: id,
+                title: title,
+                initialValue: initialValue,
+                inputKind: inputKind,
+                maximumLength: maximumLength,
+                autocompleteValues: autocompleteValues,
+                appearance: appearance,
+                onCommit: { value in continuation.resume(returning: .submitted(value)) },
+                onCancel: { continuation.resume(returning: .cancelled(timedOut: false)) }
+            ))
+            if let timeoutMilliseconds, timeoutMilliseconds > 0 {
+                timeoutHandler = {
+                    continuation.resume(returning: .cancelled(timedOut: true))
+                }
+                timeoutTask = Task { [weak self] in
+                    try? await Task.sleep(for: .milliseconds(timeoutMilliseconds))
+                    guard !Task.isCancelled, let self else { return }
+                    let handler = timeoutHandler
+                    closeCurrentWindow(invokeCancel: false)
+                    handler?()
+                }
+            }
+        }
+    }
+
     public static func autocompleteValues(from value: String?) -> [String] {
         guard let value else { return [] }
         var seen = Set<String>()
@@ -193,6 +263,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
     private func closeCurrentWindow(invokeCancel: Bool) {
         timeoutTask?.cancel()
         timeoutTask = nil
+        timeoutHandler = nil
         let request = currentRequest
         currentRequest = nil
         if let window {
@@ -207,6 +278,9 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
 
     public func windowWillClose(_: Notification) {
         if let request = currentRequest {
+            timeoutTask?.cancel()
+            timeoutTask = nil
+            timeoutHandler = nil
             currentRequest = nil
             window = nil
             request.onCancel?()
@@ -219,6 +293,8 @@ private struct TextInputDialogView: View {
     let onCommit: (String) -> Void
     let onCancel: () -> Void
     @State private var text: String
+    @State private var dateValue: Date
+    @State private var sliderValue: Double
     @FocusState private var isFocused: Bool
 
     init(
@@ -230,6 +306,8 @@ private struct TextInputDialogView: View {
         self.onCommit = onCommit
         self.onCancel = onCancel
         _text = State(initialValue: request.initialValue)
+        _dateValue = State(initialValue: Self.initialDate(for: request))
+        _sliderValue = State(initialValue: Double(request.initialValue) ?? 0)
     }
 
     var body: some View {
@@ -242,7 +320,31 @@ private struct TextInputDialogView: View {
                         .foregroundStyle(.secondary)
                 }
                 Group {
-                    if request.autocompleteValues.isEmpty {
+                    switch request.inputKind {
+                    case .password:
+                        SecureField(request.placeholder ?? "", text: $text)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($isFocused)
+                            .onSubmit { onCommit(submittedValue) }
+                    case .date:
+                        DatePicker("", selection: $dateValue, displayedComponents: .date)
+                            .labelsHidden()
+                    case .time:
+                        DatePicker("", selection: $dateValue, displayedComponents: .hourAndMinute)
+                            .labelsHidden()
+                    case let .slider(minimum, maximum):
+                        HStack {
+                            Slider(
+                                value: $sliderValue,
+                                in: Double(minimum) ... Double(max(maximum, minimum + 1)),
+                                step: 1
+                            )
+                            Text(String(Int(sliderValue.rounded())))
+                                .monospacedDigit()
+                                .frame(minWidth: 64, alignment: .trailing)
+                        }
+                    case .text where request.autocompleteValues.isEmpty,
+                         .ipAddress where request.autocompleteValues.isEmpty:
                         TextField(
                             request.placeholder ?? "",
                             text: $text
@@ -250,9 +352,9 @@ private struct TextInputDialogView: View {
                         .textFieldStyle(.roundedBorder)
                         .focused($isFocused)
                         .onSubmit {
-                            onCommit(text)
+                            onCommit(submittedValue)
                         }
-                    } else {
+                    default:
                         AutocompleteTextField(
                             text: $text,
                             placeholder: request.placeholder ?? "",
@@ -263,7 +365,7 @@ private struct TextInputDialogView: View {
                                 request.appearance?.fontColor ?? BalloonColor(red: 0, green: 0, blue: 0)
                             ),
                             backgroundColor: request.appearance?.backgroundColor.map(nsColor),
-                            onCommit: onCommit
+                            onCommit: { _ in onCommit(submittedValue) }
                         )
                     }
                 }
@@ -278,7 +380,7 @@ private struct TextInputDialogView: View {
                     }
                     Spacer()
                     Button(request.actionTitle) {
-                        onCommit(text)
+                        onCommit(submittedValue)
                     }
                     .keyboardShortcut(.defaultAction)
                 }
@@ -291,6 +393,56 @@ private struct TextInputDialogView: View {
         .onAppear {
             isFocused = true
         }
+        .onChange(of: text) { _, value in
+            if let limit = request.maximumLength, limit >= 0, value.count > limit {
+                text = String(value.prefix(limit))
+            }
+            if request.inputKind == .ipAddress {
+                let filtered = value.filter { $0.isNumber || $0 == "." || $0 == "," }
+                if filtered != value {
+                    text = filtered
+                }
+            }
+        }
+    }
+
+    private var submittedValue: String {
+        let calendar = Calendar(identifier: .gregorian)
+        switch request.inputKind {
+        case .date:
+            let parts = calendar.dateComponents([.year, .month, .day], from: dateValue)
+            return "\(parts.year ?? 0),\(parts.month ?? 0),\(parts.day ?? 0)"
+        case .time:
+            let parts = calendar.dateComponents([.hour, .minute, .second], from: dateValue)
+            return "\(parts.hour ?? 0),\(parts.minute ?? 0),\(parts.second ?? 0)"
+        case .slider:
+            return String(Int(sliderValue.rounded()))
+        case .ipAddress:
+            return text.replacingOccurrences(of: ".", with: ",")
+        case .text, .password:
+            return text
+        }
+    }
+
+    private static func initialDate(for request: TextInputWindowController.Request) -> Date {
+        let values = request.initialValue.split(separator: ",").compactMap { Int($0) }
+        var components = Calendar(identifier: .gregorian).dateComponents(
+            [.year, .month, .day, .hour, .minute, .second],
+            from: Date()
+        )
+        switch request.inputKind {
+        case .date where values.count >= 3:
+            components.year = values[0]
+            components.month = values[1]
+            components.day = values[2]
+        case .time where values.count >= 2:
+            components.hour = values[0]
+            components.minute = values[1]
+            components.second = values.count >= 3 ? values[2] : 0
+        default:
+            break
+        }
+        return Calendar(identifier: .gregorian).date(from: components) ?? Date()
     }
 
     @ViewBuilder

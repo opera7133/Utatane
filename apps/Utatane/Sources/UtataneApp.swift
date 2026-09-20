@@ -2251,37 +2251,48 @@ private struct UtataneRootView: View {
             scriptPlayer.onCloseSystemDialog = { id in
                 systemDialogController.close(id: id)
             }
-            scriptPlayer.onInputBox = { id, timeoutMilliseconds, initialValue in
+            scriptPlayer.onInputBox = { command in
                 guard let activeSession = session else { return nil }
                 let autocomplete = try? await activeSession.handle(event: .shiori(
                     id: "inputbox.autocomplete",
-                    references: [0: "inputbox", 1: id]
+                    references: [0: command.inputTypeName, 1: command.id]
                 ))
-                guard let value = await textInputWindowController.showPrompt(
-                    id: id,
+                let result = await textInputWindowController.showInput(
+                    id: command.id,
                     title: String(localized: "文字を入力"),
-                    initialValue: initialValue,
+                    initialValue: command.initialValue,
+                    inputKind: .init(command.kind),
+                    maximumLength: command.maximumLength,
                     autocompleteValues: TextInputWindowController.autocompleteValues(
                         from: autocomplete?.rawValue
                     ),
-                    actionTitle: String(localized: "OK"),
                     appearance: textInputAppearance(style: .input),
-                    timeoutMilliseconds: timeoutMilliseconds
-                ) else {
+                    timeoutMilliseconds: command.timeoutMilliseconds
+                )
+                guard case let .submitted(value) = result else {
+                    let timedOut = result == .cancelled(timedOut: true)
                     return try? await activeSession.handle(event: .shiori(
                         id: "OnUserInputCancel",
-                        references: [0: id, 1: "close", 2: ""]
+                        references: [0: command.id, 1: timedOut ? "timeout" : "close", 2: ""]
                     ))
                 }
-                if id.hasPrefix("On") {
+                if command.id.hasPrefix("On") {
+                    var references = [0: value, 1: command.supplementalValue]
+                    for (offset, reference) in command.references.enumerated() {
+                        references[offset + 2] = reference
+                    }
                     return try? await activeSession.handle(event: .shiori(
-                        id: id,
-                        references: [0: value, 1: ""]
+                        id: command.id,
+                        references: references
                     ))
+                }
+                var references = [0: command.id, 1: value, 2: command.supplementalValue]
+                for (offset, reference) in command.references.enumerated() {
+                    references[offset + 3] = reference
                 }
                 return try? await activeSession.handle(event: .shiori(
                     id: "OnUserInput",
-                    references: [0: id, 1: value, 2: ""]
+                    references: references
                 ))
             }
             scriptPlayer.onCloseInputBox = { id in
@@ -3507,6 +3518,8 @@ private struct UtataneRootView: View {
             Task { await updateCurrentGhost(reason: "script") }
         case .updateBalloon:
             Task { await updateCurrentBalloon() }
+        case .updatePlatform:
+            appUpdater.checkForUpdates()
         case let .vanishByMyself(replacement, asksConfirmation):
             requestSelfVanish(
                 calledRuntime: calledRuntime,

@@ -139,7 +139,7 @@ public final class SakuraScriptPlayer {
     public var onTranslate: (@MainActor (SakuraScript, SakuraScriptPlaybackContext) async -> SakuraScript?)?
     public var onTalkPlayback: (@MainActor (SakuraScriptTalkPhase, SakuraScript, SakuraScriptPlaybackContext) -> Void)?
     public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
-    public var onInputBox: (@MainActor (String, Int?, String) async -> SakuraScript?)?
+    public var onInputBox: (@MainActor (SakuraScriptInputCommand) async -> SakuraScript?)?
     public var onSystemDialog: (@MainActor (SakuraScriptSystemDialogCommand) async -> SakuraScript?)?
     public var onCloseSystemDialog: (@MainActor (String) -> Void)?
     public var onHTTP: (@MainActor (SakuraScriptHTTPRequest) async -> SakuraScript?)?
@@ -1487,8 +1487,8 @@ public final class SakuraScriptPlayer {
                     balloonWindowController.resetWindowPositions()
                 case .resetBalloonPositions:
                     balloonWindowController.resetWindowPositions()
-                case let .inputBox(id, timeoutMilliseconds, initialValue):
-                    if let response = await onInputBox?(id, timeoutMilliseconds, initialValue) {
+                case let .inputBox(command):
+                    if let response = await onInputBox?(command) {
                         pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
                     }
                 case let .systemDialog(command):

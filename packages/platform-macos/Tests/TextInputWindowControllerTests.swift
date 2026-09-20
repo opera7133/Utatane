@@ -80,6 +80,24 @@ struct TextInputWindowControllerTests {
     }
 
     @Test
+    func `reports timeout separately for SakuraScript input`() async {
+        let controller = TextInputWindowController()
+
+        let result = await controller.showInput(
+            id: "timed-script-input",
+            title: "テスト入力",
+            initialValue: "",
+            inputKind: .text,
+            maximumLength: nil,
+            autocompleteValues: [],
+            appearance: nil,
+            timeoutMilliseconds: 10
+        )
+
+        #expect(result == .cancelled(timedOut: true))
+    }
+
+    @Test
     func `parses autocomplete values separated by byte one`() {
         let values = TextInputWindowController.autocompleteValues(
             from: "apple\u{1}banana\u{1}apple\u{1}\u{1}cherry"

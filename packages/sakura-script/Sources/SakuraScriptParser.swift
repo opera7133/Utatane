@@ -1037,6 +1037,7 @@ public struct SakuraScriptParser: Sendable {
                         switch arguments[1].lowercased() {
                         case "ghost": tokens.append(.contentAction(.updateGhost))
                         case "balloon": tokens.append(.contentAction(.updateBalloon))
+                        case "platform": tokens.append(.contentAction(.updatePlatform))
                         default: tokens.append(.unknown("\\![\(argument)]"))
                         }
                     } else if arguments.count >= 3,
@@ -1250,11 +1251,7 @@ public struct SakuraScriptParser: Sendable {
                               arguments[0].lowercased() == "open",
                               ["inputbox", "passwordinput", "dateinput", "sliderinput", "timeinput", "ipinput"].contains(arguments[1].lowercased())
                     {
-                        tokens.append(.inputBox(
-                            id: arguments[2],
-                            timeoutMilliseconds: arguments.count >= 4 ? Int(arguments[3]) : nil,
-                            initialValue: arguments.count >= 5 ? arguments[4] : ""
-                        ))
+                        tokens.append(.inputBox(Self.inputCommand(arguments: arguments)))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "execute",
                               ["http-get", "http-post", "http-head", "http-put", "http-delete", "http-patch", "http-options", "rss-get", "rss-post", "ical-get", "ical-post"]
@@ -1469,6 +1466,63 @@ public struct SakuraScriptParser: Sendable {
         }
         guard let value = Double(number), value.isFinite else { return nil }
         return SakuraScriptBalloonCoordinate(value: value, isRelative: isRelative, unit: unit)
+    }
+
+    private static func inputCommand(arguments: [String]) -> SakuraScriptInputCommand {
+        let type = arguments[1].lowercased()
+        let optionStart = arguments.firstIndex { $0.hasPrefix("--") } ?? arguments.endIndex
+        let positional = Array(arguments[..<optionStart])
+        let options = Array(arguments[optionStart...])
+        let timeout = optionValue("timeout", in: options).flatMap(Int.init)
+            ?? positional.dropFirst(3).first.flatMap(Int.init)
+        let optionText = optionValue("text", in: options)
+
+        let kind: SakuraScriptInputCommand.Kind
+        let initialValue: String
+        switch type {
+        case "passwordinput":
+            kind = .password
+            initialValue = optionText ?? positional.dropFirst(4).first ?? ""
+        case "dateinput":
+            kind = .date
+            initialValue = optionText ?? positional.dropFirst(4).prefix(3).joined(separator: ",")
+        case "sliderinput":
+            let values = (optionText ?? positional.dropFirst(4).prefix(3).joined(separator: ","))
+                .split(separator: ",", omittingEmptySubsequences: false)
+                .map(String.init)
+            let current = values.dropFirst(0).first.flatMap(Int.init) ?? 0
+            let minimum = values.dropFirst(1).first.flatMap(Int.init) ?? 0
+            let maximum = values.dropFirst(2).first.flatMap(Int.init) ?? 100
+            kind = .slider(minimum: min(minimum, maximum), maximum: max(minimum, maximum))
+            initialValue = String(min(max(current, min(minimum, maximum)), max(minimum, maximum)))
+        case "timeinput":
+            kind = .time
+            initialValue = optionText ?? positional.dropFirst(4).prefix(3).joined(separator: ",")
+        case "ipinput":
+            kind = .ipAddress
+            initialValue = optionText ?? positional.dropFirst(4).prefix(4).joined(separator: ",")
+        default:
+            kind = .text
+            initialValue = optionText ?? positional.dropFirst(4).first ?? ""
+        }
+
+        return SakuraScriptInputCommand(
+            kind: kind,
+            id: arguments[2],
+            timeoutMilliseconds: timeout,
+            initialValue: initialValue,
+            maximumLength: optionValue("limit", in: options).flatMap(Int.init),
+            references: optionValues("reference", in: options),
+            options: options.compactMap { optionValue("option", in: [$0]) }
+        )
+    }
+
+    private static func optionValues(_ name: String, in options: [String]) -> [String] {
+        let prefix = "--\(name.lowercased())="
+        return options.compactMap { option in
+            guard option.lowercased().hasPrefix(prefix) else { return nil }
+            return String(option.dropFirst(prefix.count))
+        }
     }
 
     private static func optionValue(_ name: String, in options: [String]) -> String? {

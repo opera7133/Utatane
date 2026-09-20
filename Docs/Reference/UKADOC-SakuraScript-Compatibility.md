@@ -26,7 +26,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 調査日: 2026-09-20
 UKADOC掲載構文数: 359
 UKADOC分類行数: 143
-調査結果: ✅ 88 / 🟡 49 / ❌ 0 / ➖ 6
+調査結果: ✅ 91 / 🟡 46 / ❌ 0 / ➖ 6
 
 ### 基本仕様
 
@@ -143,7 +143,7 @@ UKADOC分類行数: 143
 | `\e` | ✅ | 再生終了 |
 | `\-` | ✅ | ゴーストの終了処理を実行（呼び出しゴーストはdismiss、メインゴーストはアプリ終了）。Player・App経路で確認 |
 | `\a` | ✅ | `OnAITalk` イベントを発生 |
-| update / updatebymyself / updateother | 🟡 | `updatebymyself`、`update,ghost`、`update,balloon`を既存更新機能へ接続。platform・updateother・全オプションは未対応 |
+| update / updatebymyself / updateother | 🟡 | `updatebymyself`、`update,ghost`、`update,balloon`を既存コンテンツ更新へ、`update,platform`をSparkleの本体更新確認へ接続。shell・複数対象・updateother・全オプションは未対応 |
 | `\6`, `\7`, SNTP | 🟡 | `\7`／`\![executesntp]`によるHTTP Date時刻取得とSNTPイベント、`\6`の補正要求経路を実装。macOS通常権限でのシステム時刻補正は未接続 |
 | `\![biff(,アカウント名)]` | ✅ | 本体設定のPOP3アカウントでメールを確認し、開始・成功・新着・失敗イベントを通知。パスワードはmacOS Keychainへ保存 |
 | `\![execute,headline,...]` | ✅ | 名前またはディレクトリ名で既存RSS／HEADLINEセンサーを実行 |
@@ -158,8 +158,8 @@ UKADOC分類行数: 143
 | otherghosttalk / othersurfacechange | ✅ | `\![set,otherghosttalk,true|false|before|after]`と`\![set,othersurfacechange,true|false]`で、呼び出し中ゴースト間の通知を制御 |
 | `\![raise,...]` | ✅ | SHIORIイベントを発生させ、元スクリプトの残りを破棄して応答スクリプトへ切り替えます |
 | `\![embed,...]` | ✅ | SHIORIイベントの戻り値を現在の再生列へ埋め込みます |
-| timerraise / raiseother / timerraiseother | 🟡 | `timerraise`、`raiseother`、`timerraiseother`に対応。他ゴーストは名前指定と全ゴースト指定が可能。プラグイン宛は未対応 |
-| notify / timernotify / timernotifyother | 🟡 | 自ゴーストへの`notify`・`timernotify`と`notifyother`・`timernotifyother`に対応し、SHIORI応答は表示しません。プラグイン宛は未対応 |
+| timerraise / raiseother / timerraiseother | ✅ | `timerraise`、`raiseother`、`timerraiseother`に対応。他ゴーストは名前指定と全ゴースト指定が可能。遅延・反復・キャンセルとraise応答再生をテストで確認 |
+| notify / timernotify / timernotifyother | ✅ | 自ゴーストへの`notify`・`timernotify`と`notifyother`・`timernotifyother`に対応し、SHIORI応答は表示しません。遅延・反復・キャンセルをテストで確認 |
 | timerraiseplugin / timernotifyplugin | ✅ | プラグインごと・イベント名ごとの遅延、反復、0ミリ秒指定によるキャンセル、raise応答再生に対応 |
 
 ### サウンド
@@ -175,8 +175,8 @@ UKADOC分類行数: 143
 | `\j[ID]`, `\![open,browser,...]` | 🟡 | メイン／呼び出しゴーストともHTTP・HTTPSを既定ブラウザで開きます。`file:`・`mailto:`は未対応 |
 | mailer / addressbar / editor / explorer | ➖ | macOSでの代替と安全境界が必要 |
 | teachbox / communicatebox | ✅ | `\![open,communicatebox,初期値]` / `\![open,teachbox,初期値]` に対応し、入力値を `OnCommunicate` / `OnTeach` イベントとして SHIORI へ通知 |
-| `\![open,inputbox,...]` | 🟡 | ID、timeout、初期値を解析し、入力値を指定されたIDのSHIORIイベントへ `Reference0` として返します。timeoutの実動作と全オプションは未対応 |
-| password/date/slider/time/ip input | 🟡 | inputbox互換の入力プロンプトとして受付 |
+| `\![open,inputbox,...]` | 🟡 | 旧形式と`--timeout`・`--text`・`--limit`・`--reference`を解析。時間切れと手動closeを区別し、入力値・補足・追加Referenceを指定イベントへ返します。noclose／noclearとballoon画像指定は未対応 |
+| password/date/slider/time/ip input | ✅ | パスワード欄、DatePicker、Slider、時刻選択、IPv4入力を使い、各形式のReference値を返します。旧形式と`--text`形式をParserテストで確認 |
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
 | configuration / 各explorer / graph / calendar | 🟡 | `\![open,configurationdialog]`で設定画面、`ghostexplorer`／`shellexplorer`／`balloonexplorer`／`headlinesensorexplorer`／`pluginexplorer`で共通コンテンツエクスプローラ、`calendar`でカレンダーを開きます。graphとdressup explorerは未実装 |
 | help / messenger / readme / terms / file | ✅ | `terms`はterms.txtをダイアログ表示して同意・拒否イベントを通知。`messenger`、`readme`、`help`、`file`、`folder`も対応 |
@@ -255,7 +255,7 @@ SakuraScript以外の仕様について、対応を進める領域をまとめ�
 
 ## 優先順位案
 
-1. anim add/text、入力ダイアログ、updateなど、実在ゴーストで使われる🟡を優先して埋める。
+1. anim add/text、updateなど、実在ゴーストで使われる🟡を優先して埋める。
 2. HTTP・RSS・iCalendar・Property Systemの未対応オプションを実データで確認する。
 3. MenuBarアイコンのアニメーションなど、macOSで代替できるSSP固有UIを仕上げる。
 4. Windows DLLを前提とする機能は、外部ホストまたはmacOSネイティブAPIの仕様を決めてから実装します。
