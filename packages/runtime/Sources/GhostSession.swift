@@ -8,7 +8,7 @@ public actor GhostSession {
         case stopped
     }
 
-    private let personalityEngine: any PersonalityEngine
+    private var personalityEngine: (any PersonalityEngine)?
     private let variableStore: GhostVariableStore?
     private let logStore: AppLogStore?
     private let ghostName: String?
@@ -46,7 +46,7 @@ public actor GhostSession {
     }
 
     public func response(for event: GhostEvent) async throws -> PersonalityResponse? {
-        guard state == .running else { return nil }
+        guard state == .running, let personalityEngine else { return nil }
         logRequest(event)
         do {
             let response = try await personalityEngine.response(for: event)
@@ -61,6 +61,7 @@ public actor GhostSession {
     public func stop(reason: GhostStopReason = .close) async throws -> SakuraScript? {
         guard state == .running else { return nil }
         state = .stopped
+        guard let personalityEngine else { return nil }
         let events: (primary: GhostEvent, fallback: GhostEvent?) = switch reason {
         case .close:
             (.close, nil)
@@ -114,7 +115,23 @@ public actor GhostSession {
     public func shutdown() async {
         guard state == .running else { return }
         state = .stopped
+        await personalityEngine?.shutdown()
+        personalityEngine = nil
+    }
+
+    public var isPersonalityEngineLoaded: Bool {
+        personalityEngine != nil
+    }
+
+    public func unloadPersonalityEngine() async {
+        guard state == .running, let personalityEngine else { return }
+        self.personalityEngine = nil
         await personalityEngine.shutdown()
+    }
+
+    public func loadPersonalityEngine(_ personalityEngine: any PersonalityEngine) {
+        guard state == .running, self.personalityEngine == nil else { return }
+        self.personalityEngine = personalityEngine
     }
 
     public func variable(forKey key: String) async throws -> String? {
@@ -126,6 +143,7 @@ public actor GhostSession {
     }
 
     private func handleLogged(event: GhostEvent) async throws -> SakuraScript? {
+        guard let personalityEngine else { return nil }
         logRequest(event)
         do {
             let script = try await personalityEngine.handle(event: event)

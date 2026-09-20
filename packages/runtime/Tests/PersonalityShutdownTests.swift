@@ -40,4 +40,23 @@ struct PersonalityShutdownTests {
         _ = try await session.stop()
         #expect(await engine.shutdowns == 1)
     }
+
+    @Test
+    func `session can unload and load its personality engine while running`() async throws {
+        let first = Engine(fails: false)
+        let second = Engine(fails: false)
+        let session = GhostSession(personalityEngine: first)
+        _ = try await session.start()
+
+        await session.unloadPersonalityEngine()
+        #expect(await first.shutdowns == 1)
+        #expect(await session.isPersonalityEngineLoaded == false)
+        #expect(try await session.handle(event: .randomTalk) == nil)
+
+        await session.loadPersonalityEngine(second)
+        #expect(await session.isPersonalityEngineLoaded)
+        _ = try await session.handle(event: .randomTalk)
+        await session.shutdown()
+        #expect(await second.shutdowns == 1)
+    }
 }

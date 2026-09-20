@@ -301,6 +301,15 @@ public final class SurfaceWindowController {
         return .submenu(title: title, items: categories)
     }
 
+    @discardableResult
+    public func showDressupExplorer(scope: Int = 0) -> Bool {
+        guard case let .submenu(_, categories)? = dressupContextMenuItem(title: "") else {
+            return false
+        }
+        let menu = SurfaceContextMenuBuilder().build(from: categories)
+        return (characters[scope] ?? characters.values.first)?.popUp(menu: menu) ?? false
+    }
+
     public func setPlacement(locksToDesktopBottom: Bool, keepsOnScreen: Bool) {
         self.locksToDesktopBottom = locksToDesktopBottom
         self.keepsOnScreen = keepsOnScreen
@@ -1076,6 +1085,16 @@ private final class CharacterSurfaceController {
 
     var renderedImage: NSImage? {
         imageView?.image
+    }
+
+    func popUp(menu: NSMenu) -> Bool {
+        guard let imageView else { return false }
+        menu.popUp(
+            positioning: nil,
+            at: NSPoint(x: imageView.bounds.midX, y: imageView.bounds.midY),
+            in: imageView
+        )
+        return true
     }
 
     var isImageAnimationEnabled: Bool {

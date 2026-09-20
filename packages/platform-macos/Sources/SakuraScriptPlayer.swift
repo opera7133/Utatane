@@ -167,6 +167,8 @@ public final class SakuraScriptPlayer {
     public var onOtherSurfaceChangeNotificationsChange: (@MainActor (Bool) -> Void)?
     public var onOpen: (@MainActor (String) -> Void)?
     public var onContentAction: (@MainActor (SakuraScriptContentAction) -> Void)?
+    public var onComponentLifecycle: (@MainActor (SakuraScriptComponent, Bool) async -> Void)?
+    public var onShioriDebugMode: (@MainActor (Bool) -> Void)?
     public var onOtherEvent: (@MainActor (String, String, [String], Bool) async -> Void)?
     public var onPluginEvent: (@MainActor (String, String, [String], Bool) async -> SakuraScript?)?
     public var onDialogueContent: (@MainActor () -> Void)?
@@ -1373,6 +1375,16 @@ public final class SakuraScriptPlayer {
                         arguments: arguments,
                         balloon: balloon
                     )
+                case let .pluginTimerEvent(target, milliseconds, repeats, reflectsResponse, id, arguments):
+                    schedulePluginEventTimer(
+                        target: target,
+                        milliseconds: milliseconds,
+                        repeats: repeats,
+                        reflectsResponse: reflectsResponse,
+                        id: id,
+                        arguments: arguments,
+                        balloon: balloon
+                    )
                 case let .stayOnTop(stayOnTop):
                     surfaceWindowController.setStayOnTop(stayOnTop)
                     balloonWindowController.setStayOnTop(stayOnTop)
@@ -1466,6 +1478,10 @@ public final class SakuraScriptPlayer {
                     }
                 case let .contentAction(action):
                     onContentAction?(action)
+                case let .componentLifecycle(component, loads):
+                    await onComponentLifecycle?(component, loads)
+                case let .shioriDebugMode(enabled):
+                    onShioriDebugMode?(enabled)
                 case .resetWindowPositions:
                     surfaceWindowController.resetWindowPositions()
                     balloonWindowController.resetWindowPositions()
@@ -1643,6 +1659,37 @@ public final class SakuraScriptPlayer {
                 }
                 guard let self, !Task.isCancelled else { return }
                 await onOtherEvent?(target, id, arguments, reflectsResponse)
+            } while repeats && !Task.isCancelled
+            self?.eventTimers[timerKey] = nil
+        }
+    }
+
+    private func schedulePluginEventTimer(
+        target: String,
+        milliseconds: Int,
+        repeats: Bool,
+        reflectsResponse: Bool,
+        id: String,
+        arguments: [String],
+        balloon: BalloonDefinition
+    ) {
+        let timerKey = "plugin:\(target):\(id)"
+        eventTimers[timerKey]?.cancel()
+        eventTimers[timerKey] = nil
+        guard milliseconds > 0 else { return }
+        eventTimers[timerKey] = Task { [weak self] in
+            repeat {
+                do {
+                    try await Task.sleep(for: .milliseconds(milliseconds))
+                } catch {
+                    return
+                }
+                guard let self, !Task.isCancelled else { return }
+                if let response = await onPluginEvent?(target, id, arguments, reflectsResponse),
+                   reflectsResponse
+                {
+                    play(response, balloon: balloon)
+                }
             } while repeats && !Task.isCancelled
             self?.eventTimers[timerKey] = nil
         }

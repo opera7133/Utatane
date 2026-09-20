@@ -71,12 +71,15 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case open(String)
     case sound(SakuraScriptSoundCommand)
     case contentAction(SakuraScriptContentAction)
+    case componentLifecycle(component: SakuraScriptComponent, loads: Bool)
+    case shioriDebugMode(Bool)
     case embeddedEvent(id: String, arguments: [String])
     case raisedEvent(id: String, arguments: [String])
     case notifyEvent(id: String, arguments: [String])
     case otherEvent(target: String, id: String, arguments: [String], reflectsResponse: Bool)
     case pluginEvent(target: String, id: String, arguments: [String], reflectsResponse: Bool)
     case timerEvent(milliseconds: Int, repeats: Bool, reflectsResponse: Bool, id: String, arguments: [String])
+    case pluginTimerEvent(target: String, milliseconds: Int, repeats: Bool, reflectsResponse: Bool, id: String, arguments: [String])
     case moveSurface(x: Int?, y: Int?, time: Int, isAsync: Bool, options: [String])
     case setPosition(x: Int, y: Int, scope: Int)
     case resetPosition
@@ -114,6 +117,11 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case clearAll
     case end
     case unknown(String)
+}
+
+public enum SakuraScriptComponent: Sendable, Equatable {
+    case shiori
+    case makoto
 }
 
 public enum SakuraScriptOtherGhostTalkMode: Sendable, Equatable {
@@ -335,6 +343,7 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case callGhost(String)
     case changeShell(String)
     case changeBalloon(String)
+    case changeCalendarSkin(String)
     case updateGhost
     case updateBalloon
     case vanishByMyself(replacement: String?, asksConfirmation: Bool)
@@ -345,6 +354,10 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case reloadShell
     case reloadBalloon
     case openContentExplorer(String)
+    case openDressupExplorer
+    case openPictureViewer(String?)
+    case openArchiveViewer(String?)
+    case setTaskTrayIcon(file: String, tooltip: String?)
     case openDeveloperTool(String)
     case openConfigurationDialog
     case openReadme

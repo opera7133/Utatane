@@ -236,6 +236,19 @@ func `parses SSP content explorer commands`() {
 }
 
 @Test
+func `parses SSP dressup picture and archive viewer commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![open,dressupexplorer]\![open,pictureviewer,image.png]\![open,pictureviewer]\![open,archiveviewer,ghost.nar]\![open,archiveviewer]"#
+    ) == [
+        .contentAction(.openDressupExplorer),
+        .contentAction(.openPictureViewer("image.png")),
+        .contentAction(.openPictureViewer(nil)),
+        .contentAction(.openArchiveViewer("ghost.nar")),
+        .contentAction(.openArchiveViewer(nil))
+    ])
+}
+
+@Test
 func `parses SSP self vanish commands`() {
     #expect(SakuraScriptParser().parse(
         #"\![vanishbymyself]\![vanishbymyself,Emily]\![vanishbymyself,--option=query]"#
@@ -1029,6 +1042,46 @@ func `parses mail check commands`() {
     #expect(SakuraScriptParser().parse(#"\![biff]\![biff,work]"#) == [
         .checkMail(account: nil),
         .checkMail(account: "work")
+    ])
+}
+
+@Test
+func `parses component lifecycle and SHIORI debug commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![unload,shiori]\![load,shiori]\![unload,makoto]\![load,makoto]\![set,shioridebugmode,true]\![set,shioridebugmode,false]"#
+    ) == [
+        .componentLifecycle(component: .shiori, loads: false),
+        .componentLifecycle(component: .shiori, loads: true),
+        .componentLifecycle(component: .makoto, loads: false),
+        .componentLifecycle(component: .makoto, loads: true),
+        .shioriDebugMode(true),
+        .shioriDebugMode(false)
+    ])
+}
+
+@Test
+func `parses plugin timers and macOS content commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![timerraiseplugin,1000,0,clock,OnTick,arg]\![timernotifyplugin,0,1,clock,OnTick]\![change,calendarskin,Simple]\![set,tasktrayicon,status.png,Talking]"#
+    ) == [
+        .pluginTimerEvent(
+            target: "clock",
+            milliseconds: 1000,
+            repeats: true,
+            reflectsResponse: true,
+            id: "OnTick",
+            arguments: ["arg"]
+        ),
+        .pluginTimerEvent(
+            target: "clock",
+            milliseconds: 0,
+            repeats: false,
+            reflectsResponse: false,
+            id: "OnTick",
+            arguments: []
+        ),
+        .contentAction(.changeCalendarSkin("Simple")),
+        .contentAction(.setTaskTrayIcon(file: "status.png", tooltip: "Talking"))
     ])
 }
 

@@ -9,6 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 DOCUMENT = ROOT / "Docs" / "Reference" / "UKADOC-Text-File-Compatibility.md"
 SHIORI_EVENT_DOCUMENT = ROOT / "Docs" / "Reference" / "UKADOC-SHIORI-Event-Compatibility.md"
+SAKURA_SCRIPT_DOCUMENT = ROOT / "Docs" / "Reference" / "UKADOC-SakuraScript-Compatibility.md"
 SOURCE_ROOTS = (ROOT / "packages", ROOT / "apps")
 
 # Add a claimed syntax here when the compatibility table starts describing it as
@@ -75,14 +76,47 @@ def main() -> int:
     if expected_summary not in event_document:
         failures.append("SHIORI Event inventory summary does not match its rows")
 
+    sakura_document = SAKURA_SCRIPT_DOCUMENT.read_text(encoding="utf-8")
+    sakura_section = sakura_document.split("## SakuraScript以外のUKADOC領域", 1)[0]
+    sakura_rows = re.findall(
+        r"^\| (?!UKADOC項目|コマンド|コマンド群|記号)(.+?) \| (✅|🟡|❌|➖) \|",
+        sakura_section,
+        flags=re.MULTILINE,
+    )
+    sakura_labels = [label for label, _ in sakura_rows]
+    if len(sakura_rows) != 143:
+        failures.append(f"SakuraScript inventory has {len(sakura_rows)} rows; expected 143")
+    if len(sakura_labels) != len(set(sakura_labels)):
+        failures.append("SakuraScript inventory contains duplicate labels")
+    sakura_unclassified = [label for label, status in sakura_rows if status == "❌"]
+    if sakura_unclassified:
+        failures.append(
+            "SakuraScript inventory has unclassified groups: " + ", ".join(sakura_unclassified)
+        )
+    sakura_counts = {
+        status: sum(row_status == status for _, row_status in sakura_rows)
+        for status in ("✅", "🟡", "❌", "➖")
+    }
+    if "UKADOC掲載構文数: 359" not in sakura_section:
+        failures.append("SakuraScript inventory does not declare the current 359-syntax UKADOC baseline")
+    sakura_summary = (
+        f"調査結果: ✅ {sakura_counts['✅']} / 🟡 {sakura_counts['🟡']} / "
+        f"❌ {sakura_counts['❌']} / ➖ {sakura_counts['➖']}"
+    )
+    if "UKADOC分類行数: 143" not in sakura_section:
+        failures.append("SakuraScript inventory does not declare its 143-row baseline")
+    if sakura_summary not in sakura_section:
+        failures.append("SakuraScript inventory summary does not match its rows")
+
     if failures:
         for failure in failures:
             print(f"UKADOC compatibility error: {failure}", file=sys.stderr)
         return 1
 
     print(
-        f"Checked {len(CLAIMED_SYNTAX)} UKADOC syntax claims and "
-        f"{len(event_rows)} classified SHIORI Events."
+        f"Checked {len(CLAIMED_SYNTAX)} UKADOC syntax claims, "
+        f"{len(event_rows)} classified SHIORI Events, and "
+        f"{len(sakura_rows)} SakuraScript groups."
     )
     return 0
 

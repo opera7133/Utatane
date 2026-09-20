@@ -46,6 +46,12 @@ final class MenuBarBalloonController: NSObject {
         menuActions = actions
     }
 
+    func setStatusIcon(_ image: NSImage?, tooltip: String?) {
+        guard let button = statusItem.button else { return }
+        button.image = image ?? NSImage(systemSymbolName: "moon.stars", accessibilityDescription: "Utatane")
+        button.toolTip = tooltip?.isEmpty == false ? tooltip : "Utatane"
+    }
+
     func show(
         _ command: SakuraScriptTrayBalloon,
         onClick: @escaping () -> Void,

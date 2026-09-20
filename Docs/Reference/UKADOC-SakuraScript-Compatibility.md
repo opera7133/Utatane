@@ -4,6 +4,8 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 
 元の表は2026-08-21時点のソースコードを基に作成しています。各節の調査日と備考で、確認した範囲を確認してください。実機で未確認の項目は「対応」に含めません。
 
+現行UKADOCには、構文違いを個別に数えて359件のSakuraScript項目があります。この表では同じ実装経路を使う構文をまとめ、143行に分類しています。集計と行数はCIで検査します。
+
 ## 判定
 
 | 記号 | 意味 |
@@ -21,8 +23,10 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 
 基準: [さくらスクリプトリスト](https://ssp.shillest.net/ukadoc/manual/list_sakura_script.html)
 
-調査日: 2026-09-17
-調査結果: ✅ 80 / 🟡 49 / ❌ 6 / ➖ 4
+調査日: 2026-09-20
+UKADOC掲載構文数: 359
+UKADOC分類行数: 143
+調査結果: ✅ 88 / 🟡 49 / ❌ 0 / ➖ 6
 
 ### 基本仕様
 
@@ -54,6 +58,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 | `\![set,alignmentondesktop/alignmenttodesktop,...]` | ✅ | scope別の`top`・`bottom`・`left`・`right`・`free`・`default`に対応。端への吸着と吸着軸のドラッグ固定をゴースト終了まで保持 |
 | `\![set,scaling,...]` | ✅ | ユーザー設定倍率を基準にscope別の単一・縦横倍率、負数による軸反転、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
 | `\![set,alpha,...]` | ✅ | scope別の0〜100指定、上限クランプ、負値で値を維持した再描画、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
+| effect / effect2 / filter | ➖ | SSPのWindows用サーフェスエフェクトプラグインを呼ぶ命令。互換プラグイン実行基盤がmacOSにないため対象外 |
 | `\4`, `\5` | ✅ | `\4`（他キャラから離れる方向への一定移動）と `\5`（他キャラとの隣接位置への接近移動）に対応 |
 | `\![move]`, `\![moveasync]` | ✅ | 指定座標・アニメーション時間（ミリ秒）によるウィンドウ移動に対応（同期・非同期移動） |
 | `\![set/reset,position...]` | ✅ | `set,position,x,y,scope`で指定scopeをスクリーン座標へ移動してドラッグ固定し、`reset,position`で全scopeの固定を解除 |
@@ -128,7 +133,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 | `\*`, `\![set,choicetimeout,時間]` | ✅ | 表示完了後から計時。省略時は設定値、0・-1・`\*`は無期限。期限時にバルーンを閉じ、通常・呼び出しゴーストへ`OnChoiceTimeout`を通知 |
 | `\_a[ID]...\_a` | ✅ | アンカー範囲と引数に対応 |
 | cursor / anchor style・各色 | 🟡 | バルーン `descript.txt` の通常・hover設定を反映。SakuraScriptの `\f[...]` 変更は未実装 |
-| cursor / anchor method | ❌ | ROP / blend method未実装 |
+| cursor / anchor method | ➖ | Win32 `SetROP2`の描画演算を直接指定する機能。AppKitへ同じ演算を移植できないため、Utataneでは通常のアルファ合成で描画 |
 | anchor visited style・各色・method | 🟡 | 選択済みアンカーIDをゴースト実行中に保持し、バルーンの`anchor.visited` style・font／pen／brush色を反映。SakuraScriptの`\f[anchorvisited...]`とROP methodは未実装 |
 
 ### イベント・本体操作
@@ -141,24 +146,27 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 | update / updatebymyself / updateother | 🟡 | `updatebymyself`、`update,ghost`、`update,balloon`を既存更新機能へ接続。platform・updateother・全オプションは未対応 |
 | `\6`, `\7`, SNTP | 🟡 | `\7`／`\![executesntp]`によるHTTP Date時刻取得とSNTPイベント、`\6`の補正要求経路を実装。macOS通常権限でのシステム時刻補正は未接続 |
 | `\![biff(,アカウント名)]` | ✅ | 本体設定のPOP3アカウントでメールを確認し、開始・成功・新着・失敗イベントを通知。パスワードはmacOS Keychainへ保存 |
-| vanish | ❌ | 未実装 |
 | `\![execute,headline,...]` | ✅ | 名前またはディレクトリ名で既存RSS／HEADLINEセンサーを実行 |
+| `\![execute,calendarplugin,...]` | ➖ | 旧来のスケジュールセンサはWindows DLL固有API（geturl／getschedule等）を使うためmacOSでは対象外。iCalendar取得と予定表への登録は別命令で対応 |
 | `\+`, `\_+`, change/call ghost | 🟡 | ランダム／順次切替と、名前・ディレクトリ名・`random`・`sequential`指定を接続。lastinstalledとraise-eventオプションは未対応 |
 | change shell / balloon | ✅ | 名前またはディレクトリ名で通常／呼び出しゴーストの既存切替処理へ接続 |
+| `\![change,calendarskin,...]` | ✅ | 名前・ID・ディレクトリ名・randomでUtataneカレンダーのスキンを切り替え |
 | `\v`, `\![set,windowstate,stayontop/!stayontop]` | ✅ | 最前面表示（`.floating` / `.normal`）のトグルと明示指定に対応。サーフェス・バルーン両方に反映しテストで確認 |
 | `\![set,trayballoon,...]` | ✅ | macOSのメニューバーへポップオーバーを表示し、クリック・時間切れイベントを通知 |
+| `\![set,tasktrayicon,...]` | 🟡 | ゴースト配下の画像とツールチップをMenuBarアイコンへ反映。ICO連番アニメーションとduration／runcountは未対応 |
 | windowstate (その他) / wallpaper | 🟡 | 画像DnDによるデスクトップ壁紙変更は実装。SakuraScriptからのsave／restore／set wallpaperは未実装 |
 | otherghosttalk / othersurfacechange | ✅ | `\![set,otherghosttalk,true|false|before|after]`と`\![set,othersurfacechange,true|false]`で、呼び出し中ゴースト間の通知を制御 |
 | `\![raise,...]` | ✅ | SHIORIイベントを発生させ、元スクリプトの残りを破棄して応答スクリプトへ切り替えます |
 | `\![embed,...]` | ✅ | SHIORIイベントの戻り値を現在の再生列へ埋め込みます |
 | timerraise / raiseother / timerraiseother | 🟡 | `timerraise`、`raiseother`、`timerraiseother`に対応。他ゴーストは名前指定と全ゴースト指定が可能。プラグイン宛は未対応 |
 | notify / timernotify / timernotifyother | 🟡 | 自ゴーストへの`notify`・`timernotify`と`notifyother`・`timernotifyother`に対応し、SHIORI応答は表示しません。プラグイン宛は未対応 |
+| timerraiseplugin / timernotifyplugin | ✅ | プラグインごと・イベント名ごとの遅延、反復、0ミリ秒指定によるキャンセル、raise応答再生に対応 |
 
 ### サウンド
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\8[file]`, `\_v[file]`, `\_V`, `\![sound,...]` | ✅ | `\8` / `\_v`（非同期音声再生）、`\_V`（音声再生完了待ち）、`\![sound,...]`（play/load/loop/wait/pause/resume/stop/option）に対応。volume、balance、rate、seektimeに対応。`ghost/master` 内のAVFoundation対応音声のみ。CD・動画ウィンドウは対象外 |
+| `\8[file]`, `\_v[file]`, `\_V`, `\![sound,...]` | 🟡 | `\8` / `\_v`（非同期音声再生）、`\_V`（音声再生完了待ち）、`\![sound,...]`（play/load/loop/wait/pause/resume/stop/option）に対応。volume、balance、rate、seektimeに対応。`ghost/master` 内のAVFoundation対応音声のみ。CD・動画ウィンドウは未対応 |
 
 ### 外部UI・入力
 
@@ -175,7 +183,9 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 | open/save/folder/color dialog、close dialog | 🟡 | `open` / `save` / `folder` / `color` とID指定・全ダイアログのcloseに対応。title、dir、filter、ext、name、color、idを受け取り、結果を `OnSystemDialog` / `OnSystemDialogCancel` または指定イベントへ通知。filterは拡張子ワイルドカードのみ、実UIは未確認 |
 | surfacetest / aigraph / developer / shiorirequest / errorlog | 🟡 | `developer`／`surfacetest`で開発用パレット、`shiorirequest`でイベントID・Referenceを指定するSHIORI Request画面、`errorlog`でエラー絞り込み済みログを開きます。aigraphは未実装 |
 | `\![open,backlogviewer]` | ✅ | 通常・呼び出しゴーストとも対象ゴーストの発話履歴を開きます。ウィンドウモードでは設定に応じて下部へ統合表示 |
-| dressup / picture / archive | ❌ | 未実装 |
+| dressup explorer | 🟡 | `\![open,dressupexplorer]`で現在のシェルの着せ替え一覧をポップアップ表示。SSPの独立したエクスプローラ画面とはUIが異なる |
+| picture viewer | 🟡 | `\![open,pictureviewer]`で画像選択、ファイル指定時はゴースト内の画像をmacOS標準アプリで表示。SSP内蔵ビューア固有の操作は未対応 |
+| archive viewer | 🟡 | `\![open,archiveviewer]`でアーカイブ選択、ファイル指定時はゴースト内のファイルをmacOS標準アプリへ渡す。SSP内蔵ビューア固有の閲覧・インストール操作は未対応 |
 
 ### Property System
 
@@ -206,7 +216,9 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 | create shortcut | ➖ | Windowsショートカット固有のためmacOSでは対象外 |
 | passive / induction / select / collision mode | 🟡 | passive／induction、collision表示に加え、selectrectの全画面矩形選択と開始・終了・マウス・キャンセル通知に対応。メニュー・DnD・更新・最小化・終了等の全制限は未実装 |
 | reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | ghost・shell・balloonに加え、旧`reloadsurface`、surface、shiori、descriptの全体指定とghost／shell／balloon対象指定を実装。shioriとghost descriptは人格全体の再起動で代替。makoto・headline・plugin・aigraphは未対応 |
-| unload/load shiori・makoto、shioridebugmode | ❌ | 未実装 |
+| `\![unload/load,shiori]` | ✅ | 実行中の人格エンジンを解放し、load時にゴースト設定から再生成。unload中はイベントに応答しない |
+| `\![unload/load,makoto]` | 🟡 | MAKOTO変換を外した／含めた人格エンジンへ切り替える。切り替え時にSHIORIも再生成される点はSSPと異なる |
+| `\![set,shioridebugmode,true/false]` | ✅ | 開発用パレットのSHIORIリクエスト画面を表示／非表示にする。Utataneは通常時もSHIORI通信をログへ記録する |
 | `\_u`, `\_m` | ✅ | 16進・10進のUCS-2／ASCIIコードを文字へ変換。範囲外とサロゲートは拒否しParserテストで確認 |
 | `\&[ID]` | ✅ | amp・apos・gt・lt・nbsp・quotに加え、yen・cent・pound・euro・copy・reg・trade・deg・plusmn・sup1-3・frac・times・divide・half_solidus・bull・hellip・矢印等の主要HTML/XML実体参照に対応 |
 | `\m` | ➖ | SSTPのWindowsウィンドウメッセージ送信に依存するためmacOSでは対象外候補 |
@@ -230,8 +242,8 @@ SakuraScript以外の仕様について、対応を進める領域をまとめ�
 
 | UKADOC領域 | 状況 | 現在の範囲・主な不足 |
 | --- | --- | --- |
-| SHIORI Event（外部） | 🟡 | SSTPや一部コールバック。全イベント未網羅 |
-| SHIORI Resource | ❌ | 完全なresource照会表なし |
+| SHIORI Event（外部） | 🟡 | 現行UKADOCの304イベントを分類済み。実装範囲は[SHIORI Event対応表](UKADOC-SHIORI-Event-Compatibility.md)を参照 |
+| SHIORI Resource | 🟡 | 主要なシステム・ゴースト・シェル・バルーン・メニュー・サイト情報を実装。完全な照会表は未作成 |
 | SHIORI/3.0 | 🟡 | GET/NOTIFY、Reference、Charset、Valueなど基本モデルあり。全ヘッダー・ステータス未照合 |
 | SSTP/1.x | ✅ | localhost Socket／HTTPのportable coreを実装。SEND、NOTIFY、COMMUNICATE、EXECUTE、GIVE、ゴースト指定、IfGhost、nobreak、情報取得・Cookie・Property・Archive系commandに対応。詳細は[UKADOC-SSTP-Compatibility.md](UKADOC-SSTP-Compatibility.md) |
 | SAORI/1.0 | 🟡 | SSU等の限定ネイティブ互換。任意SAORI、Windows DLL汎用実行は対象外 |
@@ -243,11 +255,10 @@ SakuraScript以外の仕様について、対応を進める領域をまとめ�
 
 ## 優先順位案
 
-1. 実在ゴーストで利用頻度が高いsoundオプションと、残る表示・入力系コマンド。
-2. 既存Utatane機能へ接続する update、change ghost/shell/balloon、headline、install。
-3. `surfaces.txt`、Balloon/Ghost/Shell `descript.txt`、SHIORI Eventの詳細対応表。
-4. HTTPの高度なオプション、timerraise、Property Systemなど高度な互換機能。
-5. Windows・SSP固有UIに依存する項目は、macOS向け代替仕様を決めてから実装可否を判定します。
+1. anim add/text、入力ダイアログ、updateなど、実在ゴーストで使われる🟡を優先して埋める。
+2. HTTP・RSS・iCalendar・Property Systemの未対応オプションを実データで確認する。
+3. MenuBarアイコンのアニメーションなど、macOSで代替できるSSP固有UIを仕上げる。
+4. Windows DLLを前提とする機能は、外部ホストまたはmacOSネイティブAPIの仕様を決めてから実装します。
 
 ## 更新ルール
 

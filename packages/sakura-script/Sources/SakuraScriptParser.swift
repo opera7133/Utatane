@@ -625,6 +625,15 @@ public struct SakuraScriptParser: Sendable {
                         ))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "tasktrayicon",
+                              arguments.count >= 3
+                    {
+                        tokens.append(.contentAction(.setTaskTrayIcon(
+                            file: arguments[2],
+                            tooltip: arguments.count >= 4 && !arguments[3].isEmpty ? arguments[3] : nil
+                        )))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
                               arguments[1].lowercased() == "trayballoon"
                     {
                         let options = Array(arguments.dropFirst(2))
@@ -770,6 +779,21 @@ public struct SakuraScriptParser: Sendable {
                               ].contains(arguments[1].lowercased())
                     {
                         tokens.append(.contentAction(.openContentExplorer(arguments[1].lowercased())))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "dressupexplorer"
+                    {
+                        tokens.append(.contentAction(.openDressupExplorer))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "open",
+                              ["pictureviewer", "archiveviewer"].contains(arguments[1].lowercased())
+                    {
+                        let path = arguments.count >= 3 && !arguments[2].isEmpty ? arguments[2] : nil
+                        tokens.append(.contentAction(
+                            arguments[1].lowercased() == "pictureviewer"
+                                ? .openPictureViewer(path)
+                                : .openArchiveViewer(path)
+                        ))
                     } else if arguments.count == 2,
                               arguments[0].lowercased() == "open",
                               ["backlogviewer", "calendar", "messenger"].contains(arguments[1].lowercased())
@@ -909,6 +933,19 @@ public struct SakuraScriptParser: Sendable {
                             id: arguments[3],
                             arguments: Array(arguments.dropFirst(4))
                         ))
+                    } else if arguments.count >= 5,
+                              ["timerraiseplugin", "timernotifyplugin"].contains(arguments[0].lowercased()),
+                              let milliseconds = Int(arguments[1]),
+                              let once = Int(arguments[2])
+                    {
+                        tokens.append(.pluginTimerEvent(
+                            target: arguments[3],
+                            milliseconds: max(0, milliseconds),
+                            repeats: once == 0,
+                            reflectsResponse: arguments[0].lowercased() == "timerraiseplugin",
+                            id: arguments[4],
+                            arguments: Array(arguments.dropFirst(5))
+                        ))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "set",
                               arguments[1].lowercased() == "windowstate"
@@ -976,6 +1013,7 @@ public struct SakuraScriptParser: Sendable {
                         case "ghost": tokens.append(.contentAction(.changeGhost(arguments[2])))
                         case "shell": tokens.append(.contentAction(.changeShell(arguments[2])))
                         case "balloon": tokens.append(.contentAction(.changeBalloon(arguments[2])))
+                        case "calendarskin": tokens.append(.contentAction(.changeCalendarSkin(arguments[2])))
                         default: tokens.append(.unknown("\\![\(argument)]"))
                         }
                     } else if arguments.count >= 3,
@@ -1084,6 +1122,20 @@ public struct SakuraScriptParser: Sendable {
                             }
                         default: tokens.append(.unknown("\\![\(argument)]"))
                         }
+                    } else if arguments.count == 2,
+                              ["load", "unload"].contains(arguments[0].lowercased()),
+                              ["shiori", "makoto"].contains(arguments[1].lowercased())
+                    {
+                        tokens.append(.componentLifecycle(
+                            component: arguments[1].lowercased() == "shiori" ? .shiori : .makoto,
+                            loads: arguments[0].lowercased() == "load"
+                        ))
+                    } else if arguments.count == 3,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "shioridebugmode",
+                              ["true", "false"].contains(arguments[2].lowercased())
+                    {
+                        tokens.append(.shioriDebugMode(arguments[2].lowercased() == "true"))
                     } else if arguments.count >= 4,
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "createnar"

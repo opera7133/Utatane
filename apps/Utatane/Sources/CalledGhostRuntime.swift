@@ -67,6 +67,8 @@ final class CalledGhostRuntime {
     var onWallpaperDrop: ((URL) async -> Bool)?
     var onOpenMessenger: (() -> Void)?
     var onContentAction: ((SakuraScriptContentAction) -> Void)?
+    var onComponentLifecycle: ((SakuraScriptComponent, Bool) async -> Void)?
+    var onShioriDebugMode: ((Bool) -> Void)?
     var onOtherEvent: ((String, String, [String], Bool) async -> Void)?
     var onOtherGhostTalk: ((String, String) -> Void)?
     var onTrayBalloon: ((SakuraScriptTrayBalloon) -> Void)?
@@ -940,6 +942,10 @@ final class CalledGhostRuntime {
             NSWorkspace.shared.open(url)
         }
         player.onContentAction = { [weak self] action in self?.onContentAction?(action) }
+        player.onComponentLifecycle = { [weak self] component, loads in
+            await self?.onComponentLifecycle?(component, loads)
+        }
+        player.onShioriDebugMode = { [weak self] enabled in self?.onShioriDebugMode?(enabled) }
         player.onOtherEvent = { [weak self] target, id, arguments, reflectsResponse in
             await self?.onOtherEvent?(target, id, arguments, reflectsResponse)
         }

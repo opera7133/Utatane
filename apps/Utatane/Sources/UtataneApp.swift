@@ -338,6 +338,7 @@ private struct UtataneRootView: View {
     @State private var debugWindow: NSWindow?
     @State private var shioriDiagnosticsController: SHIORIDiagnosticsWindowController?
     @State private var shioriInitializationResults: [URL: String] = [:]
+    @State private var makotoDisabledGhostIDs: Set<URL> = []
     @StateObject private var layoutPresetStore = LayoutPresetStore()
     @State private var layoutPresetController: LayoutPresetWindowController?
     @State private var isRestoringLayoutPreset = false
@@ -2120,6 +2121,12 @@ private struct UtataneRootView: View {
             scriptPlayer.onContentAction = { action in
                 handleContentAction(action)
             }
+            scriptPlayer.onComponentLifecycle = { component, loads in
+                await setScriptComponent(component, loads: loads)
+            }
+            scriptPlayer.onShioriDebugMode = { enabled in
+                setShioriDebugMode(enabled)
+            }
             scriptPlayer.onTrayBalloon = { command in
                 showMenuBarBalloon(command, session: session, player: scriptPlayer, balloon: balloon)
             }
@@ -2525,7 +2532,10 @@ private struct UtataneRootView: View {
         "utatane.ghost.hasBooted." + Data(ghost.rootDirectory.standardizedFileURL.path.utf8).base64EncodedString()
     }
 
-    private func personalityEngine(for ghost: InstalledGhost) throws -> any PersonalityEngine {
+    private func personalityEngine(
+        for ghost: InstalledGhost,
+        includesMakoto: Bool = true
+    ) throws -> any PersonalityEngine {
         let base: any PersonalityEngine
         do {
             base = try basePersonalityEngine(for: ghost)
@@ -2539,13 +2549,15 @@ private struct UtataneRootView: View {
             directoryHint: .isDirectory
         )
         var translators: [any SakuraScriptTranslator] = []
-        if ParticleMakotoTranslator.supports(masterDirectoryURL: masterDirectory) {
-            translators.append(ParticleMakotoTranslator())
-        }
-        if BasicMakotoTranslator.supports(masterDirectoryURL: masterDirectory),
-           let translator = try? BasicMakotoTranslator(masterDirectoryURL: masterDirectory)
-        {
-            translators.append(translator)
+        if includesMakoto {
+            if ParticleMakotoTranslator.supports(masterDirectoryURL: masterDirectory) {
+                translators.append(ParticleMakotoTranslator())
+            }
+            if BasicMakotoTranslator.supports(masterDirectoryURL: masterDirectory),
+               let translator = try? BasicMakotoTranslator(masterDirectoryURL: masterDirectory)
+            {
+                translators.append(translator)
+            }
         }
         return translators.isEmpty ? base : TranslatingPersonalityEngine(base: base, translators: translators)
     }
@@ -3478,6 +3490,19 @@ private struct UtataneRootView: View {
                 select(balloon: selected)
             }
             configureContextMenu()
+        case let .changeCalendarSkin(target):
+            calendarWindowController.reloadSkins()
+            let skins = calendarWindowController.skins
+            let selected = target.caseInsensitiveCompare("random") == .orderedSame
+                ? skins.randomElement()
+                : skins.first(where: {
+                    $0.id.caseInsensitiveCompare(target) == .orderedSame
+                        || $0.name.caseInsensitiveCompare(target) == .orderedSame
+                        || $0.directory.lastPathComponent.caseInsensitiveCompare(target) == .orderedSame
+                })
+            if let selected {
+                calendarWindowController.selectedSkinID = selected.id
+            }
         case .updateGhost:
             Task { await updateCurrentGhost(reason: "script") }
         case .updateBalloon:
@@ -3558,6 +3583,29 @@ private struct UtataneRootView: View {
             default: nil
             }
             showContentExplorer(preferredKind: kind)
+        case .openDressupExplorer:
+            let controller = calledRuntime?.surfaceController ?? surfaceWindowController
+            _ = controller.showDressupExplorer()
+        case let .openPictureViewer(filePath):
+            openScriptViewer(
+                filePath: filePath,
+                allowedContentTypes: [.image],
+                calledRuntime: calledRuntime
+            )
+        case let .openArchiveViewer(filePath):
+            openScriptViewer(
+                filePath: filePath,
+                allowedContentTypes: [.archive],
+                calledRuntime: calledRuntime
+            )
+        case let .setTaskTrayIcon(file, tooltip):
+            let ghost = calledRuntime?.ghost ?? currentGhost
+            let candidates = [
+                ghost?.rootDirectory.appending(path: file),
+                ghost?.rootDirectory.appending(path: "ghost/master").appending(path: file)
+            ].compactMap(\.self)
+            let image = candidates.lazy.compactMap(NSImage.init(contentsOf:)).first
+            menuBarBalloonController.setStatusIcon(image, tooltip: tooltip ?? ghost?.name)
         case let .openDeveloperTool(target):
             switch target.lowercased() {
             case "errorlog":
@@ -3616,6 +3664,80 @@ private struct UtataneRootView: View {
                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
             }
         }
+    }
+
+    private func setScriptComponent(
+        _ component: SakuraScriptComponent,
+        loads: Bool,
+        calledRuntime: CalledGhostRuntime? = nil
+    ) async {
+        guard let ghost = calledRuntime?.ghost ?? currentGhost,
+              let targetSession = calledRuntime?.session ?? session
+        else { return }
+
+        switch component {
+        case .shiori:
+            if loads {
+                guard await !(targetSession.isPersonalityEngineLoaded) else { return }
+                do {
+                    let engine = try personalityEngine(
+                        for: ghost,
+                        includesMakoto: !makotoDisabledGhostIDs.contains(ghost.id)
+                    )
+                    await targetSession.loadPersonalityEngine(engine)
+                } catch {
+                    showError(error.localizedDescription)
+                }
+            } else {
+                await targetSession.unloadPersonalityEngine()
+            }
+        case .makoto:
+            if loads {
+                makotoDisabledGhostIDs.remove(ghost.id)
+            } else {
+                makotoDisabledGhostIDs.insert(ghost.id)
+            }
+            guard await targetSession.isPersonalityEngineLoaded else { return }
+            await targetSession.unloadPersonalityEngine()
+            do {
+                let engine = try personalityEngine(for: ghost, includesMakoto: loads)
+                await targetSession.loadPersonalityEngine(engine)
+            } catch {
+                showError(error.localizedDescription)
+            }
+        }
+    }
+
+    private func setShioriDebugMode(_ enabled: Bool) {
+        if enabled {
+            developerPalettePane = .shioriRequest
+            developerLogLevelFilter = .all
+        }
+        networkSettings.showsDebugWindow = enabled
+        updateDebugWindowVisibility(bringForward: enabled)
+    }
+
+    private func openScriptViewer(
+        filePath: String?,
+        allowedContentTypes: [UTType],
+        calledRuntime: CalledGhostRuntime?
+    ) {
+        if let filePath, !filePath.isEmpty {
+            let baseDirectory = (calledRuntime?.ghost ?? currentGhost)?.rootDirectory.appending(path: "ghost/master")
+            let url = filePath.hasPrefix("/") || filePath.contains(":")
+                ? URL(fileURLWithPath: filePath)
+                : (baseDirectory?.appending(path: filePath) ?? URL(fileURLWithPath: filePath))
+            guard FileManager.default.fileExists(atPath: url.path) else { return }
+            NSWorkspace.shared.open(url)
+            return
+        }
+
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = allowedContentTypes
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func showGhostTerms(for calledRuntime: CalledGhostRuntime?) {
@@ -5221,6 +5343,12 @@ private struct UtataneRootView: View {
             }
             runtime.onContentAction = { action in
                 handleContentAction(action, calledRuntime: runtime)
+            }
+            runtime.onComponentLifecycle = { component, loads in
+                await setScriptComponent(component, loads: loads, calledRuntime: runtime)
+            }
+            runtime.onShioriDebugMode = { enabled in
+                setShioriDebugMode(enabled)
             }
             runtime.onOtherEvent = { target, id, arguments, reflectsResponse in
                 await handleOtherEvent(
