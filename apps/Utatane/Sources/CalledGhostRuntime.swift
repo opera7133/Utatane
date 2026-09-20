@@ -577,13 +577,13 @@ final class CalledGhostRuntime {
         await stop(reason: .vanish)
     }
 
-    func stopForGhostChange(to ghost: InstalledGhost) async -> String {
-        await stop(reason: .ghostChangingDetailed(
+    func stopForGhostChange(to ghost: InstalledGhost, raisesChangingEvent: Bool = true) async -> String {
+        await stop(reason: raisesChangingEvent ? .ghostChangingDetailed(
             name: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
             mode: "manual",
             ghostName: ghost.name,
             path: ghost.rootDirectory.path
-        ))
+        ) : .silent)
     }
 
     func suspendToCache() async {
@@ -677,14 +677,16 @@ final class CalledGhostRuntime {
         )
     }
 
-    func select(shell newShell: InstalledShell) {
+    func select(shell newShell: InstalledShell, raisesChangingEvent: Bool = true) {
         do {
             let previousShell = shell
-            send(SHIORIEventFactory.shellChanging(
-                newShellName: newShell.name,
-                previousShellName: previousShell.name,
-                newShellPath: newShell.directory.path
-            ))
+            if raisesChangingEvent {
+                send(SHIORIEventFactory.shellChanging(
+                    newShellName: newShell.name,
+                    previousShellName: previousShell.name,
+                    newShellPath: newShell.directory.path
+                ))
+            }
             try show(shell: newShell)
             send(SHIORIEventFactory.shellChanged(
                 shellName: newShell.name,

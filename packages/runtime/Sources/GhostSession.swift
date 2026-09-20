@@ -62,7 +62,13 @@ public actor GhostSession {
         guard state == .running else { return nil }
         state = .stopped
         guard let personalityEngine else { return nil }
+        if reason == .silent {
+            await personalityEngine.shutdown()
+            return nil
+        }
         let events: (primary: GhostEvent, fallback: GhostEvent?) = switch reason {
+        case .silent:
+            fatalError("silent stop handled before event resolution")
         case .close:
             (.close, nil)
         case let .closeDetailed(reason, menuScope, windowScope):

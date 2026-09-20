@@ -1,5 +1,6 @@
 import AppKit
 import UtataneCore
+import UtataneSakuraScript
 import UtataneShell
 
 func automaticSurfaceFitScale(imageSize: NSSize, visibleSize: NSSize?) -> CGFloat {
@@ -540,6 +541,10 @@ public final class SurfaceWindowController {
         characters[scope]?.setAnimationOffset(identifier: identifier, x: x, y: y)
     }
 
+    public func addAnimation(_ addition: SakuraScriptAnimationAddition, scope: Int = 0) {
+        characters[scope]?.addScriptAnimation(addition)
+    }
+
     public func setRepaintLocked(_ locked: Bool, scope: Int) {
         characters[scope]?.setRepaintLocked(locked)
     }
@@ -576,7 +581,7 @@ public final class SurfaceWindowController {
         )
     }
 
-    func runtimeScale(for scope: Int) -> NSSize? {
+    public func runtimeScale(for scope: Int) -> NSSize? {
         characters[scope].map {
             NSSize(width: $0.runtimeScaleX, height: $0.runtimeScaleY)
         }
@@ -995,6 +1000,10 @@ private final class CharacterSurfaceController {
     private var currentAnimationID: Int?
     private var pausedAnimationIDs: Set<Int> = []
     private var animationOffsets: [Int: SurfacePoint] = [:]
+    private var scriptAnimationLayers: [UUID: PersistentAnimationLayer] = [:]
+    private var scriptAnimationTasks: [UUID: Task<Void, Never>] = [:]
+    private var scriptBaseImage: NSImage?
+    private var scriptTranslation = SurfacePoint(x: 0, y: 0)
     private var isRepaintLocked = false
     private var pendingAnimationImage: NSImage?
     private var schedulerTask: Task<Void, Never>?
@@ -1400,6 +1409,87 @@ private final class CharacterSurfaceController {
         animationOffsets[id] = SurfacePoint(x: x, y: y)
     }
 
+    func addScriptAnimation(_ addition: SakuraScriptAnimationAddition) {
+        guard let shell else { return }
+        switch addition {
+        case let .move(x, y):
+            scriptTranslation = SurfacePoint(x: x, y: y)
+            redrawActiveAnimationFrames()
+        case let .text(x, y, width, height, text, duration, color, fontSize, fontName):
+            let size = NSSize(width: max(1, width), height: max(1, height))
+            let image = NSImage(size: size)
+            image.lockFocus()
+            let font = fontName.flatMap { NSFont(name: $0, size: CGFloat(fontSize ?? 12)) }
+                ?? NSFont.systemFont(ofSize: CGFloat(fontSize ?? 12))
+            NSAttributedString(
+                string: text,
+                attributes: [
+                    .font: font,
+                    .foregroundColor: NSColor(
+                        calibratedRed: CGFloat(min(max(color.red, 0), 255)) / 255,
+                        green: CGFloat(min(max(color.green, 0), 255)) / 255,
+                        blue: CGFloat(min(max(color.blue, 0), 255)) / 255,
+                        alpha: 1
+                    )
+                ]
+            ).draw(in: NSRect(origin: .zero, size: size))
+            image.unlockFocus()
+            let id = UUID()
+            scriptAnimationLayers[id] = PersistentAnimationLayer(
+                image: image,
+                x: x,
+                y: y,
+                operation: .sourceOver,
+                clipsToBaseAlpha: false
+            )
+            redrawActiveAnimationFrames()
+            guard duration > 0 else { return }
+            scriptAnimationTasks[id] = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(duration))
+                guard !Task.isCancelled else { return }
+                self?.scriptAnimationLayers[id] = nil
+                self?.scriptAnimationTasks[id] = nil
+                self?.redrawActiveAnimationFrames()
+            }
+        case let .surfaces(method, frames, repeats):
+            guard !frames.isEmpty else { return }
+            if method == "base", let frame = frames.first,
+               let image = try? renderLayer(surfaceID: frame.surfaceID, shell: shell, visited: [])
+            {
+                scriptBaseImage = image
+                redrawActiveAnimationFrames()
+                return
+            }
+            let id = UUID()
+            scriptAnimationTasks[id] = Task { [weak self] in
+                guard let self else { return }
+                repeat {
+                    for frame in frames {
+                        guard !Task.isCancelled else { return }
+                        guard let image = try? renderLayer(
+                            surfaceID: frame.surfaceID,
+                            shell: shell,
+                            visited: [],
+                            ignoresTransparency: false
+                        ) else { continue }
+                        scriptAnimationLayers[id] = PersistentAnimationLayer(
+                            image: image,
+                            x: frame.x,
+                            y: frame.y,
+                            operation: method == "overlayfast" ? .sourceAtop : .sourceOver,
+                            clipsToBaseAlpha: method == "overlayfast"
+                        )
+                        redrawActiveAnimationFrames()
+                        if frame.durationMilliseconds > 0 {
+                            try? await Task.sleep(for: .milliseconds(frame.durationMilliseconds))
+                        }
+                    }
+                } while repeats && !Task.isCancelled
+                scriptAnimationTasks[id] = nil
+            }
+        }
+    }
+
     func setRepaintLocked(_ locked: Bool) {
         isRepaintLocked = locked
         guard !locked, let pendingAnimationImage else { return }
@@ -1590,6 +1680,13 @@ private final class CharacterSurfaceController {
         sharedAnimationStartOrders.removeAll()
         currentAnimationID = nil
         pausedAnimationIDs.removeAll()
+        for task in scriptAnimationTasks.values {
+            task.cancel()
+        }
+        scriptAnimationTasks.removeAll()
+        scriptAnimationLayers.removeAll()
+        scriptBaseImage = nil
+        scriptTranslation = SurfacePoint(x: 0, y: 0)
         refreshAnimationScale()
     }
 
@@ -1598,7 +1695,9 @@ private final class CharacterSurfaceController {
         let excludedAnimationIDs = animationBaseExclusions.values.reduce(into: Set<Int>()) {
             $0.formUnion($1)
         }
-        var result = if excludedAnimationIDs.isEmpty {
+        var result = if let scriptBaseImage {
+            scriptBaseImage
+        } else if excludedAnimationIDs.isEmpty {
             baseImage
         } else {
             (try? render(
@@ -1606,6 +1705,19 @@ private final class CharacterSurfaceController {
                 shell: shell,
                 excludingInitialAnimations: excludedAnimationIDs
             ).image) ?? baseImage
+        }
+        for layer in scriptAnimationLayers.values {
+            result = imageLoader.composite(
+                base: result,
+                overlay: layer.image,
+                x: layer.x,
+                y: layer.y,
+                operation: layer.operation,
+                clipsToBaseAlpha: layer.clipsToBaseAlpha
+            )
+        }
+        if scriptTranslation.x != 0 || scriptTranslation.y != 0 {
+            result = imageLoader.translated(result, x: scriptTranslation.x, y: scriptTranslation.y)
         }
         let animations = currentSurfaceDefinition?.animations ?? []
         for animation in animations.reversed() {

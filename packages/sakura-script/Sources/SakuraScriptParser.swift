@@ -628,9 +628,13 @@ public struct SakuraScriptParser: Sendable {
                               arguments[1].lowercased() == "tasktrayicon",
                               arguments.count >= 3
                     {
+                        let options = Array(arguments.dropFirst(3))
+                        let tooltip = options.first.flatMap { $0.hasPrefix("--") || $0.isEmpty ? nil : $0 }
                         tokens.append(.contentAction(.setTaskTrayIcon(
                             file: arguments[2],
-                            tooltip: arguments.count >= 4 && !arguments[3].isEmpty ? arguments[3] : nil
+                            tooltip: tooltip,
+                            durationMilliseconds: Self.optionValue("duration", in: options).flatMap(Int.init),
+                            runCount: Self.optionValue("runcount", in: options).flatMap(Int.init)
                         )))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "set",
@@ -856,6 +860,84 @@ public struct SakuraScriptParser: Sendable {
                               let y = Int(arguments[4])
                     {
                         tokens.append(.offsetAnimation(identifier: arguments[2], x: x, y: y))
+                    } else if arguments.count >= 4,
+                              arguments[0].lowercased() == "anim",
+                              arguments[1].lowercased() == "add"
+                    {
+                        let kind = arguments[2].lowercased()
+                        if kind == "move", arguments.count >= 5,
+                           let x = Int(arguments[3]), let y = Int(arguments[4])
+                        {
+                            tokens.append(.addAnimation(.move(x: x, y: y)))
+                        } else if kind == "text", arguments.count >= 8,
+                                  let x = Int(arguments[3]), let y = Int(arguments[4]),
+                                  let width = Int(arguments[5]), let height = Int(arguments[6])
+                        {
+                            tokens.append(.addAnimation(.text(
+                                x: x,
+                                y: y,
+                                width: width,
+                                height: height,
+                                text: arguments[7],
+                                durationMilliseconds: arguments.count >= 9 ? max(0, Int(arguments[8]) ?? 0) : 0,
+                                color: (
+                                    red: arguments.count >= 10 ? Int(arguments[9]) ?? 0 : 0,
+                                    green: arguments.count >= 11 ? Int(arguments[10]) ?? 0 : 0,
+                                    blue: arguments.count >= 12 ? Int(arguments[11]) ?? 0 : 0
+                                ),
+                                fontSize: arguments.count >= 13 ? Int(arguments[12]) : nil,
+                                fontName: arguments.count >= 14 && !arguments[13].isEmpty ? arguments[13] : nil
+                            )))
+                        } else if ["overlay", "overlayfast", "base"].contains(kind),
+                                  let firstID = Int(arguments[3])
+                        {
+                            let values = Array(arguments.dropFirst(4))
+                            let timing = values.last?.lowercased()
+                            let repeats = timing == "always"
+                            let numericValues = ["runonce", "always"].contains(timing ?? "")
+                                ? Array(values.dropLast()) : values
+                            var frames: [SakuraScriptAnimationFrame] = []
+                            if numericValues.isEmpty {
+                                frames = [.init(surfaceID: firstID)]
+                            } else if numericValues.count >= 2,
+                                      let firstX = Int(numericValues[0]),
+                                      let firstY = Int(numericValues[1])
+                            {
+                                let firstDuration = numericValues.count >= 3 ? Int(numericValues[2]) ?? 0 : 0
+                                frames.append(.init(
+                                    surfaceID: firstID,
+                                    x: firstX,
+                                    y: firstY,
+                                    durationMilliseconds: max(0, firstDuration)
+                                ))
+                                var frameIndex = 3
+                                while frameIndex + 3 < numericValues.count,
+                                      let surfaceID = Int(numericValues[frameIndex]),
+                                      let x = Int(numericValues[frameIndex + 1]),
+                                      let y = Int(numericValues[frameIndex + 2]),
+                                      let duration = Int(numericValues[frameIndex + 3])
+                                {
+                                    frames.append(.init(
+                                        surfaceID: surfaceID,
+                                        x: x,
+                                        y: y,
+                                        durationMilliseconds: max(0, duration)
+                                    ))
+                                    frameIndex += 4
+                                }
+                            }
+                            if !frames.isEmpty {
+                                tokens.append(.addAnimation(.surfaces(
+                                    method: kind,
+                                    frames: frames,
+                                    repeats: repeats
+                                )))
+                            } else {
+                                tokens.append(.unknown("\\![\(argument)]"))
+                            }
+                        } else {
+                            tokens.append(.unknown("\\![\(argument)]"))
+                        }
                     } else if arguments.count >= 2,
                               ["lock", "unlock"].contains(arguments[0].lowercased()),
                               arguments[1].lowercased() == "repaint"
@@ -954,9 +1036,37 @@ public struct SakuraScriptParser: Sendable {
                             tokens.append(.stayOnTop(true))
                         } else if arguments[2].lowercased() == "!stayontop" {
                             tokens.append(.stayOnTop(false))
+                        } else if arguments[2].lowercased() == "minimize" {
+                            tokens.append(.contentAction(.minimizeWindows))
                         } else {
                             tokens.append(.unknown("\\![\(argument)]"))
                         }
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "save",
+                              arguments[1].lowercased() == "wallpaper"
+                    {
+                        tokens.append(.contentAction(.saveWallpaper))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "restore",
+                              arguments[1].lowercased() == "wallpaper"
+                    {
+                        tokens.append(.contentAction(.restoreWallpaper))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "wallpaper"
+                    {
+                        let operands = Array(arguments.dropFirst(2))
+                        let positional = operands.filter { !$0.hasPrefix("--") }
+                        let file = Self.optionValue("file", in: operands)
+                            ?? positional.first.flatMap { $0.isEmpty ? nil : $0 }
+                        let position = Self.optionValue("position", in: operands)
+                            ?? positional.dropFirst().first
+                            ?? "center"
+                        tokens.append(.contentAction(.setWallpaper(.init(
+                            file: file,
+                            position: position.lowercased(),
+                            color: Self.optionValue("color", in: operands)
+                        ))))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "cancel",
                               ["http", "http-get", "ical"].contains(arguments[1].lowercased())
@@ -1010,8 +1120,14 @@ public struct SakuraScriptParser: Sendable {
                               arguments[0].lowercased() == "change"
                     {
                         switch arguments[1].lowercased() {
-                        case "ghost": tokens.append(.contentAction(.changeGhost(arguments[2])))
-                        case "shell": tokens.append(.contentAction(.changeShell(arguments[2])))
+                        case "ghost":
+                            tokens.append(.contentAction(arguments.dropFirst(3).contains {
+                                $0.caseInsensitiveCompare("--option=raise-event") == .orderedSame
+                            } ? .changeGhostWithEvent(arguments[2]) : .changeGhost(arguments[2])))
+                        case "shell":
+                            tokens.append(.contentAction(arguments.dropFirst(3).contains {
+                                $0.caseInsensitiveCompare("--option=raise-event") == .orderedSame
+                            } ? .changeShellWithEvent(arguments[2]) : .changeShell(arguments[2])))
                         case "balloon": tokens.append(.contentAction(.changeBalloon(arguments[2])))
                         case "calendarskin": tokens.append(.contentAction(.changeCalendarSkin(arguments[2])))
                         default: tokens.append(.unknown("\\![\(argument)]"))
@@ -1020,9 +1136,13 @@ public struct SakuraScriptParser: Sendable {
                               arguments[0].lowercased() == "call",
                               arguments[1].lowercased() == "ghost"
                     {
-                        tokens.append(.contentAction(.callGhost(arguments[2])))
+                        tokens.append(.contentAction(arguments.dropFirst(3).contains {
+                            $0.caseInsensitiveCompare("--option=raise-event") == .orderedSame
+                        } ? .callGhostWithEvent(arguments[2]) : .callGhost(arguments[2])))
                     } else if arguments[0].lowercased() == "updatebymyself" {
                         tokens.append(.contentAction(.updateGhost))
+                    } else if arguments[0].lowercased() == "updateother" {
+                        tokens.append(.contentAction(.updateOther(Array(arguments.dropFirst()))))
                     } else if arguments[0].lowercased() == "vanishbymyself" {
                         let values = Array(arguments.dropFirst())
                         let replacement = values.first { !$0.lowercased().hasPrefix("--option=") }
@@ -1034,11 +1154,21 @@ public struct SakuraScriptParser: Sendable {
                             asksConfirmation: asksConfirmation
                         )))
                     } else if arguments.count >= 2, arguments[0].lowercased() == "update" {
-                        switch arguments[1].lowercased() {
+                        let target = arguments[1].lowercased()
+                        switch target {
                         case "ghost": tokens.append(.contentAction(.updateGhost))
                         case "balloon": tokens.append(.contentAction(.updateBalloon))
                         case "platform": tokens.append(.contentAction(.updatePlatform))
-                        default: tokens.append(.unknown("\\![\(argument)]"))
+                        case "all": tokens.append(.contentAction(.updateGhost))
+                        default:
+                            let targets = target.split(separator: "+").map(String.init)
+                            if !targets.isEmpty,
+                               targets.allSatisfy({ ["ghost", "shell", "balloon"].contains($0) })
+                            {
+                                tokens.append(.contentAction(.updateTargets(targets)))
+                            } else {
+                                tokens.append(.unknown("\\![\(argument)]"))
+                            }
                         }
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "execute",
@@ -1190,7 +1320,9 @@ public struct SakuraScriptParser: Sendable {
                               arguments[0].lowercased() == "open",
                               ["configurationdialog", "settingdialog", "preference"].contains(arguments[1].lowercased())
                     {
-                        tokens.append(.contentAction(.openConfigurationDialog))
+                        tokens.append(.contentAction(.openConfigurationDialog(
+                            arguments.count >= 3 && !arguments[2].isEmpty ? arguments[2] : nil
+                        )))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "open",
                               arguments[1].lowercased() == "dialog",

@@ -14,19 +14,56 @@ public struct BalloonTextLink: Sendable, Equatable {
     public let arguments: [String]
     public let kind: Kind
     public let fontColor: BalloonColor?
+    public let normalAppearance: BalloonLinkAppearanceOverride?
+    public let hoveredAppearance: BalloonLinkAppearanceOverride?
+    public let visitedAppearance: BalloonLinkAppearanceOverride?
 
     public init(
         range: NSRange,
         id: String,
         arguments: [String],
         kind: Kind = .choice,
-        fontColor: BalloonColor? = nil
+        fontColor: BalloonColor? = nil,
+        normalAppearance: BalloonLinkAppearanceOverride? = nil,
+        hoveredAppearance: BalloonLinkAppearanceOverride? = nil,
+        visitedAppearance: BalloonLinkAppearanceOverride? = nil
     ) {
         self.range = range
         self.id = id
         self.arguments = arguments
         self.kind = kind
         self.fontColor = fontColor
+        self.normalAppearance = normalAppearance
+        self.hoveredAppearance = hoveredAppearance
+        self.visitedAppearance = visitedAppearance
+    }
+}
+
+public struct BalloonLinkAppearanceOverride: Sendable, Equatable {
+    public var shape: BalloonLinkShape?
+    public var fontColor: BalloonColor?
+    public var penColor: BalloonColor?
+    public var brushColor: BalloonColor?
+
+    public init(
+        shape: BalloonLinkShape? = nil,
+        fontColor: BalloonColor? = nil,
+        penColor: BalloonColor? = nil,
+        brushColor: BalloonColor? = nil
+    ) {
+        self.shape = shape
+        self.fontColor = fontColor
+        self.penColor = penColor
+        self.brushColor = brushColor
+    }
+
+    func applying(to base: BalloonLinkAppearance) -> BalloonLinkAppearance {
+        BalloonLinkAppearance(
+            shape: shape ?? base.shape,
+            fontColor: fontColor ?? base.fontColor,
+            penColor: penColor ?? base.penColor,
+            brushColor: brushColor ?? base.brushColor
+        )
     }
 }
 
@@ -45,6 +82,11 @@ public struct BalloonTextStyle: Sendable, Equatable {
     public var outline = false
     public var alignment: Alignment?
     public var anchorFontColor: BalloonColor?
+    public var cursorAppearance = BalloonLinkAppearanceOverride()
+    public var cursorNotSelectedAppearance = BalloonLinkAppearanceOverride()
+    public var anchorAppearance = BalloonLinkAppearanceOverride()
+    public var anchorNotSelectedAppearance = BalloonLinkAppearanceOverride()
+    public var anchorVisitedAppearance = BalloonLinkAppearanceOverride()
     public var lineHeight: Double?
     public var paragraphIndent: Double?
     public var paragraphSpacingBefore: Double?
@@ -471,9 +513,15 @@ public final class BalloonWindowController {
         updateContent(text: text, links: links, styles: [], scope: scope)
     }
 
-    public func addPositionedImage(_ image: NSImage, x: Int, y: Int, scope: Int = 0) {
+    public func addPositionedImage(
+        _ image: NSImage,
+        x: Int,
+        y: Int,
+        foreground: Bool = false,
+        scope: Int = 0
+    ) {
         guard let presentation = presentations[scope] else { return }
-        let item = PositionedBalloonImage(image: image, x: x, y: y)
+        let item = PositionedBalloonImage(image: image, x: x, y: y, foreground: foreground)
         presentation.positionedImages.append(item)
         presentation.contentView.setPositionedImages(presentation.positionedImages)
     }
@@ -746,6 +794,24 @@ public final class BalloonWindowController {
         )
     }
 
+    private func resolvedAlignment(
+        for surfaceFrame: NSRect,
+        balloon: BalloonDefinition,
+        scope: Int
+    ) -> BalloonWindowAlignment {
+        let visibleFrame = geometryProvider.mainScreen?.visibleFrame ?? surfaceFrame
+        let automatic: BalloonWindowAlignment = surfaceFrame.midX < visibleFrame.midX ? .right : .left
+        let requested: BalloonWindowAlignment = switch balloon.windowPositionX {
+        case .center: .center
+        case .bottom: .bottom
+        case .offset:
+            alignmentByScope[scope]
+                ?? shellPresentationSettings[scope]?.balloonAlignment.map(BalloonWindowAlignment.init)
+                ?? .automatic
+        }
+        return requested == .automatic ? automatic : requested
+    }
+
     private func configureDragging(_ contentView: BalloonContentView, item: any PresentationItem) {
         contentView.configurePresentationItem(
             frame: { [weak item] in item?.frame },
@@ -767,18 +833,7 @@ public final class BalloonWindowController {
         }
 
         let spacing: CGFloat = 8
-        let automaticAlignment: BalloonWindowAlignment = surfaceFrame.midX < visibleFrame.midX
-            ? .right
-            : .left
-        let requestedAlignment: BalloonWindowAlignment = switch balloon.windowPositionX {
-        case .center: .center
-        case .bottom: .bottom
-        case .offset:
-            alignmentByScope[scope]
-                ?? shellPresentationSettings[scope]?.balloonAlignment.map(BalloonWindowAlignment.init)
-                ?? .automatic
-        }
-        let alignment = requestedAlignment == .automatic ? automaticAlignment : requestedAlignment
+        let alignment = resolvedAlignment(for: surfaceFrame, balloon: balloon, scope: scope)
         var x: CGFloat
         var y: CGFloat
         switch alignment {
@@ -920,6 +975,7 @@ private struct PositionedBalloonImage {
     let image: NSImage
     let x: Int
     let y: Int
+    let foreground: Bool
 }
 
 @MainActor
@@ -1096,7 +1152,11 @@ private final class BalloonContentView: NSView {
             ))
             imageView.image = item.image
             imageView.imageScaling = .scaleAxesIndependently
-            addSubview(imageView, positioned: .below, relativeTo: scrollView)
+            addSubview(
+                imageView,
+                positioned: item.foreground ? .above : .below,
+                relativeTo: scrollView
+            )
             return imageView
         }
     }
@@ -1970,12 +2030,24 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
             textStorage.removeAttribute(.underlineStyle, range: link.range)
             textStorage.removeAttribute(.underlineColor, range: link.range)
             let pair = appearanceByKind[link.kind]
-            let appearance = if token == hoveredLinkToken {
+            let baseAppearance = if token == hoveredLinkToken {
                 pair?.hovered
             } else if link.kind == .anchor, visitedAnchorIDs.contains(link.id) {
                 anchorVisitedAppearance ?? pair?.normal
             } else {
                 pair?.normal
+            }
+            let appearanceOverride = if token == hoveredLinkToken {
+                link.hoveredAppearance
+            } else if link.kind == .anchor, visitedAnchorIDs.contains(link.id) {
+                link.visitedAppearance ?? link.normalAppearance
+            } else {
+                link.normalAppearance
+            }
+            let appearance = if let baseAppearance, let appearanceOverride {
+                appearanceOverride.applying(to: baseAppearance)
+            } else {
+                baseAppearance
             }
             textStorage.addAttribute(
                 .foregroundColor,

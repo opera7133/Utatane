@@ -18,6 +18,7 @@ final class MenuBarBalloonController: NSObject {
     private let statusItem: NSStatusItem
     private let popover = NSPopover()
     private var timeoutTask: Task<Void, Never>?
+    private var iconAnimationTask: Task<Void, Never>?
     private var onClick: (() -> Void)?
     private var onTimeout: (() -> Void)?
     private var menuActions: MenuActions?
@@ -38,6 +39,7 @@ final class MenuBarBalloonController: NSObject {
     deinit {
         MainActor.assumeIsolated {
             timeoutTask?.cancel()
+            iconAnimationTask?.cancel()
             NSStatusBar.system.removeStatusItem(statusItem)
         }
     }
@@ -47,9 +49,37 @@ final class MenuBarBalloonController: NSObject {
     }
 
     func setStatusIcon(_ image: NSImage?, tooltip: String?) {
+        iconAnimationTask?.cancel()
+        iconAnimationTask = nil
         guard let button = statusItem.button else { return }
         button.image = image ?? NSImage(systemSymbolName: "moon.stars", accessibilityDescription: "Utatane")
         button.toolTip = tooltip?.isEmpty == false ? tooltip : "Utatane"
+    }
+
+    func setAnimatedStatusIcon(
+        _ images: [NSImage],
+        tooltip: String?,
+        durationMilliseconds: Int,
+        runCount: Int?
+    ) {
+        guard !images.isEmpty else {
+            setStatusIcon(nil, tooltip: tooltip)
+            return
+        }
+        iconAnimationTask?.cancel()
+        statusItem.button?.toolTip = tooltip?.isEmpty == false ? tooltip : "Utatane"
+        iconAnimationTask = Task { [weak self] in
+            let repetitions = runCount.map { max(0, $0) }
+            var completed = 0
+            while !Task.isCancelled, (repetitions.map { completed < $0 } ?? true) {
+                for image in images {
+                    guard !Task.isCancelled else { return }
+                    self?.statusItem.button?.image = image
+                    try? await Task.sleep(for: .milliseconds(max(1, durationMilliseconds)))
+                }
+                completed += 1
+            }
+        }
     }
 
     func show(

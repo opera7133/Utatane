@@ -11,6 +11,10 @@
 - SakuraScriptのパスワード・日付・時刻・スライダー・IPアドレス入力を専用UIで開き、timeout・文字数制限・追加Referenceを扱えるようにした
 - `\![update,platform]`からSparkleの本体更新確認を開けるようにした
 - SakuraScriptの`file:`・`mailto:`リンクをmacOSの関連付けアプリで安全に開けるようにした
+- SakuraScriptの動的サーフェス合成・移動・文字描画、バルーン画像の切り抜き・拡大縮小・前面表示に対応した
+- SakuraScriptからゴースト・シェル・複数コンテンツの更新、イベント有無を指定したゴースト／シェル切り替え、壁紙の保存・復元・変更を実行できるようにした
+- SakuraScriptで選択肢・アンカーの表示色と形状を変更し、MenuBarアイコンを連番画像でアニメーションできるようにした
+- Property SystemでOS、locale、CPU、メモリ、ディスク、起動中ゴースト、各種コンテンツ一覧の取得範囲を広げた
 
 ### 修正
 
@@ -18,6 +22,7 @@
 - SakuraScript互換表の集計を実際の分類行から検査し、現行UKADOCとの差を追跡できるようにした
 - InputBoxを閉じた理由が時間切れか利用者操作かを区別して`OnUserInputCancel`へ通知するようにした
 - InputBoxの時間切れイベントが未処理の場合、互換動作として`timeout`を入力値にして通知するようにした
+- SakuraScriptの色指定で3桁16進数とCSS Color Level 3の拡張色名を扱えるようにした
 
 ## [0.2.7] - 2026-09-20
 

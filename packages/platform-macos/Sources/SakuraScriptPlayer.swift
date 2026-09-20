@@ -654,7 +654,10 @@ public final class SakuraScriptPlayer {
                     id: link.id,
                     arguments: link.arguments,
                     kind: link.kind,
-                    fontColor: link.fontColor
+                    fontColor: link.fontColor,
+                    normalAppearance: link.normalAppearance,
+                    hoveredAppearance: link.hoveredAppearance,
+                    visitedAppearance: link.visitedAppearance
                 )
             }
             styleRunsByScope[scope] = styleRunsByScope[scope, default: []].flatMap { run in
@@ -910,6 +913,8 @@ public final class SakuraScriptPlayer {
                         y: y,
                         scope: scope
                     )
+                case let .addAnimation(addition):
+                    surfaceWindowController.addAnimation(addition, scope: scope)
                 case let .repaintLock(locked, manual):
                     surfaceWindowController.setRepaintLocked(locked, scope: scope)
                     if locked {
@@ -1243,6 +1248,7 @@ public final class SakuraScriptPlayer {
                 case .timeCritical:
                     isTimeCritical = true
                 case let .choice(label, id, arguments):
+                    let style = textStyleByScope[scope, default: BalloonTextStyle()]
                     let start = textByScope[scope, default: ""].utf16.count
                     textByScope[scope, default: ""].append(label)
                     appendStyleRun(scope: scope, location: start, length: label.utf16.count)
@@ -1251,18 +1257,24 @@ public final class SakuraScriptPlayer {
                             range: NSRange(location: start, length: label.utf16.count),
                             id: id,
                             arguments: arguments,
-                            fontColor: nil
+                            fontColor: nil,
+                            normalAppearance: style.cursorNotSelectedAppearance,
+                            hoveredAppearance: style.cursorAppearance
                         )
                     )
                     try activateIfNeeded(scope: scope)
                     updateContent(scope: scope, autoscroll: false)
                     speechHistoryRecorder?.append(label)
                 case let .choiceStart(id, arguments):
+                    let style = textStyleByScope[scope, default: BalloonTextStyle()]
                     choicesByScope[scope] = ActiveAnchor(
                         id: id,
                         arguments: arguments,
                         start: textByScope[scope, default: ""].utf16.count,
-                        fontColor: nil
+                        fontColor: nil,
+                        normalAppearance: style.cursorNotSelectedAppearance,
+                        hoveredAppearance: style.cursorAppearance,
+                        visitedAppearance: nil
                     )
                 case .choiceEnd:
                     guard let choice = choicesByScope.removeValue(forKey: scope) else { continue }
@@ -1273,18 +1285,25 @@ public final class SakuraScriptPlayer {
                             range: NSRange(location: choice.start, length: end - choice.start),
                             id: choice.id,
                             arguments: choice.arguments,
-                            fontColor: choice.fontColor
+                            fontColor: choice.fontColor,
+                            normalAppearance: choice.normalAppearance,
+                            hoveredAppearance: choice.hoveredAppearance,
+                            visitedAppearance: choice.visitedAppearance
                         )
                     )
                     updateContent(scope: scope, autoscroll: false)
                 case .choiceTimeout:
                     continue
                 case let .anchorStart(id, arguments):
+                    let style = textStyleByScope[scope, default: BalloonTextStyle()]
                     anchorsByScope[scope] = ActiveAnchor(
                         id: id,
                         arguments: arguments,
                         start: textByScope[scope, default: ""].utf16.count,
-                        fontColor: textStyleByScope[scope]?.anchorFontColor
+                        fontColor: style.anchorFontColor,
+                        normalAppearance: style.anchorNotSelectedAppearance,
+                        hoveredAppearance: style.anchorAppearance,
+                        visitedAppearance: style.anchorVisitedAppearance
                     )
                 case .anchorEnd:
                     guard let anchor = anchorsByScope.removeValue(forKey: scope) else { continue }
@@ -1296,7 +1315,10 @@ public final class SakuraScriptPlayer {
                             id: anchor.id,
                             arguments: anchor.arguments,
                             kind: .anchor,
-                            fontColor: anchor.fontColor
+                            fontColor: anchor.fontColor,
+                            normalAppearance: anchor.normalAppearance,
+                            hoveredAppearance: anchor.hoveredAppearance,
+                            visitedAppearance: anchor.visitedAppearance
                         )
                     )
                     updateContent(scope: scope)
@@ -1444,8 +1466,8 @@ public final class SakuraScriptPlayer {
                     surfaceWindowController.setStickyWindows(scopes: scopes)
                 case .resetStickyWindows:
                     surfaceWindowController.resetStickyWindows()
-                case let .inlineImage(path, isOpaque, _):
-                    if let image = resolveInlineImage(path: path, isOpaque: isOpaque) {
+                case let .inlineImage(path, isOpaque, options):
+                    if let image = resolveInlineImage(path: path, isOpaque: isOpaque, options: options) {
                         let targetScope = scope
                         let currentLength = (textByScope[targetScope, default: ""] as NSString).length
                         textByScope[targetScope, default: ""].append("\u{FFFC}")
@@ -1459,10 +1481,19 @@ public final class SakuraScriptPlayer {
                             autoscroll: autoscrollByScope[targetScope] ?? true
                         )
                     }
-                case let .positionedImage(path, x, y, isOpaque, _):
-                    if let image = resolveInlineImage(path: path, isOpaque: isOpaque) {
+                case let .positionedImage(path, x, y, isOpaque, options):
+                    if let image = resolveInlineImage(path: path, isOpaque: isOpaque, options: options) {
                         try activateIfNeeded(scope: scope)
-                        balloonWindowController.addPositionedImage(image, x: x, y: y, scope: scope)
+                        let foreground = options.contains {
+                            $0.caseInsensitiveCompare("--option=foreground") == .orderedSame
+                        }
+                        balloonWindowController.addPositionedImage(
+                            image,
+                            x: x,
+                            y: y,
+                            foreground: foreground,
+                            scope: scope
+                        )
                     }
                 case let .otherGhostTalk(target, script):
                     onOtherGhostTalk?(target, script)
@@ -1776,12 +1807,17 @@ public final class SakuraScriptPlayer {
         return result
     }
 
-    private func resolveInlineImage(path: String, isOpaque: Bool) -> NSImage? {
+    private func resolveInlineImage(path: String, isOpaque: Bool, options: [String]) -> NSImage? {
+        let usesSelfAlpha = options.contains {
+            $0.caseInsensitiveCompare("--option=use_self_alpha") == .orderedSame
+        }
+        let image: NSImage?
         if path.hasPrefix("data:image/") {
             if let commaIndex = path.firstIndex(of: ",") {
                 let base64String = String(path[path.index(after: commaIndex)...])
                 if let data = Data(base64Encoded: base64String, options: .ignoreUnknownCharacters) {
-                    return NSImage(data: data)
+                    image = NSImage(data: data)
+                    return image.flatMap { transformBalloonImage($0, options: options) }
                 }
             }
         }
@@ -1789,12 +1825,119 @@ public final class SakuraScriptPlayer {
         let normalizedPath = path.replacingOccurrences(of: "\\", with: "/")
         let url = baseDirectory.appending(path: normalizedPath)
         if FileManager.default.fileExists(atPath: url.path) {
-            if isOpaque {
-                return NSImage(contentsOf: url)
+            image = if isOpaque || usesSelfAlpha {
+                NSImage(contentsOf: url)
+            } else {
+                try? imageLoader.loadUsingTopLeftTransparency(url)
             }
-            return try? imageLoader.loadUsingTopLeftTransparency(url)
+            return image.flatMap { transformBalloonImage($0, options: options) }
         }
         return nil
+    }
+
+    private func transformBalloonImage(_ sourceImage: NSImage, options: [String]) -> NSImage? {
+        var image = sourceImage
+        if let source = options.compactMap({ option -> Int? in
+            guard option.lowercased().hasPrefix("--source=") else { return nil }
+            return Int(option.dropFirst("--source=".count))
+        }).first,
+            source >= 0,
+            source < image.representations.count
+        {
+            let selected = NSImage(size: image.size)
+            selected.addRepresentation(image.representations[source])
+            image = selected
+        }
+
+        var sourceRect = NSRect(origin: .zero, size: image.size)
+        if let clipping = options.first(where: { $0.lowercased().hasPrefix("--clipping=") }) {
+            let values = clipping.dropFirst("--clipping=".count).split(separator: " ").compactMap { Double($0) }
+            if values.count == 4 {
+                let left = min(max(values[0], 0), image.size.width)
+                let top = min(max(values[1], 0), image.size.height)
+                let right = min(max(values[2], left), image.size.width)
+                let bottom = min(max(values[3], top), image.size.height)
+                sourceRect = NSRect(
+                    x: left,
+                    y: image.size.height - bottom,
+                    width: right - left,
+                    height: bottom - top
+                )
+            }
+        }
+
+        var targetWidth = sourceRect.width
+        var targetHeight = sourceRect.height
+        var flipsX = false
+        var flipsY = false
+        if let scaling = options.first(where: { $0.lowercased().hasPrefix("--scaling=") }) {
+            let values = scaling.dropFirst("--scaling=".count).split(separator: " ").map(String.init)
+            func dimension(_ value: String, original: CGFloat) -> CGFloat? {
+                if value.hasSuffix("%"), let percent = Double(value.dropLast()) {
+                    return original * CGFloat(percent) / 100
+                }
+                let trimmed = value.lowercased().hasSuffix("px") ? String(value.dropLast(2)) : value
+                return Double(trimmed).map { CGFloat($0) }
+            }
+            if values.count >= 2,
+               let width = dimension(values[0], original: sourceRect.width),
+               let height = dimension(values[1], original: sourceRect.height)
+            {
+                flipsX = width < 0
+                flipsY = height < 0
+                targetWidth = abs(width)
+                targetHeight = abs(height)
+                if targetWidth == 0, sourceRect.height > 0 {
+                    targetWidth = targetHeight * sourceRect.width / sourceRect.height
+                }
+                if targetHeight == 0, sourceRect.width > 0 {
+                    targetHeight = targetWidth * sourceRect.height / sourceRect.width
+                }
+            } else if let value = values.first,
+                      let size = Double(value), sourceRect.width > 0, sourceRect.height > 0
+            {
+                let basis = values.dropFirst().first?.lowercased() ?? "long"
+                let side = basis.hasPrefix("short")
+                    ? min(sourceRect.width, sourceRect.height)
+                    : max(sourceRect.width, sourceRect.height)
+                let modifier = basis.hasSuffix("max") || basis == "max"
+                    ? "max" : (basis.hasSuffix("min") || basis == "min" ? "min" : "")
+                var scale = CGFloat(abs(size)) / side
+                if modifier == "max", scale > 1 {
+                    scale = 1
+                }
+                if modifier == "min", scale < 1 {
+                    scale = 1
+                }
+                targetWidth = sourceRect.width * scale
+                targetHeight = sourceRect.height * scale
+                flipsX = size < 0
+                flipsY = size < 0
+            }
+        }
+        targetWidth = min(max(targetWidth, 1), 4096)
+        targetHeight = min(max(targetHeight, 1), 4096)
+        guard sourceRect != NSRect(origin: .zero, size: image.size)
+            || targetWidth != image.size.width || targetHeight != image.size.height || flipsX || flipsY
+        else { return image }
+
+        let result = NSImage(size: NSSize(width: targetWidth, height: targetHeight))
+        result.lockFocus()
+        let context = NSGraphicsContext.current?.cgContext
+        context?.saveGState()
+        if flipsX || flipsY {
+            context?.translateBy(x: flipsX ? targetWidth : 0, y: flipsY ? targetHeight : 0)
+            context?.scaleBy(x: flipsX ? -1 : 1, y: flipsY ? -1 : 1)
+        }
+        image.draw(
+            in: NSRect(x: 0, y: 0, width: targetWidth, height: targetHeight),
+            from: sourceRect,
+            operation: .copy,
+            fraction: 1
+        )
+        context?.restoreGState()
+        result.unlockFocus()
+        return result
     }
 
     private func applyFontCommand(
@@ -1874,7 +2017,44 @@ public final class SakuraScriptPlayer {
         case "sup":
             style.baseline = fontFlag(value) ? 1 : 0
         default:
-            break
+            applyLinkAppearanceCommand(name: name, arguments: arguments, style: &style)
+        }
+    }
+
+    private func applyLinkAppearanceCommand(
+        name: String,
+        arguments: [String],
+        style: inout BalloonTextStyle
+    ) {
+        let prefixes = ["cursornotselect", "anchorvisited", "anchornotselect", "cursor", "anchor"]
+        guard let prefix = prefixes.first(where: { name.hasPrefix($0) }) else { return }
+        let property = String(name.dropFirst(prefix.count))
+        var appearance = switch prefix {
+        case "cursor": style.cursorAppearance
+        case "cursornotselect": style.cursorNotSelectedAppearance
+        case "anchor": style.anchorAppearance
+        case "anchornotselect": style.anchorNotSelectedAppearance
+        default: style.anchorVisitedAppearance
+        }
+        let value = arguments.first?.lowercased() ?? ""
+        switch property {
+        case "style":
+            appearance.shape = value == "default" ? nil : BalloonLinkShape(rawValue: value)
+        case "color", "brushcolor":
+            appearance.brushColor = parseColor(arguments)
+        case "pencolor":
+            appearance.penColor = parseColor(arguments)
+        case "fontcolor":
+            appearance.fontColor = parseColor(arguments)
+        default:
+            return
+        }
+        switch prefix {
+        case "cursor": style.cursorAppearance = appearance
+        case "cursornotselect": style.cursorNotSelectedAppearance = appearance
+        case "anchor": style.anchorAppearance = appearance
+        case "anchornotselect": style.anchorNotSelectedAppearance = appearance
+        default: style.anchorVisitedAppearance = appearance
         }
     }
 
@@ -1907,21 +2087,17 @@ public final class SakuraScriptPlayer {
 
     private func parseColor(_ arguments: [String]) -> BalloonColor? {
         guard let first = arguments.first?.lowercased(), first != "default" else { return nil }
-        let named: [String: BalloonColor] = [
-            "black": BalloonColor(red: 0, green: 0, blue: 0),
-            "white": BalloonColor(red: 255, green: 255, blue: 255),
-            "red": BalloonColor(red: 255, green: 0, blue: 0),
-            "green": BalloonColor(red: 0, green: 128, blue: 0),
-            "blue": BalloonColor(red: 0, green: 0, blue: 255),
-            "yellow": BalloonColor(red: 255, green: 255, blue: 0),
-            "gray": BalloonColor(red: 128, green: 128, blue: 128),
-            "grey": BalloonColor(red: 128, green: 128, blue: 128)
-        ]
-        if let color = named[first] {
+        if let color = cssNamedBalloonColors[first] {
             return color
         }
         if first.hasPrefix("#"), first.count == 7, let value = Int(first.dropFirst(), radix: 16) {
             return BalloonColor(red: value >> 16, green: (value >> 8) & 0xFF, blue: value & 0xFF)
+        }
+        if first.hasPrefix("#"), first.count == 4, let value = Int(first.dropFirst(), radix: 16) {
+            let red = (value >> 8) & 0xF
+            let green = (value >> 4) & 0xF
+            let blue = value & 0xF
+            return BalloonColor(red: red * 17, green: green * 17, blue: blue * 17)
         }
         guard arguments.count >= 3 else { return nil }
         let components = arguments.prefix(3).compactMap { component -> Int? in
@@ -2056,4 +2232,7 @@ private struct ActiveAnchor {
     let arguments: [String]
     let start: Int
     let fontColor: BalloonColor?
+    let normalAppearance: BalloonLinkAppearanceOverride?
+    let hoveredAppearance: BalloonLinkAppearanceOverride?
+    let visitedAppearance: BalloonLinkAppearanceOverride?
 }

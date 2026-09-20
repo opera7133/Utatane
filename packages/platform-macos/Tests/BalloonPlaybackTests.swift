@@ -795,7 +795,7 @@ func `renders adjacent extended choices without inserting a newline`() async thr
     )
 
     await player.playAndWait(
-        SakuraScript(rawValue: #"\__q[OnSelect,arg]選択肢\__q次\f[anchor.font.color,#00ff00]\_a[OnAnchor]錨\_a\e"#),
+        SakuraScript(rawValue: #"\f[cursornotselectstyle,square]\f[cursornotselectfontcolor,#ff0000]\__q[OnSelect,arg]選択肢\__q次\f[anchornotselectfontcolor,#00ff00]\f[anchorvisitedfontcolor,#0000ff]\_a[OnAnchor]錨\_a\e"#),
         balloon: makeBalloon(directory: directory),
         characterDelayMilliseconds: 0
     )
@@ -806,20 +806,40 @@ func `renders adjacent extended choices without inserting a newline`() async thr
         BalloonTextLink(
             range: NSRange(location: 0, length: 3),
             id: "OnSelect",
-            arguments: ["arg"]
+            arguments: ["arg"],
+            normalAppearance: BalloonLinkAppearanceOverride(
+                shape: .square,
+                fontColor: BalloonColor(red: 255, green: 0, blue: 0)
+            ),
+            hoveredAppearance: BalloonLinkAppearanceOverride()
         ),
         BalloonTextLink(
             range: NSRange(location: 4, length: 1),
             id: "OnAnchor",
             arguments: [],
             kind: .anchor,
-            fontColor: BalloonColor(red: 0, green: 255, blue: 0)
+            normalAppearance: BalloonLinkAppearanceOverride(
+                fontColor: BalloonColor(red: 0, green: 255, blue: 0)
+            ),
+            hoveredAppearance: BalloonLinkAppearanceOverride(),
+            visitedAppearance: BalloonLinkAppearanceOverride(
+                fontColor: BalloonColor(red: 0, green: 0, blue: 255)
+            )
         )
     ])
+    let choiceColor = try #require(
+        balloonController.textAttributes(at: 0, scope: 0)?[.foregroundColor] as? NSColor
+    )
+    #expect(choiceColor.redComponent > 0.9)
     let anchorColor = try #require(
         balloonController.textAttributes(at: 4, scope: 0)?[.foregroundColor] as? NSColor
     )
     #expect(anchorColor.greenComponent > 0.9)
+    balloonController.markAnchorVisited("OnAnchor")
+    let visitedColor = try #require(
+        balloonController.textAttributes(at: 4, scope: 0)?[.foregroundColor] as? NSColor
+    )
+    #expect(visitedColor.blueComponent > 0.9)
 }
 
 @Test
@@ -1416,6 +1436,16 @@ func `renders inline balloon images`() async throws {
     let representation = try #require(image.representations.compactMap { $0 as? NSBitmapImageRep }.first)
     #expect((representation.colorAt(x: 0, y: 0)?.alphaComponent ?? 1) == 0)
     #expect((representation.colorAt(x: 1, y: 0)?.alphaComponent ?? 0) > 0.9)
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\_b[icon.png,inline,--option=use_self_alpha,--clipping=0 0 8 8,--scaling=200% 300%]\e"#),
+        balloon: makeBalloon(directory: directory),
+        characterDelayMilliseconds: 0
+    )
+    let transformed = try #require(
+        balloonController.textAttributes(at: 0, scope: 0)?[.attachment] as? NSTextAttachment
+    )
+    #expect(transformed.image?.size == NSSize(width: 16, height: 24))
 }
 
 @Test

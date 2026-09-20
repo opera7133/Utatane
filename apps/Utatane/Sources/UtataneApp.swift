@@ -386,6 +386,9 @@ private struct UtataneRootView: View {
     @State private var previousRecycleBinSnapshot: RecycleBinSnapshot?
     @State private var nowPlayingChangeDetector = NowPlayingChangeDetector()
     @State private var desktopWallpaperChangeDetector = DesktopWallpaperChangeDetector()
+    @State private var savedDesktopWallpaperURLs: [String: URL] = [:]
+    @State private var nextGhostTransitionRaisesEvent = true
+    @State private var lastInstalledContentNames: [String: String] = [:]
     @State private var windowModeChangeDetector = WindowModeChangeDetector()
     @State private var configuredShellScalePercent: Int?
     @State private var configuredBalloonScalePercent: Int?
@@ -951,12 +954,67 @@ private struct UtataneRootView: View {
             values["ghostlist.index(\(index)).keroname"] = ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
             values["ghostlist.index(\(index)).path"] = ghost.rootDirectory.path
             values["ghostlist.index(\(index)).index"] = String(index)
+            for key in [ghost.name, ghost.rootDirectory.path, ghost.rootDirectory.lastPathComponent] {
+                values["ghostlist(\(key)).name"] = ghost.name
+                values["ghostlist(\(key)).sakuraname"] = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+                values["ghostlist(\(key)).keroname"] = ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+                values["ghostlist(\(key)).path"] = ghost.rootDirectory.path
+                values["ghostlist(\(key)).index"] = String(index)
+            }
         }
+        values["activeghostlist.count"] = String(1 + calledGhosts.count)
+        let activeGhosts = [currentGhost].compactMap(\.self) + calledGhosts.values.map(\.ghost)
+        for (index, ghost) in activeGhosts.enumerated() {
+            let prefix = "activeghostlist.index(\(index))"
+            values["\(prefix).name"] = ghost.name
+            values["\(prefix).sakuraname"] = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+            values["\(prefix).keroname"] = ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+            values["\(prefix).path"] = ghost.rootDirectory.path
+            values["\(prefix).index"] = String(index)
+        }
+        values["balloonlist.count"] = String(installedBalloons.count)
+        for (index, item) in installedBalloons.enumerated() {
+            values["balloonlist.index(\(index)).name"] = item.name
+            values["balloonlist.index(\(index)).path"] = item.directory.path
+            values["balloonlist.index(\(index)).index"] = String(index)
+        }
+        values["headlinelist.count"] = String(installedHeadlines.count)
+        values["pluginlist.count"] = String(installedPlugins.count)
         if let currentGhost {
             values["currentghost.name"] = currentGhost.name
             values["currentghost.sakuraname"] = currentGhost.characters.first(where: { $0.scope == 0 })?.name ?? currentGhost.name
             values["currentghost.keroname"] = currentGhost.characters.first(where: { $0.scope == 1 })?.name ?? ""
             values["currentghost.path"] = currentGhost.rootDirectory.path
+            values["ghostlist.current.name"] = currentGhost.name
+            values["ghostlist.current.path"] = currentGhost.rootDirectory.path
+            values["currentghost.status"] = "running"
+            values["currentghost.scope.count"] = String(currentGhost.characters.count)
+            for character in currentGhost.characters {
+                let scope = character.scope
+                let prefix = "currentghost.scope(\(scope))"
+                values["\(prefix).name"] = character.name
+                values["\(prefix).surface.num"] = String(surfaceWindowController.surfaceID(for: scope) ?? -1)
+                if let frame = surfaceWindowController.windowFrame(for: scope) {
+                    values["\(prefix).surface.x"] = String(Int(frame.midX))
+                    values["\(prefix).surface.y"] = String(Int(frame.minY))
+                    values["\(prefix).x"] = String(Int(frame.minX))
+                    values["\(prefix).y"] = String(Int(frame.minY))
+                    values["\(prefix).rect"] = "\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.maxX)),\(Int(frame.maxY))"
+                }
+                if let scale = surfaceWindowController.runtimeScale(for: scope) {
+                    values["\(prefix).scaling"] = "\(Int(scale.width * 100)),\(Int(scale.height * 100))"
+                }
+                if let frame = balloonWindowController.windowFrame(for: scope) {
+                    let balloonPrefix = "currentghost.balloon.scope(\(scope))"
+                    values["\(balloonPrefix).x"] = String(Int(frame.minX))
+                    values["\(balloonPrefix).y"] = String(Int(frame.minY))
+                    values["\(balloonPrefix).rect"] = "\(Int(frame.minX)),\(Int(frame.minY)),\(Int(frame.maxX)),\(Int(frame.maxY))"
+                }
+            }
+            if let balloon {
+                values["currentghost.balloon.name"] = balloon.name
+                values["currentghost.balloon.path"] = balloon.directory.path
+            }
             values["currentghost.shelllist.count"] = String(currentGhost.shells.count)
             for (index, shell) in currentGhost.shells.enumerated() {
                 let prefix = "currentghost.shelllist.index(\(index))"
@@ -1376,6 +1434,126 @@ private struct UtataneRootView: View {
         }
     }
 
+    private func setDesktopWallpaper(
+        _ command: SakuraScriptWallpaperCommand,
+        calledRuntime: CalledGhostRuntime?
+    ) async {
+        let ghost = calledRuntime?.ghost ?? currentGhost
+        let candidates: [URL]
+        if let file = command.file, !file.isEmpty {
+            let normalized = file.replacingOccurrences(of: "\\", with: "/")
+            candidates = [
+                ghost?.rootDirectory.appending(path: "ghost/master").appending(path: normalized),
+                ghost?.rootDirectory.appending(path: normalized)
+            ].compactMap { candidate in
+                guard let candidate, let root = ghost?.rootDirectory.standardizedFileURL else { return nil }
+                let resolved = candidate.standardizedFileURL
+                return resolved.path.hasPrefix(root.path + "/") ? resolved : nil
+            }
+        } else if let color = command.color.flatMap(desktopWallpaperColor),
+                  let solidURL = solidWallpaperURL(color: color)
+        {
+            candidates = [solidURL]
+        } else {
+            return
+        }
+        guard let url = candidates.first(where: { candidate in
+            FileManager.default.fileExists(atPath: candidate.standardizedFileURL.path)
+        }),
+            let contentType = UTType(filenameExtension: url.pathExtension),
+            contentType.conforms(to: .image)
+        else { return }
+
+        var options: [NSWorkspace.DesktopImageOptionKey: Any] = [:]
+        switch command.position {
+        case "stretch":
+            options[.imageScaling] = NSImageScaling.scaleAxesIndependently.rawValue
+            options[.allowClipping] = true
+        case "fill", "span", "stretch-x", "stretch-y":
+            options[.imageScaling] = NSImageScaling.scaleProportionallyUpOrDown.rawValue
+            options[.allowClipping] = true
+        case "fit":
+            options[.imageScaling] = NSImageScaling.scaleProportionallyDown.rawValue
+            options[.allowClipping] = false
+        default:
+            options[.imageScaling] = NSImageScaling.scaleNone.rawValue
+            options[.allowClipping] = command.position == "tile"
+        }
+        if let color = command.color.flatMap(desktopWallpaperColor) {
+            options[.fillColor] = color
+        }
+        do {
+            for screen in NSScreen.screens {
+                try NSWorkspace.shared.setDesktopImageURL(url, for: screen, options: options)
+            }
+        } catch {
+            AppLogStore.shared.warning(
+                "壁紙を変更できませんでした",
+                category: "Wallpaper",
+                details: error.localizedDescription
+            )
+        }
+    }
+
+    private func solidWallpaperURL(color: NSColor) -> URL? {
+        let directory = ContentRoot.contentDirectory.appending(path: "State", directoryHint: .isDirectory)
+        let url = directory.appending(path: "sakura-script-wallpaper.png")
+        let image = NSImage(size: NSSize(width: 2, height: 2))
+        image.lockFocus()
+        color.setFill()
+        NSRect(x: 0, y: 0, width: 2, height: 2).fill()
+        image.unlockFocus()
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let data = bitmap.representation(using: .png, properties: [:])
+        else { return nil }
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            try data.write(to: url, options: .atomic)
+            return url
+        } catch {
+            AppLogStore.shared.warning(
+                "単色壁紙を作成できませんでした",
+                category: "Wallpaper",
+                details: error.localizedDescription
+            )
+            return nil
+        }
+    }
+
+    private func desktopWallpaperColor(_ value: String) -> NSColor? {
+        let names: [String: NSColor] = [
+            "black": .black, "white": .white, "red": .red, "green": .green,
+            "blue": .blue, "yellow": .yellow, "gray": .gray, "grey": .gray,
+            "navy": NSColor(calibratedRed: 0, green: 0, blue: 0.5, alpha: 1)
+        ]
+        let lowercased = value.lowercased()
+        if let named = names[lowercased] {
+            return named
+        }
+        if lowercased.hasPrefix("#"), lowercased.count == 7,
+           let rgb = Int(lowercased.dropFirst(), radix: 16)
+        {
+            return NSColor(
+                calibratedRed: CGFloat((rgb >> 16) & 0xFF) / 255,
+                green: CGFloat((rgb >> 8) & 0xFF) / 255,
+                blue: CGFloat(rgb & 0xFF) / 255,
+                alpha: 1
+            )
+        }
+        let components = value.split(separator: ",").map(String.init)
+        guard components.count == 3 else { return nil }
+        let values = components.compactMap { component -> CGFloat? in
+            if component.hasSuffix("%"), let percent = Double(component.dropLast()) {
+                return CGFloat(min(max(percent, 0), 100) / 100)
+            }
+            guard let byte = Double(component) else { return nil }
+            return CGFloat(min(max(byte, 0), 255) / 255)
+        }
+        guard values.count == 3 else { return nil }
+        return NSColor(calibratedRed: values[0], green: values[1], blue: values[2], alpha: 1)
+    }
+
     private func handleURLDrop(scope: Int, url: URL) {
         if handleXUkagakaLink(url) {
             return
@@ -1739,12 +1917,16 @@ private struct UtataneRootView: View {
         if let called = calledGhosts.removeValue(forKey: ghost.id) {
             _ = await called.stop()
         }
-        let changeScript = await closeCurrentGhost(reason: .ghostChangingDetailed(
-            name: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
-            mode: "manual",
-            ghostName: ghost.name,
-            path: ghost.rootDirectory.path
-        ))
+        let raisesChangingEvent = nextGhostTransitionRaisesEvent
+        nextGhostTransitionRaisesEvent = true
+        let changeScript = await closeCurrentGhost(reason: raisesChangingEvent
+            ? .ghostChangingDetailed(
+                name: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+                mode: "manual",
+                ghostName: ghost.name,
+                path: ghost.rootDirectory.path
+            )
+            : .silent)
         guard !Task.isCancelled else { return }
         let startup: GhostStartup = if let previousGhost {
             .changed(from: previousGhost, script: changeScript)
@@ -3384,16 +3566,18 @@ private struct UtataneRootView: View {
         configureContextMenu()
     }
 
-    private func select(shell: InstalledShell) {
+    private func select(shell: InstalledShell, raisesChangingEvent: Bool = true) {
         let statusToken = statusWindowController.show("「\(shell.name)」に切り替え中…")
         defer { statusWindowController.hide(token: statusToken) }
         do {
             let previousShell = selectedShell
-            sendEvent(SHIORIEventFactory.shellChanging(
-                newShellName: shell.name,
-                previousShellName: previousShell?.name ?? "",
-                newShellPath: shell.directory.path
-            ))
+            if raisesChangingEvent {
+                sendEvent(SHIORIEventFactory.shellChanging(
+                    newShellName: shell.name,
+                    previousShellName: previousShell?.name ?? "",
+                    newShellPath: shell.directory.path
+                ))
+            }
             try show(shell: shell)
             sendEvent(SHIORIEventFactory.shellChanged(
                 shellName: shell.name,
@@ -3436,11 +3620,13 @@ private struct UtataneRootView: View {
                 in: model.ghosts.filter { $0.id != currentGhost?.id }
             )
             if let ghost = candidates.randomElement() {
+                nextGhostTransitionRaisesEvent = false
                 selectedGhostID = ghost.id
             }
         case .nextGhost:
             guard !model.ghosts.isEmpty else { return }
             let currentIndex = model.ghosts.firstIndex { $0.id == currentGhost?.id } ?? -1
+            nextGhostTransitionRaisesEvent = false
             selectedGhostID = model.ghosts[(currentIndex + 1) % model.ghosts.count].id
         case let .changeGhost(target):
             if target.caseInsensitiveCompare("random") == .orderedSame {
@@ -3451,50 +3637,67 @@ private struct UtataneRootView: View {
                 handleContentAction(.nextGhost, calledRuntime: calledRuntime)
                 return
             }
-            guard let ghost = model.ghosts.first(where: { matches(target, name: $0.name, directory: $0.rootDirectory) })
+            let resolvedTarget = target.caseInsensitiveCompare("lastinstalled") == .orderedSame
+                ? lastInstalledContentNames[NarContentType.ghost.rawValue] ?? target : target
+            guard let ghost = model.ghosts.first(where: { matches(resolvedTarget, name: $0.name, directory: $0.rootDirectory) })
             else { return }
             if let calledRuntime {
                 Task {
-                    do { try await replaceCalledGhost(calledRuntime, with: ghost) }
+                    do { try await replaceCalledGhost(calledRuntime, with: ghost, raisesChangingEvent: false) }
                     catch { showError(error.localizedDescription) }
                 }
             } else {
+                nextGhostTransitionRaisesEvent = false
                 selectedGhostID = ghost.id
             }
+        case let .changeGhostWithEvent(target):
+            handleGhostChange(target: target, calledRuntime: calledRuntime, raisesEvent: true)
         case let .callGhost(target):
             let available = model.ghosts.filter {
                 $0.id != currentGhost?.id && calledGhosts[$0.id] == nil && cachedCalledGhosts[$0.id] == nil
             }
-            let ghost = target.caseInsensitiveCompare("random") == .orderedSame
+            let resolvedTarget = target.caseInsensitiveCompare("lastinstalled") == .orderedSame
+                ? lastInstalledContentNames[NarContentType.ghost.rawValue] ?? target : target
+            let ghost = resolvedTarget.caseInsensitiveCompare("random") == .orderedSame
                 ? ghostsAllowedForAutomaticSwitching(in: available).randomElement()
-                : available.first(where: { matches(target, name: $0.name, directory: $0.rootDirectory) })
+                : available.first(where: { matches(resolvedTarget, name: $0.name, directory: $0.rootDirectory) })
             guard let ghost
             else { return }
-            call(ghost)
+            call(ghost, raisesEvent: false)
+        case let .callGhostWithEvent(target):
+            handleGhostCall(target: target, raisesEvent: true)
         case let .changeShell(target):
             if target.caseInsensitiveCompare("random") == .orderedSame {
                 if let calledRuntime, let shell = calledRuntime.ghost.shells.randomElement() {
-                    calledRuntime.select(shell: shell)
+                    calledRuntime.select(shell: shell, raisesChangingEvent: false)
                 } else if let shell = currentGhost?.shells.randomElement() {
-                    select(shell: shell)
+                    select(shell: shell, raisesChangingEvent: false)
                 }
                 return
             }
+            let resolvedTarget = target.caseInsensitiveCompare("lastinstalled") == .orderedSame
+                ? lastInstalledContentNames[NarContentType.shell.rawValue] ?? target : target
             if let calledRuntime,
                let shell = calledRuntime.ghost.shells.first(where: {
-                   matches(target, name: $0.name, directory: $0.directory)
+                   matches(resolvedTarget, name: $0.name, directory: $0.directory)
                })
             {
-                calledRuntime.select(shell: shell)
+                calledRuntime.select(shell: shell, raisesChangingEvent: false)
             } else if let shell = currentGhost?.shells.first(where: {
-                matches(target, name: $0.name, directory: $0.directory)
+                matches(resolvedTarget, name: $0.name, directory: $0.directory)
             }) {
-                select(shell: shell)
+                select(shell: shell, raisesChangingEvent: false)
             }
+        case let .changeShellWithEvent(target):
+            handleShellChange(target: target, calledRuntime: calledRuntime, raisesEvent: true)
         case let .changeBalloon(target):
-            let selected = target.caseInsensitiveCompare("random") == .orderedSame
+            let resolvedTarget = target.caseInsensitiveCompare("lastinstalled") == .orderedSame
+                ? lastInstalledContentNames[NarContentType.balloon.rawValue] ?? target : target
+            let selected = resolvedTarget.caseInsensitiveCompare("random") == .orderedSame
                 ? installedBalloons.randomElement()
-                : installedBalloons.first(where: { matches(target, name: $0.name, directory: $0.directory) })
+                : installedBalloons.first(where: {
+                    matches(resolvedTarget, name: $0.name, directory: $0.directory)
+                })
             guard let selected else { return }
             if let calledRuntime {
                 calledRuntime.select(balloon: selected)
@@ -3505,12 +3708,14 @@ private struct UtataneRootView: View {
         case let .changeCalendarSkin(target):
             calendarWindowController.reloadSkins()
             let skins = calendarWindowController.skins
-            let selected = target.caseInsensitiveCompare("random") == .orderedSame
+            let resolvedTarget = target.caseInsensitiveCompare("lastinstalled") == .orderedSame
+                ? lastInstalledContentNames[NarContentType.calendarSkin.rawValue] ?? target : target
+            let selected = resolvedTarget.caseInsensitiveCompare("random") == .orderedSame
                 ? skins.randomElement()
                 : skins.first(where: {
-                    $0.id.caseInsensitiveCompare(target) == .orderedSame
-                        || $0.name.caseInsensitiveCompare(target) == .orderedSame
-                        || $0.directory.lastPathComponent.caseInsensitiveCompare(target) == .orderedSame
+                    $0.id.caseInsensitiveCompare(resolvedTarget) == .orderedSame
+                        || $0.name.caseInsensitiveCompare(resolvedTarget) == .orderedSame
+                        || $0.directory.lastPathComponent.caseInsensitiveCompare(resolvedTarget) == .orderedSame
                 })
             if let selected {
                 calendarWindowController.selectedSkinID = selected.id
@@ -3521,6 +3726,19 @@ private struct UtataneRootView: View {
             Task { await updateCurrentBalloon() }
         case .updatePlatform:
             appUpdater.checkForUpdates()
+        case let .updateTargets(targets):
+            Task {
+                for target in targets {
+                    switch target {
+                    case "ghost": await updateCurrentGhost()
+                    case "shell": await updateCurrentShell(calledRuntime: calledRuntime)
+                    case "balloon": await updateCurrentBalloon()
+                    default: break
+                    }
+                }
+            }
+        case let .updateOther(options):
+            Task { await updateOtherContent(options) }
         case let .vanishByMyself(replacement, asksConfirmation):
             requestSelfVanish(
                 calledRuntime: calledRuntime,
@@ -3528,9 +3746,11 @@ private struct UtataneRootView: View {
                 asksConfirmation: asksConfirmation
             )
         case let .headline(target):
-            let headline = target.caseInsensitiveCompare("random") == .orderedSame
+            let resolvedTarget = target.caseInsensitiveCompare("lastinstalled") == .orderedSame
+                ? lastInstalledContentNames[NarContentType.headline.rawValue] ?? target : target
+            let headline = resolvedTarget.caseInsensitiveCompare("random") == .orderedSame
                 ? installedHeadlines.randomElement()
-                : installedHeadlines.first(where: { matches(target, name: $0.name, directory: $0.id) })
+                : installedHeadlines.first(where: { matches(resolvedTarget, name: $0.name, directory: $0.id) })
             guard let headline else { return }
             Task {
                 switch headline.kind {
@@ -3612,14 +3832,33 @@ private struct UtataneRootView: View {
                 allowedContentTypes: [.archive],
                 calledRuntime: calledRuntime
             )
-        case let .setTaskTrayIcon(file, tooltip):
+        case let .setTaskTrayIcon(file, tooltip, durationMilliseconds, runCount):
             let ghost = calledRuntime?.ghost ?? currentGhost
             let candidates = [
                 ghost?.rootDirectory.appending(path: file),
                 ghost?.rootDirectory.appending(path: "ghost/master").appending(path: file)
             ].compactMap(\.self)
-            let image = candidates.lazy.compactMap(NSImage.init(contentsOf:)).first
-            menuBarBalloonController.setStatusIcon(image, tooltip: tooltip ?? ghost?.name)
+            if let durationMilliseconds, let baseURL = candidates.first(where: {
+                FileManager.default.fileExists(atPath: $0.deletingPathExtension().path + "00." + $0.pathExtension)
+            }) {
+                let stem = baseURL.deletingPathExtension().lastPathComponent
+                let directory = baseURL.deletingLastPathComponent()
+                let ext = baseURL.pathExtension
+                let frames = (0 ..< 100).compactMap { index -> NSImage? in
+                    let name = "\(stem)\(String(format: "%02d", index))"
+                    let url = directory.appending(path: name).appendingPathExtension(ext)
+                    return FileManager.default.fileExists(atPath: url.path) ? NSImage(contentsOf: url) : nil
+                }
+                menuBarBalloonController.setAnimatedStatusIcon(
+                    frames,
+                    tooltip: tooltip ?? ghost?.name,
+                    durationMilliseconds: durationMilliseconds,
+                    runCount: runCount
+                )
+            } else {
+                let image = candidates.lazy.compactMap(NSImage.init(contentsOf:)).first
+                menuBarBalloonController.setStatusIcon(image, tooltip: tooltip ?? ghost?.name)
+            }
         case let .openDeveloperTool(target):
             switch target.lowercased() {
             case "errorlog":
@@ -3634,8 +3873,25 @@ private struct UtataneRootView: View {
             }
             networkSettings.showsDebugWindow = true
             updateDebugWindowVisibility(bringForward: true)
-        case .openConfigurationDialog:
+        case let .openConfigurationDialog(identifier):
+            networkSettings.selectedPane = settingsPane(for: identifier)
             openSettings()
+        case .minimizeWindows:
+            surfaceWindowController.hideAll()
+            balloonWindowController.hideAll()
+        case .saveWallpaper:
+            savedDesktopWallpaperURLs = Dictionary(uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
+                NSWorkspace.shared.desktopImageURL(for: screen).map { (screen.localizedName, $0) }
+            })
+        case .restoreWallpaper:
+            Task {
+                for screen in NSScreen.screens {
+                    guard let url = savedDesktopWallpaperURLs[screen.localizedName] else { continue }
+                    try? NSWorkspace.shared.setDesktopImageURL(url, for: screen, options: [:])
+                }
+            }
+        case let .setWallpaper(command):
+            Task { await setDesktopWallpaper(command, calledRuntime: calledRuntime) }
         case .openReadme:
             let ghost = calledRuntime?.ghost ?? currentGhost
             if let document = ghost.flatMap(ghostReadme) {
@@ -3677,6 +3933,89 @@ private struct UtataneRootView: View {
             if FileManager.default.fileExists(atPath: folderURL.path) {
                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
             }
+        }
+    }
+
+    private func handleGhostChange(
+        target: String,
+        calledRuntime: CalledGhostRuntime?,
+        raisesEvent: Bool
+    ) {
+        let resolvedTarget = target.caseInsensitiveCompare("lastinstalled") == .orderedSame
+            ? lastInstalledContentNames[NarContentType.ghost.rawValue] ?? target : target
+        let replacingID = calledRuntime?.ghost.id ?? currentGhost?.id
+        let available = model.ghosts.filter { candidate in
+            candidate.id != replacingID
+                && candidate.id != currentGhost?.id
+                && calledGhosts[candidate.id] == nil
+                && cachedCalledGhosts[candidate.id] == nil
+        }
+        let ghost: InstalledGhost? = if resolvedTarget.caseInsensitiveCompare("random") == .orderedSame {
+            ghostsAllowedForAutomaticSwitching(in: available).randomElement()
+        } else if resolvedTarget.caseInsensitiveCompare("sequential") == .orderedSame {
+            nextGhost(after: replacingID, from: available)
+        } else {
+            available.first(where: { matches(resolvedTarget, name: $0.name, directory: $0.rootDirectory) })
+        }
+        guard let ghost else { return }
+        if let calledRuntime {
+            Task {
+                do {
+                    try await replaceCalledGhost(calledRuntime, with: ghost, raisesChangingEvent: raisesEvent)
+                } catch {
+                    showError(error.localizedDescription)
+                }
+            }
+        } else {
+            nextGhostTransitionRaisesEvent = raisesEvent
+            selectedGhostID = ghost.id
+        }
+    }
+
+    private func nextGhost(after currentID: URL?, from candidates: [InstalledGhost]) -> InstalledGhost? {
+        guard !candidates.isEmpty else { return nil }
+        guard let currentID, let index = model.ghosts.firstIndex(where: { $0.id == currentID })
+        else { return candidates.first }
+        for offset in 1 ... model.ghosts.count {
+            let candidate = model.ghosts[(index + offset) % model.ghosts.count]
+            if candidates.contains(where: { $0.id == candidate.id }) {
+                return candidate
+            }
+        }
+        return candidates.first
+    }
+
+    private func handleGhostCall(target: String, raisesEvent: Bool) {
+        let available = model.ghosts.filter {
+            $0.id != currentGhost?.id && calledGhosts[$0.id] == nil && cachedCalledGhosts[$0.id] == nil
+        }
+        let resolvedTarget = target.caseInsensitiveCompare("lastinstalled") == .orderedSame
+            ? lastInstalledContentNames[NarContentType.ghost.rawValue] ?? target : target
+        let ghost = resolvedTarget.caseInsensitiveCompare("random") == .orderedSame
+            ? ghostsAllowedForAutomaticSwitching(in: available).randomElement()
+            : available.first(where: { matches(resolvedTarget, name: $0.name, directory: $0.rootDirectory) })
+        guard let ghost else { return }
+        call(ghost, raisesEvent: raisesEvent)
+    }
+
+    private func handleShellChange(
+        target: String,
+        calledRuntime: CalledGhostRuntime?,
+        raisesEvent: Bool
+    ) {
+        let resolvedTarget = target.caseInsensitiveCompare("lastinstalled") == .orderedSame
+            ? lastInstalledContentNames[NarContentType.shell.rawValue] ?? target : target
+        let shells = calledRuntime?.ghost.shells ?? currentGhost?.shells ?? []
+        let selected = resolvedTarget.caseInsensitiveCompare("random") == .orderedSame
+            ? shells.randomElement()
+            : shells.first(where: { matches(resolvedTarget, name: $0.name, directory: $0.directory) })
+        guard let selected else { return }
+        if let calledRuntime,
+           calledRuntime.ghost.shells.contains(where: { $0.directory == selected.directory })
+        {
+            calledRuntime.select(shell: selected, raisesChangingEvent: raisesEvent)
+        } else {
+            select(shell: selected, raisesChangingEvent: raisesEvent)
         }
     }
 
@@ -4962,6 +5301,19 @@ private struct UtataneRootView: View {
         NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
+    private func settingsPane(for identifier: String?) -> UtataneSettingsStore.Pane {
+        switch identifier?.lowercased() {
+        case "content", "update": .content
+        case "ghost", "ghosts": .ghost
+        case "talk", "balloon": .talkAndBalloon
+        case "voice", "speech": .voice
+        case "shiori": .shiori
+        case "network": .network
+        case "advanced", "other": .advanced
+        default: .general
+        }
+    }
+
     private func settingsMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
         var items: [SurfaceContextMenuItem] = [
             .action(title: String(localized: "本体設定"), handler: { showSettingsPane(.general) })
@@ -5277,10 +5629,10 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func call(_ ghost: InstalledGhost) {
+    private func call(_ ghost: InstalledGhost, raisesEvent: Bool = true) {
         guard !isRestoringLayoutPreset else { return }
         Task {
-            do { try await startCalledGhost(ghost) }
+            do { try await startCalledGhost(ghost, raisesCallingEvent: raisesEvent) }
             catch { showError(error.localizedDescription) }
         }
     }
@@ -5291,7 +5643,11 @@ private struct UtataneRootView: View {
         let changeScript: String
     }
 
-    private func replaceCalledGhost(_ runtime: CalledGhostRuntime, with ghost: InstalledGhost) async throws {
+    private func replaceCalledGhost(
+        _ runtime: CalledGhostRuntime,
+        with ghost: InstalledGhost,
+        raisesChangingEvent: Bool = true
+    ) async throws {
         guard ghost.id != currentGhost?.id,
               calledGhosts[ghost.id] == nil,
               cachedCalledGhosts[ghost.id] == nil
@@ -5299,7 +5655,7 @@ private struct UtataneRootView: View {
         let replacement = await CalledGhostReplacement(
             ghost: runtime.ghost,
             shellName: runtime.shell.name,
-            changeScript: runtime.stopForGhostChange(to: ghost)
+            changeScript: runtime.stopForGhostChange(to: ghost, raisesChangingEvent: raisesChangingEvent)
         )
         calledGhosts.removeValue(forKey: runtime.ghost.id)
         otherGhostTalkModes.removeValue(forKey: runtime.ghost.id)
@@ -5310,14 +5666,15 @@ private struct UtataneRootView: View {
 
     private func startCalledGhost(
         _ ghost: InstalledGhost,
-        replacing replacement: CalledGhostReplacement? = nil
+        replacing replacement: CalledGhostReplacement? = nil,
+        raisesCallingEvent: Bool = true
     ) async throws {
         guard let caller = currentGhost,
               calledGhosts[ghost.id] == nil,
               cachedCalledGhosts[ghost.id] == nil
         else { return }
         do {
-            if replacement == nil {
+            if replacement == nil, raisesCallingEvent {
                 sendEvent(SHIORIEventFactory.ghostCalling(
                     characterName: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
                     mode: "manual",
@@ -6324,6 +6681,93 @@ private struct UtataneRootView: View {
         }
     }
 
+    private func updateCurrentShell(calledRuntime: CalledGhostRuntime? = nil) async {
+        guard !isUpdatingContent else { return }
+        guard let updateShell = calledRuntime?.shell ?? selectedShell else { return }
+        guard let homeURL = ContentNetworkUpdater.homeURL(in: updateShell.directory) else {
+            showError(ContentNetworkUpdateError.invalidHomeURL.localizedDescription)
+            return
+        }
+        isUpdatingContent = true
+        defer { isUpdatingContent = false }
+        let reason = "manual"
+        let statusToken = statusWindowController.show("シェル「\(updateShell.name)」を更新中…")
+        defer { statusWindowController.hide(token: statusToken) }
+        broadcastEvent(SHIORIEventFactory.updateOtherBegin(
+            name: updateShell.name,
+            path: updateShell.directory.path,
+            updateType: "shell",
+            reason: reason
+        ))
+        do {
+            let target = ContentUpdateTarget(
+                kind: .shell,
+                name: updateShell.name,
+                rootDirectory: updateShell.directory,
+                homeURL: homeURL
+            )
+            let result = try await ContentUpdateJob().run(
+                target: target,
+                operation: .update,
+                progress: { progress in
+                    broadcastOtherUpdateProgress(progress, kind: "shell", reason: reason)
+                }
+            )
+            if let calledRuntime {
+                calledRuntime.select(shell: updateShell)
+            } else {
+                select(shell: updateShell)
+            }
+            broadcastEvent(SHIORIEventFactory.updateOtherComplete(
+                changedFiles: result.changedFiles,
+                updateType: "shell",
+                reason: reason
+            ))
+        } catch {
+            broadcastEvent(SHIORIEventFactory.updateOtherFailure(
+                failureReason: updateFailureReason(error),
+                failurePath: updateFailurePath(error),
+                updateType: "shell",
+                reason: reason
+            ))
+            showError(error.localizedDescription)
+        }
+    }
+
+    private func updateOtherContent(_ options: [String]) async {
+        let selectors = options.compactMap { option -> (ContentExplorerKind, String)? in
+            guard option.hasPrefix("--"), let separator = option.firstIndex(of: "=") else { return nil }
+            let key = String(option[option.index(option.startIndex, offsetBy: 2) ..< separator]).lowercased()
+            let value = String(option[option.index(after: separator)...])
+            let kind: ContentExplorerKind? = switch key {
+            case "balloon": .balloon
+            case "shell": .shell
+            case "plugin": .plugin
+            case "headline": .headline
+            default: nil
+            }
+            return kind.map { ($0, value) }
+        }
+        let entries = contentExplorerEntries().filter { entry in
+            selectors.contains { kind, value in
+                entry.kind == kind && matches(value, name: entry.name, directory: entry.directory)
+            }
+        }
+        guard !entries.isEmpty else { return }
+        let operation: ContentUpdateOperation = if options.contains(where: {
+            $0.caseInsensitiveCompare("--option=checkonly") == .orderedSame
+        }) {
+            .check
+        } else if options.contains(where: {
+            $0.caseInsensitiveCompare("--option=recovery") == .orderedSame
+        }) {
+            .repair
+        } else {
+            .update
+        }
+        await runContentExplorerBatch(entries, operation: operation)
+    }
+
     private func broadcastOtherUpdateProgress(
         _ progress: ContentUpdateProgress,
         kind: String,
@@ -7076,6 +7520,9 @@ private struct UtataneRootView: View {
                         )
                     }.value
                     installedItems.append(contentsOf: result.items)
+                    for item in result.items {
+                        lastInstalledContentNames[item.type.rawValue] = item.name
+                    }
                     if let bootGhostDirectory = result.bootGhostDirectory {
                         bootGhostDirectories.append(bootGhostDirectory)
                     }

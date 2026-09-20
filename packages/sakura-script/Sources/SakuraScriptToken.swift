@@ -11,6 +11,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case resumeAnimation(String)
     case waitForAnimation(String)
     case offsetAnimation(identifier: String, x: Int, y: Int)
+    case addAnimation(SakuraScriptAnimationAddition)
     case repaintLock(locked: Bool, manual: Bool)
     case balloonRepaintLock(locked: Bool, manual: Bool)
     case balloonMoveLock(Bool)
@@ -117,6 +118,51 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case clearAll
     case end
     case unknown(String)
+}
+
+public struct SakuraScriptAnimationFrame: Sendable, Equatable {
+    public let surfaceID: Int
+    public let x: Int
+    public let y: Int
+    public let durationMilliseconds: Int
+
+    public init(surfaceID: Int, x: Int = 0, y: Int = 0, durationMilliseconds: Int = 0) {
+        self.surfaceID = surfaceID
+        self.x = x
+        self.y = y
+        self.durationMilliseconds = durationMilliseconds
+    }
+}
+
+public enum SakuraScriptAnimationAddition: Sendable, Equatable {
+    case surfaces(method: String, frames: [SakuraScriptAnimationFrame], repeats: Bool)
+    case move(x: Int, y: Int)
+    case text(
+        x: Int,
+        y: Int,
+        width: Int,
+        height: Int,
+        text: String,
+        durationMilliseconds: Int,
+        color: (red: Int, green: Int, blue: Int),
+        fontSize: Int?,
+        fontName: String?
+    )
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case let (.surfaces(lm, lf, lr), .surfaces(rm, rf, rr)):
+            lm == rm && lf == rf && lr == rr
+        case let (.move(lx, ly), .move(rx, ry)):
+            lx == rx && ly == ry
+        case let (.text(lx, ly, lw, lh, lt, ld, lc, ls, ln), .text(rx, ry, rw, rh, rt, rd, rc, rs, rn)):
+            lx == rx && ly == ry && lw == rw && lh == rh && lt == rt && ld == rd
+                && lc.red == rc.red && lc.green == rc.green && lc.blue == rc.blue
+                && ls == rs && ln == rn
+        default:
+            false
+        }
+    }
 }
 
 public struct SakuraScriptInputCommand: Sendable, Equatable {
@@ -393,13 +439,18 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case randomGhost
     case nextGhost
     case changeGhost(String)
+    case changeGhostWithEvent(String)
     case callGhost(String)
+    case callGhostWithEvent(String)
     case changeShell(String)
+    case changeShellWithEvent(String)
     case changeBalloon(String)
     case changeCalendarSkin(String)
     case updateGhost
     case updateBalloon
     case updatePlatform
+    case updateTargets([String])
+    case updateOther([String])
     case vanishByMyself(replacement: String?, asksConfirmation: Bool)
     case headline(String)
     case closeGhost
@@ -411,14 +462,30 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case openDressupExplorer
     case openPictureViewer(String?)
     case openArchiveViewer(String?)
-    case setTaskTrayIcon(file: String, tooltip: String?)
+    case setTaskTrayIcon(file: String, tooltip: String?, durationMilliseconds: Int?, runCount: Int?)
     case openDeveloperTool(String)
-    case openConfigurationDialog
+    case openConfigurationDialog(String?)
+    case minimizeWindows
+    case saveWallpaper
+    case restoreWallpaper
+    case setWallpaper(SakuraScriptWallpaperCommand)
     case openReadme
     case openHelp
     case openTerms
     case openFile(String)
     case openFolder(String)
+}
+
+public struct SakuraScriptWallpaperCommand: Sendable, Equatable {
+    public let file: String?
+    public let position: String
+    public let color: String?
+
+    public init(file: String?, position: String = "center", color: String? = nil) {
+        self.file = file
+        self.position = position
+        self.color = color
+    }
 }
 
 public enum SakuraScriptSoundCommand: Sendable, Equatable {

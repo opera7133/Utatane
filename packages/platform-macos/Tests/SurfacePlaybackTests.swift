@@ -6,6 +6,12 @@ import UtataneBalloon
 import UtataneCore
 @testable import UtatanePlatformMacOS
 
+@Test func `SakuraScript colors include CSS extended keywords`() {
+    #expect(cssNamedBalloonColors.count >= 147)
+    #expect(cssNamedBalloonColors["aliceblue"] == BalloonColor(red: 240, green: 248, blue: 255))
+    #expect(cssNamedBalloonColors["darkslategrey"] == BalloonColor(red: 47, green: 79, blue: 79))
+}
+
 @Test func `resolves SakuraScript web mail and ghost relative file targets`() throws {
     let root = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)
@@ -395,6 +401,43 @@ func `bound blink replaces its initial eye layer instead of overlaying it`() asy
     }
     #expect(try #require(controller.renderedImage()?.colorAtCenter()).blueComponent > 0.9)
     controller.stopAnimation(id: 101)
+}
+
+@Test
+@MainActor
+func `SakuraScript dynamic animation can overlay and replace the base surface`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 4, height: 4, color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1))
+        .write(to: directory.appending(path: "surface0.png"))
+    try makePNG(width: 4, height: 4, color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1))
+        .write(to: directory.appending(path: "surface1.png"))
+    try makePNG(width: 4, height: 4, color: NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1))
+        .write(to: directory.appending(path: "surface2.png"))
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    defer { controller.resetContent() }
+    try controller.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:], usesSelfAlpha: true),
+        defaultSurfaceIDs: [0: 0]
+    )
+
+    controller.addAnimation(.surfaces(
+        method: "base",
+        frames: [.init(surfaceID: 2)],
+        repeats: false
+    ))
+    #expect(try #require(controller.renderedImage()?.colorAtCenter()).greenComponent > 0.9)
+    controller.addAnimation(.surfaces(
+        method: "overlay",
+        frames: [.init(surfaceID: 1)],
+        repeats: false
+    ))
+    try await requireEventually {
+        controller.renderedImage()?.colorAtCenter()?.redComponent ?? 0 > 0.9
+    }
 }
 
 @Test

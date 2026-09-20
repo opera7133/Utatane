@@ -546,6 +546,25 @@ func `parses surface animation commands`() {
 }
 
 @Test
+func `parses dynamic surface animation additions`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![anim,add,overlay,10,2,3,40,11,4,5,60,always]\![anim,add,overlayfast,12]\![anim,add,base,20]\![anim,add,move,8,-4]\![anim,add,text,1,2,120,30,hello,500,255,128,0,14,Helvetica]"#
+    ) == [
+        .addAnimation(.surfaces(method: "overlay", frames: [
+            .init(surfaceID: 10, x: 2, y: 3, durationMilliseconds: 40),
+            .init(surfaceID: 11, x: 4, y: 5, durationMilliseconds: 60)
+        ], repeats: true)),
+        .addAnimation(.surfaces(method: "overlayfast", frames: [.init(surfaceID: 12)], repeats: false)),
+        .addAnimation(.surfaces(method: "base", frames: [.init(surfaceID: 20)], repeats: false)),
+        .addAnimation(.move(x: 8, y: -4)),
+        .addAnimation(.text(
+            x: 1, y: 2, width: 120, height: 30, text: "hello", durationMilliseconds: 500,
+            color: (red: 255, green: 128, blue: 0), fontSize: 14, fontName: "Helvetica"
+        ))
+    ])
+}
+
+@Test
 func `decodes UCS-2 ASCII and common entity references`() {
     #expect(SakuraScriptParser().parse(#"\_u[0x22EE]\_u[12354]\_m[0x41]\_m[66]\&[amp]\&[lt]\&[quot]"#) == [
         .text("⋮"),
@@ -594,7 +613,7 @@ func `parses online user break and sync object controls`() {
 
 @Test
 func `parses content actions`() {
-    #expect(SakuraScriptParser().parse(#"\+\_+\![change,ghost,Ria]\![call,ghost,Emily]\![change,shell,master]\![change,balloon,origin]\![updatebymyself]\![update,balloon]\![update,platform]\![execute,headline,recall]"#) == [
+    #expect(SakuraScriptParser().parse(#"\+\_+\![change,ghost,Ria]\![call,ghost,Emily]\![change,shell,master]\![change,balloon,origin]\![updatebymyself]\![update,balloon]\![update,platform]\![update,ghost+shell+balloon]\![updateother,--plugin=clock,--headline=news,--option=checkonly]\![execute,headline,recall]"#) == [
         .contentAction(.randomGhost),
         .contentAction(.nextGhost),
         .contentAction(.changeGhost("Ria")),
@@ -604,7 +623,20 @@ func `parses content actions`() {
         .contentAction(.updateGhost),
         .contentAction(.updateBalloon),
         .contentAction(.updatePlatform),
+        .contentAction(.updateTargets(["ghost", "shell", "balloon"])),
+        .contentAction(.updateOther(["--plugin=clock", "--headline=news", "--option=checkonly"])),
         .contentAction(.headline("recall"))
+    ])
+}
+
+@Test
+func `parses content changes that explicitly raise menu events`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![change,ghost,Ria,--option=raise-event]\![call,ghost,Emily,--option=raise-event]\![change,shell,master,--option=raise-event]"#
+    ) == [
+        .contentAction(.changeGhostWithEvent("Ria")),
+        .contentAction(.callGhostWithEvent("Emily")),
+        .contentAction(.changeShellWithEvent("master"))
     ])
 }
 
@@ -944,7 +976,7 @@ func `parses open ui dialog and utility commands`() {
     #expect(SakuraScriptParser().parse(
         #"\![open,configurationdialog]\![open,readme]\![open,help]\![open,terms]\![open,file,/tmp/a.txt]\![open,folder,/tmp]\![execute,dumpsurface,/tmp/out.png,--event=OnDumped]\![execute,createupdatedata,/tmp/dir,--event=OnUpdated]"#
     ) == [
-        .contentAction(.openConfigurationDialog),
+        .contentAction(.openConfigurationDialog(nil)),
         .contentAction(.openReadme),
         .contentAction(.openHelp),
         .contentAction(.openTerms),
@@ -952,6 +984,20 @@ func `parses open ui dialog and utility commands`() {
         .contentAction(.openFolder("/tmp")),
         .archive(.dumpSurface(path: "/tmp/out.png", eventID: "OnDumped")),
         .archive(.createUpdateData(directoryPath: "/tmp/dir", eventID: "OnUpdated"))
+    ])
+}
+
+@Test
+func `parses window minimization wallpaper and settings pane commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![set,windowstate,minimize]\![save,wallpaper]\![restore,wallpaper]\![set,wallpaper,image.png,fit]\![set,wallpaper,--file=other.png,--position=fill,--color=navy]\![open,configurationdialog,talk]"#
+    ) == [
+        .contentAction(.minimizeWindows),
+        .contentAction(.saveWallpaper),
+        .contentAction(.restoreWallpaper),
+        .contentAction(.setWallpaper(.init(file: "image.png", position: "fit"))),
+        .contentAction(.setWallpaper(.init(file: "other.png", position: "fill", color: "navy"))),
+        .contentAction(.openConfigurationDialog("talk"))
     ])
 }
 
@@ -1094,7 +1140,7 @@ func `parses component lifecycle and SHIORI debug commands`() {
 @Test
 func `parses plugin timers and macOS content commands`() {
     #expect(SakuraScriptParser().parse(
-        #"\![timerraiseplugin,1000,0,clock,OnTick,arg]\![timernotifyplugin,0,1,clock,OnTick]\![change,calendarskin,Simple]\![set,tasktrayicon,status.png,Talking]"#
+        #"\![timerraiseplugin,1000,0,clock,OnTick,arg]\![timernotifyplugin,0,1,clock,OnTick]\![change,calendarskin,Simple]\![set,tasktrayicon,status.png,Talking]\![set,tasktrayicon,blink.ico,Blink,--duration=80,--runcount=3]"#
     ) == [
         .pluginTimerEvent(
             target: "clock",
@@ -1113,7 +1159,12 @@ func `parses plugin timers and macOS content commands`() {
             arguments: []
         ),
         .contentAction(.changeCalendarSkin("Simple")),
-        .contentAction(.setTaskTrayIcon(file: "status.png", tooltip: "Talking"))
+        .contentAction(.setTaskTrayIcon(
+            file: "status.png", tooltip: "Talking", durationMilliseconds: nil, runCount: nil
+        )),
+        .contentAction(.setTaskTrayIcon(
+            file: "blink.ico", tooltip: "Blink", durationMilliseconds: 80, runCount: 3
+        ))
     ])
 }
 

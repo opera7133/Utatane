@@ -25,8 +25,8 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 
 調査日: 2026-09-20
 UKADOC掲載構文数: 359
-UKADOC分類行数: 143
-調査結果: ✅ 94 / 🟡 43 / ❌ 0 / ➖ 6
+UKADOC分類行数: 147
+調査結果: ✅ 111 / 🟡 27 / ❌ 0 / ➖ 9
 
 ### 基本仕様
 
@@ -34,7 +34,7 @@ UKADOC分類行数: 143
 | --- | --- | --- |
 | `\\` | ✅ | `\` を文字として表示 |
 | `\%` | ✅ | `%` を環境変数の開始記号として解釈せず、そのまま表示。Parserテストで確認 |
-| スクリプトの寿命 | 🟡 | 再生、キャンセル、クリック待ち、終了後の自動消去は実装。SSPの全割込み規則とは未照合 |
+| スクリプトの寿命 | ✅ | 再生、通常割込み、選択肢応答からの一時割込みと再開、クリック待ち、キャンセル、終了後の自動消去、time critical／nouserbreakによる割込み抑止を実装してPlayerテストで確認 |
 
 ### スコープ
 
@@ -51,7 +51,7 @@ UKADOC分類行数: 143
 | `\sID`, `\s[ID]` | ✅ | 数値IDに対応。UKADOCどおり括弧なしは1桁、複数桁は括弧形式。Parserテストで確認 |
 | `\s[識別子]` | ✅ | sakura／kero／charのsurface aliasと、`surfaces.txt`の各surfaceに書く`name`を解決。候補が複数あるalias／nameはその中から選択 |
 | `\i[ID]`, `\i[ID,wait]` | ✅ | 数値IDと`animation*.name`のSERIKOアニメーション開始、実完了待ちに対応 |
-| `\![anim,clear/pause/resume/offset/add/stop,...]` | 🟡 | ID・名前指定の`clear`・`stop`・`pause`・`resume`・`offset`を実装。pause中はフレーム残り時間も停止。add・textは未実装 |
+| `\![anim,clear/pause/resume/offset/add/stop,...]` | ✅ | ID・名前指定の`clear`・`stop`・`pause`・`resume`・`offset`を実装。pause中はフレーム残り時間も停止。`add`のoverlay／overlayfast／base／move、複数フレームとrunonce／always、サーフェス上のtext描画にも対応 |
 | `\__w[animation,ID]` | ✅ | 現scopeで同じID・名前のアニメーションTaskが完了・停止するまで待機 |
 | `\![bind,...]`, `\![bind-noevent,...]` | ✅ | カテゴリ・パーツ指定、明示ON/OFFとトグル、scope、`mustselect`・`multiple`・`addid`の描画、実行時再描画に対応。`bind`は`OnDressupChanged`と`OnNotifyDressupInfo`を通知。右クリックの着せ替えメニューと、ゴースト・シェル別の選択状態保存にも対応 |
 | `\![lock/unlock,repaint]` | ✅ | アニメーション進行を止めず描画だけ保留し、unlock時に最新フレームを反映。通常lockはスクリプト終端で自動解除、manualは維持 |
@@ -72,21 +72,21 @@ UKADOC分類行数: 143
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\bID`, `\b[ID]` | ✅ | scope別のバルーンsurface変更に対応。括弧なしは1桁、複数桁は括弧形式。`\b[-1]` によるバルーン非表示に対応 |
-| `\_b[ファイル,...]` 全形式 | 🟡 | `\_b[画像パス,inline]` と `\_b[画像パス,x,y]` によるバルーン内画像描画（相対パスおよび `data:image/...;base64,...` 画像）に対応。`opaque` / `--option=opaque`も解釈します。拡大縮小・切り抜き・前面固定などの追加オプションは未対応 |
+| `\_b[ファイル,...]` 全形式 | 🟡 | inline／座標指定、相対パスとbase64、opaque／use_self_alpha、clipping、ピクセル・百分率・縦横比維持のscaling、反転、fixed、background／foreground、画像representation番号のsourceに対応。画像URL、プラグイン内探索、DLL／EXEリソース、PSDレイヤー名指定は未対応 |
 | `\n` | ✅ | 改行 |
 | `\n[half]`, `\n[百分率]` | ✅ | `half`と数値・`%`付き百分率を改行文字の行高へ反映 |
 | `\_n` | ✅ | 次の`\_n`まで現scopeの自動折返しを停止し、スクリプト終了時に復帰 |
 | `\c` | ✅ | 現scopeの本文とリンクを消去 |
 | `\c[char/line,...]` | ✅ | カーソル直前または0始まり開始位置から文字数・行数を消去。後続のリンク・文字装飾範囲も補正 |
-| `\_l[x,y]`／`\_l[x]` | 🟡 | ピクセル・em・lh・%と`@`相対指定を解釈し、文字描画範囲左上を基準に配置。X座標だけを指定する旧来形は現在のY座標を維持します。%は文字描画範囲の幅・高さを基準にします。同じ行の左へ戻って後続を右揃えする指定は右タブとして扱い、左右に分かれたメニューを同一行へ配置。縦書きでの座標配置は未検証 |
+| `\_l[x,y]`／`\_l[x]` | ✅ | ピクセル・em・lh・%と`@`相対指定を解釈し、文字描画範囲左上を基準に配置。Xだけの旧来形、右タブとして使う同一行の左右分割、AppKit縦書きレイアウトにも同じ座標モデルを反映 |
 | `\C` | ✅ | スクリプト先頭では直前の表示内容・リンク・装飾を維持してscope 0から追記。途中では全scopeを消去。Playerテストで確認 |
 | `\![set,autoscroll,...]` | ✅ | `disable` / `enable` をスコープ単位で反映 |
-| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset、left/center(top)/right/bottom/none配置、下部marker、受信数表示を実装。offset・marker・numはスクリプト終了時に解除、alignはゴースト終了まで保持。`@`付きoffsetはShell descript・surface固有offsetへ加算し、`@`なしは両方を無視する挙動を統合テストで確認。バルーンを利用者がドラッグした座標との加算規則は未照合 |
+| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset、配置、下部marker、受信数表示を実装。`@`付きoffsetはShell／surface固有offsetへ加算し、`@`なしは置換。利用者がドラッグした座標との加算・終端復帰規則は未対応 |
 | `\![set,balloontimeout,...]` | ✅ | 表示完了後のバルーン消去時間を指定。0以下で無効、選択肢タイムアウトとの競合は早い方を採用 |
 | `\![set,balloonwait,...]` | ✅ | 倍率・百分率・`ms` 絶対値に対応し、スクリプト終了時に復帰 |
 | `\![set,serikotalk,true/false]` | ✅ | 文字表示中に現在surfaceのSERIKO `talk` intervalを駆動。明示アニメーションとは競合させず、スクリプトごとにtrueへリセット |
 | `\![*]` | ✅ | scope別の `marker*.png` をインライン表示 |
-| online / nouserbreak mode | 🟡 | `enter` / `leave`を解析。onlineは現scopeのバルーンを強制表示して簡易オンライン印を表示し、nouserbreakは区間中の別スクリプトによる割込みを拒否。SSPの専用マーカー画像とOwned SSTP判定は未対応 |
+| online / nouserbreak mode | ✅ | `enter`／`leave`を解析。onlineは現scopeのバルーンを強制表示してバルーンの`online*.png`・座標・アニメーション間隔を使用し、SSTP再生時は送信元markerを表示。nouserbreakは区間中の別スクリプトによる割込みを拒否 |
 | balloon repaint / move lock | ✅ | `balloonrepaint`は描画を保留してunlock時に最新内容を反映。通常lockは終端解除、manualは維持。`balloonmove`は明示解除までドラッグを抑止 |
 | `\_!`, `\_?` | ✅ | 区間内のタグ・環境変数を解釈せずそのまま表示。閉じタグがない場合は末尾までを対象にしParserテストで確認 |
 | `\__v` | ✅ | `disable`で音声合成と発話履歴への記録を一時停止し、`alternate,テキスト`で読み上げと履歴へ残す代替文を指定。引数なしで通常動作へ戻ります |
@@ -99,7 +99,7 @@ UKADOC分類行数: 143
 | `\f[align/valign,...]` | ✅ | `align`のleft・center・rightは同じ行の既存文字にも反映し、明示改行でleftへ復帰。`valign`のtop・center・bottomは改行をまたいでscope別に維持 |
 | `\f[name,フォント名]` | ✅ | 複数候補を優先順に選択し、ゴーストmaster／バルーン内のフォントファイルをプロセス登録。`default`への復帰にも対応 |
 | `\f[height,数値]` | ✅ | 絶対値、相対値、百分率、`default`、CSS風の7段階サイズ名と`smaller`・`larger`に対応 |
-| `\f[color,色指定]` | 🟡 | RGB、百分率RGB、`#RRGGBB`、主要な色名、`default` に対応。全色名は未照合 |
+| `\f[color,色指定]` | 🟡 | RGB、百分率RGB、`#RGB`、`#RRGGBB`、CSS Color Level 3の全拡張色名、`default`に対応。`disable`と`default.anchor`など別スタイルの既定色参照は未対応 |
 | shadow color/style、outline | ✅ | `shadowcolor`の色指定・`none`・`default`、`shadowstyle`の`offset`・`outline`、`outline`の真偽・`default`を文字範囲別に描画 |
 | anchor font color | ✅ | `\f[anchor.font.color,...]`のRGB・百分率・16進・主要色名・defaultを以後のアンカー範囲へ反映 |
 | bold / italic / strike / underline | ✅ | 有効・無効・defaultと、文字範囲別の描画に対応 |
@@ -117,7 +117,8 @@ UKADOC分類行数: 143
 | `\t` | ✅ | 実行後からスクリプト終了・キャンセルまで、通常・呼び出しゴーストのサーフェスマウスイベントをSHIORIへ通知しません。Player状態と配送経路をテスト |
 | `\_q`, quicksection | ✅ | トグル形式と明示的なtrue/false・1/0に対応。文字ウェイトだけを省略し、明示ウェイトは実行 |
 | `\_s`, `\_s[ID...]` | ✅ | 無引数はscope 0・1、ID指定は列挙scopeへ、区間内の文字と改行を同時表示。scope別の文字装飾も保持しPlayerテストで確認 |
-| syncobject の wait / set / reset | 🟡 | Utatane内の通常・呼び出しゴースト間で共有する名前付きシグナルとしてset・reset・waitとtimeoutを実装。WindowsのMutex・Semaphore種別判定と`--reset`は未対応 |
+| syncobject の wait / set / reset | ✅ | Utatane内の通常・呼び出しゴースト間で共有する名前付きシグナルとしてset・reset・waitとtimeoutを実装 |
+| Windows Mutex／Semaphoreとのsyncobject連携 | ➖ | WindowsのOSオブジェクトを名前で取得し、種別に応じて`--reset`を処理する互換機能。macOSプロセスから同じオブジェクトへ接続できないため対象外 |
 
 ### 選択肢・アンカー
 
@@ -132,9 +133,10 @@ UKADOC分類行数: 143
 | `\z` | ✅ | 旧仕様の選択肢付きスクリプト終端として `\e` と同じ再生終了処理へ接続。Parser・Playerの終了経路で確認 |
 | `\*`, `\![set,choicetimeout,時間]` | ✅ | 表示完了後から計時。省略時は設定値、0・-1・`\*`は無期限。期限時にバルーンを閉じ、通常・呼び出しゴーストへ`OnChoiceTimeout`を通知 |
 | `\_a[ID]...\_a` | ✅ | アンカー範囲と引数に対応 |
-| cursor / anchor style・各色 | 🟡 | バルーン `descript.txt` の通常・hover設定を反映。SakuraScriptの `\f[...]` 変更は未実装 |
+| cursor / anchor style・各色 | ✅ | バルーン`descript.txt`の通常・hover設定に加え、SakuraScriptのstyle、font／pen／brush色をリンクごとに反映。`default`でバルーン設定へ戻す |
 | cursor / anchor method | ➖ | Win32 `SetROP2`の描画演算を直接指定する機能。AppKitへ同じ演算を移植できないため、Utataneでは通常のアルファ合成で描画 |
-| anchor visited style・各色・method | 🟡 | 選択済みアンカーIDをゴースト実行中に保持し、バルーンの`anchor.visited` style・font／pen／brush色を反映。SakuraScriptの`\f[anchorvisited...]`とROP methodは未実装 |
+| anchor visited style・各色 | ✅ | 選択済みアンカーIDをゴースト実行中に保持し、バルーン設定とSakuraScriptの`\f[anchorvisited...]`によるstyle・font／pen／brush色を反映 |
+| anchor visited method | ➖ | cursor／anchor methodと同じWin32 `SetROP2`指定のため、macOSでは通常のアルファ合成で描画 |
 
 ### イベント・本体操作
 
@@ -143,18 +145,19 @@ UKADOC分類行数: 143
 | `\e` | ✅ | 再生終了 |
 | `\-` | ✅ | ゴーストの終了処理を実行（呼び出しゴーストはdismiss、メインゴーストはアプリ終了）。Player・App経路で確認 |
 | `\a` | ✅ | `OnAITalk` イベントを発生 |
-| update / updatebymyself / updateother | 🟡 | `updatebymyself`、`update,ghost`、`update,balloon`を既存コンテンツ更新へ、`update,platform`をSparkleの本体更新確認へ接続。shell・複数対象・updateother・全オプションは未対応 |
-| `\6`, `\7`, SNTP | 🟡 | `\7`／`\![executesntp]`によるHTTP Date時刻取得とSNTPイベント、`\6`の補正要求経路を実装。macOS通常権限でのシステム時刻補正は未接続 |
+| update / updatebymyself / updateother | 🟡 | ghost／shell／balloonの単体・複数対象、`updatebymyself`、`update,platform`、`updateother`のghost／shell／balloon／plugin／headline指定とcheckonly／recoveryを既存の更新基盤へ接続。SSPの残りのオプションと集約結果・言語指定は未対応 |
+| `\7`, `\![executesntp]`, SNTP取得 | ✅ | HTTP Dateから時刻を取得し、OnSNTPBegin／OnSNTPCompare／失敗イベントを通知 |
+| `\6`によるシステム時計の補正 | ➖ | macOSのシステム時計変更には管理者権限が必要で、安全な無権限APIがないため補正要求の受理まで対応 |
 | `\![biff(,アカウント名)]` | ✅ | 本体設定のPOP3アカウントでメールを確認し、開始・成功・新着・失敗イベントを通知。パスワードはmacOS Keychainへ保存 |
 | `\![execute,headline,...]` | ✅ | 名前またはディレクトリ名で既存RSS／HEADLINEセンサーを実行 |
 | `\![execute,calendarplugin,...]` | ➖ | 旧来のスケジュールセンサはWindows DLL固有API（geturl／getschedule等）を使うためmacOSでは対象外。iCalendar取得と予定表への登録は別命令で対応 |
-| `\+`, `\_+`, change/call ghost | 🟡 | ランダム／順次切替と、名前・ディレクトリ名・`random`・`sequential`指定を接続。lastinstalledとraise-eventオプションは未対応 |
+| `\+`, `\_+`, change/call ghost | ✅ | ランダム／順次切替、名前・ディレクトリ名・`random`・`sequential`・`lastinstalled`指定を接続。通常は切替イベントを抑止し、`--option=raise-event`指定時だけ通知 |
 | change shell / balloon | ✅ | 名前またはディレクトリ名で通常／呼び出しゴーストの既存切替処理へ接続 |
 | `\![change,calendarskin,...]` | ✅ | 名前・ID・ディレクトリ名・randomでUtataneカレンダーのスキンを切り替え |
 | `\v`, `\![set,windowstate,stayontop/!stayontop]` | ✅ | 最前面表示（`.floating` / `.normal`）のトグルと明示指定に対応。サーフェス・バルーン両方に反映しテストで確認 |
 | `\![set,trayballoon,...]` | ✅ | macOSのメニューバーへポップオーバーを表示し、クリック・時間切れイベントを通知 |
-| `\![set,tasktrayicon,...]` | 🟡 | ゴースト配下の画像とツールチップをMenuBarアイコンへ反映。ICO連番アニメーションとduration／runcountは未対応 |
-| windowstate (その他) / wallpaper | 🟡 | 画像DnDによるデスクトップ壁紙変更は実装。SakuraScriptからのsave／restore／set wallpaperは未実装 |
+| `\![set,tasktrayicon,...]` | ✅ | ゴースト配下の画像とツールチップをMenuBarアイコンへ反映。`--duration`指定時は00〜99の連番画像を読み、`--runcount`回数または無限でアニメーション |
+| windowstate (その他) / wallpaper | ✅ | `windowstate,minimize`と、壁紙のsave／restore／setに対応。相対画像、単色、center／stretch／fill／fit／tile系の配置をmacOSデスクトップへ反映 |
 | otherghosttalk / othersurfacechange | ✅ | `\![set,otherghosttalk,true|false|before|after]`と`\![set,othersurfacechange,true|false]`で、呼び出し中ゴースト間の通知を制御 |
 | `\![raise,...]` | ✅ | SHIORIイベントを発生させ、元スクリプトの残りを破棄して応答スクリプトへ切り替えます |
 | `\![embed,...]` | ✅ | SHIORIイベントの戻り値を現在の再生列へ埋め込みます |
@@ -178,22 +181,23 @@ UKADOC分類行数: 143
 | `\![open,inputbox,...]` | 🟡 | 旧形式と`--timeout`・`--text`・`--limit`・`--reference`を解析。時間切れと手動closeを区別し、`OnUserInputCancel`が空応答なら`timeout`値の入力イベントへフォールバック。入力値・補足・追加Referenceも指定イベントへ返します。noclose／noclearとballoon画像指定は未対応 |
 | password/date/slider/time/ip input | ✅ | パスワード欄、DatePicker、Slider、時刻選択、IPv4入力を使い、各形式のReference値を返します。旧形式と`--text`形式をParserテストで確認 |
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
-| configuration / 各explorer / graph / calendar | 🟡 | `\![open,configurationdialog]`で設定画面、`ghostexplorer`／`shellexplorer`／`balloonexplorer`／`headlinesensorexplorer`／`pluginexplorer`で共通コンテンツエクスプローラ、`calendar`でカレンダーを開きます。graphとdressup explorerは未実装 |
+| configuration / 各explorer / calendar | ✅ | configurationの画面IDをUtataneの設定ペインへ対応付け、ghost／shell／balloon／headline／plugin explorerを共通コンテンツ画面、calendarを予定表として開く |
+| graph / aigraph | 🟡 | SSPのグラフ／AI会話グラフ表示に相当する画面は未実装 |
 | help / messenger / readme / terms / file | ✅ | `terms`はterms.txtをダイアログ表示して同意・拒否イベントを通知。`messenger`、`readme`、`help`、`file`、`folder`も対応 |
-| open/save/folder/color dialog、close dialog | 🟡 | `open` / `save` / `folder` / `color` とID指定・全ダイアログのcloseに対応。title、dir、filter、ext、name、color、idを受け取り、結果を `OnSystemDialog` / `OnSystemDialogCancel` または指定イベントへ通知。filterは拡張子ワイルドカードのみ、実UIは未確認 |
-| surfacetest / aigraph / developer / shiorirequest / errorlog | 🟡 | `developer`／`surfacetest`で開発用パレット、`shiorirequest`でイベントID・Referenceを指定するSHIORI Request画面、`errorlog`でエラー絞り込み済みログを開きます。aigraphは未実装 |
+| open/save/folder/color dialog、close dialog | ✅ | AppKit標準のopen／save／folder／colorパネルをID別に管理し、title、dir、filter、ext、name、colorを反映。結果を`OnSystemDialog`／Cancelまたは指定イベントへ通知し、個別・一括closeにも対応 |
+| surfacetest / developer / shiorirequest / errorlog | ✅ | 開発用パレットのサーフェステスト、イベントID・Reference指定のSHIORI Request、エラー絞り込み済みログへ接続 |
 | `\![open,backlogviewer]` | ✅ | 通常・呼び出しゴーストとも対象ゴーストの発話履歴を開きます。ウィンドウモードでは設定に応じて下部へ統合表示 |
-| dressup explorer | 🟡 | `\![open,dressupexplorer]`で現在のシェルの着せ替え一覧をポップアップ表示。SSPの独立したエクスプローラ画面とはUIが異なる |
-| picture viewer | 🟡 | `\![open,pictureviewer]`で画像選択、ファイル指定時はゴースト内の画像をmacOS標準アプリで表示。SSP内蔵ビューア固有の操作は未対応 |
-| archive viewer | 🟡 | `\![open,archiveviewer]`でアーカイブ選択、ファイル指定時はゴースト内のファイルをmacOS標準アプリへ渡す。SSP内蔵ビューア固有の閲覧・インストール操作は未対応 |
+| dressup explorer | ✅ | 現在のシェルの着せ替え一覧をmacOS向けポップアップとして開き、選択内容を実際の着せ替え状態へ反映 |
+| picture viewer | ✅ | 画像選択またはゴースト内の指定画像をmacOS標準ビューアで開く |
+| archive viewer | ✅ | アーカイブ選択またはゴースト内の指定書庫をmacOS標準の関連付けアプリで開く |
 
 ### Property System
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\![set,property,...]` | 🟡 | 構文・書込可否検証・Property Systemへの書き込み経路を実装。個別のUI／サウンド状態setterは未実装 |
-| `\![get,property,...]` | 🟡 | 複数プロパティを解決して指定イベントのReference0以降へ通知。日時・OS・CPU・メモリ・カーソル・モニター・テーマ、baseware（`baseware.windowmode`を含む）、currentghost、ghostlist、shelllistの基本値に対応 |
-| `%property[...]` | 🟡 | Property Systemの値を再生中に展開。日時・OS・CPU・メモリ・カーソル・モニター・テーマ、baseware（`baseware.windowmode`を含む）、currentghost、ghostlist、shelllistの基本値に対応 |
+| `\![get,property,...]` | 🟡 | 複数プロパティを指定イベントのReferenceへ通知。日時、OS／locale／timezone／uptime、CPU、メモリ、ディスク、カーソル、モニター、テーマ、baseware、currentghostのscope座標・surface・balloon、activeghostlist、ghost／shell／balloon／headline／plugin一覧に対応。UKADOC全プロパティとの照合は継続中 |
+| `%property[...]` | 🟡 | `get,property`と共通の値を再生中に展開。未登録値の拡充と、変動するAppKit値の取得時更新は継続中 |
 
 ### HTTP、WebSocket、アーカイブなど
 
