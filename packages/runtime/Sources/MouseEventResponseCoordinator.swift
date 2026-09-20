@@ -32,19 +32,28 @@ public final class MouseEventResponseCoordinator {
                 receive(response)
                 return true
             }
-        case .click, .doubleClick:
+        case .click:
             let mouseUp = pendingMouseUp.removeValue(forKey: key)
             startTask {
                 guard await mouseUp?.value != true else { return }
                 await Self.send(event, request: request, receive: receive)
             }
+        case .doubleClick:
+            let mouseUp = pendingMouseUp.removeValue(forKey: key)
+            startTask {
+                _ = await mouseUp?.value
+                await Self.send(event, request: request, receive: receive)
+            }
         case let .multipleClick(count):
             let mouseUp = pendingMouseUp.removeValue(forKey: key)
             startTask {
-                guard await mouseUp?.value != true else { return }
+                let handledMouseUp = await mouseUp?.value == true
                 if let response = await request(.mouse(event)) {
                     guard !Task.isCancelled else { return }
                     receive(response)
+                    return
+                }
+                if !count.isMultiple(of: 2), handledMouseUp {
                     return
                 }
                 let fallback = GhostMouseEvent(

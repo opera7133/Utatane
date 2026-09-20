@@ -36,6 +36,23 @@ struct MouseEventResponseCoordinatorTests {
 
     @Test
     @MainActor
+    func `mouse up response does not suppress double click`() async {
+        let coordinator = MouseEventResponseCoordinator()
+        let recorder = MouseRequestRecorder(responses: [
+            "OnMouseUp": PersonalityResponse(script: nil),
+            "OnMouseDoubleClick": PersonalityResponse(script: nil)
+        ])
+
+        coordinator.submit(mouse(.up), request: recorder.request, receive: recorder.receive)
+        coordinator.submit(mouse(.doubleClick), request: recorder.request, receive: recorder.receive)
+        await recorder.waitForRequestCount(2)
+
+        #expect(recorder.requestIDs == ["OnMouseUp", "OnMouseDoubleClick"])
+        #expect(recorder.receivedCount == 2)
+    }
+
+    @Test
+    @MainActor
     func `unhandled multiple click returns to the ordinary click sequence`() async {
         let cases = [
             (3, 0, "OnMouseMultipleClick", "OnMouseClick"),
@@ -58,6 +75,33 @@ struct MouseEventResponseCoordinatorTests {
             let upID = button <= 1 ? "OnMouseUp" : "OnMouseUpEx"
             #expect(recorder.requestIDs == [upID, multipleID, fallbackID])
             #expect(recorder.receivedCount == 1)
+        }
+    }
+
+    @Test
+    @MainActor
+    func `handled mouse up only suppresses an odd multiple click fallback`() async {
+        let cases = [
+            (3, ["OnMouseUp", "OnMouseMultipleClick"]),
+            (4, ["OnMouseUp", "OnMouseMultipleClick", "OnMouseDoubleClick"])
+        ]
+        for (count, expectedIDs) in cases {
+            let coordinator = MouseEventResponseCoordinator()
+            let recorder = MouseRequestRecorder(responses: [
+                "OnMouseUp": PersonalityResponse(script: nil),
+                "OnMouseDoubleClick": PersonalityResponse(script: nil)
+            ])
+
+            coordinator.submit(mouse(.up), request: recorder.request, receive: recorder.receive)
+            coordinator.submit(
+                mouse(.multipleClick(count: count)),
+                request: recorder.request,
+                receive: recorder.receive
+            )
+            await recorder.waitForRequestCount(expectedIDs.count)
+
+            #expect(recorder.requestIDs == expectedIDs)
+            #expect(recorder.receivedCount == (count.isMultiple(of: 2) ? 2 : 1))
         }
     }
 
