@@ -1,12 +1,12 @@
 # 設定を調整する
 
-メニューバーの「Utatane」→「設定…」、または右クリックの「設定」→「本体設定」から開きます。右クリックの「設定」→「設定画面」から、目的のタブへ直接移動することもできます。
+メニューバーの「Utatane」→「設定…」、または右クリックの「設定」→「本体設定」から開きます。設定する内容は、画面左側のサイドバーから選びます。右クリックの「設定」→「設定画面」から、目的のカテゴリへ直接移動することもできます。
 
-以下の画像は各タブの**画面の一部**です。設定ウィンドウの高さが限られるため、すべての項目は写っていません。画像にない項目は画面を下へスクロールして確認してください。選択値やスイッチの状態は撮影時の例です。
+以下の画像は各カテゴリに表示される**設定内容の一部**です。設定ウィンドウの高さが限られるため、すべての項目は写っていません。画像にない項目は画面を下へスクロールして確認してください。選択値やスイッチの状態は撮影時の例です。
 
 ## 一般
 
-![「一般」タブの表示例（画面の一部）](../../website/public/assets/screenshots/settings-general.png)
+![「一般」の設定内容（画面の一部）](../../website/public/assets/screenshots/settings-general.png)
 
 | 項目 | 効果・適用範囲 |
 | --- | --- |
@@ -23,13 +23,13 @@
 
 ## コンテンツ
 
-![「コンテンツ」タブの表示例（画面の一部）](../../website/public/assets/screenshots/settings-contents.png)
+![「コンテンツ」の設定内容（画面の一部）](../../website/public/assets/screenshots/settings-contents.png)
 
 読み込みフォルダを種類ごとに登録し、優先順位、有効・無効、インストール先を選びます。変更には再起動が必要です。[コンテンツ管理](Content.md)と[保存場所](Storage.md)を参照してください。
 
 ## ゴースト
 
-![「ゴースト」タブの表示例（画面の一部）](../../website/public/assets/screenshots/settings-ghost.png)
+![「ゴースト」の設定内容（画面の一部）](../../website/public/assets/screenshots/settings-ghost.png)
 
 現在のゴーストに適用します。倍率や配置などはゴーストごとに保存します。
 
@@ -45,7 +45,7 @@
 
 ## 喋り / バルーン
 
-![「喋り / バルーン」タブの表示例（画面の一部）](../../website/public/assets/screenshots/settings-balloon.png)
+![「喋り / バルーン」の設定内容（画面の一部）](../../website/public/assets/screenshots/settings-balloon.png)
 
 すべてのゴーストに共通する表示設定です。「喋る速度」は文字の表示間隔、「文字サイズ」は吹き出し内の文字倍率、「会話後に閉じる」は会話終了後の表示時間です。
 
@@ -53,19 +53,19 @@
 
 ## 音声
 
-![「音声」タブの表示例（画面の一部）](../../website/public/assets/screenshots/settings-voice.png)
+![「音声」の設定内容（画面の一部）](../../website/public/assets/screenshots/settings-voice.png)
 
 発話の読み上げを有効にし、本体（スコープ0）と相方（スコープ1）のエンジンや声を設定します。音声認識は認識言語とデバイス上での認識を選べます。初回はmacOSのマイク・音声認識の許可が必要です。[エンジン別の設定](Speech.md)を参照してください。
 
 ## SHIORI
 
-![「SHIORI」タブの表示例（画面の一部）](../../website/public/assets/screenshots/settings-shiori.png)
+![「SHIORI」の設定内容（画面の一部）](../../website/public/assets/screenshots/settings-shiori.png)
 
 人格エンジンの認識・実行方式を確認する画面です。通常の利用で辞書を書き換える必要はありません。動かないゴーストの確認には[SHIORI・SAORIの対応範囲](../Support/Native-SHIORI.md)を使います。
 
 ## ネットワーク
 
-![「ネットワーク」タブの表示例（画面の一部）](../../website/public/assets/screenshots/settings-network.png)
+![「ネットワーク」の設定内容（画面の一部）](../../website/public/assets/screenshots/settings-network.png)
 
 | まとまり | 設定すること |
 | --- | --- |
@@ -80,7 +80,7 @@
 
 ## 詳細
 
-![「詳細」タブの表示例（画面の一部）](../../website/public/assets/screenshots/settings-advanced.png)
+![「詳細」の設定内容（画面の一部）](../../website/public/assets/screenshots/settings-advanced.png)
 
 「開発用パレットを表示」でログ、当たり判定、バルーンテスト、SakuraScript入力、再生操作を表示します。通常は非表示で構いません。
 

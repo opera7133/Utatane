@@ -19,7 +19,7 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 - [はじめてのUtatane](Guide/Getting-Started.md): 用語、インストール、初回起動
 - [ゴーストと遊ぶ](Guide/Basic-Operations.md): 会話、マウス操作、配置、切り替え、終了
 - [コンテンツを管理する](Guide/Content.md): NAR、SSP取り込み、エクスプローラ、更新、削除
-- [設定を調整する](Guide/Settings.md): 各タブの項目と適用範囲
+- [設定を調整する](Guide/Settings.md): 各カテゴリの項目と適用範囲
 - [カレンダー・ニュース・拡張](Guide/Features.md)
 - [保存場所とバックアップ](Guide/Storage.md)
 - [メニューとショートカット](Guide/Shortcuts.md)

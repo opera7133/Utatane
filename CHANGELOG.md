@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.2.7] - 2026-09-20
+
 ### 追加
 
 - MenuBarのUtataneアイコンからランダムトーク、ゴースト変更、Surface再表示、発話履歴、設定、ヘルプ、終了を操作できるようにし、Dockアイコンを隠してバックグラウンド動作できる設定を追加した
@@ -654,6 +656,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
+[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.7...HEAD
+[0.2.7]: https://github.com/opera7133/Utatane/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/opera7133/Utatane/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/opera7133/Utatane/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/opera7133/Utatane/compare/v0.2.3...v0.2.4
