@@ -68,8 +68,8 @@ public struct ShellLoader: Sendable {
         if fileManager.fileExists(atPath: aliasURL.path) {
             try sources.append(readText(from: aliasURL))
         }
-        let document = parser.parseDocument(
-            sources.joined(separator: "\n"),
+        let document = parser.parseDocuments(
+            sources,
             existingSurfaceIDs: existingSurfaceIDs
         )
         let shellMetadata = metadata(in: shellDirectory)

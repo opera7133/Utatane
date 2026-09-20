@@ -2,7 +2,7 @@
 
 ゴーストの設定や配布に使うテキストファイルについて、Utataneが読み取る項目と、実際の動作に使う項目をまとめています。項目の基準はUKADOCです。
 
-調査日: 2026-09-17
+調査日: 2026-09-20
 調査対象: [UKADOC](https://ssp.shillest.net/ukadoc/manual/)とUtatane本番Swiftコード・テスト
 
 ## 判定
@@ -27,15 +27,15 @@
 | `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストールに加え、refreshとrefreshundeletemaskをバックアップ付き置換で実装 | supplement・languageは未対応 |
 | `delete.txt` | ✅ | UTF-8／Shift_JIS、charset行、Windows区切りの相対ファイル・ディレクトリを事前検証し、更新ファイルの置換と同じロールバック境界で安全に削除 | — |
 | `developer_options.txt` | 🟡 | `noupdate`／`nonar`に加え、`.narignore`／`.updateignore`／`.narinclude`／`.updateinclude`の主要gitignore構文と`include:`を各生成処理へ反映 | 文字クラス・エスケープ等、gitignoreの全細則は未対応 |
-| `surfaces.txt`／`surfaces*.txt` | 🟡 | 複数ファイル結合、surface selector、append、alias、PNG／APNG／GIF／WebPのelement、rect／ellipse／circle／polygon／region collision、主要animationとoption | 保持だけのsurface属性、ファイルごとのdescript設定が未対応 |
-| `surfaces2.txt` | 🟡 | `surfaces`で始まるため読み込みます | SSP用上書きではなく、他のsurfacesファイルとファイル名順で単純結合します |
+| `surfaces.txt`／`surfaces*.txt` | 🟡 | 複数ファイルをファイル名順に読み、各ファイルのdescript設定を分離。surface selector、append、alias、PNG／APNG／GIF／WebPのelement、rect／ellipse／circle／polygon／region collision、主要animationとoption | 保持だけのsurface属性が未対応 |
+| `surfaces2.txt` | ✅ | 他の`surfaces*.txt`と同様にファイル名順で読み、先行定義への追記・上書きを反映 | — |
 | `alias.txt` | 🟡 | surfaces文書として追加読込し、sakura／kero／char scope aliasを利用 | alias以外の互換挙動は未照合 |
 | `surfacetable.txt` | ✅ | charset、version、option、group、scope、surface IDと名前を解析。`DisableNoDefineSurfaces`、`__disabled`、`__parts`も利用 | 実機UIでの全表示差は未確認 |
 | `updates2.dau` | 🟡 | path・MD5・size・date・charsetを解析し、取得・サイズ／MD5検証・`delete.txt`を含むロールバック更新。生成はCRLFで拡張フィールドも出力 | date・charsetは保持のみ |
 | `updates.txt` | 🟡 | `charset,`と`file,`行、path・MD5・拡張フィールド、未知行の無視に対応 | Version 3形式の生成は未対応 |
 | `readme.txt`／`readme.md` | 🟡 | Ghost／選択中Shell／Balloon／Headlineのdescript.txtにあるreadme指定と既定候補を安全に解決し、macOSの関連アプリで開きます。readme.charsetも保持 | Markdownの独自表示はせず、文字コードの最終的な解釈は関連アプリに依存 |
 
-現状は ✅ 1 / 🟡 13 / ❌ 1。
+現状は ✅ 2 / 🟡 12 / ❌ 1。
 
 ## Ghost descript.txt
 
@@ -134,7 +134,7 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | cursor定義 | 🟡 | sakura／kero／char scopeのmouseup、mousedown、mouserightdown、mousewheel、mousehoverをcollision名ごとに反映。system cursor 10種と、AppKitで画像として読めるカーソルファイルに対応。system:wait／move／helpはmacOSの近似表示 |
 | tooltip定義 | ✅ | sakura／kero／char scopeのcollision別テキストをmacOS標準ツールチップとして表示 |
 
-`surfaces*.txt`は全てファイル名順に連結します。`surfaces2.txt`の「SSPだけへ上書き」という優先規則は専用実装していません。
+`surfaces*.txt`は全てファイル名順に読みます。同じIDのelement・collision・animationなどは後の定義で上書きし、`surface.append`は先に存在するsurfaceへ追記します。各ファイルの`descript`ブレスはそのファイルで定義・追記するsurfaceにだけ適用するため、別ファイルのcollision-sort／animation-sortを巻き込みません。
 
 ## surfacetable.txt
 
@@ -153,6 +153,5 @@ size／date／charset拡張フィールドとVersion 3の`charset,`・未知行�
 ## 優先度
 
 1. point.baseposを位置保存へ、icon.rectを履歴サムネイルへ接続します。
-2. `surfaces*.txt`ごとのdescript設定と、単純連結ではない`surfaces2.txt`の優先規則を整理します。
-3. Balloon descript.txtのSSTP／online markerとarrow0表示を既存描画へ接続します。
-4. pattern methodの近似描画を実画像で比較し、互換差が大きい演算を優先して補正します。
+2. Balloon descript.txtのSSTP／online markerとarrow0表示を既存描画へ接続します。
+3. pattern methodの近似描画を実画像で比較し、互換差が大きい演算を優先して補正します。

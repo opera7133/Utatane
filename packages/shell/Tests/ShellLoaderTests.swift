@@ -44,6 +44,23 @@ func `loads UTF 8 surfaces when its charset declaration is stale`() throws {
 }
 
 @Test
+func `loads multiple surfaces files in filename order`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(
+        path: UUID().uuidString,
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data("surface0\n{\nname,base\n}".utf8).write(to: root.appending(path: "surfaces.txt"))
+    try Data("surface0\n{\nname,ten\n}".utf8).write(to: root.appending(path: "surfaces10.txt"))
+    try Data("surface0\n{\nname,two\n}".utf8).write(to: root.appending(path: "surfaces2.txt"))
+
+    let shell = try ShellLoader().load(from: root)
+
+    #expect(shell.surfaces[0]?.name == "two")
+}
+
+@Test
 func `loads GIF and WebP base surfaces and elements`() throws {
     let root = FileManager.default.temporaryDirectory.appending(
         path: UUID().uuidString,

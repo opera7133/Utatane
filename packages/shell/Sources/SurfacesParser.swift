@@ -38,73 +38,91 @@ public struct SurfacesParser: Sendable {
         _ text: String,
         existingSurfaceIDs: Set<Int> = []
     ) -> ParsedSurfacesDocument {
+        parseDocuments([text], existingSurfaceIDs: existingSurfaceIDs)
+    }
+
+    public func parseDocuments(
+        _ texts: [String],
+        existingSurfaceIDs: Set<Int> = []
+    ) -> ParsedSurfacesDocument {
         var builders = Dictionary(uniqueKeysWithValues: existingSurfaceIDs.map {
             ($0, SurfaceBuilder(id: $0))
         })
         var aliases: [Int: [String: [Int]]] = [:]
-        var pendingBlock: Block?
-        var currentBlock: Block?
         var maximumSurfaceWidth: Int?
         var collisionSort: SurfaceSortOrder = .none
         var animationSort: SurfaceSortOrder = .descending
         var cursorDefinitions: [Int: [SurfaceCursorDefinition]] = [:]
         var tooltips: [Int: [String: String]] = [:]
 
-        for rawLine in text.components(separatedBy: .newlines) {
-            let line = rawLine
-                .replacingOccurrences(of: #"\s+//.*$"#, with: "", options: .regularExpression)
-                .trimmingCharacters(in: .whitespaces)
-            guard !line.isEmpty, !line.hasPrefix("//") else { continue }
+        for text in texts {
+            var pendingBlock: Block?
+            var currentBlock: Block?
+            var fileCollisionSort: SurfaceSortOrder?
+            var fileAnimationSort: SurfaceSortOrder?
 
-            if let block = parseBlockHeader(line) {
-                pendingBlock = block
-                continue
-            }
-            if line == "{" {
-                currentBlock = pendingBlock
-                pendingBlock = nil
-                continue
-            }
-            if line == "}" {
-                currentBlock = nil
-                continue
-            }
+            for rawLine in text.components(separatedBy: .newlines) {
+                let line = rawLine
+                    .replacingOccurrences(of: #"\s+//.*$"#, with: "", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespaces)
+                guard !line.isEmpty, !line.hasPrefix("//") else { continue }
 
-            switch currentBlock {
-            case let .surfaces(surfaceIDs, appendOnly):
-                for surfaceID in surfaceIDs where !appendOnly || builders[surfaceID] != nil {
-                    var builder = builders[surfaceID] ?? SurfaceBuilder(id: surfaceID)
-                    parseDirective(line, into: &builder)
-                    builders[surfaceID] = builder
+                if let block = parseBlockHeader(line) {
+                    pendingBlock = block
+                    continue
                 }
-            case let .aliases(scope):
-                guard let (name, surfaceIDs) = parseAlias(line) else { continue }
-                aliases[scope, default: [:]][name] = surfaceIDs
-            case .descript:
-                let fields = line.split(separator: ",", maxSplits: 1).map(String.init)
-                guard fields.count == 2 else { continue }
-                switch fields[0].lowercased() {
-                case "maxwidth": maximumSurfaceWidth = Int(fields[1])
-                case "collision-sort": collisionSort = SurfaceSortOrder(rawValue: fields[1].lowercased()) ?? .none
-                case "animation-sort": animationSort = SurfaceSortOrder(rawValue: fields[1].lowercased()) ?? .descending
-                default: continue
+                if line == "{" {
+                    currentBlock = pendingBlock
+                    pendingBlock = nil
+                    continue
                 }
-            case let .cursor(scope):
-                guard let definition = parseCursor(line) else { continue }
-                cursorDefinitions[scope, default: []].append(definition)
-            case let .tooltips(scope):
-                guard let separator = line.firstIndex(of: ",") else { continue }
-                let region = line[..<separator].trimmingCharacters(in: .whitespaces)
-                let text = line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces)
-                guard !region.isEmpty, !text.isEmpty else { continue }
-                tooltips[scope, default: [:]][region] = text
-            case nil:
-                continue
+                if line == "}" {
+                    currentBlock = nil
+                    continue
+                }
+
+                switch currentBlock {
+                case let .surfaces(surfaceIDs, appendOnly):
+                    for surfaceID in surfaceIDs where !appendOnly || builders[surfaceID] != nil {
+                        var builder = builders[surfaceID] ?? SurfaceBuilder(id: surfaceID)
+                        builder.collisionSort = fileCollisionSort ?? builder.collisionSort
+                        builder.animationSort = fileAnimationSort ?? builder.animationSort
+                        parseDirective(line, into: &builder)
+                        builders[surfaceID] = builder
+                    }
+                case let .aliases(scope):
+                    guard let (name, surfaceIDs) = parseAlias(line) else { continue }
+                    aliases[scope, default: [:]][name] = surfaceIDs
+                case .descript:
+                    let fields = line.split(separator: ",", maxSplits: 1).map(String.init)
+                    guard fields.count == 2 else { continue }
+                    switch fields[0].lowercased() {
+                    case "maxwidth": maximumSurfaceWidth = Int(fields[1])
+                    case "collision-sort":
+                        fileCollisionSort = SurfaceSortOrder(rawValue: fields[1].lowercased()) ?? SurfaceSortOrder.none
+                        collisionSort = fileCollisionSort ?? .none
+                    case "animation-sort":
+                        fileAnimationSort = SurfaceSortOrder(rawValue: fields[1].lowercased()) ?? .descending
+                        animationSort = fileAnimationSort ?? .descending
+                    default: continue
+                    }
+                case let .cursor(scope):
+                    guard let definition = parseCursor(line) else { continue }
+                    cursorDefinitions[scope, default: []].append(definition)
+                case let .tooltips(scope):
+                    guard let separator = line.firstIndex(of: ",") else { continue }
+                    let region = line[..<separator].trimmingCharacters(in: .whitespaces)
+                    let text = line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces)
+                    guard !region.isEmpty, !text.isEmpty else { continue }
+                    tooltips[scope, default: [:]][region] = text
+                case nil:
+                    continue
+                }
             }
         }
 
         return ParsedSurfacesDocument(
-            surfaces: builders.mapValues { $0.build(collisionSort: collisionSort, animationSort: animationSort) },
+            surfaces: builders.mapValues { $0.build() },
             aliases: aliases,
             maximumSurfaceWidth: maximumSurfaceWidth,
             collisionSort: collisionSort,
@@ -593,8 +611,10 @@ private struct SurfaceBuilder {
     var collisionOrder: [Int] = []
     var animations: [Int: AnimationBuilder] = [:]
     var animationOrder: [Int] = []
+    var collisionSort: SurfaceSortOrder = .none
+    var animationSort: SurfaceSortOrder = .descending
 
-    func build(collisionSort: SurfaceSortOrder, animationSort: SurfaceSortOrder) -> SurfaceDefinition {
+    func build() -> SurfaceDefinition {
         let collisionIDs = sortedIDs(collisionOrder, order: collisionSort)
         let animationIDs = sortedIDs(animationOrder, order: animationSort)
         return SurfaceDefinition(

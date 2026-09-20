@@ -337,6 +337,45 @@ func `preserves collision definition order when collision sorting is omitted`() 
 }
 
 @Test
+func `keeps descript sorting local to each surfaces file`() {
+    let document = SurfacesParser().parseDocuments([
+        """
+        descript
+        {
+        collision-sort,ascend
+        animation-sort,descend
+        }
+        surface0
+        {
+        collision3,0,0,10,10,three
+        collision1,0,0,10,10,one
+        animation1.interval,runonce
+        animation3.interval,runonce
+        }
+        """,
+        """
+        descript
+        {
+        collision-sort,descend
+        animation-sort,ascend
+        }
+        surface1
+        {
+        collision1,0,0,10,10,one
+        collision3,0,0,10,10,three
+        animation3.interval,runonce
+        animation1.interval,runonce
+        }
+        """
+    ])
+
+    #expect(document.surfaces[0]?.collisions.map(\.id) == [1, 3])
+    #expect(document.surfaces[0]?.animations.map(\.id) == [3, 1])
+    #expect(document.surfaces[1]?.collisions.map(\.id) == [3, 1])
+    #expect(document.surfaces[1]?.animations.map(\.id) == [1, 3])
+}
+
+@Test
 func `parses scoped cursor and tooltip braces`() {
     let document = SurfacesParser().parseDocument("""
     sakura.cursor
