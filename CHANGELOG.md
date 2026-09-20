@@ -4,10 +4,19 @@
 
 ### 追加
 
+- `\![set,trayballoon]`をmacOSのメニューバーポップオーバーとして表示し、クリックと時間切れをSHIORIへ通知するようにした
+- 呼び出しゴーストの休止・復帰と切り替えを追加し、`OnCacheSuspend`／`OnCacheRestore`／`OnOtherGhostChanged`を通知するようにした
+- POP3メールアカウント設定と`\![biff]`を追加し、メール確認の開始・成功・新着・失敗をSHIORIへ通知するようにした
+- `selectrect`による全画面の矩形選択、ゴミ箱を空にする操作、画像ドロップによるデスクトップ壁紙変更を追加した
+- 設定画面のヘルプ、ゴースト利用規約、Sparkleによる本体更新前後、macOS更新履歴をSHIORIへ通知するようにした
+- HTTP／RSS／WebSocketの進捗・ストリーミング・TLS情報と、WebSocket自動再接続、ping進捗イベントを追加した
+- `OnTranslate`、他ゴーストの発話・surface変更監視、`activeghostlist.ext`のProperty取得・設定を追加した
+- トークの割り込みと消滅スクリプトのダブルクリック中断を、`OnBalloonBreak`／`OnVanishButtonHold`として通知するようにした
 - キャラクター上の右ボタン／ホイールドラッグを8方向の`OnMouseGesture`として通知するようにした
 - SakuraScriptでループ再生している音声が次の周回へ入る時に`OnSoundLoop`を通知するようにした
 - バルーンのスクロール位置に応じて`arrow0`／`arrow1`画像を表示し、クリックで文章を送れるようにした
 - SSTP受信時にバルーンのSSTP marker画像と送信元を表示するようにした
+- iCalendarの取得、共有予定表の登録・削除・取得、ファイル・ディレクトリの変更監視をSakuraScriptから実行できるようにした
 
 ### 修正
 
@@ -21,7 +30,7 @@
 
 - SHIORIの共通処理、macOS・Windows向け外部ローダー、各ネイティブ実装を`packages/shiori`配下へ整理した
 - SHIORIイベント互換表を再監査し、`OnClose`、`OnCloseAll`、選択肢・アンカーのhoverイベントを確認済みに更新した
-- 現行UKADOCのSHIORIイベント304件を一括再監査し、対応250件、実装予定46件、macOS非該当または旧仕様8件に分類した。Utatane側の機能不足だけを理由に非該当へ分類しない検査基準へ改めた
+- 現行UKADOCのSHIORIイベント304件を一括再監査し、対応295件、実装予定・未分類0件、macOS非該当または旧仕様9件に分類した。当初ローカル資料に未収録だった新規14件も検査対象へ加え、Utatane側の機能不足だけを理由に非該当へ分類しない基準へ改めた
 - 起動時に利用可能なカレンダースキン名と、外部カレンダープラグインが未導入であることをSHIORIへ通知するようにした
 - シェルの初期配置と別スクリーンへの移動を`OnDisplayHandover`で通知するようにした
 - `raiseother`／`notifyother`の宛先がない時と、`raiseother`の宛先が204を返した時に、送信元へ`OnRaiseOtherFailure`／`OnNotifyOtherFailure`を通知するようにした

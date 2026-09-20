@@ -522,6 +522,11 @@ public struct SakuraScriptParser: Sendable {
                         ))
                     } else if arguments.count >= 2,
                               ["enter", "leave"].contains(arguments[0].lowercased()),
+                              arguments[1].lowercased() == "selectrect"
+                    {
+                        tokens.append(.selectRectangle(enabled: arguments[0].lowercased() == "enter"))
+                    } else if arguments.count >= 2,
+                              ["enter", "leave"].contains(arguments[0].lowercased()),
                               arguments[1].lowercased() == "collisionmode"
                     {
                         tokens.append(.collisionMode(
@@ -618,6 +623,45 @@ public struct SakuraScriptParser: Sendable {
                             current: arguments.count >= 4 ? arguments[3] : "",
                             maximum: arguments.count >= 5 ? arguments[4] : ""
                         ))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "trayballoon"
+                    {
+                        let options = Array(arguments.dropFirst(2))
+                        let text = options.compactMap { Self.optionValue("text", in: [$0]) }
+                            .joined(separator: "\n")
+                        if !text.isEmpty {
+                            tokens.append(.trayBalloon(.init(
+                                title: Self.optionValue("title", in: options) ?? "",
+                                text: text,
+                                icon: Self.optionValue("icon", in: options) ?? "none",
+                                timeoutSeconds: min(30, max(10,
+                                                            Self.optionValue("timeout", in: options).flatMap(Int.init) ?? 10))
+                            )))
+                        } else {
+                            tokens.append(.unknown("\\![\(argument)]"))
+                        }
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "otherghosttalk"
+                    {
+                        let mode: SakuraScriptOtherGhostTalkMode? = switch arguments[2].lowercased() {
+                        case "false": .disabled
+                        case "before": .before
+                        case "true", "after": .after
+                        default: nil
+                        }
+                        if let mode {
+                            tokens.append(.otherGhostTalkMode(mode))
+                        } else {
+                            tokens.append(.unknown("\\![\(argument)]"))
+                        }
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "set",
+                              arguments[1].lowercased() == "othersurfacechange",
+                              ["true", "false"].contains(arguments[2].lowercased())
+                    {
+                        tokens.append(.otherSurfaceChangeNotifications(arguments[2].lowercased() == "true"))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "set",
                               arguments[1].lowercased() == "serikotalk",
@@ -878,7 +922,7 @@ public struct SakuraScriptParser: Sendable {
                         }
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "cancel",
-                              ["http", "http-get"].contains(arguments[1].lowercased())
+                              ["http", "http-get", "ical"].contains(arguments[1].lowercased())
                     {
                         tokens.append(.cancelHTTP(url: arguments.count >= 3 && !arguments[2].isEmpty ? arguments[2] : nil))
                     } else if arguments.count >= 3,
@@ -1125,6 +1169,11 @@ public struct SakuraScriptParser: Sendable {
                               arguments[1].lowercased() == "help"
                     {
                         tokens.append(.contentAction(.openHelp))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "terms"
+                    {
+                        tokens.append(.contentAction(.openTerms))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "open",
                               arguments[1].lowercased() == "file"
@@ -1156,12 +1205,13 @@ public struct SakuraScriptParser: Sendable {
                         ))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "execute",
-                              ["http-get", "http-post", "http-head", "http-put", "http-delete", "http-patch", "http-options", "rss-get", "rss-post"]
+                              ["http-get", "http-post", "http-head", "http-put", "http-delete", "http-patch", "http-options", "rss-get", "rss-post", "ical-get", "ical-post"]
                               .contains(arguments[1].lowercased())
                     {
                         let isFeed = ["rss-get", "rss-post"].contains(arguments[1].lowercased())
-                        let method = if isFeed {
-                            arguments[1].lowercased() == "rss-get" ? "GET" : "POST"
+                        let isCalendar = ["ical-get", "ical-post"].contains(arguments[1].lowercased())
+                        let method = if isFeed || isCalendar {
+                            arguments[1].lowercased().hasSuffix("-get") ? "GET" : "POST"
                         } else {
                             String(arguments[1].dropFirst("http-".count)).uppercased()
                         }
@@ -1193,11 +1243,12 @@ public struct SakuraScriptParser: Sendable {
                         tokens.append(.http(SakuraScriptHTTPRequest(
                             method: method,
                             url: arguments[2],
-                            eventID: syncID ?? asyncID,
+                            eventID: syncID ?? asyncID ?? (isCalendar ? "" : nil),
                             waitsForCompletion: syncID != nil,
                             parameters: options.compactMap { option in
                                 option.lowercased().hasPrefix("--param=") ? String(option.dropFirst(8)) : nil
                             } + (options.first?.hasPrefix("--") == false ? [options[0]] : []),
+                            options: isCalendar ? options : [],
                             headers: headers,
                             timeoutSeconds: Self.optionValue("timeout", in: options).flatMap(Double.init),
                             output: nofileOption.map { option in
@@ -1206,8 +1257,51 @@ public struct SakuraScriptParser: Sendable {
                                 }
                                 return .memory(characterEncoding: encoding)
                             } ?? .file(Self.optionValue("file", in: options)),
-                            isFeed: isFeed
+                            isFeed: isFeed,
+                            isCalendar: isCalendar,
+                            notifiesProgress: options.contains {
+                                $0.caseInsensitiveCompare("--progress-notify") == .orderedSame
+                            },
+                            streamingMode: options.first(where: {
+                                $0.lowercased() == "--streaming"
+                                    || $0.lowercased().hasPrefix("--streaming=")
+                            }).map { option in
+                                Self.optionValue("streaming", in: [option]) ?? "auto"
+                            }
                         )))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "execute",
+                              ["schedule-add", "schedule-delete", "schedule-get"].contains(arguments[1].lowercased())
+                    {
+                        let operation = arguments[1].lowercased()
+                        let optionStart = operation == "schedule-delete" ? 3 : 2
+                        var options: [String: String] = [:]
+                        for option in arguments.dropFirst(optionStart) where option.hasPrefix("--") {
+                            let fields = option.dropFirst(2).split(separator: "=", maxSplits: 1).map(String.init)
+                            options[fields[0].lowercased()] = fields.count > 1 ? fields[1] : ""
+                        }
+                        if operation == "schedule-add" {
+                            tokens.append(.schedule(.add(options: options)))
+                        } else if operation == "schedule-delete", arguments.count >= 3 {
+                            tokens.append(.schedule(.delete(uid: arguments[2], eventID: options["event"])))
+                        } else if operation == "schedule-get" {
+                            tokens.append(.schedule(.get(options: options)))
+                        }
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "filewatch"
+                    {
+                        let options = Array(arguments.dropFirst(3))
+                        tokens.append(.fileWatch(.start(
+                            path: arguments[2],
+                            eventID: Self.optionValue("async", in: options),
+                            debounceMilliseconds: Self.optionValue("debounce", in: options).flatMap(Int.init) ?? 500
+                        )))
+                    } else if arguments.count >= 3,
+                              arguments[0].lowercased() == "cancel",
+                              arguments[1].lowercased() == "filewatch"
+                    {
+                        tokens.append(.fileWatch(.cancel(path: arguments[2])))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "execute",
                               ["ping", "nslookup"].contains(arguments[1].lowercased())
@@ -1227,6 +1321,15 @@ public struct SakuraScriptParser: Sendable {
                         } else {
                             tokens.append(.networkDiagnostic(.nslookup(host: host, eventID: eventID)))
                         }
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "emptyrecyclebin"
+                    {
+                        tokens.append(.emptyRecycleBin)
+                    } else if !arguments.isEmpty,
+                              arguments[0].lowercased() == "biff"
+                    {
+                        tokens.append(.checkMail(account: arguments.count >= 2 ? arguments[1] : nil))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "websocket"

@@ -140,13 +140,15 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 | `\a` | ✅ | `OnAITalk` イベントを発生 |
 | update / updatebymyself / updateother | 🟡 | `updatebymyself`、`update,ghost`、`update,balloon`を既存更新機能へ接続。platform・updateother・全オプションは未対応 |
 | `\6`, `\7`, SNTP | 🟡 | `\7`／`\![executesntp]`によるHTTP Date時刻取得とSNTPイベント、`\6`の補正要求経路を実装。macOS通常権限でのシステム時刻補正は未接続 |
-| biff, vanish | ❌ | 未実装 |
+| `\![biff(,アカウント名)]` | ✅ | 本体設定のPOP3アカウントでメールを確認し、開始・成功・新着・失敗イベントを通知。パスワードはmacOS Keychainへ保存 |
+| vanish | ❌ | 未実装 |
 | `\![execute,headline,...]` | ✅ | 名前またはディレクトリ名で既存RSS／HEADLINEセンサーを実行 |
 | `\+`, `\_+`, change/call ghost | 🟡 | ランダム／順次切替と、名前・ディレクトリ名・`random`・`sequential`指定を接続。lastinstalledとraise-eventオプションは未対応 |
 | change shell / balloon | ✅ | 名前またはディレクトリ名で通常／呼び出しゴーストの既存切替処理へ接続 |
 | `\v`, `\![set,windowstate,stayontop/!stayontop]` | ✅ | 最前面表示（`.floating` / `.normal`）のトグルと明示指定に対応。サーフェス・バルーン両方に反映しテストで確認 |
-| windowstate (その他) / wallpaper / tray | ➖ | macOSでの代替仕様を決める必要あり |
-| otherghosttalk / othersurfacechange | 🟡 | 呼び出し中ゴースト間の独自連携は実装。UKADOCの `\![set,otherghosttalk,...]` / `\![set,othersurfacechange,...]` による通知制御は未実装 |
+| `\![set,trayballoon,...]` | ✅ | macOSのメニューバーへポップオーバーを表示し、クリック・時間切れイベントを通知 |
+| windowstate (その他) / wallpaper | 🟡 | 画像DnDによるデスクトップ壁紙変更は実装。SakuraScriptからのsave／restore／set wallpaperは未実装 |
+| otherghosttalk / othersurfacechange | ✅ | `\![set,otherghosttalk,true|false|before|after]`と`\![set,othersurfacechange,true|false]`で、呼び出し中ゴースト間の通知を制御 |
 | `\![raise,...]` | ✅ | SHIORIイベントを発生させ、元スクリプトの残りを破棄して応答スクリプトへ切り替えます |
 | `\![embed,...]` | ✅ | SHIORIイベントの戻り値を現在の再生列へ埋め込みます |
 | timerraise / raiseother / timerraiseother | 🟡 | `timerraise`、`raiseother`、`timerraiseother`に対応。他ゴーストは名前指定と全ゴースト指定が可能。プラグイン宛は未対応 |
@@ -169,7 +171,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 | password/date/slider/time/ip input | 🟡 | inputbox互換の入力プロンプトとして受付 |
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
 | configuration / 各explorer / graph / calendar | 🟡 | `\![open,configurationdialog]`で設定画面、`ghostexplorer`／`shellexplorer`／`balloonexplorer`／`headlinesensorexplorer`／`pluginexplorer`で共通コンテンツエクスプローラ、`calendar`でカレンダーを開きます。graphとdressup explorerは未実装 |
-| help / messenger / readme / terms / file | 🟡 | `\![open,messenger]`でIP Messenger画面を開きます。`\![open,readme]`、`\![open,help]`、`\![open,file,パス]`、`\![open,folder,パス]`では該当ドキュメントやファイルを外部アプリ／Finderで開きます |
+| help / messenger / readme / terms / file | ✅ | `terms`はterms.txtをダイアログ表示して同意・拒否イベントを通知。`messenger`、`readme`、`help`、`file`、`folder`も対応 |
 | open/save/folder/color dialog、close dialog | 🟡 | `open` / `save` / `folder` / `color` とID指定・全ダイアログのcloseに対応。title、dir、filter、ext、name、color、idを受け取り、結果を `OnSystemDialog` / `OnSystemDialogCancel` または指定イベントへ通知。filterは拡張子ワイルドカードのみ、実UIは未確認 |
 | surfacetest / aigraph / developer / shiorirequest / errorlog | 🟡 | `developer`／`surfacetest`で開発用パレット、`shiorirequest`でイベントID・Referenceを指定するSHIORI Request画面、`errorlog`でエラー絞り込み済みログを開きます。aigraphは未実装 |
 | `\![open,backlogviewer]` | ✅ | 通常・呼び出しゴーストとも対象ゴーストの発話履歴を開きます。ウィンドウモードでは設定に応じて下部へ統合表示 |
@@ -187,18 +189,22 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\![execute,http-get,URL,...]` | 🟡 | `--async`はSakuraScriptを継続して完了イベントを後から通知し、`--sync`は完了まで再生を停止。param、主要header、timeout、no-cache、file/nofileも実装。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行って `Reference3` へ返します。同一URLの並行実行、multipart、streaming、progressは未対応 |
+| `\![execute,http-get,URL,...]` | 🟡 | async／sync、param、主要header、timeout、no-cache、file／nofile、progress-notify、streaming、TLS情報通知に対応。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行います。同一URLの並行実行とmultipartは未対応 |
 | http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded bodyと主要共通オプションに対応。multipart、入力ファイル、証明書検証無効化は未対応 |
-| `\![execute,rss-get/rss-post,URL,...]` | 🟡 | RSS/Atomの取得・基本パースと完了/失敗通知に対応。日時形式・全オプション・SSL情報は未照合 |
-| websocket execute/send/close/cancel | 🟡 | URL単位のws/wss接続、HTTP 101確立後のOpen通知、header・subprotocol、テキスト/バイナリ送受信、close/cancelを実装。自動再接続とSSLInfoは未対応 |
-| `\![cancel,http/http-get,...]` | ✅ | `\![cancel,http,URL]` / `\![cancel,http-get,URL]` で特定URLまたは全実行中HTTPリクエストをキャンセル |
+| `\![execute,rss-get/rss-post,URL,...]` | 🟡 | RSS/Atomの取得・基本パース、完了／失敗、TLS情報通知に対応。全オプションは未照合 |
+| `\![execute,ical-get/ical-post,URL,...]` | 🟡 | iCalendar取得・解析、完了／失敗／進捗／TLS情報通知、主要VEVENTフィールドとlimitに対応。繰り返し展開とfrom／toによる完全な絞り込みは未対応 |
+| `\![execute,schedule-add/delete/get,...]` | 🟡 | Utataneの共有予定表へ登録・削除・取得し、完了／失敗を通知。主要フィールドと単純な週・月・年の繰り返しに対応し、RRULE・EXDATEの完全解釈は未対応 |
+| `\![execute,filewatch,...]` / `\![cancel,filewatch,...]` | ✅ | ファイル・ディレクトリを監視し、作成・更新・削除をdebounce後に通知。ゴースト終了時に監視を解除 |
+| websocket execute/send/close/cancel | 🟡 | ws/wss接続、Open、header・subprotocol、テキスト／バイナリ送受信、close／cancel、最大5回の自動再接続とTLS情報通知に対応。証明書subject／issuerは空欄 |
+| `\![cancel,http/http-get/ical,...]` | ✅ | 特定URLまたは全実行中のHTTP・iCalendarリクエストをキャンセル |
 | `\![execute,extractarchive/compressarchive,...]` | 🟡 | ghost/master配下に限定してZIP展開・圧縮を実行し、結果またはエラーコードをイベント通知。パストラバーサル・シンボリックリンクを拒否。SSP管理下の他フォルダと暗号化方式の完全互換は未対応 |
 | dumpsurface | 🟡 | 表示中サーフェスのPNG出力と完了通知に対応。scope・surface列挙・prefix・cropなどUKADOCの全引数は未実装 |
 | `\![execute,install,path/url,...]` | ✅ | ローカルファイルパスまたはURL指定のNARインストールコマンドを接続 |
-| ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl、完了・失敗イベントに対応。ping progress、df/dataは未対応 |
+| ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl、応答単位progress、完了・失敗イベントに対応。df/dataは未対応 |
 | createnar / createupdatedata | 🟡 | `createupdatedata` は引数なしで実行元ゴーストの `updates2.dau` を生成（明示パス拡張も対応）。`createnar` は明示パス拡張のみで、UKADOCの引数なし形式は未実装 |
-| emptyrecyclebin / create shortcut | ➖ | OS依存かつ危険。原則対象外候補 |
-| passive / induction / select / collision mode | 🟡 | passive／inductionはenter・leaveと`cantalk=false`を実装し、passive中は選択肢・バルーンの時間切れも停止。collisionは矩形・多角形の領域を名前つきまたは`rect`指定で枠のみ表示。メニュー・DnD・更新・最小化・終了等の全制限とselect modeは未実装 |
+| emptyrecyclebin | ✅ | ユーザーの`~/.Trash`を空にし、実行元と他ゴーストへ前後の件数・容量・成否を通知 |
+| create shortcut | ➖ | Windowsショートカット固有のためmacOSでは対象外 |
+| passive / induction / select / collision mode | 🟡 | passive／induction、collision表示に加え、selectrectの全画面矩形選択と開始・終了・マウス・キャンセル通知に対応。メニュー・DnD・更新・最小化・終了等の全制限は未実装 |
 | reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | ghost・shell・balloonに加え、旧`reloadsurface`、surface、shiori、descriptの全体指定とghost／shell／balloon対象指定を実装。shioriとghost descriptは人格全体の再起動で代替。makoto・headline・plugin・aigraphは未対応 |
 | unload/load shiori・makoto、shioridebugmode | ❌ | 未実装 |
 | `\_u`, `\_m` | ✅ | 16進・10進のUCS-2／ASCIIコードを文字へ変換。範囲外とサロゲートは拒否しParserテストで確認 |

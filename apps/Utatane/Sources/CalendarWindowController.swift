@@ -3,6 +3,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import UtataneCore
 import UtatanePlatformMacOS
+import UtataneSakuraScript
 
 struct UtataneSchedule: Codable, Identifiable, Equatable {
     enum Repetition: String, Codable, CaseIterable, Identifiable {
@@ -23,6 +24,7 @@ struct UtataneSchedule: Codable, Identifiable, Equatable {
     }
 
     var id = UUID()
+    var uid: String?
     var type = "event"
     var caption = ""
     var subtitle = ""
@@ -32,6 +34,10 @@ struct UtataneSchedule: Codable, Identifiable, Equatable {
     var isAllDay = false
     var repetition = Repetition.none
     var soundPath: String?
+    var location: String?
+    var url: String?
+    var status: String?
+    var recurrenceRule: String?
 }
 
 @MainActor
@@ -145,6 +151,96 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
         save()
     }
 
+    func execute(_ command: SakuraScriptScheduleCommand) -> GhostEvent {
+        switch command {
+        case let .add(options):
+            let eventID = resultEventID(options["event"], defaultID: "OnExecuteScheduleComplete")
+            guard let summary = options["summary"], !summary.isEmpty,
+                  let startSource = options["start"], let start = Self.parseCommandDate(startSource)
+            else {
+                return scheduleFailure(operation: "add", reason: "invalid", uid: options["uid"] ?? "", eventID: options["event"])
+            }
+            let isAllDay = startSource.filter(\.isNumber).count == 8
+            let end = options["end"].flatMap(Self.parseCommandDate)
+                ?? start.addingTimeInterval(isAllDay ? 86400 : 3600)
+            let uid = options["uid"]?.isEmpty == false ? options["uid"]! : UUID().uuidString
+            let repetition = Self.repetition(from: options["rrule"])
+            let schedule = UtataneSchedule(
+                uid: uid,
+                type: options["type"] ?? "event",
+                caption: summary,
+                subtitle: options["description"] ?? "",
+                script: options["script"] ?? "",
+                start: start,
+                end: end,
+                isAllDay: isAllDay,
+                repetition: repetition,
+                location: options["location"],
+                url: options["url"],
+                status: options["status"],
+                recurrenceRule: options["rrule"]
+            )
+            if let index = schedules.firstIndex(where: { ($0.uid ?? $0.id.uuidString) == uid }) {
+                schedules[index] = schedule
+            } else {
+                schedules.append(schedule)
+            }
+            guard save() else {
+                return scheduleFailure(operation: "add", reason: "save", uid: uid, eventID: options["event"])
+            }
+            return .shiori(id: eventID, references: [0: "add", 1: uid])
+        case let .delete(uid, eventID):
+            guard let index = schedules.firstIndex(where: { ($0.uid ?? $0.id.uuidString) == uid }) else {
+                return scheduleFailure(operation: "delete", reason: "notfound", uid: uid, eventID: eventID)
+            }
+            schedules.remove(at: index)
+            guard save() else {
+                return scheduleFailure(operation: "delete", reason: "save", uid: uid, eventID: eventID)
+            }
+            return .shiori(id: resultEventID(eventID, defaultID: "OnExecuteScheduleComplete"), references: [0: "delete", 1: uid])
+        case let .get(options):
+            let source = ICalendarCodec().encode(schedules)
+            let references = SakuraScriptCalendarSupport.references(source: source, options: options)
+            return .shiori(
+                id: resultEventID(options["event"], defaultID: "OnExecuteScheduleGetComplete"),
+                references: references
+            )
+        }
+    }
+
+    private func scheduleFailure(operation: String, reason: String, uid: String, eventID: String?) -> GhostEvent {
+        .shiori(
+            id: resultEventID(eventID, defaultID: "OnExecuteScheduleFailure", failure: true),
+            references: [0: operation, 1: reason, 2: uid]
+        )
+    }
+
+    private func resultEventID(_ custom: String?, defaultID: String, failure: Bool = false) -> String {
+        guard let custom, custom.hasPrefix("On") else { return defaultID }
+        return failure ? custom + "Failure" : custom
+    }
+
+    private static func parseCommandDate(_ source: String) -> Date? {
+        let digits = source.filter(\.isNumber)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = switch digits.count {
+        case 8: "yyyyMMdd"
+        case 12: "yyyyMMddHHmm"
+        case 14: "yyyyMMddHHmmss"
+        default: ""
+        }
+        return formatter.date(from: digits)
+    }
+
+    private static func repetition(from rule: String?) -> UtataneSchedule.Repetition {
+        guard let frequency = rule?.uppercased().split(separator: ";")
+            .first(where: { $0.hasPrefix("FREQ=") })?.dropFirst(5)
+        else { return .none }
+        return UtataneSchedule.Repetition(rawValue: frequency.lowercased()) ?? .none
+    }
+
     func importICalendar(from url: URL) {
         let sensorName = url.deletingPathExtension().lastPathComponent
         onCalendarEvent?("OnSchedulesenseBegin", [0: sensorName, 1: url.absoluteString])
@@ -240,15 +336,19 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
         schedules = decoded
     }
 
-    private func save() {
+    @discardableResult
+    private func save() -> Bool {
+        var succeeded = true
         do {
             try FileManager.default.createDirectory(at: storeURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             let data = try JSONEncoder().encode(schedules)
             try data.write(to: storeURL, options: .atomic)
         } catch {
+            succeeded = false
             AppLogStore.shared.error("カレンダーの保存に失敗しました: \(error.localizedDescription)", category: "Calendar")
         }
         checkTodayScheduleChanges(at: Date())
+        return succeeded
     }
 }
 
@@ -427,13 +527,18 @@ struct ICalendarCodec {
                 let allDay = startSource.count == 8
                 let end = fields["DTEND"].flatMap(parseDate) ?? start.addingTimeInterval(allDay ? 86400 : 3600)
                 schedules.append(UtataneSchedule(
+                    uid: fields["UID"],
                     type: fields["CATEGORIES"]?.lowercased() ?? "event",
                     caption: unescape(fields["SUMMARY"] ?? ""),
                     subtitle: unescape(fields["DESCRIPTION"] ?? ""),
                     start: start,
                     end: end,
                     isAllDay: allDay,
-                    repetition: repetition(fields["RRULE"])
+                    repetition: repetition(fields["RRULE"]),
+                    location: unescape(fields["LOCATION"] ?? ""),
+                    url: fields["URL"],
+                    status: fields["STATUS"],
+                    recurrenceRule: fields["RRULE"]
                 ))
                 isEvent = false
             } else if isEvent, let separator = line.firstIndex(of: ":") {
@@ -450,14 +555,25 @@ struct ICalendarCodec {
         for schedule in schedules {
             lines += [
                 "BEGIN:VEVENT",
-                "UID:\(schedule.id.uuidString)@utatane",
+                "UID:\(schedule.uid ?? schedule.id.uuidString)",
                 schedule.isAllDay ? "DTSTART;VALUE=DATE:\(formatDate(schedule.start, allDay: true))" : "DTSTART:\(formatDate(schedule.start, allDay: false))",
                 schedule.isAllDay ? "DTEND;VALUE=DATE:\(formatDate(schedule.end, allDay: true))" : "DTEND:\(formatDate(schedule.end, allDay: false))",
                 "SUMMARY:\(escape(schedule.caption))",
                 "DESCRIPTION:\(escape(schedule.subtitle))",
                 "CATEGORIES:\(schedule.type)"
             ]
-            if schedule.repetition != .none {
+            if let location = schedule.location, !location.isEmpty {
+                lines.append("LOCATION:\(escape(location))")
+            }
+            if let url = schedule.url, !url.isEmpty {
+                lines.append("URL:\(url)")
+            }
+            if let status = schedule.status, !status.isEmpty {
+                lines.append("STATUS:\(status)")
+            }
+            if let recurrenceRule = schedule.recurrenceRule, !recurrenceRule.isEmpty {
+                lines.append("RRULE:\(recurrenceRule)")
+            } else if schedule.repetition != .none {
                 lines.append("RRULE:FREQ=\(schedule.repetition.rawValue.uppercased())")
             }
             lines.append("END:VEVENT")

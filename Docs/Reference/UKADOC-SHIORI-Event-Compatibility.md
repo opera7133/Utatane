@@ -7,7 +7,7 @@
 
 UKADOC掲載イベント数: 304
 調査日: 2026-09-20
-調査結果: ✅ 250 / 🟡 46 / ❌ 0 / ➖ 8
+調査結果: ✅ 295 / 🟡 0 / ❌ 0 / ➖ 9
 
 ## 判定
 
@@ -16,12 +16,12 @@ UKADOC掲載イベント数: 304
 | ✅ | Utataneが発行経路を提供。macOS固有差や未提供のSSP拡張は備考に記載 |
 | 🟡 | 仕様と不足している実装を確認済み。実装予定 |
 | ❌ | 未分類の一時状態。公開時には残しません |
-| ➖ | Windows固有などmacOSでは非該当、または新仕様に置き換え済み |
+| ➖ | Windows固有などmacOSでは非該当、旧仕様に置き換え済み、または現行UKADOCで契約未定義 |
 
-名前がソースに現れるだけでは対応としません。発生条件とReferenceをUKADOCに照らし、提供する契約は✅、未実装は🟡、macOSで成立しないものだけを➖に分類します。
+名前がソースに現れるだけでは対応としません。発生条件とReferenceをUKADOCに照らし、提供する契約は✅、未実装は🟡、macOSで成立しないか契約が定義されていないものだけを➖に分類します。
 任意IDを中継できる経路（raise、inputbox、HTTP等）は、そのイベントをベースウェアが自動発行する実装とは数えません。
 全イベントを本番Swiftコード（テストコードを除く）の固定IDおよびイベント生成経路と照合します。✅のmacOS固有差と実機確認状況は備考に残します。
-➖はWindows固有機能か旧仕様である根拠を備考へ記録します。Utatane側の機能不足だけを理由に➖へ分類しません。
+➖はWindows固有機能、旧仕様、または現行UKADOCで契約を実装できない根拠を備考へ記録します。Utatane側の機能不足だけを理由に➖へ分類しません。
 
 ## 起動・終了・切り替えイベント
 
@@ -37,7 +37,7 @@ UKADOC掲載イベント数: 304
 | [`OnGhostCalling`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostCalling) | ✅ | 手動呼出時のReference0〜3を実装。automatic経路は未実装 |
 | [`OnGhostCallComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostCallComplete) | ✅ | 呼出完了後に呼出先の本体名・起動スクリプト・ゴースト名・シェル名をReference0〜2・7へ通知。イベント生成をテスト済み |
 | [`OnOtherGhostBooted`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostBooted) | ✅ | 呼び出しゴーストの起動完了時、無関係な起動中ゴーストへ本体名・起動スクリプト・ゴースト名・シェル名をReference0〜2・7で通知。イベント生成をテスト済み |
-| [`OnOtherGhostChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostChanged) | 🟡 | Utataneは呼び出しゴースト同士を直接切り替える操作を提供しないため未実装 |
+| [`OnOtherGhostChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostChanged) | ✅ | 呼び出しゴーストの切替時に切替前後の本体名・ゴースト名・パス・シェル名を、メインと他の呼び出しゴーストへ通知 |
 | [`OnOtherGhostClosed`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostClosed) | ✅ | 呼び出しゴーストの終了後、本体名・最終スクリプト・ゴースト名・シェル名をReference0〜2・7へ通知。イベント生成をテスト済み |
 | [`OnShellChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnShellChanged) | ✅ | 切替後に現シェル名・ゴースト名・シェルパスをReference0〜2へ通知。イベント生成テストで確認 |
 | [`OnShellChanging`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnShellChanging) | ✅ | 切替前に新旧シェル名と新シェルパスをReference0〜2へ通知。イベント生成テストで確認 |
@@ -48,14 +48,14 @@ UKADOC掲載イベント数: 304
 | [`OnFullScreenAppMinimize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFullScreenAppMinimize) | ✅ | 前面アプリの通常レイヤに画面全体と一致するウインドウを検出すると、シェル・バルーンを透過してReference0=fullscreenを通知 |
 | [`OnFullScreenAppRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFullScreenAppRestore) | ✅ | 前面アプリの全画面ウインドウがなくなると、シェル・バルーンを再表示してReference0=fullscreenを通知 |
 | [`OnVirtualDesktopChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVirtualDesktopChanged) | ✅ | macOSのactiveSpaceDidChangeでReference0=currentを通知。公開APIでSpace IDを取得できないためReference1は空 |
-| [`OnCacheSuspend`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCacheSuspend) | 🟡 | SSPのキャッシュ休止機能を提供しないため未実装 |
-| [`OnCacheRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCacheRestore) | 🟡 | SSPのキャッシュ復帰機能を提供しないため未実装 |
+| [`OnCacheSuspend`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCacheSuspend) | ✅ | 呼び出しゴーストを右クリックメニューから休止する前に発行し、ウインドウを非表示化 |
+| [`OnCacheRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCacheRestore) | ✅ | 休止中の呼び出しゴーストをメニューから復帰した後に発行 |
 | [`OnInitialize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInitialize) | ✅ | SHIORIセッション開始直後、OnBootまたはOnGhostCalledより前にNOTIFY。リロード時のReference0=reloadは未対応 |
 | [`OnDestroy`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDestroy) | ✅ | ゴースト終了処理でOnCloseより前にNOTIFY。リロード時のReference0=reloadは未対応 |
 | [`OnSysResume`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSysResume) | ✅ | macOSのスリープ復帰通知でReference0=normalを発行。自動復帰理由autoの判定は未対応 |
 | [`OnSysSuspend`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSysSuspend) | ✅ | macOSがスリープへ入る直前にNOTIFY。実機スリープでの実動未確認 |
-| [`OnBasewareUpdating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBasewareUpdating) | 🟡 | 実行中のベースウェア自己更新を提供しないため未実装 |
-| [`OnBasewareUpdated`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBasewareUpdated) | 🟡 | 実行中のベースウェア自己更新を提供しないため未実装 |
+| [`OnBasewareUpdating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBasewareUpdating) | ✅ | Sparkleが更新をインストールする直前に旧バージョンとビルド番号を通知 |
+| [`OnBasewareUpdated`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBasewareUpdated) | ✅ | 更新後の初回起動で保存済みの旧版情報と現在版情報を通知 |
 
 ## 入力ボックスイベント
 
@@ -76,9 +76,9 @@ UKADOC掲載イベント数: 304
 | --- | --- | --- |
 | [`OnSystemDialog`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSystemDialog) | ✅ | open/save/folder/colorダイアログの決定時に種別・ID・選択パスまたはRGB値をReference0〜2へ通知。Onで始まるIDは指定イベントとして通知 |
 | [`OnSystemDialogCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSystemDialogCancel) | ✅ | open/save/folder/colorダイアログのキャンセル時に種別・IDをReference0〜1へ通知 |
-| [`OnConfigurationDialogHelp`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnConfigurationDialogHelp) | 🟡 | SSP形式の設定ダイアログ拡張ヘルプを提供しないため未実装 |
-| [`OnGhostTermsAccept`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostTermsAccept) | 🟡 | SSP形式のゴースト利用規約ダイアログを提供しないため未実装 |
-| [`OnGhostTermsDecline`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostTermsDecline) | 🟡 | SSP形式のゴースト利用規約ダイアログを提供しないため未実装 |
+| [`OnConfigurationDialogHelp`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnConfigurationDialogHelp) | ✅ | 本体設定のヘルプボタンから現在の設定ページIDを通知 |
+| [`OnGhostTermsAccept`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostTermsAccept) | ✅ | terms.txtの利用規約ダイアログで同意した時に通知。UTF-8とShift_JISを読込 |
+| [`OnGhostTermsDecline`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostTermsDecline) | ✅ | terms.txtの利用規約ダイアログで拒否した時に通知 |
 
 ## 時間イベント
 
@@ -95,7 +95,7 @@ UKADOC掲載イベント数: 304
 | [`OnVanishSelecting`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanishSelecting) | ✅ | コンテンツエクスプローラまたは確認付きvanishbymyselfから、確認画面を出す前に発行。実画面での一連操作は未確認 |
 | [`OnVanishSelected`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanishSelected) | ✅ | 確認後または即時vanishbymyselfで、SHIORI終了前に発行して応答スクリプトを再生。実画面での一連操作は未確認 |
 | [`OnVanishCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanishCancel) | ✅ | 消滅確認をキャンセルした時に発行して応答スクリプトを再生。実画面での一連操作は未確認 |
-| [`OnVanishButtonHold`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanishButtonHold) | 🟡 | 消滅スクリプトのダブルクリック中断操作を提供しないため未実装 |
+| [`OnVanishButtonHold`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanishButtonHold) | ✅ | OnVanishSelected再生中のバルーンをダブルクリックした時にスクリプト・scope・表示文字位置を通知し、再生と消滅処理を取り消す |
 | [`OnVanished`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanished) | ✅ | 消滅後の切り替え先へ消滅元の本体名・最終スクリプト・ゴースト名と切替先シェル名をReference0〜2・7で通知し、無応答ならOnBootへフォールバック。テスト済み |
 | [`OnOtherGhostVanished`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostVanished) | ✅ | 呼び出しゴーストの消滅後、他の起動中ゴーストへReference0〜2・7を発行し、204時はOnVanishedへフォールバック。実画面での一連操作は未確認 |
 
@@ -119,7 +119,7 @@ UKADOC掲載イベント数: 304
 | --- | --- | --- |
 | [`OnSurfaceChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceChange) | ✅ | SakuraScript等でsurfaceが変わった時に本体側・相方側の現在IDをReference0〜1へ通知。NOTIFYメソッドの区別は未対応 |
 | [`OnSurfaceRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceRestore) | ✅ | SSP同様、バルーン消去15秒後に、その時点の現在surfaceをReference0〜1へ通知。待機中に次の会話が始まった場合は通知を取り消します。Playerテスト済み。Emily/Phase4.5は標準イベントを意図的に無効化し、YAYA SHIORI/3フレームワーク側の独自タイミングで復帰します |
-| [`OnOtherSurfaceChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherSurfaceChange) | ✅ | 他の実行中ゴーストへ本体名・Sakura名・scope・新旧surface・矩形をReference0〜5で通知。othersurfacechange無効化設定は未対応 |
+| [`OnOtherSurfaceChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherSurfaceChange) | ✅ | set,othersurfacechangeを有効にしたゴーストへ、他ゴーストの本体名・Sakura名・scope・新旧surface・矩形をReference0〜5で通知 |
 
 ## マウスイベント
 
@@ -160,7 +160,7 @@ UKADOC掲載イベント数: 304
 
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
-| [`OnBalloonBreak`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonBreak) | 🟡 | 通常トークを途中位置付きで中断する操作を提供しないため未実装 |
+| [`OnBalloonBreak`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonBreak) | ✅ | 通常トークを別のトークが置き換える時にスクリプト・scope・表示文字位置を通知。生SakuraScriptのバイト位置とは一致しない場合あり |
 | [`OnBalloonClose`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonClose) | ✅ | 再生完了後にユーザーがバルーンをクリックして閉じた時、表示スクリプトをReference0へ通知。Playerテストで確認 |
 | [`OnBalloonTimeout`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonTimeout) | ✅ | 選択肢のないバルーンが表示期限で閉じる時、スクリプトと残り時間0を通知。Playerテストで確認 |
 
@@ -168,8 +168,8 @@ UKADOC掲載イベント数: 304
 
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
-| [`OnTrayBalloonClick`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTrayBalloonClick) | ➖ | Windows通知領域のトレイバルーン機能でありmacOS版では対象外 |
-| [`OnTrayBalloonTimeout`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTrayBalloonTimeout) | ➖ | Windows通知領域のトレイバルーン機能でありmacOS版では対象外 |
+| [`OnTrayBalloonClick`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTrayBalloonClick) | ✅ | set,trayballoonをmacOSのメニューバーポップオーバーとして表示し、ポップオーバーまたはステータスアイコンのクリック時にタイトルと本文を通知 |
+| [`OnTrayBalloonTimeout`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTrayBalloonTimeout) | ✅ | メニューバーポップオーバーが指定時間で閉じた時にタイトルと本文を通知。指定時間はSSP互換で10〜30秒に制限 |
 
 ## インストールイベント
 
@@ -195,10 +195,10 @@ UKADOC掲載イベント数: 304
 | [`OnMediaPlayerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMediaPlayerOpen) | ✅ | `OnFileDrop2`未応答の音声・動画を既定アプリで開いた後、同じReferenceで通知。実機応答は未確認 |
 | [`OnPictureViewerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnPictureViewerOpen) | ✅ | `OnFileDrop2`未応答の画像を既定アプリで開いた後、同じReferenceで通知。実機応答は未確認 |
 | [`OnArchiveViewerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnArchiveViewerOpen) | ✅ | `OnFileDrop2`未応答の一般アーカイブを既定アプリで開いた後、同じReferenceで通知。NARはインストールを優先。実機応答は未確認 |
-| [`OnOtherObjectDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherObjectDropping) | 🟡 | SSPの他オブジェクトDnD連携を提供しないため未実装 |
-| [`OnOtherObjectDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherObjectDropped) | 🟡 | SSPの他オブジェクトDnD連携を提供しないため未実装 |
+| [`OnOtherObjectDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherObjectDropping) | ➖ | Windows Shellの仮想オブジェクトを表すイベント。macOSのファイル・URL・テキストDnDは各専用イベントで処理 |
+| [`OnOtherObjectDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherObjectDropped) | ➖ | Windows Shellの仮想オブジェクトを表すイベント。macOSのファイル・URL・テキストDnDは各専用イベントで処理 |
 | [`OnDirectoryDrop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDirectoryDrop) | ✅ | ドロップされた各ディレクトリについてパスとscopeをReference0〜1へ個別通知。混在する複数項目をテスト済み |
-| [`OnWallpaperChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWallpaperChange) | 🟡 | 画像DnDによる壁紙変更機能を提供しないため未実装 |
+| [`OnWallpaperChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWallpaperChange) | ✅ | 画像をサーフェスへドロップして全macOS画面の壁紙変更に成功した時に画像パスを通知 |
 | [`OnUpdatedataCreating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdatedataCreating) | ✅ | `createupdatedata`による`updates2.dau`生成の直前にReferenceなしで通知。フォルダD&Dからの作成UIは未実装 |
 | [`OnUpdatedataCreated`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdatedataCreated) | ✅ | `updates2.dau`生成成功後にReferenceなしで通知。実機応答は未確認 |
 | [`OnNarCreating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNarCreating) | ✅ | `createnar`実行直前にinstall.txt由来の名前、出力絶対パス、識別子をReference0〜2へ通知。フォルダD&Dからの作成UIは未実装 |
@@ -209,7 +209,7 @@ UKADOC掲載イベント数: 304
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
 | [`OnURLDragDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDragDropping) | ✅ | Web URLがサーフェスへ重なった時にURLとscopeを通知。受入可否の詳細判定は未実装 |
-| [`OnURLDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropping) | ✅ | NAR URLのダウンロード開始直前にURLとscopeを通知。実ネットワークでの確認は未実施 |
+| [`OnURLDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropping) | ✅ | Web URLがサーフェスへドロップされた時にURLとscopeを通知。後続のダウンロード機能は未実装 |
 | [`OnURLDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropped) | ✅ | NARのダウンロード完了後・インストール直前にローカルパス・元URL・scopeを通知。実ネットワークでの確認は未実施 |
 | [`OnURLDropFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLDropFailure) | ✅ | NAR取得失敗時に空のローカルパス、timeout・HTTP status・fileio、元URL、scopeをReference0〜3へ通知。実ネットワークでの確認は未実施 |
 | [`OnURLQuery`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnURLQuery) | ✅ | URL・scope・推定MIME type・nar/unknownを通知し、スクリプト応答時は標準処理を中止。feed・homeurl判定は未対応 |
@@ -259,10 +259,10 @@ UKADOC掲載イベント数: 304
 
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
-| [`OnBIFFBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBIFFBegin) | 🟡 | メールアカウントとPOPメールチェック機能を提供しないため未実装 |
-| [`OnBIFFComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBIFFComplete) | 🟡 | メールアカウントとPOPメールチェック機能を提供しないため未実装 |
-| [`OnBIFF2Complete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBIFF2Complete) | 🟡 | メールアカウントとPOPメールチェック機能を提供しないため未実装 |
-| [`OnBIFFFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBIFFFailure) | 🟡 | メールアカウントとPOPメールチェック機能を提供しないため未実装 |
+| [`OnBIFFBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBIFFBegin) | ✅ | biffコマンドによるPOP3メールチェック開始時に設定アカウント名を通知 |
+| [`OnBIFFComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBIFFComplete) | ✅ | POP3 STAT成功時に通数・総バイト数・アカウント名・前回との差分を通知。LIST・UIDL・ヘッダ一覧は空欄 |
+| [`OnBIFF2Complete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBIFF2Complete) | ✅ | 新着がありOnBIFFCompleteが無応答だった場合に通数・総バイト数・アカウント名を通知 |
+| [`OnBIFFFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBIFFFailure) | ✅ | POP3設定不足・接続・認証・応答解析失敗を理由とアカウント名付きで通知 |
 
 ## ヘッドライン/RSSセンスイベント
 
@@ -280,7 +280,7 @@ UKADOC掲載イベント数: 304
 
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
-| [`OnScheduleTodayNotify`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnScheduleTodayNotify) | ✅ | 予定の追加・編集・削除・取り込みや日付変更で「今日の予定」が変化した時、全起動ゴーストへNOTIFY。Reference0以降はtype/caption/subtitle/script/開始/終了をバイト値1区切り・末尾区切り付きで格納 |
+| [`OnScheduleTodayNotify`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnScheduleTodayNotify) | ✅ | 予定の追加・編集・削除・取り込みや日付変更で今日の予定が変化した時、全起動ゴーストへNOTIFY |
 | [`OnSchedule5MinutesToGo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedule5MinutesToGo) | ✅ | 時刻指定予定の5分前にReference0〜3へtype/caption/subtitle/scriptを通知。アプリが停止中だった期間の追跡はしません |
 | [`OnScheduleRead`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnScheduleRead) | ✅ | カレンダー詳細の「予定を読む」からReference0〜3を通知。スキンアイコンのホバー読み上げは未実装 |
 | [`OnSchedulesenseBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSchedulesenseBegin) | ✅ | 内蔵iCalendarセンサの読み込み開始時にReference0へファイル名、Reference1へURLを全起動ゴーストへ通知。外部calendar pluginは未対応 |
@@ -294,7 +294,7 @@ UKADOC掲載イベント数: 304
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
 | [`OnSSTPBreak`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSSTPBreak) | ✅ | nobreakなしの新しいSSTPが再生中SSTPを中断する際に発行。Reference0は中断スクリプト、Reference1は0。Reference2は現在0固定 |
-| [`OnSSTPBlacklisting`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSSTPBlacklisting) | 🟡 | localhost限定のSSTPで送信元IPを識別・拒否する仕組みが未実装 |
+| [`OnSSTPBlacklisting`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSSTPBlacklisting) | ➖ | UKADOCではMateria専用の送信元ブラックリストイベントであり、SSP互換対象外 |
 
 ## その他通信イベント
 
@@ -302,29 +302,29 @@ UKADOC掲載イベント数: 304
 | --- | --- | --- |
 | [`OnExecuteHTTPComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPComplete) | ✅ | 取得成功時に小文字のメソッド・識別ID・URL・本文または保存先・HTTPコード・Cookie・全ヘッダをReference0〜6へ通知。標準／独自イベントIDをテスト済み |
 | [`OnExecuteHTTPFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPFailure) | ✅ | HTTPステータス、timeout、fileio、artificial、toomanyredirect等をReference4へ入れ、Completeと同じReference0〜6で通知。イベント生成をテスト済み |
-| [`OnExecuteHTTPProgress`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPProgress) | 🟡 | execute-httpのprogress-notifyオプションを提供しないため未実装 |
-| [`OnExecuteHTTPStreaming`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPStreaming) | 🟡 | execute-httpのstreamingオプションを提供しないため未実装 |
-| [`OnExecuteHTTPSSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPSSLInfo) | 🟡 | TLS証明書詳細をSHIORIへ公開する機能を提供しないため未実装 |
-| [`OnExecuteICalComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICalComplete) | 🟡 | SakuraScriptからのical-get／ical-post操作を提供しないため未実装 |
-| [`OnExecuteICalFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICalFailure) | 🟡 | SakuraScriptからのical-get／ical-post操作を提供しないため未実装 |
-| [`OnExecuteICalProgress`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICalProgress) | 🟡 | SakuraScriptからのical-get／ical-post操作を提供しないため未実装 |
-| [`OnExecuteICal_SSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICal_SSLInfo) | 🟡 | SakuraScriptからのical-get／ical-post操作を提供しないため未実装 |
+| [`OnExecuteHTTPProgress`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPProgress) | ✅ | progress-notify指定時に受信済みバイト数と期待総量をデータ受信ごとに通知 |
+| [`OnExecuteHTTPStreaming`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPStreaming) | ✅ | streaming指定時に改行単位の受信データを通知 |
+| [`OnExecuteHTTPSSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPSSLInfo) | ✅ | HTTPS通信のTLSバージョン・暗号スイート・証明書概要をURLSession metricsから通知。証明書日時は空欄 |
+| [`OnExecuteICalComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICalComplete) | ✅ | ical-get／ical-postで取得したiCalendarを解析し、カレンダー情報とVEVENTをReference列へ通知。主要フィールドと件数制限に対応 |
+| [`OnExecuteICalFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICalFailure) | ✅ | iCalendarの通信・HTTP・解析失敗をHTTP系と同じReference形式で通知 |
+| [`OnExecuteICalProgress`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICalProgress) | ✅ | --progress-notify指定時にiCalendar取得の進捗を通知 |
+| [`OnExecuteICal_SSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICal_SSLInfo) | ✅ | HTTPSでiCalendarを取得した時にTLS情報を通知 |
 | [`OnExecuteRSSComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteRSSComplete) | ✅ | RSS各項目をタイトル・URL・SSP形式日時・作者・要約のバイト値1区切りでReference0以降へ通知。標準／独自イベントIDをテスト済み |
 | [`OnExecuteRSSFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteRSSFailure) | ✅ | 解析失敗はReference4=parse、通信失敗はHTTPと同じReference0〜6で通知。標準／独自イベントIDをテスト済み |
-| [`OnExecuteRSS_SSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteRSS_SSLInfo) | 🟡 | TLS証明書詳細をSHIORIへ公開する機能を提供しないため未実装 |
-| [`OnExecuteScheduleComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteScheduleComplete) | 🟡 | SakuraScriptからのschedule-add／schedule-delete操作を提供しないため未実装 |
-| [`OnExecuteScheduleFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteScheduleFailure) | 🟡 | SakuraScriptからのschedule-add／schedule-delete操作を提供しないため未実装 |
-| [`OnExecuteScheduleGetComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteScheduleGetComplete) | 🟡 | SakuraScriptからのschedule-get操作を提供しないため未実装 |
-| [`OnExecuteFileWatchChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteFileWatchChange) | 🟡 | SakuraScriptからのfilewatch操作を提供しないため未実装 |
-| [`OnExecuteFileWatchFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteFileWatchFailure) | 🟡 | SakuraScriptからのfilewatch操作を提供しないため未実装 |
+| [`OnExecuteRSS_SSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteRSS_SSLInfo) | ✅ | HTTPSのRSS取得時にHTTPと同じTLS情報を通知。証明書日時は空欄 |
+| [`OnExecuteScheduleComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteScheduleComplete) | ✅ | schedule-add／schedule-deleteで共有予定表への登録・削除が完了した時に操作種別とUIDを通知 |
+| [`OnExecuteScheduleFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteScheduleFailure) | ✅ | schedule-add／schedule-deleteの入力不正・対象なしを理由とUID付きで通知 |
+| [`OnExecuteScheduleGetComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteScheduleGetComplete) | ✅ | schedule-getで共有予定表をiCalendarと同じReference形式で通知 |
+| [`OnExecuteFileWatchChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteFileWatchChange) | ✅ | filewatchで指定したファイルまたはディレクトリの作成・更新・削除をdebounce後に通知 |
+| [`OnExecuteFileWatchFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteFileWatchFailure) | ✅ | filewatchの監視先ディレクトリがない場合や監視を継続できない場合に理由を通知 |
 | [`OnExecuteWebSocketOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocketOpen) | ✅ | HTTP 101成立後にReference0〜2を発行 |
 | [`OnExecuteWebSocketReceive`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocketReceive) | ✅ | text/binary opcodeと本文またはBase64をReference0〜3へ発行 |
-| [`OnExecuteWebSocketReconnect`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocketReconnect) | 🟡 | WebSocket自動再接続オプションを提供しないため未実装 |
-| [`OnExecuteWebSocketClose`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocketClose) | ✅ | close code・userbreakを通知。自動再接続と再接続後の最終Close規則は未実装 |
-| [`OnExecuteWebSocketFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocketFailure) | ✅ | 接続・受信エラーを通知。UKADOCの5回自動再接続後Failureは未実装 |
-| [`OnExecuteWebSocket_SSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocket_SSLInfo) | 🟡 | TLS証明書詳細をSHIORIへ公開する機能を提供しないため未実装 |
+| [`OnExecuteWebSocketReconnect`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocketReconnect) | ✅ | WebSocket受信失敗後の自動再接続を最大5回行い、試行回数を通知 |
+| [`OnExecuteWebSocketClose`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocketClose) | ✅ | 正常終了、明示的なclose、ユーザー中断時にclose codeまたはuserbreakを通知。異常切断時は再接続へ移行 |
+| [`OnExecuteWebSocketFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocketFailure) | ✅ | 接続・受信エラーから最大5回の自動再接続に失敗した時にreconnect failedを通知 |
+| [`OnExecuteWebSocket_SSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocket_SSLInfo) | ✅ | wss接続のTLSバージョンと暗号スイートを通知。証明書subject・issuerは空欄 |
 | [`OnPingComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnPingComplete) | ✅ | ping完了を通知するがReference1の送信元アドレスとReference2以降の1応答1Reference構造が未対応 |
-| [`OnPingProgress`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnPingProgress) | 🟡 | pingの応答単位progress通知を提供しないため未実装 |
+| [`OnPingProgress`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnPingProgress) | ✅ | pingの応答行ごとに指定イベントID・ホスト・応答番号・解析した遅延を通知 |
 | [`OnNSLookupComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNSLookupComplete) | ✅ | nslookup成功時に指定イベント名・ホスト・lookup/reverse・結果をReference0〜3へ通知。executeタグのコマンド解析とイベント生成をテスト済み |
 | [`OnNSLookupFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNSLookupFailure) | ✅ | nslookup失敗時に指定イベント名・ホスト・lookup/reverseをReference0〜2へ通知し、不要なReference3は付けない。イベント生成をテスト済み |
 
@@ -381,21 +381,21 @@ UKADOC掲載イベント数: 304
 | [`OnTabletMode`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTabletMode) | ➖ | macOSに対応するタブレットモードがないため対象外 |
 | [`OnDarkTheme`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDarkTheme) | ✅ | 起動時とアプリ再アクティブ化時にmacOSのダークモード状態をReference0〜1へ通知。非アクティブ中の変更は復帰時通知 |
 | [`OnDesktopWallpaperChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDesktopWallpaperChange) | ✅ | 起動時はNOTIFY、macOSの壁紙変更時はGETで、画面・画像パス・表示方法・背景色を通知。状態遷移とReferenceを自動テスト済み |
-| [`OnWindowModeChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWindowModeChange) | ✅ | 起動時はNOTIFYでReference0=init、切替時はGETでReference0=update。Reference1へ現在、Reference2へ直前のモードをnormal/shared/perghostで渡し、切替時は続けて`OnDisplayChange`を発行。起動時のReference2は空 |
-| [`OnOSUpdateInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOSUpdateInfo) | 🟡 | Windows Update履歴を通知するイベントでありmacOS版では未実装 |
-| [`OnRecycleBinEmpty`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRecycleBinEmpty) | 🟡 | SakuraScriptからmacOSのゴミ箱を空にする操作を提供しないため未実装 |
-| [`OnRecycleBinEmptyFromOther`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRecycleBinEmptyFromOther) | 🟡 | ゴミ箱を空にする操作を提供しないため未実装。外部変更はOnRecycleBinStatusUpdateで通知 |
+| [`OnWindowModeChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWindowModeChange) | ✅ | 起動時とウインドウモード切替時に現在・直前のモードを通知し、切替時はOnDisplayChangeも発行 |
+| [`OnOSUpdateInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOSUpdateInfo) | ✅ | macOSのsystem_profilerインストール履歴から直近20件の名称・版・導入日を起動時に通知。Windows固有項目は空欄 |
+| [`OnRecycleBinEmpty`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRecycleBinEmpty) | ✅ | emptyrecyclebinでユーザーの~/.Trashを空にし、前後の件数・容量と成否を通知 |
+| [`OnRecycleBinEmptyFromOther`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRecycleBinEmptyFromOther) | ✅ | 他ゴーストがemptyrecyclebinを実行した時に同じ結果を通知 |
 | [`OnRecycleBinStatusUpdate`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRecycleBinStatusUpdate) | ✅ | 起動時と5秒ごとの変化時にmacOSゴミ箱内の通常ファイル数・合計サイズ・直前との差を通知。外部ボリュームのゴミ箱と隠しファイルは対象外 |
 
 ## 選択領域モードイベント
 
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
-| [`OnSelectModeBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSelectModeBegin) | 🟡 | selectrect画面領域選択モードを提供しないため未実装 |
-| [`OnSelectModeCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSelectModeCancel) | 🟡 | selectrect画面領域選択モードを提供しないため未実装 |
-| [`OnSelectModeComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSelectModeComplete) | 🟡 | selectrect画面領域選択モードを提供しないため未実装 |
-| [`OnSelectModeMouseDown`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSelectModeMouseDown) | 🟡 | selectrect画面領域選択モードを提供しないため未実装 |
-| [`OnSelectModeMouseUp`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSelectModeMouseUp) | 🟡 | selectrect画面領域選択モードを提供しないため未実装 |
+| [`OnSelectModeBegin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSelectModeBegin) | ✅ | enter,selectrectで全画面の矩形選択オーバーレイを開始して通知 |
+| [`OnSelectModeCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSelectModeCancel) | ✅ | selectrectをEscまたは選択未完了で終了した時に通知 |
+| [`OnSelectModeComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSelectModeComplete) | ✅ | leave,selectrectで選択矩形の画面座標を通知 |
+| [`OnSelectModeMouseDown`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSelectModeMouseDown) | ✅ | 矩形選択開始点をクリックした時にscope・モード・画面座標を通知 |
+| [`OnSelectModeMouseUp`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSelectModeMouseUp) | ✅ | 矩形選択終了点でボタンを離した時にscope・モード・画面座標を通知 |
 
 ## 音声認識・合成イベント
 
@@ -411,9 +411,9 @@ UKADOC掲載イベント数: 304
 | --- | --- | --- |
 | [`OnKeyPress`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnKeyPress) | ✅ | Utataneがアクティブな時のkeyDownを文字・macOS keyCode・repeat・scope・修飾キーで通知。Reference1はWin32仮想キーコードではありません |
 | [`OnRecommendsiteChoice`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnRecommendsiteChoice) | ✅ | おすすめ・ポータルメニュー選択時にサイト名・URL・バナー・種別・選択scope・0始まりの位置をReference0〜5へ通知。イベント生成テストで確認 |
-| [`OnTranslate`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTranslate) | 🟡 | SHIORIをMAKOTOとして再呼び出しする翻訳フックを提供しないため未実装 |
+| [`OnTranslate`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTranslate) | ✅ | イベント応答の再生前に元スクリプト・イベントID・Reference等で同じSHIORIを再呼出しし、応答があれば置換 |
 | [`OnAITalk`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAITalk) | ✅ | \a・手動ランダムトークからGETで発行。Referenceなし |
-| [`OnOtherGhostTalk`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostTalk) | 🟡 | 他ゴーストの全発話を監視するopt-in機能を提供しないため未実装 |
+| [`OnOtherGhostTalk`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostTalk) | ✅ | set,otherghosttalkでopt-inしたゴーストへ他ゴーストの再生前または再生後のスクリプトと発生元情報を通知 |
 | [`OnEmbryoExist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnEmbryoExist) | ➖ | Windows用Materiaの同時起動検出イベントでありmacOS版では対象外 |
 | [`OnNekodorifExist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNekodorifExist) | ➖ | Windows用猫どりふの同時起動検出イベントでありmacOS版では対象外 |
 | [`OnSoundStop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundStop) | ✅ | SakuraScript音声の自然終了とstop操作でファイル名・end/closeを通知。ループ終了など全経路は未確認 |
@@ -431,8 +431,8 @@ UKADOC掲載イベント数: 304
 | [`OnExtractArchiveFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExtractArchiveFailure) | ✅ | ZIP展開失敗時に対象書庫とエラー内容をReference0〜1へ通知。失敗経路とイベント生成をテスト済み |
 | [`OnCompressArchiveComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCompressArchiveComplete) | ✅ | 実際のZIP圧縮成功後にファイル・出力先・形式・ユーザーIDをReference0〜3へ通知。圧縮処理とイベント生成をテスト済み |
 | [`OnCompressArchiveFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCompressArchiveFailure) | ✅ | ZIP圧縮失敗時に対象ファイルとエラー内容をReference0〜1へ通知。失敗経路とイベント生成をテスト済み |
-| [`property.get`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#property.get) | 🟡 | SSPのactiveghostlist.ext拡張プロパティを提供しないため未実装 |
-| [`property.set`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#property.set) | 🟡 | SSPのactiveghostlist.ext拡張プロパティを提供しないため未実装 |
+| [`property.get`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#property.get) | ✅ | activeghostlist.extの対象ゴーストへ拡張プロパティ取得を中継 |
+| [`property.set`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#property.set) | ✅ | activeghostlist.extの対象ゴーストへ拡張プロパティ設定を中継 |
 
 ## Notifyイベント
 
@@ -453,7 +453,7 @@ UKADOC掲載イベント数: 304
 | [`installedcalendarskinname`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#installedcalendarskinname) | ✅ | 起動時に利用可能なカレンダースキン名をReference列へNOTIFY |
 | [`installedcalendarpluginname`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#installedcalendarpluginname) | ✅ | 起動時に空のNOTIFYを送り、利用可能な外部カレンダープラグインがない状態を通知 |
 | [`installedplugin`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#installedplugin) | ✅ | 起動時に認識済みプラグインの「名前、ID」をバイト値1で結合し、Reference列へNOTIFY。ネイティブSHIORI型のロード、定期イベント、メニュー・SakuraScript明示呼び出しを接続 |
-| [`configuredbiffname`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#configuredbiffname) | ✅ | 起動時に空のNOTIFYを送り、設定済みメールアカウントがない状態を通知。メールチェック機能自体は未実装 |
+| [`configuredbiffname`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#configuredbiffname) | ✅ | 起動時に本体設定で利用可能なPOP3アカウント名をNOTIFY。パスワードはmacOS Keychainへ保存 |
 | [`ghostpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#ghostpathlist) | ✅ | 起動時に有効な全ゴーストフォルダの絶対パスを優先順でNOTIFY。DebugではBundledも含みます |
 | [`balloonpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#balloonpathlist) | ✅ | 起動時に有効な全バルーンフォルダの絶対パスを優先順でNOTIFY。DebugではBundledも含みます |
 | [`headlinepathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#headlinepathlist) | ✅ | 起動時に有効な全ヘッドラインフォルダの絶対パスを優先順でNOTIFY |

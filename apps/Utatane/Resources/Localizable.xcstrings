@@ -2698,6 +2698,35 @@
         }
       }
     },
+    "TLSで接続" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connect with TLS"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TLS로 연결"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 TLS 连接"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用 TLS 連線"
+          }
+        }
+      }
+    },
     "URLを指定して取得…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3887,6 +3916,35 @@
         }
       }
     },
+    "この設定のヘルプ" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Help for This Setting"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 설정 도움말"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此设置的帮助"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此設定的說明"
+          }
+        }
+      }
+    },
     "しない" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4086,6 +4144,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "慢速播放"
+          }
+        }
+      }
+    },
+    "アカウント名" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Account Name"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계정 이름"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帐户名称"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "帳戶名稱"
           }
         }
       }
@@ -5134,6 +5221,35 @@
         }
       }
     },
+    "ゴーストがメールチェックを要求した時だけ接続する。通常はPOP3 over TLSの995番を使う。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connects only when a ghost requests a mail check. POP3 over TLS normally uses port 995."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고스트가 메일 확인을 요청할 때만 연결합니다. POP3 over TLS는 보통 995번 포트를 사용합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅在 Ghost 请求检查邮件时连接。POP3 over TLS 通常使用 995 端口。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "僅在 Ghost 要求檢查郵件時連線。POP3 over TLS 通常使用 995 連接埠。"
+          }
+        }
+      }
+    },
     "ゴーストごとに1枚" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5594,6 +5710,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "當Ghost及其歷史記錄均未指定對話框時使用。如果已被刪除，將切換到可用的對話框。"
+          }
+        }
+      }
+    },
+    "サーバー" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Server"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "서버"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "服务器"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "伺服器"
           }
         }
       }
@@ -6497,6 +6642,35 @@
         }
       }
     },
+    "パスワード（Keychainに保存）" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Password (saved in Keychain)"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "비밀번호(Keychain에 저장)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密码（保存到钥匙串）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "密碼（儲存到鑰匙圈）"
+          }
+        }
+      }
+    },
     "ビルド %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7044,6 +7218,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新整理成員"
+          }
+        }
+      }
+    },
+    "メールチェック (POP3)" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Check (POP3)"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메일 확인 (POP3)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "邮件检查 (POP3)"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "郵件檢查 (POP3)"
           }
         }
       }

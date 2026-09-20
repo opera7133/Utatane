@@ -26,12 +26,14 @@ final class CalledGhostRuntime {
     private let presentationGeometry: any PresentationGeometryProviding
     private let textInputWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
+    private let fileWatchManager = SakuraScriptFileWatchManager()
     private let speechHistoryStore: SpeechHistoryStore
     private let speechHistoryWindowController: SpeechHistoryWindowController
     private let speechHistoryPresenter: SpeechHistoryPresenter?
     private let speechSynthesizer = SpeechSynthesisRouter()
     private var integratesSpeechHistory: Bool
     private let speechRecognitionEnabled: Bool
+    private let configuredBiffNames: [String]
     private var speechHistoryTextScale: CGFloat = 1
     private var weatherTask: Task<Void, Never>?
     private var sntpCoordinator: SNTPEventCoordinator?
@@ -62,11 +64,22 @@ final class CalledGhostRuntime {
     var onError: ((Error) -> Void)?
     var onCommunication: ((String, String) -> Void)?
     var onNarDrop: (([URL]) -> Void)?
+    var onWallpaperDrop: ((URL) async -> Bool)?
     var onOpenMessenger: (() -> Void)?
     var onContentAction: ((SakuraScriptContentAction) -> Void)?
     var onOtherEvent: ((String, String, [String], Bool) async -> Void)?
     var onOtherGhostTalk: ((String, String) -> Void)?
+    var onTrayBalloon: ((SakuraScriptTrayBalloon) -> Void)?
     var onOtherSurfaceChange: ((String, Int, Int) -> Void)?
+    var onOtherGhostTalkModeChange: ((SakuraScriptOtherGhostTalkMode) -> Void)?
+    var onOtherSurfaceChangeNotificationsChange: ((Bool) -> Void)?
+    var onTalkPlayback: ((SakuraScriptTalkPhase, SakuraScript, SakuraScriptPlaybackContext) -> Void)?
+    var onExternalPropertyGet: ((String) async -> String?)?
+    var onExternalPropertySet: ((String, String) async -> Bool)?
+    var onEmptyRecycleBin: ((String) async -> [Int: String])?
+    var onCheckMail: ((String?, GhostSession) async -> SakuraScript?)?
+    var onSelectRectangle: ((Int, Bool) async -> GhostEvent?)?
+    var onSchedule: ((SakuraScriptScheduleCommand) -> GhostEvent)?
     var onSurfaceChanged: ((Int, Int?, Int) -> Void)?
     var onSpeechSynthesisActivity: (@MainActor @Sendable (Bool) -> Void)? {
         didSet { player.onSpeechSynthesisActivity = onSpeechSynthesisActivity }
@@ -84,6 +97,7 @@ final class CalledGhostRuntime {
         speechSynthesisEnabled: Bool,
         speechVoiceSettingsByScope: [Int: UtataneSettingsStore.SpeechVoiceSettings],
         speechRecognitionEnabled: Bool,
+        configuredBiffNames: [String],
         speechHistoryStore: SpeechHistoryStore,
         integratesSpeechHistory: Bool,
         windowMode: GhostWindowMode,
@@ -112,6 +126,7 @@ final class CalledGhostRuntime {
         }
         self.integratesSpeechHistory = integratesSpeechHistory
         self.speechRecognitionEnabled = speechRecognitionEnabled
+        self.configuredBiffNames = configuredBiffNames
         self.windowMode = windowMode
         self.presentationSession = presentationSession
         self.presentationGeometry = effectivePresentationGeometry
@@ -204,6 +219,41 @@ final class CalledGhostRuntime {
         caller: InstalledGhost,
         desktopWallpaperEvent: DesktopWallpaperChangeEvent? = nil
     ) async throws -> String? {
+        try await start(
+            event: SHIORIEventFactory.ghostCalled(
+                callerCharacterName: caller.characters.first(where: { $0.scope == 0 })?.name ?? caller.name,
+                callerScript: "",
+                callerGhostName: caller.name,
+                callerGhostPath: caller.rootDirectory.path,
+                shellName: shell.name
+            ),
+            desktopWallpaperEvent: desktopWallpaperEvent
+        )
+    }
+
+    func startAfterGhostChange(
+        previousGhost: InstalledGhost,
+        previousShellName: String,
+        changeScript: String,
+        desktopWallpaperEvent: DesktopWallpaperChangeEvent? = nil
+    ) async throws -> String? {
+        try await start(
+            event: SHIORIEventFactory.ghostChanged(
+                previousCharacterName: previousGhost.characters.first(where: { $0.scope == 0 })?.name
+                    ?? previousGhost.name,
+                previousScript: changeScript,
+                previousGhostName: previousGhost.name,
+                previousGhostPath: previousGhost.rootDirectory.path,
+                shellName: shell.name
+            ),
+            desktopWallpaperEvent: desktopWallpaperEvent
+        )
+    }
+
+    private func start(
+        event: GhostEvent,
+        desktopWallpaperEvent: DesktopWallpaperChangeEvent?
+    ) async throws -> String? {
         try show(shell: shell)
         surfaceController.setPresentationHidden(true)
         _ = try? await session.start(event: .shiori(id: "OnInitialize", references: [:]))
@@ -215,7 +265,8 @@ final class CalledGhostRuntime {
                 shellDefinition: definition,
                 windowMode: windowMode,
                 speechSynthesisEnabled: player.isSpeechSynthesisEnabled,
-                speechRecognitionEnabled: speechRecognitionEnabled
+                speechRecognitionEnabled: speechRecognitionEnabled,
+                configuredBiffNames: configuredBiffNames
             ) {
                 _ = try? await session.handle(event: .notification(
                     id: event.id,
@@ -232,14 +283,11 @@ final class CalledGhostRuntime {
         if let desktopWallpaperEvent {
             _ = try? await session.handle(event: desktopWallpaperGhostEvent(desktopWallpaperEvent))
         }
+        if let event = await MacOSOSUpdateHistorySampler().event() {
+            _ = try? await session.handle(event: event)
+        }
         let script = try await session.handle(
-            event: SHIORIEventFactory.ghostCalled(
-                callerCharacterName: caller.characters.first(where: { $0.scope == 0 })?.name ?? caller.name,
-                callerScript: "",
-                callerGhostName: caller.name,
-                callerGhostPath: caller.rootDirectory.path,
-                shellName: shell.name
-            ),
+            event: event,
             fallingBackTo: SHIORIEventFactory.boot(shellName: shell.name)
         )
         surfaceController.setPresentationHidden(false)
@@ -324,7 +372,7 @@ final class CalledGhostRuntime {
                 for event in events {
                     guard let response = try await session.response(for: event) else { continue }
                     if let script = response.script {
-                        player.play(script, balloon: balloon)
+                        player.play(script, balloon: balloon, context: event.playbackContext)
                     }
                     forwardCommunication(response)
                 }
@@ -456,6 +504,22 @@ final class CalledGhostRuntime {
         return true
     }
 
+    func extensionProperty(named name: String) async -> String? {
+        try? await session.handle(event: .shiori(id: "property.get", references: [0: name]))?.rawValue
+    }
+
+    func setExtensionProperty(named name: String, value: String) async -> Bool {
+        do {
+            _ = try await session.handle(event: .shiori(
+                id: "property.set",
+                references: [0: name, 1: value]
+            ))
+            return true
+        } catch {
+            return false
+        }
+    }
+
     func notify(_ event: GhostEvent) async {
         _ = try? await session.handle(event: event)
     }
@@ -511,17 +575,58 @@ final class CalledGhostRuntime {
         await stop(reason: .vanish)
     }
 
+    func stopForGhostChange(to ghost: InstalledGhost) async -> String {
+        await stop(reason: .ghostChangingDetailed(
+            name: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
+            mode: "manual",
+            ghostName: ghost.name,
+            path: ghost.rootDirectory.path
+        ))
+    }
+
+    func suspendToCache() async {
+        _ = try? await session.handle(event: .shiori(id: "OnCacheSuspend", references: [:]))
+        player.cancel()
+        surfaceController.setPresentationHidden(true)
+        balloonController.setPresentationHidden(true)
+    }
+
+    func restoreFromCache() async {
+        surfaceController.setPresentationHidden(false)
+        balloonController.setPresentationHidden(false)
+        if let script = try? await session.handle(event: .shiori(id: "OnCacheRestore", references: [:])) {
+            player.play(script, balloon: balloon)
+        }
+    }
+
     private func stop(reason: GhostStopReason) async -> String {
+        var finalScript = ""
+        if reason == .vanish {
+            if let script = try? await session.handle(event: .shiori(id: "OnVanishSelected", references: [:])) {
+                finalScript = script.rawValue
+                await player.playAndWait(
+                    script,
+                    balloon: balloon,
+                    context: .init(eventID: "OnVanishSelected")
+                )
+                if player.didCancelVanishPlayback {
+                    return finalScript
+                }
+            }
+            _ = try? await session.handle(event: .shiori(id: "OnDestroy", references: [:]))
+            await session.shutdown()
+        } else {
+            _ = try? await session.handle(event: .shiori(id: "OnDestroy", references: [:]))
+            if let script = try? await session.stop(reason: reason) {
+                finalScript = script.rawValue
+                await player.playAndWait(script, balloon: balloon)
+            }
+        }
         periodicEventRunner.cancel()
         mouseEventCoordinator.cancel()
         await webSocketManager.cancelAll()
         cancelHTTP(url: nil)
-        var finalScript = ""
-        _ = try? await session.handle(event: .shiori(id: "OnDestroy", references: [:]))
-        if let script = try? await session.stop(reason: reason) {
-            finalScript = script.rawValue
-            await player.playAndWait(script, balloon: balloon)
-        }
+        fileWatchManager.cancelAll()
         player.cancel()
         surfaceController.resetContent()
         balloonController.resetContent()
@@ -685,6 +790,24 @@ final class CalledGhostRuntime {
     }
 
     private func configureCallbacks() {
+        player.onTranslate = { [weak self] script, context in
+            guard let self, context.eventID != "OnTranslate",
+                  let translated = try? await session.handle(event: .shiori(
+                      id: "OnTranslate",
+                      references: context.translateReferences(script: script)
+                  )), !translated.rawValue.isEmpty
+            else { return nil }
+            return translated
+        }
+        player.onOtherGhostTalkModeChange = { [weak self] mode in
+            self?.onOtherGhostTalkModeChange?(mode)
+        }
+        player.onOtherSurfaceChangeNotificationsChange = { [weak self] enabled in
+            self?.onOtherSurfaceChangeNotificationsChange?(enabled)
+        }
+        player.onTalkPlayback = { [weak self] phase, script, context in
+            self?.onTalkPlayback?(phase, script, context)
+        }
         surfaceController.onMouseEvent = { [weak self] event in
             guard let self, !player.isTimeCritical else { return }
             dispatchMouseEvent(event)
@@ -746,6 +869,16 @@ final class CalledGhostRuntime {
         player.onBalloonTimeout = { [weak self] script in
             self?.send(.shiori(id: "OnBalloonTimeout", references: [0: script, 1: "0"]))
         }
+        player.onBalloonBreak = { [weak self] script, scope, position in
+            self?.send(.shiori(id: "OnBalloonBreak", references: [
+                0: script, 1: String(scope), 2: String(position)
+            ]))
+        }
+        player.onVanishButtonHold = { [weak self] script, scope, position in
+            self?.send(.shiori(id: "OnVanishButtonHold", references: [
+                0: script, 1: String(scope), 2: String(position)
+            ]))
+        }
         player.onChoice = { [weak self] id, arguments in
             if let url = URL(string: id), let scheme = url.scheme?.lowercased(), ["http", "https"].contains(scheme) {
                 NSWorkspace.shared.open(url)
@@ -788,6 +921,9 @@ final class CalledGhostRuntime {
         player.onChoiceTimeout = { [weak self] script in
             self?.send(.shiori(id: "OnChoiceTimeout", references: [0: script]))
         }
+        player.onTrayBalloon = { [weak self] command in
+            self?.onTrayBalloon?(command)
+        }
         player.onOpen = { [weak self] target in
             if target.caseInsensitiveCompare("messenger") == .orderedSame {
                 self?.onOpenMessenger?()
@@ -818,6 +954,9 @@ final class CalledGhostRuntime {
         }
         player.onPropertyValue = { [weak self] property in
             guard let self else { return nil }
+            if let value = await onExternalPropertyGet?(property) {
+                return value
+            }
             await propertySystem.register(values: MacOSPropertySnapshot.values(
                 geometryProvider: presentationGeometry
             ))
@@ -836,6 +975,9 @@ final class CalledGhostRuntime {
         }
         player.onSetProperty = { [weak self] property, value in
             guard let self else { return }
+            if await onExternalPropertySet?(property, value) == true {
+                return
+            }
             try? await propertySystem.setValue(value, for: property)
         }
         player.onSystemDialog = { [weak self] command in
@@ -907,9 +1049,38 @@ final class CalledGhostRuntime {
             return nil
         }
         player.onCancelHTTP = { [weak self] url in self?.cancelHTTP(url: url) }
+        player.onSchedule = { [weak self] command in
+            guard let self, let event = onSchedule?(command) else { return nil }
+            return try? await session.handle(event: event)
+        }
+        player.onFileWatch = { [weak self] command in
+            guard let self else { return nil }
+            let master = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
+            guard let event = fileWatchManager.handle(command, masterDirectory: master, notify: { [weak self] event in
+                self?.send(event)
+            }) else { return nil }
+            return try? await session.handle(event: event)
+        }
         player.onNetworkDiagnostic = { [weak self] command in
             guard let self else { return nil }
             return await handleNetworkDiagnostic(command)
+        }
+        player.onEmptyRecycleBin = { [weak self] in
+            guard let self, let references = await onEmptyRecycleBin?(
+                ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+            ) else { return nil }
+            return try? await session.handle(event: .shiori(
+                id: "OnRecycleBinEmpty",
+                references: references
+            ))
+        }
+        player.onCheckMail = { [weak self] account in
+            guard let self else { return nil }
+            return await onCheckMail?(account, session)
+        }
+        player.onSelectRectangle = { [weak self] scope, enabled in
+            guard let self, let event = await onSelectRectangle?(scope, enabled) else { return nil }
+            return try? await session.handle(event: event)
         }
         player.onWebSocket = { [weak self] command in
             await self?.handleWebSocket(command)
@@ -1037,6 +1208,10 @@ final class CalledGhostRuntime {
                     }
                     return
                 }
+                if urls.count == 1, let url = urls.first, await onWallpaperDrop?(url) == true {
+                    send(.shiori(id: "OnWallpaperChange", references: [0: url.path]))
+                    return
+                }
                 guard let url = urls.first,
                       let viewerEvent = FileDropEventRouter.viewerOpened(scope: scope, urls: urls),
                       NSWorkspace.shared.open(url)
@@ -1120,14 +1295,67 @@ final class CalledGhostRuntime {
                     request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
                 }
             }
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let masterDirectory = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
+            let progress: HTTPTransferClient.ProgressHandler? = if command.notifiesProgress {
+                { [weak self] data, response in
+                    guard let self,
+                          let event = SakuraScriptHTTPEventSupport.progressEvent(
+                              command: command,
+                              data: data,
+                              response: response,
+                              masterDirectory: masterDirectory
+                          )
+                    else { return }
+                    _ = try? await session.handle(event: event)
+                }
+            } else {
+                nil
+            }
+            let streaming: HTTPTransferClient.StreamingHandler? = if command.streamingMode != nil {
+                { [weak self] value, response in
+                    guard let self,
+                          let event = SakuraScriptHTTPEventSupport.streamingEvent(
+                              command: command,
+                              value: value,
+                              response: response,
+                              masterDirectory: masterDirectory
+                          )
+                    else { return }
+                    _ = try? await session.handle(event: event)
+                }
+            } else {
+                nil
+            }
+            let transfer = try await HTTPTransferClient.perform(
+                request,
+                progress: progress,
+                streaming: streaming
+            )
+            let data = transfer.data
+            let response = transfer.response
             let httpResponse = response as? HTTPURLResponse
+            if let httpResponse, let tlsInfo = transfer.tlsInfo,
+               let event = SakuraScriptHTTPEventSupport.tlsEvent(
+                   command: command,
+                   response: httpResponse,
+                   info: tlsInfo
+               )
+            {
+                _ = try? await session.handle(event: event)
+            }
             let statusCode = httpResponse?.statusCode ?? 0
             let cookie = httpResponse?.value(forHTTPHeaderField: "Set-Cookie") ?? ""
             let headers = Self.httpResponseHeaders(httpResponse)
             if !(200 ..< 300).contains(statusCode) {
                 guard let eventID = command.eventID else { return nil }
-                let event = if command.isFeed {
+                let event = if command.isCalendar {
+                    SakuraScriptCalendarSupport.failureEvent(
+                        command: command,
+                        reason: String(statusCode),
+                        cookie: cookie,
+                        headers: headers
+                    )
+                } else if command.isFeed {
                     SHIORIEventFactory.executeRSSFailure(
                         eventID: eventID,
                         method: command.method,
@@ -1179,10 +1407,25 @@ final class CalledGhostRuntime {
                 }
             }
 
+            if command.isCalendar {
+                do {
+                    return try await session.handle(event: SakuraScriptCalendarSupport.completeEvent(
+                        data: data,
+                        command: command
+                    ))
+                } catch {
+                    return try? await session.handle(event: SakuraScriptCalendarSupport.failureEvent(
+                        command: command,
+                        reason: "parse",
+                        cookie: cookie,
+                        headers: headers
+                    ))
+                }
+            }
+
             let result: String
             switch command.output {
             case let .file(requestedName):
-                let masterDirectory = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
                 let varDirectory = masterDirectory.appending(path: "var", directoryHint: .isDirectory)
                 try FileManager.default.createDirectory(at: varDirectory, withIntermediateDirectories: true)
                 let fallbackName = url.lastPathComponent.isEmpty ? "index.html" : url.lastPathComponent
@@ -1217,7 +1460,9 @@ final class CalledGhostRuntime {
             }
             guard let eventID = command.eventID else { return nil }
             let reason = Self.httpFailureReason(error)
-            let event = if command.isFeed {
+            let event = if command.isCalendar {
+                SakuraScriptCalendarSupport.failureEvent(command: command, reason: reason)
+            } else if command.isFeed {
                 SHIORIEventFactory.executeRSSFailure(
                     eventID: eventID,
                     method: command.method,
@@ -1449,8 +1694,20 @@ final class CalledGhostRuntime {
         case let .ping(host, eventID, count, size, timeout, ttl):
             guard !host.isEmpty else { return nil }
             let result = await NetworkDiagnosticRunner.ping(
-                host: host, count: count, size: size, timeoutMilliseconds: timeout, ttl: ttl
-            )
+                host: host,
+                count: count,
+                size: size,
+                timeoutMilliseconds: timeout,
+                ttl: ttl
+            ) { progress in
+                let id = eventID.hasPrefix("On") ? eventID : "OnPingProgress"
+                _ = try? await self.session.handle(event: .shiori(id: id, references: [
+                    0: eventID,
+                    1: [progress.address, String(progress.sequence + 1),
+                        String(progress.sequence + 1), "0"].joined(separator: "\u{1}"),
+                    2: ["OK", progress.address, progress.roundTripMilliseconds].joined(separator: "\u{1}")
+                ]))
+            }
             let summary = result.output.split(separator: "\n").first { $0.contains("packets transmitted") }
             let numbers = summary?.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) } ?? []
             let sent = numbers.first ?? count

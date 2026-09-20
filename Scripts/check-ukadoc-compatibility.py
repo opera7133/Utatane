@@ -71,7 +71,7 @@ def main() -> int:
         f"❌ {counts['❌']} / ➖ {counts['➖']}"
     )
     if "UKADOC掲載イベント数: 304" not in event_document:
-        failures.append("SHIORI Event inventory does not declare the current 304-event baseline")
+        failures.append("SHIORI Event inventory does not declare the current 304-event UKADOC baseline")
     if expected_summary not in event_document:
         failures.append("SHIORI Event inventory summary does not match its rows")
 

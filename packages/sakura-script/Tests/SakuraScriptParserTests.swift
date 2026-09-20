@@ -326,6 +326,18 @@ func `parses balloon playback controls`() {
 }
 
 @Test
+func `parses tray balloons for the menu bar`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![set,trayballoon,--text=1行目,--text=2行目,--title=更新,--icon=info,--timeout=20]"#
+    ) == [
+        .trayBalloon(.init(title: "更新", text: "1行目\n2行目", icon: "info", timeoutSeconds: 20))
+    ])
+    #expect(SakuraScriptParser().parse(
+        #"\![set,trayballoon,--title=本文なし]"#
+    ) == [.unknown(#"\![set,trayballoon,--title=本文なし]"#)])
+}
+
+@Test
 func `parses surface alpha transitions`() {
     #expect(SakuraScriptParser().parse(
         #"\![set,alpha,50]\![set,alpha,200,--time=300,--wait]\![set,alpha,-1,250]"#
@@ -885,11 +897,12 @@ func `parses passive and induction mode commands`() {
 @Test
 func `parses open ui dialog and utility commands`() {
     #expect(SakuraScriptParser().parse(
-        #"\![open,configurationdialog]\![open,readme]\![open,help]\![open,file,/tmp/a.txt]\![open,folder,/tmp]\![execute,dumpsurface,/tmp/out.png,--event=OnDumped]\![execute,createupdatedata,/tmp/dir,--event=OnUpdated]"#
+        #"\![open,configurationdialog]\![open,readme]\![open,help]\![open,terms]\![open,file,/tmp/a.txt]\![open,folder,/tmp]\![execute,dumpsurface,/tmp/out.png,--event=OnDumped]\![execute,createupdatedata,/tmp/dir,--event=OnUpdated]"#
     ) == [
         .contentAction(.openConfigurationDialog),
         .contentAction(.openReadme),
         .contentAction(.openHelp),
+        .contentAction(.openTerms),
         .contentAction(.openFile("/tmp/a.txt")),
         .contentAction(.openFolder("/tmp")),
         .archive(.dumpSurface(path: "/tmp/out.png", eventID: "OnDumped")),
@@ -968,5 +981,84 @@ func `parses plugin raise and notify commands`() {
     ) == [
         .pluginEvent(target: "clock", id: "OnAlarm", arguments: ["one", "two"], reflectsResponse: true),
         .pluginEvent(target: "clock", id: "OnQuiet", arguments: [], reflectsResponse: false)
+    ])
+}
+
+@Test
+func `parses cross ghost notification modes`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![set,otherghosttalk,before]\![set,otherghosttalk,true]\![set,otherghosttalk,false]\![set,othersurfacechange,true]"#
+    ) == [
+        .otherGhostTalkMode(.before),
+        .otherGhostTalkMode(.after),
+        .otherGhostTalkMode(.disabled),
+        .otherSurfaceChangeNotifications(true)
+    ])
+}
+
+@Test
+func `parses recycle bin and screen selection commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,emptyrecyclebin]\![enter,selectrect]\![leave,selectrect]"#
+    ) == [
+        .emptyRecycleBin,
+        .selectRectangle(enabled: true),
+        .selectRectangle(enabled: false)
+    ])
+}
+
+@Test
+func `parses HTTP progress and streaming options`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,http-get,https://example.com/feed,--async=download,--nofile,--progress-notify,--streaming=sse]"#
+    ) == [
+        .http(.init(
+            method: "GET",
+            url: "https://example.com/feed",
+            eventID: "download",
+            waitsForCompletion: false,
+            output: .memory(characterEncoding: nil),
+            notifiesProgress: true,
+            streamingMode: "sse"
+        ))
+    ])
+}
+
+@Test
+func `parses mail check commands`() {
+    #expect(SakuraScriptParser().parse(#"\![biff]\![biff,work]"#) == [
+        .checkMail(account: nil),
+        .checkMail(account: "work")
+    ])
+}
+
+@Test
+func `parses iCalendar schedule and file watch commands`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,ical-get,https://example.com/calendar.ics,--async=OnCalendar,--limit=5,--progress-notify]\![cancel,ical,https://example.com/calendar.ics]"#
+    ) == [
+        .http(.init(
+            method: "GET",
+            url: "https://example.com/calendar.ics",
+            eventID: "OnCalendar",
+            waitsForCompletion: false,
+            options: ["--async=OnCalendar", "--limit=5", "--progress-notify"],
+            isCalendar: true,
+            notifiesProgress: true
+        )),
+        .cancelHTTP(url: "https://example.com/calendar.ics")
+    ])
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,schedule-add,--uid=test,--summary=予定,--start=20260920,--event=OnAdded]\![execute,schedule-delete,test,--event=OnDeleted]\![execute,schedule-get,--limit=3,--event=OnSchedules]"#
+    ) == [
+        .schedule(.add(options: ["uid": "test", "summary": "予定", "start": "20260920", "event": "OnAdded"])),
+        .schedule(.delete(uid: "test", eventID: "OnDeleted")),
+        .schedule(.get(options: ["limit": "3", "event": "OnSchedules"]))
+    ])
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,filewatch,config.json,--async=OnConfigChanged,--debounce=250]\![cancel,filewatch,config.json]"#
+    ) == [
+        .fileWatch(.start(path: "config.json", eventID: "OnConfigChanged", debounceMilliseconds: 250)),
+        .fileWatch(.cancel(path: "config.json"))
     ])
 }

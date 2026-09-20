@@ -10,6 +10,45 @@ import UtataneShell
 
 @Test
 @MainActor
+func `cancels vanish playback on a balloon double click`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 120, height: 80).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    var heldReferences: (String, Int, Int)?
+    var presentationReady = false
+    player.onVanishButtonHold = { heldReferences = ($0, $1, $2) }
+    let source = #"消滅します\_w[5000]\e"#
+    let playback = Task {
+        await player.playAndWait(
+            SakuraScript(rawValue: source),
+            balloon: makeBalloon(directory: directory),
+            characterDelayMilliseconds: 0,
+            context: .init(eventID: "OnVanishSelected"),
+            onPresentationReady: { presentationReady = true }
+        )
+    }
+    try await requireEventually { presentationReady }
+    balloonController.onDoubleClick?(0)
+    await playback.value
+
+    #expect(player.didCancelVanishPlayback)
+    #expect(heldReferences?.0 == source)
+    #expect(heldReferences?.1 == 0)
+}
+
+@Test
+@MainActor
 func `keeps every speaker balloon until a completed dialogue is clicked`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

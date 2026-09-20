@@ -10,15 +10,17 @@ from pathlib import Path
 
 
 AUDITED_EVENTS = {
+    "OnTrayBalloonClick": ("✅", "set,trayballoonをmacOSのメニューバーポップオーバーとして表示し、ポップオーバーまたはステータスアイコンのクリック時にタイトルと本文を通知"),
+    "OnTrayBalloonTimeout": ("✅", "メニューバーポップオーバーが指定時間で閉じた時にタイトルと本文を通知。指定時間はSSP互換で10〜30秒に制限"),
     "OnRaiseOtherFailure": ("✅", "raiseotherの宛先がない時はnotfound、宛先SHIORIが204の時は204をReference0へ入れ、宛先・イベントID・元Referenceとともに送信元へ通知。全ゴースト宛ての複数結果列挙は未対応"),
     "OnNotifyOtherFailure": ("✅", "notifyotherの宛先がない時にnotfoundをReference0へ入れ、宛先・イベントID・元Referenceとともに送信元へ通知。全ゴースト宛ての複数結果列挙は未対応"),
     "hwnd": ("✅", "起動時に各scopeのNSWindow番号をバイト値1区切りでNOTIFY。macOSではWindows HWNDの代わりにwindowNumberを通知し、未生成バルーンは空欄"),
     "otherghostname": ("✅", "起動時に呼び出し起動中の他ゴースト名とscope 0/1のsurface番号をバイト値1区切りでNOTIFY。通常起動側から見える呼出ゴーストのみ"),
-    "installedplugin": ("✅", "起動時に空のNOTIFYを送り、プラグインがインストールされていない状態を通知。プラグイン機能自体は未実装"),
-    "configuredbiffname": ("✅", "起動時に空のNOTIFYを送り、設定済みメールアカウントがない状態を通知。メールチェック機能自体は未実装"),
+    "installedplugin": ("✅", "起動時に認識済みプラグインの「名前、ID」をバイト値1で結合し、Reference列へNOTIFY。ネイティブSHIORI型のロード、定期イベント、メニュー・SakuraScript明示呼び出しを接続"),
+    "configuredbiffname": ("✅", "起動時に本体設定で利用可能なPOP3アカウント名をNOTIFY。パスワードはmacOS Keychainへ保存"),
     "pluginpathlist": ("✅", "起動時に空のNOTIFYを送り、プラグイン格納パスがない状態を通知。プラグイン機能自体は未実装"),
-    "calendarskinpathlist": ("✅", "起動時に空のNOTIFYを送り、カレンダースキン格納パスがない状態を通知。カレンダー機能自体は未実装"),
-    "calendarpluginpathlist": ("✅", "起動時に空のNOTIFYを送り、カレンダープラグイン格納パスがない状態を通知。カレンダー機能自体は未実装"),
+    "calendarskinpathlist": ("✅", "起動時にカレンダースキン格納パスをNOTIFY"),
+    "calendarpluginpathlist": ("✅", "起動時にカレンダープラグイン格納パスをNOTIFY"),
     "rateofusegraph": ("✅", "起動中ゴーストをboot状態の1レコードとしてNOTIFY。起動回数・時間・割合は0固定で履歴集計は未実装"),
     "enable_log": ("✅", "起動時にUtataneのアプリ内ログが有効であることをReference0=1でNOTIFY。SSP開発パレット相当の切替UIは未実装"),
     "enable_debug": ("✅", "起動時にDebugビルドなら1、Releaseなら0をReference0へNOTIFY。実行中の切替UIは未実装"),
@@ -76,8 +78,8 @@ AUDITED_EVENTS = {
     "OnExecuteHTTPFailure": ("✅", "HTTPステータス、timeout、fileio、artificial、toomanyredirect等をReference4へ入れ、Completeと同じReference0〜6で通知。イベント生成をテスト済み"),
     "OnExecuteRSSComplete": ("✅", "RSS各項目をタイトル・URL・SSP形式日時・作者・要約のバイト値1区切りでReference0以降へ通知。標準／独自イベントIDをテスト済み"),
     "OnExecuteRSSFailure": ("✅", "解析失敗はReference4=parse、通信失敗はHTTPと同じReference0〜6で通知。標準／独自イベントIDをテスト済み"),
-    "OnExecuteWebSocketClose": ("✅", "close code・userbreakを通知。自動再接続と再接続後の最終Close規則は未実装"),
-    "OnExecuteWebSocketFailure": ("✅", "接続・受信エラーを通知。UKADOCの5回自動再接続後Failureは未実装"),
+    "OnExecuteWebSocketClose": ("✅", "正常終了、明示的なclose、ユーザー中断時にclose codeまたはuserbreakを通知。異常切断時は再接続へ移行"),
+    "OnExecuteWebSocketFailure": ("✅", "接続・受信エラーから最大5回の自動再接続に失敗した時にreconnect failedを通知"),
     "OnExecuteWebSocketOpen": ("✅", "HTTP 101成立後にReference0〜2を発行"),
     "OnExecuteWebSocketReceive": ("✅", "text/binary opcodeと本文またはBase64をReference0〜3へ発行"),
     "OnExtractArchiveComplete": ("✅", "実際のZIP展開成功後に書庫・出力先・形式・ユーザーIDをReference0〜3へ通知。展開処理とイベント生成をテスト済み"),
@@ -129,7 +131,7 @@ AUDITED_EVENTS = {
     "OnNotifyUserInfo": ("✅", "起動時にmacOSアカウント名とフルネームを通知。誕生日は空、性別はundef固定"),
     "OnOtherGhostBooted": ("✅", "呼び出しゴーストの起動完了時、無関係な起動中ゴーストへ本体名・起動スクリプト・ゴースト名・シェル名をReference0〜2・7で通知。イベント生成をテスト済み"),
     "OnOtherGhostClosed": ("✅", "呼び出しゴーストの終了後、本体名・最終スクリプト・ゴースト名・シェル名をReference0〜2・7へ通知。イベント生成をテスト済み"),
-    "OnOtherSurfaceChange": ("✅", "他の実行中ゴーストへ本体名・Sakura名・scope・新旧surface・矩形をReference0〜5で通知。othersurfacechange無効化設定は未対応"),
+    "OnOtherSurfaceChange": ("✅", "set,othersurfacechangeを有効にしたゴーストへ、他ゴーストの本体名・Sakura名・scope・新旧surface・矩形をReference0〜5で通知"),
     "OnPingComplete": ("✅", "ping完了を通知するがReference1の送信元アドレスとReference2以降の1応答1Reference構造が未対応"),
     "OnRSSBegin": ("✅", "サイト名・URLを通知し、無応答時はOnHeadlinesenseBeginへフォールバック。イベント生成をテスト済み"),
     "OnRSSComplete": ("✅", "フィード情報とSSP形式日時を通知。同一内容の再取得はReference0=no updateとし、無応答時はOnHeadlinesense.OnFind／Completeへフォールバック。指紋判定をテスト済み"),
@@ -202,67 +204,90 @@ AUDITED_EVENTS = {
     "OnDisplayHandover": ("✅", "シェル位置の初期化時と別スクリーンへの移動時に、scopeと移動前後の画面座標・色深度・主画面フラグを通知"),
 }
 
-# Events whose trigger belongs to an SSP/Windows-only facility or to a feature
-# Utatane intentionally does not provide. Keeping these explicit prevents a
-# missing fixed event ID from being mistaken for an unaudited implementation.
-PLANNED_EVENTS = {
-    "OnOtherGhostChanged": "Utataneは呼び出しゴースト同士を直接切り替える操作を提供しないため未実装",
-    "OnCacheSuspend": "SSPのキャッシュ休止機能を提供しないため未実装",
-    "OnCacheRestore": "SSPのキャッシュ復帰機能を提供しないため未実装",
-    "OnBasewareUpdating": "実行中のベースウェア自己更新を提供しないため未実装",
-    "OnBasewareUpdated": "実行中のベースウェア自己更新を提供しないため未実装",
-    "OnConfigurationDialogHelp": "SSP形式の設定ダイアログ拡張ヘルプを提供しないため未実装",
-    "OnGhostTermsAccept": "SSP形式のゴースト利用規約ダイアログを提供しないため未実装",
-    "OnGhostTermsDecline": "SSP形式のゴースト利用規約ダイアログを提供しないため未実装",
-    "OnVanishButtonHold": "消滅スクリプトのダブルクリック中断操作を提供しないため未実装",
-    "OnBalloonBreak": "通常トークを途中位置付きで中断する操作を提供しないため未実装",
-    "OnOtherObjectDropping": "SSPの他オブジェクトDnD連携を提供しないため未実装",
-    "OnOtherObjectDropped": "SSPの他オブジェクトDnD連携を提供しないため未実装",
-    "OnWallpaperChange": "画像DnDによる壁紙変更機能を提供しないため未実装",
-    "OnBIFFBegin": "メールアカウントとPOPメールチェック機能を提供しないため未実装",
-    "OnBIFFComplete": "メールアカウントとPOPメールチェック機能を提供しないため未実装",
-    "OnBIFF2Complete": "メールアカウントとPOPメールチェック機能を提供しないため未実装",
-    "OnBIFFFailure": "メールアカウントとPOPメールチェック機能を提供しないため未実装",
-    "OnSSTPBlacklisting": "localhost限定のSSTPで送信元IPを識別・拒否する仕組みが未実装",
-    "OnExecuteHTTPProgress": "execute-httpのprogress-notifyオプションを提供しないため未実装",
-    "OnExecuteHTTPStreaming": "execute-httpのstreamingオプションを提供しないため未実装",
-    "OnExecuteHTTPSSLInfo": "TLS証明書詳細をSHIORIへ公開する機能を提供しないため未実装",
-    "OnExecuteRSS_SSLInfo": "TLS証明書詳細をSHIORIへ公開する機能を提供しないため未実装",
-    "OnExecuteICalComplete": "SakuraScriptからのical-get／ical-post操作を提供しないため未実装",
-    "OnExecuteICalFailure": "SakuraScriptからのical-get／ical-post操作を提供しないため未実装",
-    "OnExecuteICalProgress": "SakuraScriptからのical-get／ical-post操作を提供しないため未実装",
-    "OnExecuteICal_SSLInfo": "SakuraScriptからのical-get／ical-post操作を提供しないため未実装",
-    "OnExecuteScheduleComplete": "SakuraScriptからのschedule-add／schedule-delete操作を提供しないため未実装",
-    "OnExecuteScheduleFailure": "SakuraScriptからのschedule-add／schedule-delete操作を提供しないため未実装",
-    "OnExecuteScheduleGetComplete": "SakuraScriptからのschedule-get操作を提供しないため未実装",
-    "OnExecuteFileWatchChange": "SakuraScriptからのfilewatch操作を提供しないため未実装",
-    "OnExecuteFileWatchFailure": "SakuraScriptからのfilewatch操作を提供しないため未実装",
-    "OnExecuteWebSocketReconnect": "WebSocket自動再接続オプションを提供しないため未実装",
-    "OnExecuteWebSocket_SSLInfo": "TLS証明書詳細をSHIORIへ公開する機能を提供しないため未実装",
-    "OnPingProgress": "pingの応答単位progress通知を提供しないため未実装",
-    "OnOSUpdateInfo": "Windows Update履歴を通知するイベントでありmacOS版では未実装",
-    "OnRecycleBinEmpty": "SakuraScriptからmacOSのゴミ箱を空にする操作を提供しないため未実装",
-    "OnRecycleBinEmptyFromOther": "ゴミ箱を空にする操作を提供しないため未実装。外部変更はOnRecycleBinStatusUpdateで通知",
-    "OnSelectModeBegin": "selectrect画面領域選択モードを提供しないため未実装",
-    "OnSelectModeCancel": "selectrect画面領域選択モードを提供しないため未実装",
-    "OnSelectModeComplete": "selectrect画面領域選択モードを提供しないため未実装",
-    "OnSelectModeMouseDown": "selectrect画面領域選択モードを提供しないため未実装",
-    "OnSelectModeMouseUp": "selectrect画面領域選択モードを提供しないため未実装",
-    "OnTranslate": "SHIORIをMAKOTOとして再呼び出しする翻訳フックを提供しないため未実装",
-    "OnOtherGhostTalk": "他ゴーストの全発話を監視するopt-in機能を提供しないため未実装",
-    "property.get": "SSPのactiveghostlist.ext拡張プロパティを提供しないため未実装",
-    "property.set": "SSPのactiveghostlist.ext拡張プロパティを提供しないため未実装",
-}
+AUDITED_EVENTS.update({
+    "configuredbiffname": ("✅", "起動時に本体設定で利用可能なPOP3アカウント名をNOTIFY。パスワードはmacOS Keychainへ保存"),
+    "OnOtherGhostChanged": ("✅", "呼び出しゴーストの切替時に切替前後の本体名・ゴースト名・パス・シェル名を、メインと他の呼び出しゴーストへ通知"),
+    "OnCacheSuspend": ("✅", "呼び出しゴーストを右クリックメニューから休止する前に発行し、ウインドウを非表示化"),
+    "OnCacheRestore": ("✅", "休止中の呼び出しゴーストをメニューから復帰した後に発行"),
+    "OnBasewareUpdating": ("✅", "Sparkleが更新をインストールする直前に旧バージョンとビルド番号を通知"),
+    "OnBasewareUpdated": ("✅", "更新後の初回起動で保存済みの旧版情報と現在版情報を通知"),
+    "OnConfigurationDialogHelp": ("✅", "本体設定のヘルプボタンから現在の設定ページIDを通知"),
+    "OnGhostTermsAccept": ("✅", "terms.txtの利用規約ダイアログで同意した時に通知。UTF-8とShift_JISを読込"),
+    "OnGhostTermsDecline": ("✅", "terms.txtの利用規約ダイアログで拒否した時に通知"),
+    "OnVanishButtonHold": ("✅", "OnVanishSelected再生中のバルーンをダブルクリックした時にスクリプト・scope・表示文字位置を通知し、再生と消滅処理を取り消す"),
+    "OnBalloonBreak": ("✅", "通常トークを別のトークが置き換える時にスクリプト・scope・表示文字位置を通知。生SakuraScriptのバイト位置とは一致しない場合あり"),
+    "OnWallpaperChange": ("✅", "画像をサーフェスへドロップして全macOS画面の壁紙変更に成功した時に画像パスを通知"),
+    "OnBIFFBegin": ("✅", "biffコマンドによるPOP3メールチェック開始時に設定アカウント名を通知"),
+    "OnBIFFComplete": ("✅", "POP3 STAT成功時に通数・総バイト数・アカウント名・前回との差分を通知。LIST・UIDL・ヘッダ一覧は空欄"),
+    "OnBIFF2Complete": ("✅", "新着がありOnBIFFCompleteが無応答だった場合に通数・総バイト数・アカウント名を通知"),
+    "OnBIFFFailure": ("✅", "POP3設定不足・接続・認証・応答解析失敗を理由とアカウント名付きで通知"),
+    "OnExecuteHTTPProgress": ("✅", "progress-notify指定時に受信済みバイト数と期待総量をデータ受信ごとに通知"),
+    "OnExecuteHTTPStreaming": ("✅", "streaming指定時に改行単位の受信データを通知"),
+    "OnExecuteHTTPSSLInfo": ("✅", "HTTPS通信のTLSバージョン・暗号スイート・証明書概要をURLSession metricsから通知。証明書日時は空欄"),
+    "OnExecuteRSS_SSLInfo": ("✅", "HTTPSのRSS取得時にHTTPと同じTLS情報を通知。証明書日時は空欄"),
+    "OnExecuteWebSocketReconnect": ("✅", "WebSocket受信失敗後の自動再接続を最大5回行い、試行回数を通知"),
+    "OnExecuteWebSocket_SSLInfo": ("✅", "wss接続のTLSバージョンと暗号スイートを通知。証明書subject・issuerは空欄"),
+    "OnPingProgress": ("✅", "pingの応答行ごとに指定イベントID・ホスト・応答番号・解析した遅延を通知"),
+    "OnOSUpdateInfo": ("✅", "macOSのsystem_profilerインストール履歴から直近20件の名称・版・導入日を起動時に通知。Windows固有項目は空欄"),
+    "OnRecycleBinEmpty": ("✅", "emptyrecyclebinでユーザーの~/.Trashを空にし、前後の件数・容量と成否を通知"),
+    "OnRecycleBinEmptyFromOther": ("✅", "他ゴーストがemptyrecyclebinを実行した時に同じ結果を通知"),
+    "OnSelectModeBegin": ("✅", "enter,selectrectで全画面の矩形選択オーバーレイを開始して通知"),
+    "OnSelectModeCancel": ("✅", "selectrectをEscまたは選択未完了で終了した時に通知"),
+    "OnSelectModeComplete": ("✅", "leave,selectrectで選択矩形の画面座標を通知"),
+    "OnSelectModeMouseDown": ("✅", "矩形選択開始点をクリックした時にscope・モード・画面座標を通知"),
+    "OnSelectModeMouseUp": ("✅", "矩形選択終了点でボタンを離した時にscope・モード・画面座標を通知"),
+    "OnTranslate": ("✅", "イベント応答の再生前に元スクリプト・イベントID・Reference等で同じSHIORIを再呼出しし、応答があれば置換"),
+    "OnOtherGhostTalk": ("✅", "set,otherghosttalkでopt-inしたゴーストへ他ゴーストの再生前または再生後のスクリプトと発生元情報を通知"),
+    "property.get": ("✅", "activeghostlist.extの対象ゴーストへ拡張プロパティ取得を中継"),
+    "property.set": ("✅", "activeghostlist.extの対象ゴーストへ拡張プロパティ設定を中継"),
+})
+
+PLANNED_EVENTS = {}
 
 INAPPLICABLE_EVENTS = {
-    "OnTrayBalloonClick": "Windows通知領域のトレイバルーン機能でありmacOS版では対象外",
-    "OnTrayBalloonTimeout": "Windows通知領域のトレイバルーン機能でありmacOS版では対象外",
     "OnFileDropped": "旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行",
     "OnFileDrop": "旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行",
     "OnFileDropEx": "旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行",
     "OnTabletMode": "macOSに対応するタブレットモードがないため対象外",
     "OnEmbryoExist": "Windows用Materiaの同時起動検出イベントでありmacOS版では対象外",
     "OnNekodorifExist": "Windows用猫どりふの同時起動検出イベントでありmacOS版では対象外",
+    "OnOtherObjectDropping": "Windows Shellの仮想オブジェクトを表すイベント。macOSのファイル・URL・テキストDnDは各専用イベントで処理",
+    "OnOtherObjectDropped": "Windows Shellの仮想オブジェクトを表すイベント。macOSのファイル・URL・テキストDnDは各専用イベントで処理",
+    "OnSSTPBlacklisting": "UKADOCではMateria専用の送信元ブラックリストイベントであり、SSP互換対象外",
+}
+
+ONLINE_ADDITIONAL_EVENTS = [
+    "OnScheduleTodayNotify",
+    "OnDesktopWallpaperChange",
+    "OnWindowModeChange",
+    "installedcalendarskinname",
+    "installedcalendarpluginname",
+    "OnExecuteICalComplete",
+    "OnExecuteICalFailure",
+    "OnExecuteICalProgress",
+    "OnExecuteICal_SSLInfo",
+    "OnExecuteScheduleComplete",
+    "OnExecuteScheduleFailure",
+    "OnExecuteScheduleGetComplete",
+    "OnExecuteFileWatchChange",
+    "OnExecuteFileWatchFailure",
+]
+
+ONLINE_ADDITIONAL_AUDITED_EVENTS = {
+    "OnScheduleTodayNotify": ("✅", "予定の追加・編集・削除・取り込みや日付変更で今日の予定が変化した時、全起動ゴーストへNOTIFY"),
+    "OnDesktopWallpaperChange": AUDITED_EVENTS["OnDesktopWallpaperChange"],
+    "OnWindowModeChange": ("✅", "起動時とウインドウモード切替時に現在・直前のモードを通知し、切替時はOnDisplayChangeも発行"),
+    "installedcalendarskinname": AUDITED_EVENTS["installedcalendarskinname"],
+    "installedcalendarpluginname": AUDITED_EVENTS["installedcalendarpluginname"],
+    "OnExecuteICalComplete": ("✅", "ical-get／ical-postで取得したiCalendarを解析し、カレンダー情報とVEVENTをReference列へ通知。主要フィールドと件数制限に対応"),
+    "OnExecuteICalFailure": ("✅", "iCalendarの通信・HTTP・解析失敗をHTTP系と同じReference形式で通知"),
+    "OnExecuteICalProgress": ("✅", "--progress-notify指定時にiCalendar取得の進捗を通知"),
+    "OnExecuteICal_SSLInfo": ("✅", "HTTPSでiCalendarを取得した時にTLS情報を通知"),
+    "OnExecuteScheduleComplete": ("✅", "schedule-add／schedule-deleteで共有予定表への登録・削除が完了した時に操作種別とUIDを通知"),
+    "OnExecuteScheduleFailure": ("✅", "schedule-add／schedule-deleteの入力不正・対象なしを理由とUID付きで通知"),
+    "OnExecuteScheduleGetComplete": ("✅", "schedule-getで共有予定表をiCalendarと同じReference形式で通知"),
+    "OnExecuteFileWatchChange": ("✅", "filewatchで指定したファイルまたはディレクトリの作成・更新・削除をdebounce後に通知"),
+    "OnExecuteFileWatchFailure": ("✅", "filewatchの監視先ディレクトリがない場合や監視を継続できない場合に理由を通知"),
 }
 
 HIGH_DIFFICULTY_CATEGORIES = {
@@ -348,16 +373,25 @@ def render(ukadoc_file: Path) -> str:
                 seen.add(event_id)
         if unique_ids:
             unique_sections.append((title, unique_ids))
+    missing_online_events = [event_id for event_id in ONLINE_ADDITIONAL_EVENTS if event_id not in seen]
+    if missing_online_events:
+        unique_sections.append(("オンラインUKADOC追加イベント", missing_online_events))
     sections = unique_sections
-    event_count = len(seen)
-    status_counts = {
-        "✅": 0,
-        "🟡": len(PLANNED_EVENTS),
-        "❌": event_count - len(AUDITED_EVENTS) - len(PLANNED_EVENTS) - len(INAPPLICABLE_EVENTS),
-        "➖": len(INAPPLICABLE_EVENTS),
-    }
-    for status, _ in AUDITED_EVENTS.values():
-        status_counts[status] += 1
+    event_count = len(seen) + len(missing_online_events)
+    status_counts = {status: 0 for status in ("✅", "🟡", "❌", "➖")}
+    for _, event_ids in sections:
+        for event_id in event_ids:
+            if event_id in ONLINE_ADDITIONAL_AUDITED_EVENTS:
+                status = ONLINE_ADDITIONAL_AUDITED_EVENTS[event_id][0]
+            elif event_id in AUDITED_EVENTS:
+                status = AUDITED_EVENTS[event_id][0]
+            elif event_id in PLANNED_EVENTS:
+                status = "🟡"
+            elif event_id in INAPPLICABLE_EVENTS:
+                status = "➖"
+            else:
+                status = "❌"
+            status_counts[status] += 1
     lines = [
         "# UKADOC SHIORIイベント互換状況",
         "",
@@ -377,12 +411,12 @@ def render(ukadoc_file: Path) -> str:
         "| ✅ | Utataneが発行経路を提供。macOS固有差や未提供のSSP拡張は備考に記載 |",
         "| 🟡 | 仕様と不足している実装を確認済み。実装予定 |",
         "| ❌ | 未分類の一時状態。公開時には残しません |",
-        "| ➖ | Windows固有などmacOSでは非該当、または新仕様に置き換え済み |",
+        "| ➖ | Windows固有などmacOSでは非該当、旧仕様に置き換え済み、または現行UKADOCで契約未定義 |",
         "",
-        "名前がソースに現れるだけでは対応としません。発生条件とReferenceをUKADOCに照らし、提供する契約は✅、未実装は🟡、macOSで成立しないものだけを➖に分類します。",
+        "名前がソースに現れるだけでは対応としません。発生条件とReferenceをUKADOCに照らし、提供する契約は✅、未実装は🟡、macOSで成立しないか契約が定義されていないものだけを➖に分類します。",
         "任意IDを中継できる経路（raise、inputbox、HTTP等）は、そのイベントをベースウェアが自動発行する実装とは数えません。",
         "全イベントを本番Swiftコード（テストコードを除く）の固定IDおよびイベント生成経路と照合します。✅のmacOS固有差と実機確認状況は備考に残します。",
-        "➖はWindows固有機能か旧仕様である根拠を備考へ記録します。Utatane側の機能不足だけを理由に➖へ分類しません。",
+        "➖はWindows固有機能、旧仕様、または現行UKADOCで契約を実装できない根拠を備考へ記録します。Utatane側の機能不足だけを理由に➖へ分類しません。",
         "",
     ]
     for title, event_ids in sections:
@@ -394,7 +428,9 @@ def render(ukadoc_file: Path) -> str:
         ])
         for event_id in event_ids:
             link = f"https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#{event_id}"
-            if event_id in AUDITED_EVENTS:
+            if event_id in ONLINE_ADDITIONAL_AUDITED_EVENTS:
+                status, note = ONLINE_ADDITIONAL_AUDITED_EVENTS[event_id]
+            elif event_id in AUDITED_EVENTS:
                 status, note = AUDITED_EVENTS[event_id]
             elif event_id in PLANNED_EVENTS:
                 status = "🟡"
@@ -432,7 +468,7 @@ def merge_audited_rows(existing: str, generated: str, ukadoc_file: Path) -> str:
         event_id
         for _, event_ids in toc_sections(ukadoc_file.read_text(encoding="utf-8"))
         for event_id in event_ids
-    }
+    } | set(ONLINE_ADDITIONAL_EVENTS)
     merged: list[str] = []
     statuses: dict[str, str] = {}
     for line in generated.splitlines():

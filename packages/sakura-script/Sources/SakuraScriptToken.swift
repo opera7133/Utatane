@@ -44,6 +44,9 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case balloonAlignment(SakuraScriptBalloonAlignment)
     case balloonMarker(String)
     case balloonNumber(file: String, current: String, maximum: String)
+    case trayBalloon(SakuraScriptTrayBalloon)
+    case otherGhostTalkMode(SakuraScriptOtherGhostTalkMode)
+    case otherSurfaceChangeNotifications(Bool)
     case serikoTalk(Bool)
     case autoscroll(Bool)
     case anchorStart(id: String, arguments: [String])
@@ -60,6 +63,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case onlineMode(Bool)
     case noUserBreakMode(Bool)
     case interactionMode(SakuraScriptInteractionMode, enabled: Bool)
+    case selectRectangle(enabled: Bool)
     case collisionMode(enabled: Bool, showsNames: Bool)
     case syncObjectWait(name: String, timeoutMilliseconds: Int?)
     case syncObjectSet(String)
@@ -97,7 +101,11 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case communicateBox(initialValue: String)
     case teachBox(initialValue: String)
     case http(SakuraScriptHTTPRequest)
+    case schedule(SakuraScriptScheduleCommand)
+    case fileWatch(SakuraScriptFileWatchCommand)
     case networkDiagnostic(SakuraScriptNetworkDiagnostic)
+    case emptyRecycleBin
+    case checkMail(account: String?)
     case webSocket(SakuraScriptWebSocketCommand)
     case weatherGet(eventID: String)
     case sntpStart
@@ -106,6 +114,26 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case clearAll
     case end
     case unknown(String)
+}
+
+public enum SakuraScriptOtherGhostTalkMode: Sendable, Equatable {
+    case disabled
+    case before
+    case after
+}
+
+public struct SakuraScriptTrayBalloon: Sendable, Equatable {
+    public let title: String
+    public let text: String
+    public let icon: String
+    public let timeoutSeconds: Int
+
+    public init(title: String, text: String, icon: String, timeoutSeconds: Int) {
+        self.title = title
+        self.text = text
+        self.icon = icon
+        self.timeoutSeconds = timeoutSeconds
+    }
 }
 
 public enum SakuraScriptVoiceMode: Sendable, Equatable {
@@ -178,16 +206,31 @@ public enum SakuraScriptNetworkDiagnostic: Sendable, Equatable {
     case nslookup(host: String, eventID: String)
 }
 
+public enum SakuraScriptScheduleCommand: Sendable, Equatable {
+    case add(options: [String: String])
+    case delete(uid: String, eventID: String?)
+    case get(options: [String: String])
+}
+
+public enum SakuraScriptFileWatchCommand: Sendable, Equatable {
+    case start(path: String, eventID: String?, debounceMilliseconds: Int)
+    case cancel(path: String)
+}
+
 public struct SakuraScriptHTTPRequest: Sendable, Equatable {
     public let method: String
     public let url: String
     public let eventID: String?
     public let waitsForCompletion: Bool
     public let parameters: [String]
+    public let options: [String]
     public let headers: [String]
     public let timeoutSeconds: Double?
     public let output: SakuraScriptHTTPOutput
     public let isFeed: Bool
+    public let isCalendar: Bool
+    public let notifiesProgress: Bool
+    public let streamingMode: String?
 
     public init(
         method: String,
@@ -195,20 +238,28 @@ public struct SakuraScriptHTTPRequest: Sendable, Equatable {
         eventID: String?,
         waitsForCompletion: Bool,
         parameters: [String] = [],
+        options: [String] = [],
         headers: [String] = [],
         timeoutSeconds: Double? = nil,
         output: SakuraScriptHTTPOutput = .file(nil),
-        isFeed: Bool = false
+        isFeed: Bool = false,
+        isCalendar: Bool = false,
+        notifiesProgress: Bool = false,
+        streamingMode: String? = nil
     ) {
         self.method = method
         self.url = url
         self.eventID = eventID
         self.waitsForCompletion = waitsForCompletion
         self.parameters = parameters
+        self.options = options
         self.headers = headers
         self.timeoutSeconds = timeoutSeconds
         self.output = output
         self.isFeed = isFeed
+        self.isCalendar = isCalendar
+        self.notifiesProgress = notifiesProgress
+        self.streamingMode = streamingMode
     }
 }
 
@@ -298,6 +349,7 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case openConfigurationDialog
     case openReadme
     case openHelp
+    case openTerms
     case openFile(String)
     case openFolder(String)
 }

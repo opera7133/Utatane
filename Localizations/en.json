@@ -529,5 +529,12 @@
   "名前を変更" : "Rename",
   "配置を復元" : "Restore Layout",
   "復元すると、現在のゴースト一式を保存した構成に切り替えます。" : "Restoring replaces the running set of ghosts with the saved configuration.",
-  "再診断" : "Inspect Again"
+  "再診断" : "Inspect Again",
+  "メールチェック (POP3)" : "Mail Check (POP3)",
+  "アカウント名" : "Account Name",
+  "サーバー" : "Server",
+  "パスワード（Keychainに保存）" : "Password (saved in Keychain)",
+  "TLSで接続" : "Connect with TLS",
+  "ゴーストがメールチェックを要求した時だけ接続する。通常はPOP3 over TLSの995番を使う。" : "Connects only when a ghost requests a mail check. POP3 over TLS normally uses port 995.",
+  "この設定のヘルプ" : "Help for This Setting"
 }

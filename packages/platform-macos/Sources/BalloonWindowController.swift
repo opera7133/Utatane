@@ -121,6 +121,7 @@ public final class BalloonWindowController {
     private var visitedAnchorIDs: Set<String> = []
 
     public var onClick: (@MainActor (Int) -> Void)?
+    public var onDoubleClick: (@MainActor (Int) -> Void)?
     public var onLinkClick: (@MainActor (String, [String]) -> Void)?
     public var onLinkActivate: (@MainActor (BalloonTextLink, String) -> Void)?
     public var onLinkEnter: (@MainActor (BalloonTextLink?, String?) -> Void)?
@@ -401,6 +402,9 @@ public final class BalloonWindowController {
         contentView.visitedAnchorIDs = visitedAnchorIDs
         contentView.onClick = { [weak self] in
             self?.onClick?(scope)
+        }
+        contentView.onDoubleClick = { [weak self] in
+            self?.onDoubleClick?(scope)
         }
         contentView.onLinkClick = { [weak self] id, arguments in
             self?.onLinkClick?(id, arguments)
@@ -981,6 +985,7 @@ private final class BalloonContentView: NSView {
     var isMovementLocked = false
     private var verticalAlignment: BalloonVerticalAlignment = .top
     var onClick: (() -> Void)?
+    var onDoubleClick: (() -> Void)?
     var onLinkClick: ((String, [String]) -> Void)?
     var onLinkActivate: ((BalloonTextLink, String) -> Void)?
     var onLinkEnter: ((BalloonTextLink?, String?) -> Void)?
@@ -1243,6 +1248,9 @@ private final class BalloonContentView: NSView {
         textView.onBackgroundClick = { [weak self] in
             self?.onClick?()
         }
+        textView.onBackgroundDoubleClick = { [weak self] in
+            self?.onDoubleClick?()
+        }
         textView.onLinkClick = { [weak self] id, arguments in
             self?.onLinkClick?(id, arguments)
         }
@@ -1433,7 +1441,11 @@ private final class BalloonContentView: NSView {
             didDrag = false
         }
         guard !didDrag else { return }
-        onClick?()
+        if event.clickCount >= 2 {
+            onDoubleClick?()
+        } else {
+            onClick?()
+        }
     }
 
     private func textFrame(for balloon: BalloonDefinition) -> NSRect {
@@ -1824,6 +1836,7 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
     var visitedAnchorIDs: Set<String> = []
     var defaultTextColor = NSColor.textColor
     var onBackgroundClick: (() -> Void)?
+    var onBackgroundDoubleClick: (() -> Void)?
     var onLinkClick: ((String, [String]) -> Void)?
     var onLinkActivate: ((BalloonTextLink, String) -> Void)?
     var onLinkEnter: ((BalloonTextLink?, String?) -> Void)?
@@ -1922,7 +1935,11 @@ private final class InteractiveTextView: NSTextView, NSTextViewDelegate {
             activateLink(token)
             return
         }
-        onBackgroundClick?()
+        if event.clickCount >= 2 {
+            onBackgroundDoubleClick?()
+        } else {
+            onBackgroundClick?()
+        }
     }
 
     func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {

@@ -1,5 +1,6 @@
 import Foundation
 @preconcurrency import Network
+import UtataneCore
 
 public struct NetworkStatusSnapshot: Sendable, Equatable {
     public let isOnline: Bool
@@ -119,5 +120,82 @@ public struct MacOSRecycleBinSampler: Sendable {
             bytes += Int64(values.fileSize ?? 0)
         }
         return RecycleBinSnapshot(itemCount: count, totalBytes: bytes)
+    }
+
+    public func empty() async -> Bool {
+        await Task.detached {
+            let trash = FileManager.default.homeDirectoryForCurrentUser.appending(
+                path: ".Trash",
+                directoryHint: .isDirectory
+            )
+            guard let contents = try? FileManager.default.contentsOfDirectory(
+                at: trash,
+                includingPropertiesForKeys: nil
+            ), !contents.isEmpty else { return false }
+            var succeeded = true
+            for url in contents {
+                do {
+                    try FileManager.default.removeItem(at: url)
+                } catch {
+                    succeeded = false
+                }
+            }
+            return succeeded
+        }.value
+    }
+}
+
+public struct MacOSOSUpdateHistorySampler: Sendable {
+    public init() {}
+
+    public func event() async -> GhostEvent? {
+        await Task.detached(priority: .utility) {
+            let process = Process()
+            let output = Pipe()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/system_profiler")
+            process.arguments = ["SPInstallHistoryDataType", "-json"]
+            process.standardOutput = output
+            process.standardError = Pipe()
+            do {
+                try process.run()
+                let data = output.fileHandleForReading.readDataToEndOfFile()
+                process.waitUntilExit()
+                guard process.terminationStatus == 0,
+                      let root = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let records = root["SPInstallHistoryDataType"] as? [[String: Any]]
+                else { return nil }
+                let values = records.suffix(20).reversed().compactMap { record -> String? in
+                    guard let title = record["_name"] as? String else { return nil }
+                    let date = Self.formattedDate(record["install_date"] as? String)
+                    return ["success", "0", date, title].joined(separator: "\u{1}")
+                }
+                guard !values.isEmpty else { return nil }
+                var references = [0: "", 1: Self.formattedDate(records.last?["install_date"] as? String)]
+                for (index, value) in values.enumerated() {
+                    references[index + 2] = value
+                }
+                return .notification(id: "OnOSUpdateInfo", references: references)
+            } catch {
+                return nil
+            }
+        }.value
+    }
+
+    private static func formattedDate(_ value: String?) -> String {
+        guard let value, !value.isEmpty else { return "" }
+        let input = DateFormatter()
+        input.locale = Locale(identifier: "en_US_POSIX")
+        input.timeZone = TimeZone(secondsFromGMT: 0)
+        let formats = ["yyyy-MM-dd'T'HH:mm:ssZ", "yyyy-MM-dd HH:mm:ss Z", "yyyy-MM-dd HH:mm:ss"]
+        let date = formats.lazy.compactMap { format -> Date? in
+            input.dateFormat = format
+            return input.date(from: value)
+        }.first
+        guard let date else { return value }
+        let output = DateFormatter()
+        output.locale = Locale(identifier: "en_US_POSIX")
+        output.timeZone = .current
+        output.dateFormat = "yyyy,M,d,H,m,s"
+        return output.string(from: date)
     }
 }

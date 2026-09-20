@@ -111,6 +111,12 @@ public actor GhostSession {
         }
     }
 
+    public func shutdown() async {
+        guard state == .running else { return }
+        state = .stopped
+        await personalityEngine.shutdown()
+    }
+
     public func variable(forKey key: String) async throws -> String? {
         try await variableStore?.value(forKey: key)
     }

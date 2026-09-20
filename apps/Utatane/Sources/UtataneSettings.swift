@@ -307,6 +307,11 @@ final class UtataneSettingsStore: ObservableObject {
         static let ipMessengerGroupName = "network.ipMessengerGroupName"
         static let ipMessengerPort = "network.ipMessengerPort"
         static let ipMessengerBroadcastAddresses = "network.ipMessengerBroadcastAddresses"
+        static let mailAccountName = "network.mail.accountName"
+        static let mailHost = "network.mail.host"
+        static let mailPort = "network.mail.port"
+        static let mailUser = "network.mail.user"
+        static let mailUsesTLS = "network.mail.usesTLS"
         static let startupBehavior = "general.startupBehavior"
         static let appearance = "general.appearance"
         static let windowLevelBehavior = "general.windowLevelBehavior"
@@ -378,6 +383,30 @@ final class UtataneSettingsStore: ObservableObject {
 
     @Published var ipMessengerBroadcastAddresses: String {
         didSet { defaults.set(ipMessengerBroadcastAddresses, forKey: Key.ipMessengerBroadcastAddresses) }
+    }
+
+    @Published var mailAccountName: String {
+        didSet { defaults.set(mailAccountName, forKey: Key.mailAccountName) }
+    }
+
+    @Published var mailHost: String {
+        didSet { defaults.set(mailHost, forKey: Key.mailHost) }
+    }
+
+    @Published var mailPort: Int {
+        didSet { defaults.set(mailPort, forKey: Key.mailPort) }
+    }
+
+    @Published var mailUser: String {
+        didSet { defaults.set(mailUser, forKey: Key.mailUser) }
+    }
+
+    @Published var mailUsesTLS: Bool {
+        didSet { defaults.set(mailUsesTLS, forKey: Key.mailUsesTLS) }
+    }
+
+    @Published var mailPassword: String {
+        didSet { MailPasswordStore.save(mailPassword, account: "default") }
     }
 
     @Published var startupBehavior: StartupBehavior {
@@ -585,6 +614,12 @@ final class UtataneSettingsStore: ObservableObject {
         )
         ipMessengerBroadcastAddresses = defaults.string(forKey: Key.ipMessengerBroadcastAddresses)
             ?? "255.255.255.255"
+        mailAccountName = defaults.string(forKey: Key.mailAccountName) ?? "default"
+        mailHost = defaults.string(forKey: Key.mailHost) ?? ""
+        mailPort = Self.positiveValue(defaults.integer(forKey: Key.mailPort), fallback: 995)
+        mailUser = defaults.string(forKey: Key.mailUser) ?? ""
+        mailUsesTLS = defaults.object(forKey: Key.mailUsesTLS) as? Bool ?? true
+        mailPassword = MailPasswordStore.load(account: "default")
         startupBehavior = StartupBehavior(
             rawValue: defaults.string(forKey: Key.startupBehavior) ?? ""
         ) ?? .restore
@@ -1135,6 +1170,18 @@ struct UtataneSettingsView: View {
                     .disabled(!settings.automaticHeadlineRefresh)
                 }
 
+                Section("メールチェック (POP3)") {
+                    TextField("アカウント名", text: $settings.mailAccountName)
+                    TextField("サーバー", text: $settings.mailHost)
+                    TextField("ポート", value: $settings.mailPort, format: .number)
+                    TextField("ユーザー名", text: $settings.mailUser)
+                    SecureField("パスワード（Keychainに保存）", text: $settings.mailPassword)
+                    Toggle("TLSで接続", isOn: $settings.mailUsesTLS)
+                    Text("ゴーストがメールチェックを要求した時だけ接続する。通常はPOP3 over TLSの995番を使う。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("生成AIゴースト") {
                     Picker("プロバイダー", selection: $settings.aiProvider) {
                         Text("OpenAI").tag(AIProviderKind.openAI)
@@ -1231,6 +1278,19 @@ struct UtataneSettingsView: View {
             .tag(UtataneSettingsStore.Pane.advanced)
         }
         .frame(width: 560, height: 520)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    NotificationCenter.default.post(
+                        name: .showUtataneConfigurationHelp,
+                        object: nil,
+                        userInfo: configurationHelpReferences
+                    )
+                } label: {
+                    Label("この設定のヘルプ", systemImage: "questionmark.circle")
+                }
+            }
+        }
         .task { reload() }
         .alert("再起動できなかった", isPresented: Binding(
             get: { restartError != nil },
@@ -1247,6 +1307,20 @@ struct UtataneSettingsView: View {
                 Text(verbatim: restartError)
             }
         }
+    }
+
+    private var configurationHelpReferences: [Int: String] {
+        let page = switch settings.selectedPane {
+        case .general: ("setup", "一般")
+        case .content: ("folder", "コンテンツ")
+        case .ghost: ("ghost", "ゴースト")
+        case .talkAndBalloon: ("talk", "喋り / バルーン")
+        case .voice: ("dictation", "音声")
+        case .shiori: ("developer", "SHIORI")
+        case .network: ("network", "ネットワーク")
+        case .advanced: ("developer", "詳細")
+        }
+        return [0: page.0, 1: page.1, 2: "page:\(page.0)", 3: "Utataneの\(page.1)設定"]
     }
 
     private func reload() {
