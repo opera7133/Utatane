@@ -2279,7 +2279,7 @@ private struct UtataneRootView: View {
                 path: "ghost/master",
                 directoryHint: .isDirectory
             ))
-            let mainName = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
+            let mainName = ghost.characterName(for: 0, shell: selectedShell) ?? ghost.name
             let historyContext = SpeechHistoryContext(
                 ghostIdentifier: ghost.id.path,
                 ghostName: ghost.name,
@@ -2299,8 +2299,8 @@ private struct UtataneRootView: View {
             )
             scriptPlayer.configure(environmentVariables: [
                 "selfname": mainName,
-                "selfname2": mainName,
-                "keroname": ghost.characters.first(where: { $0.scope == 1 })?.name ?? "",
+                "selfname2": ghost.secondaryCharacterName(shell: selectedShell) ?? ghost.name,
+                "keroname": ghost.characterName(for: 1, shell: selectedShell) ?? "",
                 "lastghostname": lastGhostName,
                 "lastobjectname": lastObjectName
             ])
@@ -3297,8 +3297,17 @@ private struct UtataneRootView: View {
                 ))
             }
         case let .createNar(narPath, sourceDirectoryPath, eventID):
-            let archiveURL = resolvePath(narPath)
-            let sourceURL = resolvePath(sourceDirectoryPath)
+            let archiveURL: URL
+            if let narPath, !narPath.isEmpty {
+                archiveURL = resolvePath(narPath)
+            } else {
+                let panel = NSSavePanel()
+                panel.nameFieldStringValue = "\(currentGhost.name).nar"
+                panel.allowedContentTypes = [.init(filenameExtension: "nar")!]
+                guard panel.runModal() == .OK, let url = panel.url else { return nil }
+                archiveURL = url
+            }
+            let sourceURL = sourceDirectoryPath.map(resolvePath) ?? currentGhost.rootDirectory
             do {
                 let references = narCreationEventReferences(sourceURL: sourceURL, archiveURL: archiveURL)
                 _ = try? await activeSession.handle(event: .shiori(
@@ -3558,6 +3567,11 @@ private struct UtataneRootView: View {
         )
         selectedShell = installedShell
         if let currentGhost {
+            scriptPlayer.updateEnvironmentVariables([
+                "selfname": currentGhost.characterName(for: 0, shell: installedShell) ?? currentGhost.name,
+                "selfname2": currentGhost.secondaryCharacterName(shell: installedShell) ?? currentGhost.name,
+                "keroname": currentGhost.characterName(for: 1, shell: installedShell) ?? ""
+            ])
             selectionStore.setShellDirectoryName(
                 installedShell.directory.lastPathComponent,
                 for: currentGhost.id

@@ -1267,15 +1267,16 @@ public struct SakuraScriptParser: Sendable {
                               ["true", "false"].contains(arguments[2].lowercased())
                     {
                         tokens.append(.shioriDebugMode(arguments[2].lowercased() == "true"))
-                    } else if arguments.count >= 4,
+                    } else if arguments.count >= 2,
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "createnar"
                     {
-                        let options = Array(arguments.dropFirst(4))
+                        let operands = arguments.dropFirst(2).filter { !$0.hasPrefix("--") }
+                        let options = arguments.dropFirst(2).filter { $0.hasPrefix("--") }
                         let eventID = Self.optionValue("event", in: options)
                         tokens.append(.archive(.createNar(
-                            narPath: arguments[2],
-                            sourceDirectoryPath: arguments[3],
+                            narPath: operands.first,
+                            sourceDirectoryPath: operands.dropFirst().first,
                             eventID: eventID
                         )))
                     } else if arguments.count >= 1, ["move", "moveasync"].contains(arguments[0].lowercased()) {

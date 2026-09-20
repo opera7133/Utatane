@@ -516,6 +516,68 @@ func `unified choice callback suppresses independent legacy dispatch`() async th
 
 @Test
 @MainActor
+func `font colors can reuse balloon link defaults`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 30, height: 40).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 180, height: 100).write(to: directory.appending(path: "balloons0.png"))
+
+    let surfaceController = SurfaceWindowController(positionStore: positionStore)
+    try surfaceController.show(
+        shell: ShellDefinition(directory: directory, surfaces: [:]),
+        scope: 0,
+        surfaceID: 0
+    )
+    defer { surfaceController.hideAll() }
+    let balloonController = BalloonWindowController(positionStore: positionStore)
+    let player = SakuraScriptPlayer(
+        surfaceWindowController: surfaceController,
+        balloonWindowController: balloonController
+    )
+    let balloon = BalloonDefinition(
+        directory: directory,
+        name: "colors",
+        originX: 4,
+        originY: 4,
+        wordWrapPointX: -4,
+        wordWrapPointY: -4,
+        fontHeight: 14,
+        fontColor: BalloonColor(red: 12, green: 34, blue: 56),
+        cursorStyle: BalloonLinkAppearance(
+            shape: .underline,
+            fontColor: BalloonColor(red: 210, green: 20, blue: 30)
+        ),
+        anchorStyle: BalloonLinkAppearance(
+            shape: .underline,
+            fontColor: BalloonColor(red: 40, green: 220, blue: 60)
+        ),
+        anchorVisitedStyle: BalloonLinkAppearance(
+            shape: .none,
+            fontColor: BalloonColor(red: 70, green: 80, blue: 230)
+        )
+    )
+
+    await player.playAndWait(
+        SakuraScript(rawValue: #"\f[color,default.anchor]A\f[color,default.anchorvisited]B\f[color,default.plain]C\f[color,disable]D\e"#),
+        balloon: balloon,
+        characterDelayMilliseconds: 0
+    )
+
+    let anchor = try #require(balloonController.textAttributes(at: 0, scope: 0)?[.foregroundColor] as? NSColor)
+    let visited = try #require(balloonController.textAttributes(at: 1, scope: 0)?[.foregroundColor] as? NSColor)
+    let plain = try #require(balloonController.textAttributes(at: 2, scope: 0)?[.foregroundColor] as? NSColor)
+    #expect(anchor.greenComponent > 0.8)
+    #expect(visited.blueComponent > 0.8)
+    #expect(abs(plain.redComponent - 12.0 / 255.0) < 0.01)
+    #expect(balloonController.textAttributes(at: 3, scope: 0)?[.foregroundColor] is NSColor)
+}
+
+@Test
+@MainActor
 func `choice and anchor enter and hover events preserve link references`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

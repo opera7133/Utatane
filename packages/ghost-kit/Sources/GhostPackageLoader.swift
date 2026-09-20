@@ -60,6 +60,7 @@ public struct GhostPackageLoader: Sendable {
             InstalledGhostCharacter(
                 scope: 0,
                 name: metadata["sakura.name"],
+                secondaryName: metadata["sakura.name2"],
                 defaultSurfaceID: metadata["sakura.seriko.defaultsurface"].flatMap(Int.init) ?? 0,
                 defaultBalloonSurfaceID: metadata["sakura.balloon.defaultsurface"].flatMap(Int.init)
                     ?? commonBalloonSurfaceID
@@ -115,7 +116,12 @@ public struct GhostPackageLoader: Sendable {
             else { return nil }
             return InstalledShell(
                 name: metadata["name"] ?? directory.lastPathComponent,
-                directory: directory
+                directory: directory,
+                characterNames: [
+                    0: metadata["sakura.name"],
+                    1: metadata["kero.name"]
+                ].compactMapValues { $0 },
+                secondaryCharacterName: metadata["sakura.name2"]
             )
         }.sorted { lhs, rhs in
             if lhs.directory.lastPathComponent == "master" {

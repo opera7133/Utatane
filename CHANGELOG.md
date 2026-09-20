@@ -23,7 +23,9 @@
 - SakuraScript互換表の集計を実際の分類行から検査し、現行UKADOCとの差を追跡できるようにした
 - InputBoxを閉じた理由が時間切れか利用者操作かを区別して`OnUserInputCancel`へ通知するようにした
 - InputBoxの時間切れイベントが未処理の場合、互換動作として`timeout`を入力値にして通知するようにした
-- SakuraScriptの色指定で3桁16進数とCSS Color Level 3の拡張色名を扱えるようにした
+- SakuraScriptの色指定で3桁16進数、CSS Color Level 3の拡張色名、無効色、選択肢・アンカーの既定色参照を扱えるようにした
+- `%selfname2`がゴーストまたは現在のシェルの`descript.txt`にある`sakura.name2`を使うようにした
+- SakuraScriptの`createnar`を引数なしで実行し、保存先を選んで現在のゴーストをNAR化できるようにした
 
 ## [0.2.7] - 2026-09-20
 

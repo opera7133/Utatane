@@ -2087,6 +2087,27 @@ public final class SakuraScriptPlayer {
 
     private func parseColor(_ arguments: [String]) -> BalloonColor? {
         guard let first = arguments.first?.lowercased(), first != "default" else { return nil }
+        if first == "disable" {
+            let color = NSColor.disabledControlTextColor.usingColorSpace(.deviceRGB)
+                ?? NSColor.disabledControlTextColor
+            return BalloonColor(
+                red: Int((color.redComponent * 255).rounded()),
+                green: Int((color.greenComponent * 255).rounded()),
+                blue: Int((color.blueComponent * 255).rounded())
+            )
+        }
+        if first.hasPrefix("default."), let balloon = currentBalloon {
+            let plain = balloon.fontColor
+            return switch first {
+            case "default.plain": plain
+            case "default.cursor": balloon.cursorStyle.fontColor ?? plain
+            case "default.cursornotselect": balloon.cursorNotSelectedStyle.fontColor ?? plain
+            case "default.anchor": balloon.anchorStyle.fontColor ?? plain
+            case "default.anchornotselect": balloon.anchorNotSelectedStyle.fontColor ?? plain
+            case "default.anchorvisited": balloon.anchorVisitedStyle.fontColor ?? plain
+            default: nil
+            }
+        }
         if let color = cssNamedBalloonColors[first] {
             return color
         }

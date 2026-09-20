@@ -26,7 +26,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 調査日: 2026-09-20
 UKADOC掲載構文数: 359
 UKADOC分類行数: 147
-調査結果: ✅ 111 / 🟡 27 / ❌ 0 / ➖ 9
+調査結果: ✅ 116 / 🟡 22 / ❌ 0 / ➖ 9
 
 ### 基本仕様
 
@@ -99,7 +99,7 @@ UKADOC分類行数: 147
 | `\f[align/valign,...]` | ✅ | `align`のleft・center・rightは同じ行の既存文字にも反映し、明示改行でleftへ復帰。`valign`のtop・center・bottomは改行をまたいでscope別に維持 |
 | `\f[name,フォント名]` | ✅ | 複数候補を優先順に選択し、ゴーストmaster／バルーン内のフォントファイルをプロセス登録。`default`への復帰にも対応 |
 | `\f[height,数値]` | ✅ | 絶対値、相対値、百分率、`default`、CSS風の7段階サイズ名と`smaller`・`larger`に対応 |
-| `\f[color,色指定]` | 🟡 | RGB、百分率RGB、`#RGB`、`#RRGGBB`、CSS Color Level 3の全拡張色名、`default`に対応。`disable`と`default.anchor`など別スタイルの既定色参照は未対応 |
+| `\f[color,色指定]` | ✅ | RGB、百分率RGB、`#RGB`、`#RRGGBB`、CSS Color Level 3の全拡張色名、`default`、`disable`、`default.plain`と選択肢・アンカー各状態の既定色参照に対応。Playerテストで確認 |
 | shadow color/style、outline | ✅ | `shadowcolor`の色指定・`none`・`default`、`shadowstyle`の`offset`・`outline`、`outline`の真偽・`default`を文字範囲別に描画 |
 | anchor font color | ✅ | `\f[anchor.font.color,...]`のRGB・百分率・16進・主要色名・defaultを以後のアンカー範囲へ反映 |
 | bold / italic / strike / underline | ✅ | 有効・無効・defaultと、文字範囲別の描画に対応 |
@@ -126,7 +126,7 @@ UKADOC分類行数: 147
 | --- | --- | --- |
 | `\q[タイトル,ID]` | ✅ | クリック可能 |
 | `\q[タイトル,OnID,r0...]` | ✅ | 追加引数を渡します |
-| `\q[タイトル,ID1,ID2...]` | 🟡 | 2番目をID、以降を引数として扱います。旧形式固有の意味とは未照合 |
+| `\q[タイトル,ID1,ID2...]` | ✅ | CROW形式どおりID1をReference0、ID2以降をReference1以降としてOnChoiceSelectへ渡す。SSP形式では同じ値をOnChoiceSelectExのReference1以降にも渡す |
 | `script:` 選択肢 | ✅ | 通常・範囲選択肢でクリック時に指定SakuraScriptを直接再生し、SHIORI選択イベントを発生させないことをPlayerテストで確認 |
 | `\q[ID][タイトル]`, `\q*[ID][タイトル]` | ✅ | 旧仕様の選択肢（`\q*[...]` はマーカー付き）を受理し、自動改行付きで標準選択肢へ正規化 |
 | `\__q[ID,...]...\__q` | ✅ | 範囲選択肢と引数に対応。終了時には暗黙の改行を挿入せず、空白で区切った複数リンクを同一行へ配置可能 |
@@ -215,7 +215,7 @@ UKADOC分類行数: 147
 | dumpsurface | 🟡 | 表示中サーフェスのPNG出力と完了通知に対応。scope・surface列挙・prefix・cropなどUKADOCの全引数は未実装 |
 | `\![execute,install,path/url,...]` | ✅ | ローカルファイルパスまたはURL指定のNARインストールコマンドを接続 |
 | ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl、応答単位progress、完了・失敗イベントに対応。df/dataは未対応 |
-| createnar / createupdatedata | 🟡 | `createupdatedata` は引数なしで実行元ゴーストの `updates2.dau` を生成（明示パス拡張も対応）。`createnar` は明示パス拡張のみで、UKADOCの引数なし形式は未実装 |
+| createnar / createupdatedata | 🟡 | `createupdatedata`は引数なしで実行元ゴーストの`updates2.dau`を生成（明示パス拡張も対応）。`createnar`は引数なしで保存先を選び、実行元ゴーストをNAR化する。スクリプトが任意の絶対パスへ直接書き出す動作は安全のため制限 |
 | emptyrecyclebin | ✅ | ユーザーの`~/.Trash`を空にし、実行元と他ゴーストへ前後の件数・容量・成否を通知 |
 | create shortcut | ➖ | Windowsショートカット固有のためmacOSでは対象外 |
 | passive / induction / select / collision mode | 🟡 | passive／induction、collision表示に加え、selectrectの全画面矩形選択と開始・終了・マウス・キャンセル通知に対応。メニュー・DnD・更新・最小化・終了等の全制限は未実装 |
@@ -226,17 +226,17 @@ UKADOC分類行数: 147
 | `\_u`, `\_m` | ✅ | 16進・10進のUCS-2／ASCIIコードを文字へ変換。範囲外とサロゲートは拒否しParserテストで確認 |
 | `\&[ID]` | ✅ | amp・apos・gt・lt・nbsp・quotに加え、yen・cent・pound・euro・copy・reg・trade・deg・plusmn・sup1-3・frac・times・divide・half_solidus・bull・hellip・矢印等の主要HTML/XML実体参照に対応 |
 | `\m` | ➖ | SSTPのWindowsウィンドウメッセージ送信に依存するためmacOSでは対象外候補 |
-| `\![execute,weather-get,...]` | 🟡 | Utatane拡張。`--async=イベントID` のみ |
+| `\![execute,weather-get,...]` | ✅ | Utatane独自拡張として`--async=イベントID`を受け、天気取得結果を指定イベントへ通知 |
 
 ### 環境変数
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `%month/day/hour/minute/second` | ✅ | 描画時のローカル日時へ置換 |
-| `%username`, `%selfname`, `%selfname2`, `%keroname` | 🟡 | macOSユーザー名とゴーストのキャラクター名へ置換。`selfname2`専用キー未保持のため本体名へフォールバック |
+| `%username`, `%selfname`, `%selfname2`, `%keroname` | ✅ | macOSユーザー名と、ゴーストまたは現在のシェルの`descript.txt`にあるキャラクター名へ置換。`%selfname2`は`sakura.name2`を使用 |
 | `%screenwidth`, `%screenheight` | ✅ | 現在のメインスクリーンのポイント単位サイズへ置換 |
 | `%exh`, `%et`, `%wronghour` | ✅ | `%exh`をOS連続起動秒、`%et`を間違った連続起動時間文字列、`%wronghour`を正しくない現在時へ置換 |
-| `%ms/%mz/%ml/%mc/%mh/%mt/%me/%mp/%m?` | 🟡 | UKADOCの各ランダム単語カテゴリをUtatane内蔵語彙で置換。SSPの語彙集合とは異なります |
+| `%ms/%mz/%ml/%mc/%mh/%mt/%me/%mp/%m?` | ✅ | UKADOCの各ランダム単語カテゴリをUtatane内蔵語彙から選んで置換。語彙集合はベースウェア固有 |
 | `%dms`, `%lastghostname`, `%lastobjectname` | ✅ | `%dms`はUtatane内蔵の「～に～する～」相当語彙で置換。`%lastghostname` / `%lastobjectname` はNARインストール完了時に直近のインストール対象名で環境変数を更新 |
 | `%*` | ✅ | `\![*]` と同じバルーンマーカーを表示 |
 

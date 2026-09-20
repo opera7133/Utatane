@@ -79,6 +79,7 @@ func `loads and names every installed shell with master as default`() throws {
     shiori,first.dll
     balloon,test-balloon
     sakura.name,Emily
+    sakura.name2,Em
     sakura.seriko.defaultsurface,1
     sakura.balloon.defaultsurface,2
     kero.name,Teddy
@@ -89,7 +90,12 @@ func `loads and names every installed shell with master as default`() throws {
     """.utf8).write(
         to: ghostMaster.appending(path: "descript.txt", directoryHint: .notDirectory)
     )
-    try Data("name,Default Shell\n".utf8).write(
+    try Data("""
+    name,Default Shell
+    sakura.name,Emily in Default
+    sakura.name2,Em in Default
+    kero.name,Teddy in Default
+    """.utf8).write(
         to: master.appending(path: "descript.txt", directoryHint: .notDirectory)
     )
     try Data("name,Alternate Shell\n".utf8).write(
@@ -101,6 +107,9 @@ func `loads and names every installed shell with master as default`() throws {
     #expect(ghost.name == "Test Ghost")
     #expect(ghost.defaultShellDirectory.standardizedFileURL == master.standardizedFileURL)
     #expect(ghost.shells.map(\.name) == ["Default Shell", "Alternate Shell"])
+    #expect(ghost.characterName(for: 0, shell: ghost.shells[0]) == "Emily in Default")
+    #expect(ghost.characterName(for: 1, shell: ghost.shells[0]) == "Teddy in Default")
+    #expect(ghost.secondaryCharacterName(shell: ghost.shells[0]) == "Em in Default")
     #expect(ghost.shioriFilename == "first.dll")
     #expect(ghost.charset == "EUC-KR")
     #expect(ghost.defaultBalloonDirectoryName == "test-balloon")
@@ -108,6 +117,7 @@ func `loads and names every installed shell with master as default`() throws {
         InstalledGhostCharacter(
             scope: 0,
             name: "Emily",
+            secondaryName: "Em",
             defaultSurfaceID: 1,
             defaultBalloonSurfaceID: 2
         ),

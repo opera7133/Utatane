@@ -295,7 +295,7 @@ public enum SakuraScriptInstallSource: Sendable, Equatable {
 public enum SakuraScriptArchiveCommand: Sendable, Equatable {
     case extract(archivePath: String, destinationPath: String, eventID: String?, password: String?)
     case compress(archivePath: String, sourceDirectoryPath: String, eventID: String?, password: String?)
-    case createNar(narPath: String, sourceDirectoryPath: String, eventID: String?)
+    case createNar(narPath: String?, sourceDirectoryPath: String?, eventID: String?)
     case dumpSurface(path: String?, eventID: String?)
     case createUpdateData(directoryPath: String?, eventID: String?)
 }

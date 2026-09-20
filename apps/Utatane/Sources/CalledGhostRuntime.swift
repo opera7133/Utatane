@@ -201,16 +201,11 @@ final class CalledGhostRuntime {
             path: "ghost/master",
             directoryHint: .isDirectory
         ))
-        let mainName = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
         player.configureSpeechHistory(
             store: speechHistoryStore,
             context: historyContext
         )
-        player.configure(environmentVariables: [
-            "selfname": mainName,
-            "selfname2": mainName,
-            "keroname": ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
-        ])
+        configureCharacterEnvironment(for: selectedShell)
         configureCallbacks()
         surfaceController.onUserDressupChange = { [weak player] changes in
             Task { await player?.notifyDressupChanges(changes, source: "user") }
@@ -784,7 +779,24 @@ final class CalledGhostRuntime {
             ($0.scope, $0.defaultBalloonSurfaceID)
         }))
         shell = newShell
+        updateCharacterEnvironment(for: newShell)
         selectionStore.setShellDirectoryName(newShell.directory.lastPathComponent, for: ghost.id)
+    }
+
+    private func configureCharacterEnvironment(for shell: InstalledShell) {
+        player.configure(environmentVariables: [
+            "selfname": ghost.characterName(for: 0, shell: shell) ?? ghost.name,
+            "selfname2": ghost.secondaryCharacterName(shell: shell) ?? ghost.name,
+            "keroname": ghost.characterName(for: 1, shell: shell) ?? ""
+        ])
+    }
+
+    private func updateCharacterEnvironment(for shell: InstalledShell) {
+        player.updateEnvironmentVariables([
+            "selfname": ghost.characterName(for: 0, shell: shell) ?? ghost.name,
+            "selfname2": ghost.secondaryCharacterName(shell: shell) ?? ghost.name,
+            "keroname": ghost.characterName(for: 1, shell: shell) ?? ""
+        ])
     }
 
     private func currentSurfaceReferences() -> [Int: String] {
@@ -1593,8 +1605,17 @@ final class CalledGhostRuntime {
                 ))
             }
         case let .createNar(narPath, sourceDirectoryPath, eventID):
-            let archiveURL = resolvePath(narPath)
-            let sourceURL = resolvePath(sourceDirectoryPath)
+            let archiveURL: URL
+            if let narPath, !narPath.isEmpty {
+                archiveURL = resolvePath(narPath)
+            } else {
+                let panel = NSSavePanel()
+                panel.nameFieldStringValue = "\(ghost.name).nar"
+                panel.allowedContentTypes = [.init(filenameExtension: "nar")!]
+                guard panel.runModal() == .OK, let url = panel.url else { return nil }
+                archiveURL = url
+            }
+            let sourceURL = sourceDirectoryPath.map(resolvePath) ?? ghost.rootDirectory
             do {
                 let references = narCreationEventReferences(sourceURL: sourceURL, archiveURL: archiveURL)
                 _ = try? await session.handle(event: .shiori(id: "OnNarCreating", references: references))

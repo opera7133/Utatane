@@ -913,6 +913,13 @@ func `parses reload content actions and createnar commands`() {
 }
 
 @Test
+func `parses standard createnar command without a destination`() {
+    #expect(SakuraScriptParser().parse(#"\![execute,createnar]"#) == [
+        .archive(.createNar(narPath: nil, sourceDirectoryPath: nil, eventID: nil))
+    ])
+}
+
+@Test
 func `parses negative balloon surface ID for hiding balloon`() {
     #expect(SakuraScriptParser().parse(#"\b[-1]"#) == [
         .balloonSurface(-1)

@@ -3,31 +3,43 @@ import Foundation
 public struct InstalledShell: Identifiable, Sendable, Equatable {
     public let name: String
     public let directory: URL
+    public let characterNames: [Int: String]
+    public let secondaryCharacterName: String?
 
     public var id: URL {
         directory
     }
 
-    public init(name: String, directory: URL) {
+    public init(
+        name: String,
+        directory: URL,
+        characterNames: [Int: String] = [:],
+        secondaryCharacterName: String? = nil
+    ) {
         self.name = name
         self.directory = directory
+        self.characterNames = characterNames
+        self.secondaryCharacterName = secondaryCharacterName
     }
 }
 
 public struct InstalledGhostCharacter: Sendable, Equatable {
     public let scope: Int
     public let name: String?
+    public let secondaryName: String?
     public let defaultSurfaceID: Int
     public let defaultBalloonSurfaceID: Int
 
     public init(
         scope: Int,
         name: String? = nil,
+        secondaryName: String? = nil,
         defaultSurfaceID: Int,
         defaultBalloonSurfaceID: Int = 0
     ) {
         self.scope = scope
         self.name = name
+        self.secondaryName = secondaryName
         self.defaultSurfaceID = defaultSurfaceID
         self.defaultBalloonSurfaceID = defaultBalloonSurfaceID
     }
@@ -55,6 +67,16 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
     /// can still distinguish an omitted declaration from an explicit one.
     public var effectiveShioriFilename: String {
         shioriFilename ?? "shiori.dll"
+    }
+
+    public func characterName(for scope: Int, shell: InstalledShell? = nil) -> String? {
+        shell?.characterNames[scope] ?? characters.first(where: { $0.scope == scope })?.name
+    }
+
+    public func secondaryCharacterName(shell: InstalledShell? = nil) -> String? {
+        shell?.secondaryCharacterName
+            ?? characters.first(where: { $0.scope == 0 })?.secondaryName
+            ?? characterName(for: 0, shell: shell)
     }
 
     public init(
