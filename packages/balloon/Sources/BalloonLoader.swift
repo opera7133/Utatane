@@ -171,6 +171,19 @@ public struct BalloonLoader: Sendable {
             onlineMarkerX: integer("onlinemarker.x", in: values, default: 0),
             onlineMarkerY: integer("onlinemarker.y", in: values, default: 0),
             onlineMarkerIntervalMilliseconds: integer("onlinemarker.interval", in: values, default: 500),
+            sstpMarkerX: integer("sstpmarker.x", in: values, default: 0),
+            sstpMarkerY: integer("sstpmarker.y", in: values, default: 0),
+            sstpMessageFontName: values["sstpmessage.font.name"],
+            sstpMessageFontHeight: integer("sstpmessage.font.height", in: values, default: 10),
+            sstpMessageFontColor: BalloonColor(
+                red: integer("sstpmessage.font.color.r", in: values, default: 0),
+                green: integer("sstpmessage.font.color.g", in: values, default: 0),
+                blue: integer("sstpmessage.font.color.b", in: values, default: 0)
+            ),
+            sstpMessageX: integer("sstpmessage.x", in: values, default: 0),
+            sstpMessageY: integer("sstpmessage.y", in: values, default: 0),
+            sstpMessageRightX: values["sstpmessage.xr"].flatMap(Int.init),
+            sstpMessageBottomY: values["sstpmessage.yb"].flatMap(Int.init),
             numberFontName: values["number.font.name"],
             numberFontHeight: integer("number.font.height", in: values, default: 10),
             numberFontColor: BalloonColor(
@@ -274,6 +287,31 @@ public struct BalloonLoader: Sendable {
             }
         }
         return []
+    }
+
+    public func sstpMarkerImageURL(
+        speaker: BalloonSpeaker,
+        style: Int = 0,
+        in balloon: BalloonDefinition
+    ) -> URL? {
+        if let filename = overrideValues(
+            speaker: speaker,
+            style: style,
+            in: balloon.directory
+        )?["sstpmarker.filename"],
+            let url = imageURL(filename: filename, suffix: "", in: balloon.directory)
+        {
+            return url
+        }
+        let names: [String] = switch speaker {
+        case .sakura:
+            ["sstp_news.png", "sstp_new.png", "sstps.png", "sstp.png"]
+        case .kero:
+            ["sstp_newk.png", "sstp_new.png", "sstpk.png", "sstp.png"]
+        case let .character(scope):
+            ["sstp_newp\(scope)def.png", "sstp_newk.png", "sstp_new.png", "sstpp\(scope)def.png", "sstpk.png", "sstp.png"]
+        }
+        return firstExistingImage(named: names, in: balloon.directory)
     }
 
     public func clickWaitMarkerImageURL(

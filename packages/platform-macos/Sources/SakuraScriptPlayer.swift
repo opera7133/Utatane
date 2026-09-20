@@ -261,6 +261,7 @@ public final class SakuraScriptPlayer {
         balloon: BalloonDefinition,
         characterDelayMilliseconds: Int? = nil,
         policy: SakuraScriptPlaybackPolicy = .trusted,
+        sstpMessage: String? = nil,
         onPresentationReady: (@MainActor () -> Void)? = nil
     ) {
         guard !(preventsUserBreak && playbackTask != nil) else { return }
@@ -277,6 +278,7 @@ public final class SakuraScriptPlayer {
         currentBalloon = balloon
         currentScriptRawValue = script.rawValue
         balloonWindowController.setWaitingForClick(false)
+        balloonWindowController.setSSTPMessage(sstpMessage)
         var tokens = filteredSakuraScriptTokens(parser.parse(script), policy: policy)
         let continuesPreviousDialogue = tokens.first == .clearAll
         if continuesPreviousDialogue {
@@ -305,6 +307,7 @@ public final class SakuraScriptPlayer {
         balloon: BalloonDefinition,
         characterDelayMilliseconds: Int? = nil,
         policy: SakuraScriptPlaybackPolicy = .trusted,
+        sstpMessage: String? = nil,
         onPresentationReady: (@MainActor () -> Void)? = nil
     ) async {
         await withTaskCancellationHandler {
@@ -314,6 +317,7 @@ public final class SakuraScriptPlayer {
                     balloon: balloon,
                     characterDelayMilliseconds: characterDelayMilliseconds,
                     policy: policy,
+                    sstpMessage: sstpMessage,
                     onPresentationReady: onPresentationReady
                 )
                 playbackContinuation = continuation
@@ -329,7 +333,8 @@ public final class SakuraScriptPlayer {
         _ script: SakuraScript,
         balloon: BalloonDefinition,
         characterDelayMilliseconds: Int? = nil,
-        policy: SakuraScriptPlaybackPolicy = .trusted
+        policy: SakuraScriptPlaybackPolicy = .trusted,
+        sstpMessage: String? = nil
     ) {
         let previous = queuedPlaybackTail ?? playbackTask
         let task = Task { @MainActor [weak self] in
@@ -339,7 +344,8 @@ public final class SakuraScriptPlayer {
                 script,
                 balloon: balloon,
                 characterDelayMilliseconds: characterDelayMilliseconds,
-                policy: policy
+                policy: policy,
+                sstpMessage: sstpMessage
             )
             await playbackTask?.value
         }

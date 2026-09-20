@@ -109,6 +109,7 @@ public final class BalloonWindowController {
     private var markerTextByScope: [Int: String] = [:]
     private var numberTextByScope: [Int: String] = [:]
     private var onlineModeScopes: Set<Int> = []
+    private var sstpMessageByScope: [Int: String] = [:]
     private var offsetByScope: [Int: RuntimeOffset] = [:]
     private var alignmentByScope: [Int: BalloonWindowAlignment] = [:]
     private var shellPresentationSettings: [Int: ShellScopePresentationSettings] = [:]
@@ -181,6 +182,7 @@ public final class BalloonWindowController {
         markerTextByScope.removeAll()
         numberTextByScope.removeAll()
         onlineModeScopes.removeAll()
+        sstpMessageByScope.removeAll()
         visitedAnchorIDs.removeAll()
         offsetByScope.removeAll()
         alignmentByScope.removeAll()
@@ -256,6 +258,10 @@ public final class BalloonWindowController {
 
     func isOnlineMarkerVisible(scope: Int) -> Bool {
         presentations[scope]?.contentView.isOnlineMarkerVisible ?? false
+    }
+
+    func displayedSSTPMessage(scope: Int) -> String? {
+        presentations[scope]?.contentView.sstpMessage
     }
 
     func textAttributes(at location: Int, scope: Int) -> [NSAttributedString.Key: Any]? {
@@ -364,6 +370,11 @@ public final class BalloonWindowController {
             style: style,
             in: effectiveBalloon
         ).compactMap { try? loadImage($0, balloon: effectiveBalloon) }
+        let sstpMarkerImage = balloonLoader.sstpMarkerImageURL(
+            speaker: speaker,
+            style: style,
+            in: effectiveBalloon
+        ).flatMap { try? loadImage($0, balloon: effectiveBalloon) }
         let markerImage = balloonLoader.markerImageURL(speaker: speaker, style: style, in: effectiveBalloon)
             .flatMap { try? loadImage($0, balloon: effectiveBalloon) }
         let scopeDisplayScale = effectiveDisplayScale(scope: scope)
@@ -380,6 +391,7 @@ public final class BalloonWindowController {
             scrollArrow0Image: scrollArrow0Image,
             scrollArrow1Image: scrollArrow1Image,
             onlineMarkerImages: onlineMarkerImages,
+            sstpMarkerImage: sstpMarkerImage,
             markerImage: markerImage,
             balloon: effectiveBalloon,
             text: repaintLockedScopes.contains(scope) ? existingPresentation?.contentView.text ?? "" : text,
@@ -405,6 +417,7 @@ public final class BalloonWindowController {
         contentView.setMarkerText(markerTextByScope[scope] ?? "")
         contentView.setNumberText(numberTextByScope[scope] ?? "")
         contentView.setOnlineMode(onlineModeScopes.contains(scope))
+        contentView.setSSTPMessage(sstpMessageByScope[scope])
         contentView.setPositionedImages(existingPositionedImages)
 
         let item = existingPresentation?.item ?? makePresentationItem(scope: scope)
@@ -587,6 +600,15 @@ public final class BalloonWindowController {
             onlineModeScopes.remove(scope)
         }
         presentations[scope]?.contentView.setOnlineMode(enabled)
+    }
+
+    public func setSSTPMessage(_ message: String?, scope: Int = 0) {
+        if let message, !message.isEmpty {
+            sstpMessageByScope[scope] = message
+        } else {
+            sstpMessageByScope.removeValue(forKey: scope)
+        }
+        presentations[scope]?.contentView.setSSTPMessage(message)
     }
 
     public func setNumber(file: String, current: String, maximum: String, scope: Int) {
@@ -941,6 +963,8 @@ private final class BalloonContentView: NSView {
     private let scrollArrow0View: ClickableImageView?
     private let scrollArrow1View: ClickableImageView?
     private let onlineMarkerView: AnimatedBalloonImageView?
+    private let sstpMarkerView: NSImageView?
+    private let sstpMessageField = NSTextField(labelWithString: "")
     private let markerImage: NSImage?
     private let markerTextField = NSTextField(labelWithString: "")
     private let numberTextField = NSTextField(labelWithString: "")
@@ -1003,6 +1027,10 @@ private final class BalloonContentView: NSView {
 
     var isOnlineMarkerVisible: Bool {
         onlineMarkerView?.isHidden == false
+    }
+
+    var sstpMessage: String? {
+        sstpMessageField.isHidden ? nil : sstpMessageField.stringValue
     }
 
     var verticalContentInset: CGFloat {
@@ -1119,6 +1147,13 @@ private final class BalloonContentView: NSView {
         onlineMarkerView?.setAnimating(enabled)
     }
 
+    func setSSTPMessage(_ message: String?) {
+        let message = message ?? ""
+        sstpMessageField.stringValue = message
+        sstpMessageField.isHidden = message.isEmpty
+        sstpMarkerView?.isHidden = message.isEmpty
+    }
+
     init(
         frame: NSRect,
         image: NSImage,
@@ -1126,6 +1161,7 @@ private final class BalloonContentView: NSView {
         scrollArrow0Image: NSImage?,
         scrollArrow1Image: NSImage?,
         onlineMarkerImages: [NSImage],
+        sstpMarkerImage: NSImage?,
         markerImage: NSImage?,
         balloon: BalloonDefinition,
         text: String,
@@ -1141,6 +1177,7 @@ private final class BalloonContentView: NSView {
             images: onlineMarkerImages,
             intervalMilliseconds: balloon.onlineMarkerIntervalMilliseconds
         )
+        sstpMarkerView = sstpMarkerImage.map(NSImageView.init(image:))
         self.markerImage = markerImage
         let fontSize = CGFloat(balloon.fontHeight) * displayScale * textScale
         let namedFont = ghostDialogueFont(named: balloon.fontName, size: fontSize)
@@ -1310,6 +1347,41 @@ private final class BalloonContentView: NSView {
             onlineMarkerView.isHidden = true
             addSubview(onlineMarkerView)
         }
+        if let sstpMarkerView {
+            sstpMarkerView.imageScaling = .scaleAxesIndependently
+            sstpMarkerView.frame = NSRect(
+                x: scaledCoordinate(balloon.sstpMarkerX, extent: bounds.width),
+                y: scaledCoordinate(balloon.sstpMarkerY, extent: bounds.height),
+                width: (sstpMarkerImage?.size.width ?? 0) * displayScale,
+                height: (sstpMarkerImage?.size.height ?? 0) * displayScale
+            )
+            sstpMarkerView.isHidden = true
+            addSubview(sstpMarkerView)
+        }
+        sstpMessageField.font = ghostDialogueFont(
+            named: balloon.sstpMessageFontName,
+            size: CGFloat(balloon.sstpMessageFontHeight) * displayScale
+        )
+        sstpMessageField.textColor = NSColor(balloonColor: balloon.sstpMessageFontColor)
+        sstpMessageField.drawsBackground = false
+        sstpMessageField.isBordered = false
+        sstpMessageField.lineBreakMode = .byTruncatingTail
+        let sstpMessageX = scaledCoordinate(balloon.sstpMessageX, extent: bounds.width)
+        let sstpMessageY = scaledCoordinate(balloon.sstpMessageY, extent: bounds.height)
+        let sstpMessageRight = balloon.sstpMessageRightX.map {
+            scaledCoordinate($0, extent: bounds.width)
+        } ?? bounds.width
+        let sstpMessageBottom = balloon.sstpMessageBottomY.map {
+            scaledCoordinate($0, extent: bounds.height)
+        } ?? (sstpMessageY + sstpMessageField.intrinsicContentSize.height)
+        sstpMessageField.frame = NSRect(
+            x: sstpMessageX,
+            y: sstpMessageY,
+            width: max(1, sstpMessageRight - sstpMessageX),
+            height: max(sstpMessageField.intrinsicContentSize.height, sstpMessageBottom - sstpMessageY)
+        )
+        sstpMessageField.isHidden = true
+        addSubview(sstpMessageField)
         updateScrollArrowVisibility()
     }
 
@@ -1715,8 +1787,12 @@ private final class AnimatedBalloonImageView: NSImageView {
 }
 
 func ghostDialogueFont(named name: String?, size: CGFloat) -> NSFont {
-    if let name, let font = NSFont(name: name, size: size) {
-        return font
+    if let names = name?.split(separator: ",").map({ $0.trimmingCharacters(in: .whitespaces) }) {
+        for name in names {
+            if let font = NSFont(name: name, size: size) {
+                return font
+            }
+        }
     }
 
     let systemFont = NSFont.systemFont(ofSize: size)

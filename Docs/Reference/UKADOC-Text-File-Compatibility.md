@@ -21,7 +21,7 @@
 | --- | --- | --- | --- |
 | Ghost `descript.txt` | 🟡 | UTF-8／Shift_JIS、基本情報、SHIORI名、キャラクター名、既定surface・balloon、更新URL、README、推奨balloon | 74項目中、配置、SSTP制御、SHIORI詳細設定、カーソル、メニュー、アイコン等が未反映 |
 | Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`（`full`を含む）、bindgroup／bindoption、着せ替えmenuitem、初期位置・上下配置、z-order、sticky-window、balloonのoffset／alignment／dontmove／syncscale | 102項目中、画像ベース座標の全用途、オーナードローメニュー装飾、DPI、透過・crossfade等が未反映 |
-| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、scroll arrow／clickwaitmarker／online marker／number、cursor／anchor／anchor.visited、透過方式、windowposition、入力欄 | 162項目中、SSTP marker、blendmethod、recommended ghost等が未反映 |
+| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、scroll arrow／clickwaitmarker／online marker／SSTP marker／number、cursor／anchor／anchor.visited、透過方式、windowposition、入力欄 | 162項目中、blendmethod、recommended ghost等が未反映 |
 | Plugin `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、name、id、filename、type、charset、作者、更新URL、README、secondchangeinterval、otherghosttalkを読み込み、SHIORI／dylib／Windows DLLへ分類。Utatane拡張の`filename.macos`でmacOS用モジュールを優先指定可能。メニューから実行、README表示、ネットワーク更新が可能。ネイティブSHIORI型は実体をロードし、OnSecondChange・OnMenuExec・raiseplugin／notifypluginを配送。AKARIの`_create_thread`は独立評価ワーカーで実行し、変更されたグローバル変数を完了時に反映。YAYA製wallet_of_unyuとAKARI製sudohaikuyuは実ファイルでOnMenuExecを確認。macOS dylibは標準`loadu/load`・`unload`・`request`を優先 | dylib実物とWine DLL、AKARIワーカー内の外部通信を伴う長時間処理は未確認 |
 | Headline `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、名前、DLL名、URL、open URL、homeurl、charset、alwaysdisplay、readme、readme.charset。RSS用`type`・`feed`拡張も利用 | UKADOC掲載項目は保持・利用。Windows DLL実行は実行環境依存 |
 | `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストールに加え、refreshとrefreshundeletemaskをバックアップ付き置換で実装 | supplement・languageは未対応 |
@@ -80,13 +80,14 @@ UKADOC掲載は162項目。現在の実利用項目は以下。
 | 利用 | `font.name`、`font.height`、`font.color.r/g/b`、`font.shadowcolor.r/g/b`、`font.shadowstyle` |
 | 利用 | `font.bold`、`font.italic`、`font.underline`、`font.strike`、`font.outline`、`arrow0.x/y`、`arrow1.x/y`、`clickwaitmarker.x/y` |
 | 利用 | `onlinemarker.x/y`、`onlinemarker.interval`。`online0.png`から始まる連番画像を`onlinemode`中にアニメーション表示 |
+| 利用 | `sstpmarker.x/y`、`sstpmessage.font.name/height/color`、`sstpmessage.x/y/xr/yb`。SSTP受信トークでmarker画像とSenderを表示 |
 | 利用 | `number.font.name/height/color`、`number.xr/y`、`use_self_alpha`（`full`を含む）、`windowposition.x`、`windowposition.y`、`windowposition.limit` |
 | 利用 | `communicatebox.font.name/height/color`、`communicatebox.background.color`、`communicatebox.x`、`communicatebox.y`、`communicatebox.width`、`communicatebox.height` |
 | 画像として利用 | `balloonc1.png`／`balloonc2.png`／`balloonc3.png`と対応する`balloonc*s.txt`を、communicatebox／teachbox／inputboxのネイティブ入力パネルへ反映 |
 | 利用 | cursor、cursor.notselect、anchor、anchor.notselect、anchor.visitedの`style`、font／pen／brush RGB。訪問済みアンカーはゴーストの実行中にID単位で保持 |
-| 画像として利用 | balloon画像、marker画像、clickwaitmarker／arrow／online marker画像。`balloons*s.txt`等のサーフェス別上書きと`marker.filename`／`clickwaitmarker.filename`／`arrow.filename`／`onlinemarker.filename`を反映 |
+| 画像として利用 | balloon画像、marker画像、clickwaitmarker／arrow／online／SSTP marker画像。`balloons*s.txt`等のサーフェス別上書きと`marker.filename`／`clickwaitmarker.filename`／`arrow.filename`／`onlinemarker.filename`／`sstpmarker.filename`を反映 |
 | 別経路で利用 | `readme`、`readme.charset` |
-| 未反映 | disable.font、blendmethod、SSTP markerの座標・文字と画像、入力画像上のボタン自体のオーナードロー、recommended ghost |
+| 未反映 | disable.font、blendmethod、入力画像上のボタン自体のオーナードロー、recommended ghost |
 
 `origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックします。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置します。入力欄は従来どおり横書き。
 
@@ -153,5 +154,5 @@ size／date／charset拡張フィールドとVersion 3の`charset,`・未知行�
 ## 優先度
 
 1. point.baseposを位置保存へ、icon.rectを履歴サムネイルへ接続します。
-2. Balloon descript.txtのSSTP markerを既存のSSTP受信表示へ接続します。
-3. pattern methodの近似描画を実画像で比較し、互換差が大きい演算を優先して補正します。
+2. pattern methodの近似描画を実画像で比較し、互換差が大きい演算を優先して補正します。
+3. Balloon descript.txtのblendmethodと入力画像上のボタン描画を実装します。

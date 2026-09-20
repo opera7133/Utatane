@@ -190,6 +190,17 @@ func `loads marker number transparency and window placement settings`() throws {
     onlinemarker.x,-24
     onlinemarker.y,16
     onlinemarker.interval,20
+    sstpmarker.x,22
+    sstpmarker.y,-19
+    sstpmessage.font.name,Helvetica
+    sstpmessage.font.height,12
+    sstpmessage.font.color.r,10
+    sstpmessage.font.color.g,20
+    sstpmessage.font.color.b,30
+    sstpmessage.x,35
+    sstpmessage.y,-20
+    sstpmessage.xr,-10
+    sstpmessage.yb,-5
     number.font.name,Helvetica
     number.font.height,14
     number.font.color.r,10
@@ -210,6 +221,15 @@ func `loads marker number transparency and window placement settings`() throws {
     #expect(balloon.onlineMarkerX == -24)
     #expect(balloon.onlineMarkerY == 16)
     #expect(balloon.onlineMarkerIntervalMilliseconds == 50)
+    #expect(balloon.sstpMarkerX == 22)
+    #expect(balloon.sstpMarkerY == -19)
+    #expect(balloon.sstpMessageFontName == "Helvetica")
+    #expect(balloon.sstpMessageFontHeight == 12)
+    #expect(balloon.sstpMessageFontColor == BalloonColor(red: 10, green: 20, blue: 30))
+    #expect(balloon.sstpMessageX == 35)
+    #expect(balloon.sstpMessageY == -20)
+    #expect(balloon.sstpMessageRightX == -10)
+    #expect(balloon.sstpMessageBottomY == -5)
     #expect(balloon.numberFontName == "Helvetica")
     #expect(balloon.numberFontHeight == 14)
     #expect(balloon.numberFontColor == BalloonColor(red: 10, green: 20, blue: 30))
@@ -300,8 +320,9 @@ func `applies per surface balloon settings and replacement filenames`() throws {
     marker.filename,custom-marker
     clickwaitmarker.filename,custom-click
     arrow.filename,custom-arrow
+    sstpmarker.filename,custom-sstp
     """.utf8).write(to: directory.appending(path: "balloons2s.txt"))
-    for filename in ["custom-marker.png", "custom-click.png", "custom-arrow1.png"] {
+    for filename in ["custom-marker.png", "custom-click.png", "custom-arrow1.png", "custom-sstp.png"] {
         try Data().write(to: directory.appending(path: filename))
     }
     let loader = BalloonLoader()
@@ -314,6 +335,7 @@ func `applies per surface balloon settings and replacement filenames`() throws {
     #expect(loader.markerImageURL(speaker: .sakura, style: 2, in: balloon)?.lastPathComponent == "custom-marker.png")
     #expect(loader.clickWaitMarkerImageURL(speaker: .sakura, style: 2, in: balloon)?.lastPathComponent == "custom-click.png")
     #expect(loader.arrowImageURL(index: 1, speaker: .sakura, style: 2, in: balloon)?.lastPathComponent == "custom-arrow1.png")
+    #expect(loader.sstpMarkerImageURL(speaker: .sakura, style: 2, in: balloon)?.lastPathComponent == "custom-sstp.png")
 }
 
 @Test
@@ -359,7 +381,7 @@ func `uses scope specific arrows and numbered online markers`() throws {
         fontColor: BalloonColor(red: 0, green: 0, blue: 0)
     )
     let loader = BalloonLoader()
-    for filename in ["arrow0.png", "arrowk0.png", "online0.png", "online1.png"] {
+    for filename in ["arrow0.png", "arrowk0.png", "online0.png", "online1.png", "sstp.png"] {
         try Data().write(to: directory.appending(path: filename))
     }
 
@@ -368,13 +390,16 @@ func `uses scope specific arrows and numbered online markers`() throws {
     #expect(loader.onlineMarkerImageURLs(speaker: .sakura, in: balloon).map(\.lastPathComponent) == [
         "online0.png", "online1.png"
     ])
+    #expect(loader.sstpMarkerImageURL(speaker: .sakura, in: balloon)?.lastPathComponent == "sstp.png")
 
     try Data().write(to: directory.appending(path: "arrowp2def0.png"))
     try Data().write(to: directory.appending(path: "onlinep2def0.png"))
+    try Data().write(to: directory.appending(path: "sstp_newp2def.png"))
     #expect(loader.arrowImageURL(index: 0, speaker: .character(scope: 2), in: balloon)?.lastPathComponent == "arrowp2def0.png")
     #expect(loader.onlineMarkerImageURLs(speaker: .character(scope: 2), in: balloon).map(\.lastPathComponent) == [
         "onlinep2def0.png"
     ])
+    #expect(loader.sstpMarkerImageURL(speaker: .character(scope: 2), in: balloon)?.lastPathComponent == "sstp_newp2def.png")
 }
 
 @Test

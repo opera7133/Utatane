@@ -3438,7 +3438,7 @@ private struct UtataneRootView: View {
                     autoscroll: false,
                     scope: scope
                 )
-                balloonWindowController.setMarkerText("SSTP", scope: scope)
+                balloonWindowController.setSSTPMessage("SSTPテスト", scope: scope)
                 balloonWindowController.setNumber(file: "test", current: "50", maximum: "100", scope: scope)
             } catch {
                 showError(error.localizedDescription)
@@ -5797,6 +5797,7 @@ private struct UtataneRootView: View {
         }
         let activeSession = target.session
         let activeBalloon = target.balloon
+        let sstpSender = request.value(for: "Sender") ?? request.value(for: "User-Agent")
         let options = Set((request.value(for: "Option") ?? "").lowercased().split(separator: ",").map {
             $0.trimmingCharacters(in: .whitespaces)
         })
@@ -5824,7 +5825,7 @@ private struct UtataneRootView: View {
         }
         AppLogStore.shared.info("SSTPスクリプト再生", category: "SSTP", details: script.rawValue)
         if options.contains("nobreak") {
-            target.player.enqueue(script, balloon: activeBalloon)
+            target.player.enqueue(script, balloon: activeBalloon, sstpMessage: sstpSender)
         } else if let interrupted = activeSSTPScripts[target.ghost.id], target.player.isDialogueActive {
             let breakResponse = try? await activeSession.handle(event: .shiori(id: "OnSSTPBreak", references: [
                 0: interrupted,
@@ -5832,13 +5833,13 @@ private struct UtataneRootView: View {
                 2: "0"
             ]))
             if let breakResponse, !breakResponse.rawValue.isEmpty {
-                target.player.play(breakResponse, balloon: activeBalloon)
-                target.player.enqueue(script, balloon: activeBalloon)
+                target.player.play(breakResponse, balloon: activeBalloon, sstpMessage: sstpSender)
+                target.player.enqueue(script, balloon: activeBalloon, sstpMessage: sstpSender)
             } else {
-                target.player.play(script, balloon: activeBalloon)
+                target.player.play(script, balloon: activeBalloon, sstpMessage: sstpSender)
             }
         } else {
-            target.player.play(script, balloon: activeBalloon)
+            target.player.play(script, balloon: activeBalloon, sstpMessage: sstpSender)
         }
         activeSSTPScripts[target.ghost.id] = script.rawValue
         return SSTPResponse(script: script.rawValue)
@@ -5907,7 +5908,7 @@ private struct UtataneRootView: View {
         }
         let script = try? await target.session.handle(event: .shiori(id: "OnCommunicate", references: references))
         if let script {
-            target.player.play(script, balloon: target.balloon)
+            target.player.play(script, balloon: target.balloon, sstpMessage: sender)
             return SSTPResponse(script: script.rawValue)
         }
         return SSTPResponse(statusCode: 204, reason: "No Content")
@@ -5923,7 +5924,8 @@ private struct UtataneRootView: View {
             return SSTPResponse(statusCode: 400, reason: "Bad Request")
         }
         if let script = try? await target.session.handle(event: event) {
-            target.player.play(script, balloon: target.balloon)
+            let sender = request.value(for: "Sender") ?? request.value(for: "User-Agent")
+            target.player.play(script, balloon: target.balloon, sstpMessage: sender)
             return SSTPResponse(script: script.rawValue)
         }
         return SSTPResponse(statusCode: 204, reason: "No Content")

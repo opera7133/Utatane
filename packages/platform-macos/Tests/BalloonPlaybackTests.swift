@@ -1048,6 +1048,32 @@ func `online mode displays the balloon online marker`() throws {
 
 @Test
 @MainActor
+func `SSTP sender marker survives balloon activation and can be cleared`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    try makePNG(width: 8, height: 8).write(to: directory.appending(path: "sstp.png"))
+
+    let controller = BalloonWindowController(positionStore: positionStore)
+    controller.setSSTPMessage("Test Sender")
+    try controller.show(
+        balloon: makeBalloon(directory: directory),
+        text: "SSTP本文",
+        near: NSRect(x: 500, y: 100, width: 40, height: 80)
+    )
+    defer { controller.hideAll() }
+    #expect(controller.displayedSSTPMessage(scope: 0) == "Test Sender")
+
+    controller.setSSTPMessage(nil)
+    #expect(controller.displayedSSTPMessage(scope: 0) == nil)
+}
+
+@Test
+@MainActor
 func `dismisses balloons before requesting surface restore`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

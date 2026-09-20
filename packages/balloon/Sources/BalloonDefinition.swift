@@ -31,6 +31,15 @@ public struct BalloonDefinition: Sendable, Equatable {
     public let onlineMarkerX: Int
     public let onlineMarkerY: Int
     public let onlineMarkerIntervalMilliseconds: Int
+    public let sstpMarkerX: Int
+    public let sstpMarkerY: Int
+    public let sstpMessageFontName: String?
+    public let sstpMessageFontHeight: Int
+    public let sstpMessageFontColor: BalloonColor
+    public let sstpMessageX: Int
+    public let sstpMessageY: Int
+    public let sstpMessageRightX: Int?
+    public let sstpMessageBottomY: Int?
     public let numberFontName: String?
     public let numberFontHeight: Int
     public let numberFontColor: BalloonColor
@@ -86,6 +95,15 @@ public struct BalloonDefinition: Sendable, Equatable {
         onlineMarkerX: Int = 0,
         onlineMarkerY: Int = 0,
         onlineMarkerIntervalMilliseconds: Int = 500,
+        sstpMarkerX: Int = 0,
+        sstpMarkerY: Int = 0,
+        sstpMessageFontName: String? = nil,
+        sstpMessageFontHeight: Int = 10,
+        sstpMessageFontColor: BalloonColor = .init(red: 0, green: 0, blue: 0),
+        sstpMessageX: Int = 0,
+        sstpMessageY: Int = 0,
+        sstpMessageRightX: Int? = nil,
+        sstpMessageBottomY: Int? = nil,
         numberFontName: String? = nil,
         numberFontHeight: Int = 10,
         numberFontColor: BalloonColor = .init(red: 0, green: 0, blue: 0),
@@ -140,6 +158,15 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.onlineMarkerX = onlineMarkerX
         self.onlineMarkerY = onlineMarkerY
         self.onlineMarkerIntervalMilliseconds = max(50, onlineMarkerIntervalMilliseconds)
+        self.sstpMarkerX = sstpMarkerX
+        self.sstpMarkerY = sstpMarkerY
+        self.sstpMessageFontName = sstpMessageFontName
+        self.sstpMessageFontHeight = sstpMessageFontHeight
+        self.sstpMessageFontColor = sstpMessageFontColor
+        self.sstpMessageX = sstpMessageX
+        self.sstpMessageY = sstpMessageY
+        self.sstpMessageRightX = sstpMessageRightX
+        self.sstpMessageBottomY = sstpMessageBottomY
         self.numberFontName = numberFontName
         self.numberFontHeight = numberFontHeight
         self.numberFontColor = numberFontColor
