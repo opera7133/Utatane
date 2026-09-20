@@ -893,403 +893,405 @@ struct UtataneSettingsView: View {
     @State private var contentSourcesRequireRestart = false
 
     var body: some View {
-        TabView(selection: $settings.selectedPane) {
-            SettingsPage(
-                title: "一般",
-                description: "Utatane全体の基本設定。"
-            ) {
-                Section("起動と操作") {
-                    Picker("起動するゴースト", selection: $settings.startupBehavior) {
-                        Text("前回のゴースト").tag(UtataneSettingsStore.StartupBehavior.restore)
-                        Text("起動時に選択").tag(UtataneSettingsStore.StartupBehavior.choose)
-                        Text("ランダム").tag(UtataneSettingsStore.StartupBehavior.random)
-                    }
-                    Picker("外観", selection: $settings.appearance) {
-                        Text("システム設定に合わせる").tag(UtataneSettingsStore.Appearance.system)
-                        Text("ライト").tag(UtataneSettingsStore.Appearance.light)
-                        Text("ダーク").tag(UtataneSettingsStore.Appearance.dark)
-                    }
-                    Toggle("Dockにアプリアイコンを表示", isOn: $settings.showsDockIcon)
-                    Text("非表示にしても、MenuBarのUtataneアイコンから設定や終了操作を開ける。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text("Shell、バルーン、キャラクター位置は、最後に使った状態がゴーストごとに復元される。")
-                        .foregroundStyle(.secondary)
-                }
-                Section("ウィンドウモード（実験的）") {
-                    Picker("表示方式", selection: $settings.windowMode) {
-                        Text("使用しない").tag(GhostWindowMode.off)
-                        Text("全ゴーストをまとめて1枚").tag(GhostWindowMode.shared)
-                        Text("ゴーストごとに1枚").tag(GhostWindowMode.perGhost)
-                    }
-                    Toggle(
-                        "発話履歴をウィンドウ内に表示",
-                        isOn: $settings.integratesSpeechHistoryInWindowMode
-                    )
-                    .disabled(settings.windowMode == .off)
-                    Text("ゴーストとバルーンを通常の1枚のウィンドウ内に表示する。配信や画面収録でウィンドウ単位に取り込みやすくなる。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Section("ウィンドウ表示") {
-                    Picker("手前に表示", selection: $settings.windowLevelBehavior) {
-                        Text("常に").tag(GhostWindowLevelBehavior.always)
-                        Text("発話中だけ").tag(GhostWindowLevelBehavior.whileTalking)
-                        Text("通常のウィンドウと同じ").tag(GhostWindowLevelBehavior.normal)
-                    }
-                    Text("サーフェスとバルーンをほかのウィンドウより手前に表示するタイミングを選ぶ。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Section("音楽再生") {
-                    Toggle("再生中の曲情報をゴーストに通知", isOn: $settings.notifiesNowPlaying)
-                    Text("Spotify、ミュージック、ブラウザなど、macOSの「再生中」に表示される曲が変わった時に通知する。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Section("言語") {
-                    Picker("表示言語", selection: $settings.appLanguage) {
-                        Text("システム設定に合わせる").tag(UtataneSettingsStore.AppLanguage.system)
-                        Text("日本語").tag(UtataneSettingsStore.AppLanguage.ja)
-                        Text("英語").tag(UtataneSettingsStore.AppLanguage.en)
-                        Text("中国語（簡体字）").tag(UtataneSettingsStore.AppLanguage.zhHans)
-                        Text("中国語（繁体字）").tag(UtataneSettingsStore.AppLanguage.zhHant)
-                        Text("韓国語").tag(UtataneSettingsStore.AppLanguage.ko)
-                    }
-                    if settings.languageRequiresRestart {
-                        Text("言語の変更はUtataneの再起動後に反映される。")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Button("今すぐ再起動") {
-                            restartApplication()
-                        }
-                        .disabled(relauncher.isRestarting)
-                    }
-                }
-                Section("既定のバルーン") {
-                    Picker("バルーン", selection: $settings.defaultBalloonDirectoryName) {
-                        Text("インストール済みの先頭").tag("")
-                        ForEach(balloons, id: \.directory) { balloon in
-                            Text(balloon.name).tag(balloon.directory.lastPathComponent)
-                        }
-                    }
-                    Text("ゴースト自身にも、ゴーストごとの履歴にも指定がない場合に使う。削除されていた場合は利用可能なバルーンへ切り替わる。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Section("最近使ったもの") {
-                    Picker("最大件数", selection: $settings.recentContentMaximumCount) {
-                        ForEach([5, 10, 12, 20, 30], id: \.self) { count in
-                            Text("\(count)件").tag(count)
-                        }
-                    }
-                    Text("ゴーストの右クリックメニューに保存する利用履歴の件数。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+        HStack(spacing: 0) {
+            List(selection: $settings.selectedPane) {
+                Label("一般", systemImage: "gearshape").tag(UtataneSettingsStore.Pane.general)
+                Label("コンテンツ", systemImage: "folder").tag(UtataneSettingsStore.Pane.content)
+                Label("ゴースト", systemImage: "person.2").tag(UtataneSettingsStore.Pane.ghost)
+                Label("喋り / バルーン", systemImage: "text.bubble")
+                    .tag(UtataneSettingsStore.Pane.talkAndBalloon)
+                Label("音声", systemImage: "waveform").tag(UtataneSettingsStore.Pane.voice)
+                Label("SHIORI", systemImage: "puzzlepiece.extension").tag(UtataneSettingsStore.Pane.shiori)
+                Label("ネットワーク", systemImage: "network").tag(UtataneSettingsStore.Pane.network)
+                Label("詳細", systemImage: "wrench.and.screwdriver").tag(UtataneSettingsStore.Pane.advanced)
             }
-            .tabItem { Label("一般", systemImage: "gearshape") }
-            .tag(UtataneSettingsStore.Pane.general)
+            .listStyle(.sidebar)
+            .frame(width: 220)
 
-            SettingsPage(
-                title: "コンテンツフォルダ",
-                description: "ゴーストなどを種類ごとに複数のフォルダから読み込む。"
-            ) {
-                ContentSourcesSettingsView(
-                    store: contentSources,
-                    requiresRestart: $contentSourcesRequireRestart
-                )
-                if contentSourcesRequireRestart {
-                    Section {
-                        Text("変更はUtataneの再起動後に反映される。")
-                            .foregroundStyle(.secondary)
-                        Button("今すぐ再起動") {
-                            restartApplication()
-                        }
-                        .disabled(relauncher.isRestarting)
-                    }
-                }
-            }
-            .tabItem { Label("コンテンツ", systemImage: "folder") }
-            .tag(UtataneSettingsStore.Pane.content)
+            Divider()
 
-            SettingsPage(
-                title: "ゴーストごとの設定",
-                description: settings.activeGhostName.map { LocalizedStringKey("「\($0)」にだけ適用する設定。") }
-                    ?? LocalizedStringKey("現在表示しているゴーストにだけ適用する設定。")
-            ) {
-                Section("自動会話") {
-                    Picker("会話間隔", selection: $settings.randomTalkIntervalMinutes) {
-                        Text("しない").tag(0)
-                        Text("1分ごと").tag(1)
-                        Text("3分ごと").tag(3)
-                        Text("5分ごと").tag(5)
-                        Text("10分ごと").tag(10)
-                        Text("15分ごと").tag(15)
-                        Text("30分ごと").tag(30)
-                    }
-                    .disabled(settings.activeGhostName == nil)
-                    Text("ゴースト自身が会話間隔を管理する場合は「しない」にする。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Section("表示倍率") {
-                    Picker("シェル", selection: $settings.shellScalePercent) {
-                        ForEach([25, 50, 75, 100, 125, 150, 200], id: \.self) { value in
-                            Text("\(value)%").tag(value)
+            Group {
+                switch settings.selectedPane {
+                case .general:
+                    SettingsPage(
+                        title: "一般",
+                        description: "Utatane全体の基本設定。"
+                    ) {
+                        Section("起動と操作") {
+                            Picker("起動するゴースト", selection: $settings.startupBehavior) {
+                                Text("前回のゴースト").tag(UtataneSettingsStore.StartupBehavior.restore)
+                                Text("起動時に選択").tag(UtataneSettingsStore.StartupBehavior.choose)
+                                Text("ランダム").tag(UtataneSettingsStore.StartupBehavior.random)
+                            }
+                            Picker("外観", selection: $settings.appearance) {
+                                Text("システム設定に合わせる").tag(UtataneSettingsStore.Appearance.system)
+                                Text("ライト").tag(UtataneSettingsStore.Appearance.light)
+                                Text("ダーク").tag(UtataneSettingsStore.Appearance.dark)
+                            }
+                            Toggle("Dockにアプリアイコンを表示", isOn: $settings.showsDockIcon)
+                            Text("非表示にしても、MenuBarのUtataneアイコンから設定や終了操作を開ける。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text("Shell、バルーン、キャラクター位置は、最後に使った状態がゴーストごとに復元される。")
+                                .foregroundStyle(.secondary)
                         }
-                    }
-                    Toggle("大きいシェルを画面に合わせて縮小", isOn: $settings.automaticallyFitsLargeSurfaces)
-                    Toggle("バルーンをシェル倍率に連動", isOn: $settings.linksBalloonScale)
-                    Picker("バルーン", selection: $settings.balloonScalePercent) {
-                        ForEach([25, 50, 75, 100, 125, 150, 200], id: \.self) { value in
-                            Text("\(value)%").tag(value)
-                        }
-                    }
-                    .disabled(settings.linksBalloonScale)
-                    Text("倍率は現在のゴーストにだけ保存される。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Section("配置") {
-                    Toggle("画面下に固定", isOn: $settings.locksShellToDesktopBottom)
-                    Toggle("画面端からはみ出さない", isOn: $settings.keepsShellOnScreen)
-                    Text("画面下に固定している間は、ドラッグ時に横方向だけ移動する。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .tabItem { Label("ゴースト", systemImage: "person.2") }
-            .tag(UtataneSettingsStore.Pane.ghost)
-
-            SettingsPage(
-                title: "喋り / バルーン",
-                description: "すべてのゴーストに共通する会話表示の設定。"
-            ) {
-                Section("喋り") {
-                    Picker("喋る速度", selection: $settings.characterDelayMilliseconds) {
-                        Text("瞬間表示").tag(0)
-                        Text("速い").tag(25)
-                        Text("標準").tag(50)
-                        Text("遅い").tag(80)
-                        Text("かなり遅い").tag(120)
-                    }
-                }
-                Section("バルーン") {
-                    Picker("文字サイズ", selection: $settings.balloonTextScalePercent) {
-                        ForEach([75, 90, 100, 110, 125, 150], id: \.self) { value in
-                            Text("\(value)%").tag(value)
-                        }
-                    }
-                    Picker("会話後に閉じる", selection: $settings.dialogueDismissalSeconds) {
-                        Text("5秒").tag(5)
-                        Text("10秒").tag(10)
-                        Text("20秒").tag(20)
-                        Text("30秒").tag(30)
-                        Text("1分").tag(60)
-                    }
-                    Text("使用するShellとバルーン、キャラクター位置はゴーストごとに保存される。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .tabItem { Label("喋り / バルーン", systemImage: "text.bubble") }
-            .tag(UtataneSettingsStore.Pane.talkAndBalloon)
-
-            SettingsPage(
-                title: "音声",
-                description: "音声合成エンジンとmacOS標準の音声認識を設定する。"
-            ) {
-                Section("音声合成") {
-                    Toggle("ゴーストの発話を読み上げる", isOn: $settings.speechSynthesisEnabled)
-                    ForEach([0, 1], id: \.self) { scope in
-                        SpeechVoiceSettingsEditor(
-                            title: scope == 0 ? "本体（スコープ0）" : "相方（スコープ1）",
-                            scope: scope,
-                            voices: MacOSSpeechSynthesizer.availableVoices,
-                            settings: Binding(
-                                get: { settings.speechVoiceSettings(for: scope) },
-                                set: { settings.setSpeechVoiceSettings($0, for: scope) }
+                        Section("ウィンドウモード（実験的）") {
+                            Picker("表示方式", selection: $settings.windowMode) {
+                                Text("使用しない").tag(GhostWindowMode.off)
+                                Text("全ゴーストをまとめて1枚").tag(GhostWindowMode.shared)
+                                Text("ゴーストごとに1枚").tag(GhostWindowMode.perGhost)
+                            }
+                            Toggle(
+                                "発話履歴をウィンドウ内に表示",
+                                isOn: $settings.integratesSpeechHistoryInWindowMode
                             )
+                            .disabled(settings.windowMode == .off)
+                            Text("ゴーストとバルーンを通常の1枚のウィンドウ内に表示する。配信や画面収録でウィンドウ単位に取り込みやすくなる。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Section("ウィンドウ表示") {
+                            Picker("手前に表示", selection: $settings.windowLevelBehavior) {
+                                Text("常に").tag(GhostWindowLevelBehavior.always)
+                                Text("発話中だけ").tag(GhostWindowLevelBehavior.whileTalking)
+                                Text("通常のウィンドウと同じ").tag(GhostWindowLevelBehavior.normal)
+                            }
+                            Text("サーフェスとバルーンをほかのウィンドウより手前に表示するタイミングを選ぶ。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Section("音楽再生") {
+                            Toggle("再生中の曲情報をゴーストに通知", isOn: $settings.notifiesNowPlaying)
+                            Text("Spotify、ミュージック、ブラウザなど、macOSの「再生中」に表示される曲が変わった時に通知する。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Section("言語") {
+                            Picker("表示言語", selection: $settings.appLanguage) {
+                                Text("システム設定に合わせる").tag(UtataneSettingsStore.AppLanguage.system)
+                                Text("日本語").tag(UtataneSettingsStore.AppLanguage.ja)
+                                Text("英語").tag(UtataneSettingsStore.AppLanguage.en)
+                                Text("中国語（簡体字）").tag(UtataneSettingsStore.AppLanguage.zhHans)
+                                Text("中国語（繁体字）").tag(UtataneSettingsStore.AppLanguage.zhHant)
+                                Text("韓国語").tag(UtataneSettingsStore.AppLanguage.ko)
+                            }
+                            if settings.languageRequiresRestart {
+                                Text("言語の変更はUtataneの再起動後に反映される。")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                Button("今すぐ再起動") {
+                                    restartApplication()
+                                }
+                                .disabled(relauncher.isRestarting)
+                            }
+                        }
+                        Section("既定のバルーン") {
+                            Picker("バルーン", selection: $settings.defaultBalloonDirectoryName) {
+                                Text("インストール済みの先頭").tag("")
+                                ForEach(balloons, id: \.directory) { balloon in
+                                    Text(balloon.name).tag(balloon.directory.lastPathComponent)
+                                }
+                            }
+                            Text("ゴースト自身にも、ゴーストごとの履歴にも指定がない場合に使う。削除されていた場合は利用可能なバルーンへ切り替わる。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Section("最近使ったもの") {
+                            Picker("最大件数", selection: $settings.recentContentMaximumCount) {
+                                ForEach([5, 10, 12, 20, 30], id: \.self) { count in
+                                    Text("\(count)件").tag(count)
+                                }
+                            }
+                            Text("ゴーストの右クリックメニューに保存する利用履歴の件数。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                case .content:
+                    SettingsPage(
+                        title: "コンテンツフォルダ",
+                        description: "ゴーストなどを種類ごとに複数のフォルダから読み込む。"
+                    ) {
+                        ContentSourcesSettingsView(
+                            store: contentSources,
+                            requiresRestart: $contentSourcesRequireRestart
                         )
+                        if contentSourcesRequireRestart {
+                            Section {
+                                Text("変更はUtataneの再起動後に反映される。")
+                                    .foregroundStyle(.secondary)
+                                Button("今すぐ再起動") {
+                                    restartApplication()
+                                }
+                                .disabled(relauncher.isRestarting)
+                            }
+                        }
                     }
-                    Text("SakuraScriptの\\__v[disable]と\\__v[alternate,...]にも対応する。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("音声認識") {
-                    Toggle("マイクから音声を認識する", isOn: $settings.speechRecognitionEnabled)
-                    Picker("認識言語", selection: $settings.speechRecognitionLocaleIdentifier) {
-                        Text("日本語").tag("ja-JP")
-                        Text("English (US)").tag("en-US")
-                        Text("English (UK)").tag("en-GB")
-                        Text("简体中文").tag("zh-CN")
-                        Text("繁體中文").tag("zh-TW")
-                        Text("한국어").tag("ko-KR")
+                case .ghost:
+                    SettingsPage(
+                        title: "ゴーストごとの設定",
+                        description: settings.activeGhostName.map { LocalizedStringKey("「\($0)」にだけ適用する設定。") }
+                            ?? LocalizedStringKey("現在表示しているゴーストにだけ適用する設定。")
+                    ) {
+                        Section("自動会話") {
+                            Picker("会話間隔", selection: $settings.randomTalkIntervalMinutes) {
+                                Text("しない").tag(0)
+                                Text("1分ごと").tag(1)
+                                Text("3分ごと").tag(3)
+                                Text("5分ごと").tag(5)
+                                Text("10分ごと").tag(10)
+                                Text("15分ごと").tag(15)
+                                Text("30分ごと").tag(30)
+                            }
+                            .disabled(settings.activeGhostName == nil)
+                            Text("ゴースト自身が会話間隔を管理する場合は「しない」にする。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Section("表示倍率") {
+                            Picker("シェル", selection: $settings.shellScalePercent) {
+                                ForEach([25, 50, 75, 100, 125, 150, 200], id: \.self) { value in
+                                    Text("\(value)%").tag(value)
+                                }
+                            }
+                            Toggle("大きいシェルを画面に合わせて縮小", isOn: $settings.automaticallyFitsLargeSurfaces)
+                            Toggle("バルーンをシェル倍率に連動", isOn: $settings.linksBalloonScale)
+                            Picker("バルーン", selection: $settings.balloonScalePercent) {
+                                ForEach([25, 50, 75, 100, 125, 150, 200], id: \.self) { value in
+                                    Text("\(value)%").tag(value)
+                                }
+                            }
+                            .disabled(settings.linksBalloonScale)
+                            Text("倍率は現在のゴーストにだけ保存される。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Section("配置") {
+                            Toggle("画面下に固定", isOn: $settings.locksShellToDesktopBottom)
+                            Toggle("画面端からはみ出さない", isOn: $settings.keepsShellOnScreen)
+                            Text("画面下に固定している間は、ドラッグ時に横方向だけ移動する。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    Toggle(
-                        "利用できる場合はデバイス上で認識",
-                        isOn: $settings.prefersOnDeviceSpeechRecognition
-                    )
-                    Text("初回にマイクと音声認識の許可を求める。確定した認識結果だけをゴーストへ通知する。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .tabItem { Label("音声", systemImage: "waveform") }
-            .tag(UtataneSettingsStore.Pane.voice)
-
-            SettingsPage(
-                title: "SHIORI対応状況",
-                description: "Utataneが認識するSHIORIの実行方式を確認する。"
-            ) {
-                ShioriStatusView()
-            }
-            .tabItem { Label("SHIORI", systemImage: "puzzlepiece.extension") }
-            .tag(UtataneSettingsStore.Pane.shiori)
-
-            SettingsPage(
-                title: "ネットワーク",
-                description: "LANメッセージ、RSS / Atom、ネットワーク更新を設定する。"
-            ) {
-                Section("IP Messenger") {
-                    Toggle("IP Messenger互換モードを利用", isOn: $settings.ipMessengerEnabled)
-                    TextField("表示名", text: $settings.ipMessengerDisplayName)
-                        .disabled(!settings.ipMessengerEnabled)
-                    TextField("グループ", text: $settings.ipMessengerGroupName)
-                        .disabled(!settings.ipMessengerEnabled)
-                    TextField("ポート", value: $settings.ipMessengerPort, format: .number)
-                        .disabled(!settings.ipMessengerEnabled)
-                    TextField("ブロードキャスト先", text: $settings.ipMessengerBroadcastAddresses)
-                        .disabled(!settings.ipMessengerEnabled)
-                    Text("通常はUDP 2425番と255.255.255.255のままでよい。LAN上の平文メッセージを送受信するため、信頼できるネットワークで利用して。暗号化と添付ファイルには未対応。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("RSS / ヘッドライン") {
-                    Toggle("自動巡回する", isOn: $settings.automaticHeadlineRefresh)
-                    Picker("巡回間隔", selection: $settings.headlineRefreshIntervalMinutes) {
-                        Text("15分").tag(15)
-                        Text("30分").tag(30)
-                        Text("1時間").tag(60)
-                        Text("3時間").tag(180)
-                        Text("6時間").tag(360)
+                case .talkAndBalloon:
+                    SettingsPage(
+                        title: "喋り / バルーン",
+                        description: "すべてのゴーストに共通する会話表示の設定。"
+                    ) {
+                        Section("喋り") {
+                            Picker("喋る速度", selection: $settings.characterDelayMilliseconds) {
+                                Text("瞬間表示").tag(0)
+                                Text("速い").tag(25)
+                                Text("標準").tag(50)
+                                Text("遅い").tag(80)
+                                Text("かなり遅い").tag(120)
+                            }
+                        }
+                        Section("バルーン") {
+                            Picker("文字サイズ", selection: $settings.balloonTextScalePercent) {
+                                ForEach([75, 90, 100, 110, 125, 150], id: \.self) { value in
+                                    Text("\(value)%").tag(value)
+                                }
+                            }
+                            Picker("会話後に閉じる", selection: $settings.dialogueDismissalSeconds) {
+                                Text("5秒").tag(5)
+                                Text("10秒").tag(10)
+                                Text("20秒").tag(20)
+                                Text("30秒").tag(30)
+                                Text("1分").tag(60)
+                            }
+                            Text("使用するShellとバルーン、キャラクター位置はゴーストごとに保存される。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    .disabled(!settings.automaticHeadlineRefresh)
-                }
+                case .voice:
+                    SettingsPage(
+                        title: "音声",
+                        description: "音声合成エンジンとmacOS標準の音声認識を設定する。"
+                    ) {
+                        Section("音声合成") {
+                            Toggle("ゴーストの発話を読み上げる", isOn: $settings.speechSynthesisEnabled)
+                            ForEach([0, 1], id: \.self) { scope in
+                                SpeechVoiceSettingsEditor(
+                                    title: scope == 0 ? "本体（スコープ0）" : "相方（スコープ1）",
+                                    scope: scope,
+                                    voices: MacOSSpeechSynthesizer.availableVoices,
+                                    settings: Binding(
+                                        get: { settings.speechVoiceSettings(for: scope) },
+                                        set: { settings.setSpeechVoiceSettings($0, for: scope) }
+                                    )
+                                )
+                            }
+                            Text("SakuraScriptの\\__v[disable]と\\__v[alternate,...]にも対応する。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
-                Section("メールチェック (POP3)") {
-                    TextField("アカウント名", text: $settings.mailAccountName)
-                    TextField("サーバー", text: $settings.mailHost)
-                    TextField("ポート", value: $settings.mailPort, format: .number)
-                    TextField("ユーザー名", text: $settings.mailUser)
-                    SecureField("パスワード（Keychainに保存）", text: $settings.mailPassword)
-                    Toggle("TLSで接続", isOn: $settings.mailUsesTLS)
-                    Text("ゴーストがメールチェックを要求した時だけ接続する。通常はPOP3 over TLSの995番を使う。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("生成AIゴースト") {
-                    Picker("プロバイダー", selection: $settings.aiProvider) {
-                        Text("OpenAI").tag(AIProviderKind.openAI)
-                        Text("Claude (Anthropic)").tag(AIProviderKind.anthropic)
-                        Text("Gemini").tag(AIProviderKind.gemini)
-                        Text("OpenAI互換 / ローカル").tag(AIProviderKind.openAICompatible)
+                        Section("音声認識") {
+                            Toggle("マイクから音声を認識する", isOn: $settings.speechRecognitionEnabled)
+                            Picker("認識言語", selection: $settings.speechRecognitionLocaleIdentifier) {
+                                Text("日本語").tag("ja-JP")
+                                Text("English (US)").tag("en-US")
+                                Text("English (UK)").tag("en-GB")
+                                Text("简体中文").tag("zh-CN")
+                                Text("繁體中文").tag("zh-TW")
+                                Text("한국어").tag("ko-KR")
+                            }
+                            Toggle(
+                                "利用できる場合はデバイス上で認識",
+                                isOn: $settings.prefersOnDeviceSpeechRecognition
+                            )
+                            Text("初回にマイクと音声認識の許可を求める。確定した認識結果だけをゴーストへ通知する。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                    TextField("モデル", text: $settings.aiModel)
-                    TextField("Base URL", text: $settings.aiBaseURL)
-                    SecureField("APIキー（Keychainに保存）", text: $settings.aiAPIKey)
-                    Text("OpenAI互換ではAPIキーを空にできる。設定変更後はAIゴーストを再読み込みする。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                Section("リアルタイム音声会話") {
-                    Picker("プロバイダー", selection: $settings.realtimeProvider) {
-                        Text("OpenAI Realtime").tag(RealtimeProviderKind.openAI)
-                        Text("OpenAI Realtime互換").tag(RealtimeProviderKind.openAICompatible)
+                case .shiori:
+                    SettingsPage(
+                        title: "SHIORI対応状況",
+                        description: "Utataneが認識するSHIORIの実行方式を確認する。"
+                    ) {
+                        ShioriStatusView()
                     }
-                    TextField("モデル", text: $settings.realtimeModel)
-                    TextField("Voice", text: $settings.realtimeVoice)
-                    TextField("Base URL", text: $settings.realtimeBaseURL)
-                    SecureField("APIキー（Keychainに保存）", text: $settings.realtimeAPIKey)
-                    Text("OpenAIではBase URLを空にできる。互換APIではサービスのURLを設定する。設定値は配布するゴーストへ保存されない。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                case .network:
+                    SettingsPage(
+                        title: "ネットワーク",
+                        description: "LANメッセージ、RSS / Atom、ネットワーク更新を設定する。"
+                    ) {
+                        Section("IP Messenger") {
+                            Toggle("IP Messenger互換モードを利用", isOn: $settings.ipMessengerEnabled)
+                            TextField("表示名", text: $settings.ipMessengerDisplayName)
+                                .disabled(!settings.ipMessengerEnabled)
+                            TextField("グループ", text: $settings.ipMessengerGroupName)
+                                .disabled(!settings.ipMessengerEnabled)
+                            TextField("ポート", value: $settings.ipMessengerPort, format: .number)
+                                .disabled(!settings.ipMessengerEnabled)
+                            TextField("ブロードキャスト先", text: $settings.ipMessengerBroadcastAddresses)
+                                .disabled(!settings.ipMessengerEnabled)
+                            Text("通常はUDP 2425番と255.255.255.255のままでよい。LAN上の平文メッセージを送受信するため、信頼できるネットワークで利用して。暗号化と添付ファイルには未対応。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
-                AppUpdateSettingsView(updater: appUpdater)
+                        Section("RSS / ヘッドライン") {
+                            Toggle("自動巡回する", isOn: $settings.automaticHeadlineRefresh)
+                            Picker("巡回間隔", selection: $settings.headlineRefreshIntervalMinutes) {
+                                Text("15分").tag(15)
+                                Text("30分").tag(30)
+                                Text("1時間").tag(60)
+                                Text("3時間").tag(180)
+                                Text("6時間").tag(360)
+                            }
+                            .disabled(!settings.automaticHeadlineRefresh)
+                        }
 
-                Section("ゴースト / バルーンのネットワーク更新") {
-                    Toggle("起動後に自動更新を確認", isOn: $settings.automaticContentUpdate)
-                    Picker("更新間隔", selection: $settings.contentUpdateIntervalDays) {
-                        Text("毎日").tag(1)
-                        Text("3日ごと").tag(3)
-                        Text("7日ごと").tag(7)
-                        Text("14日ごと").tag(14)
-                        Text("30日ごと").tag(30)
-                    }
-                    .disabled(!settings.automaticContentUpdate)
-                    Text("homeurlが設定されたゴーストとバルーンが対象。手動更新は右クリックメニューから実行できる。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                        Section("メールチェック (POP3)") {
+                            TextField("アカウント名", text: $settings.mailAccountName)
+                            TextField("サーバー", text: $settings.mailHost)
+                            TextField("ポート", value: $settings.mailPort, format: .number)
+                            TextField("ユーザー名", text: $settings.mailUser)
+                            SecureField("パスワード（Keychainに保存）", text: $settings.mailPassword)
+                            Toggle("TLSで接続", isOn: $settings.mailUsesTLS)
+                            Text("ゴーストがメールチェックを要求した時だけ接続する。通常はPOP3 over TLSの995番を使う。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
 
-                Section("インストール済みヘッドライン") {
-                    if let loadError {
-                        Text(loadError).foregroundStyle(.red)
-                    } else if headlines.isEmpty {
-                        ContentUnavailableView(
-                            "ヘッドラインはありません",
-                            systemImage: "newspaper",
-                            description: Text("NARをインストールすると、ここに表示される。")
-                        )
-                    } else {
-                        ForEach(headlines) { headline in
-                            HStack {
-                                Text(headline.name)
-                                Spacer()
-                                Text(kindLabel(headline)).foregroundStyle(.secondary)
-                                if let readmeURL = headline.readmeURL {
-                                    Button("README") {
-                                        NSWorkspace.shared.open(readmeURL)
+                        Section("生成AIゴースト") {
+                            Picker("プロバイダー", selection: $settings.aiProvider) {
+                                Text("OpenAI").tag(AIProviderKind.openAI)
+                                Text("Claude (Anthropic)").tag(AIProviderKind.anthropic)
+                                Text("Gemini").tag(AIProviderKind.gemini)
+                                Text("OpenAI互換 / ローカル").tag(AIProviderKind.openAICompatible)
+                            }
+                            TextField("モデル", text: $settings.aiModel)
+                            TextField("Base URL", text: $settings.aiBaseURL)
+                            SecureField("APIキー（Keychainに保存）", text: $settings.aiAPIKey)
+                            Text("OpenAI互換ではAPIキーを空にできる。設定変更後はAIゴーストを再読み込みする。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Section("リアルタイム音声会話") {
+                            Picker("プロバイダー", selection: $settings.realtimeProvider) {
+                                Text("OpenAI Realtime").tag(RealtimeProviderKind.openAI)
+                                Text("OpenAI Realtime互換").tag(RealtimeProviderKind.openAICompatible)
+                            }
+                            TextField("モデル", text: $settings.realtimeModel)
+                            TextField("Voice", text: $settings.realtimeVoice)
+                            TextField("Base URL", text: $settings.realtimeBaseURL)
+                            SecureField("APIキー（Keychainに保存）", text: $settings.realtimeAPIKey)
+                            Text("OpenAIではBase URLを空にできる。互換APIではサービスのURLを設定する。設定値は配布するゴーストへ保存されない。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        AppUpdateSettingsView(updater: appUpdater)
+
+                        Section("ゴースト / バルーンのネットワーク更新") {
+                            Toggle("起動後に自動更新を確認", isOn: $settings.automaticContentUpdate)
+                            Picker("更新間隔", selection: $settings.contentUpdateIntervalDays) {
+                                Text("毎日").tag(1)
+                                Text("3日ごと").tag(3)
+                                Text("7日ごと").tag(7)
+                                Text("14日ごと").tag(14)
+                                Text("30日ごと").tag(30)
+                            }
+                            .disabled(!settings.automaticContentUpdate)
+                            Text("homeurlが設定されたゴーストとバルーンが対象。手動更新は右クリックメニューから実行できる。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Section("インストール済みヘッドライン") {
+                            if let loadError {
+                                Text(loadError).foregroundStyle(.red)
+                            } else if headlines.isEmpty {
+                                ContentUnavailableView(
+                                    "ヘッドラインはありません",
+                                    systemImage: "newspaper",
+                                    description: Text("NARをインストールすると、ここに表示される。")
+                                )
+                            } else {
+                                ForEach(headlines) { headline in
+                                    HStack {
+                                        Text(headline.name)
+                                        Spacer()
+                                        Text(kindLabel(headline)).foregroundStyle(.secondary)
+                                        if let readmeURL = headline.readmeURL {
+                                            Button("README") {
+                                                NSWorkspace.shared.open(readmeURL)
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
+                case .advanced:
+                    SettingsPage(
+                        title: "詳細",
+                        description: "通常は変更する必要のない開発・診断用の設定。"
+                    ) {
+                        Section("開発用") {
+                            Toggle("開発用パレットを表示", isOn: $settings.showsDebugWindow)
+                            Text("ログ、当たり判定、バルーンテスト、SakuraScript入力、再生操作を表示する。通常の利用では非表示でよい。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Section("Windows互換モジュール") {
+                            TextField("Wine実行ファイル", text: $settings.wineExecutablePath)
+                            TextField("WINEPREFIX", text: $settings.winePrefixPath)
+                            Text("MateriaのFIRST、外部SHIORI・SAORI・プラグインDLL、config.txtで解析できないHEADLINE DLLに使用する。32-bit Windowsアプリを実行できるWineと、専用のprefixを指定する。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
-            .tabItem { Label("ネットワーク", systemImage: "network") }
-            .tag(UtataneSettingsStore.Pane.network)
-
-            SettingsPage(
-                title: "詳細",
-                description: "通常は変更する必要のない開発・診断用の設定。"
-            ) {
-                Section("開発用") {
-                    Toggle("開発用パレットを表示", isOn: $settings.showsDebugWindow)
-                    Text("ログ、当たり判定、バルーンテスト、SakuraScript入力、再生操作を表示する。通常の利用では非表示でよい。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Section("Windows互換モジュール") {
-                    TextField("Wine実行ファイル", text: $settings.wineExecutablePath)
-                    TextField("WINEPREFIX", text: $settings.winePrefixPath)
-                    Text("MateriaのFIRST、外部SHIORI・SAORI・プラグインDLL、config.txtで解析できないHEADLINE DLLに使用する。32-bit Windowsアプリを実行できるWineと、専用のprefixを指定する。")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            .tabItem { Label("詳細", systemImage: "wrench.and.screwdriver") }
-            .tag(UtataneSettingsStore.Pane.advanced)
-        }
-        .frame(width: 840, height: 600)
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            .overlay(alignment: .bottomTrailing) {
                 Button {
                     NotificationCenter.default.post(
                         name: .showUtataneConfigurationHelp,
@@ -1297,10 +1299,15 @@ struct UtataneSettingsView: View {
                         userInfo: configurationHelpReferences
                     )
                 } label: {
-                    Label("この設定のヘルプ", systemImage: "questionmark.circle")
+                    Image(systemName: "questionmark.circle")
+                        .font(.title3)
                 }
+                .buttonStyle(.borderless)
+                .help("この設定のヘルプ")
+                .padding(16)
             }
         }
+        .frame(width: 960, height: 640)
         .task { reload() }
         .alert("再起動できなかった", isPresented: Binding(
             get: { restartError != nil },
