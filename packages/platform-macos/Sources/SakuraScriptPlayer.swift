@@ -1048,7 +1048,7 @@ public final class SakuraScriptPlayer {
                             targetY - nextLinePosition.y
                     }
                 case let .onlineMode(enabled):
-                    balloonWindowController.setMarkerText(enabled ? "●" : "", scope: scope)
+                    balloonWindowController.setOnlineMode(enabled, scope: scope)
                     if enabled, !activatedScopes.contains(scope) {
                         try activate(scope: scope, style: balloonStyleByScope[scope] ?? 0)
                         activatedScopes.insert(scope)

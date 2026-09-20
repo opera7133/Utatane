@@ -28,6 +28,9 @@ public struct BalloonDefinition: Sendable, Equatable {
     public let arrow1Y: Int
     public let clickWaitMarkerX: Int
     public let clickWaitMarkerY: Int
+    public let onlineMarkerX: Int
+    public let onlineMarkerY: Int
+    public let onlineMarkerIntervalMilliseconds: Int
     public let numberFontName: String?
     public let numberFontHeight: Int
     public let numberFontColor: BalloonColor
@@ -80,6 +83,9 @@ public struct BalloonDefinition: Sendable, Equatable {
         arrow1Y: Int = 0,
         clickWaitMarkerX: Int? = nil,
         clickWaitMarkerY: Int? = nil,
+        onlineMarkerX: Int = 0,
+        onlineMarkerY: Int = 0,
+        onlineMarkerIntervalMilliseconds: Int = 500,
         numberFontName: String? = nil,
         numberFontHeight: Int = 10,
         numberFontColor: BalloonColor = .init(red: 0, green: 0, blue: 0),
@@ -131,6 +137,9 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.arrow1Y = arrow1Y
         self.clickWaitMarkerX = clickWaitMarkerX ?? arrow1X
         self.clickWaitMarkerY = clickWaitMarkerY ?? arrow1Y
+        self.onlineMarkerX = onlineMarkerX
+        self.onlineMarkerY = onlineMarkerY
+        self.onlineMarkerIntervalMilliseconds = max(50, onlineMarkerIntervalMilliseconds)
         self.numberFontName = numberFontName
         self.numberFontHeight = numberFontHeight
         self.numberFontColor = numberFontColor

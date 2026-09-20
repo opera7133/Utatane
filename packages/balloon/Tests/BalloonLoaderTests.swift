@@ -187,6 +187,9 @@ func `loads marker number transparency and window placement settings`() throws {
     arrow1.y,-10
     clickwaitmarker.x,-40
     clickwaitmarker.y,-30
+    onlinemarker.x,-24
+    onlinemarker.y,16
+    onlinemarker.interval,20
     number.font.name,Helvetica
     number.font.height,14
     number.font.color.r,10
@@ -204,6 +207,9 @@ func `loads marker number transparency and window placement settings`() throws {
 
     #expect(balloon.clickWaitMarkerX == -40)
     #expect(balloon.clickWaitMarkerY == -30)
+    #expect(balloon.onlineMarkerX == -24)
+    #expect(balloon.onlineMarkerY == 16)
+    #expect(balloon.onlineMarkerIntervalMilliseconds == 50)
     #expect(balloon.numberFontName == "Helvetica")
     #expect(balloon.numberFontHeight == 14)
     #expect(balloon.numberFontColor == BalloonColor(red: 10, green: 20, blue: 30))
@@ -334,6 +340,41 @@ func `uses scope specific marker and falls back to common marker`() throws {
     let sakura = directory.appending(path: "markers.png")
     try Data().write(to: sakura)
     #expect(loader.markerImageURL(speaker: .sakura, in: balloon) == sakura)
+}
+
+@Test
+func `uses scope specific arrows and numbered online markers`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let balloon = BalloonDefinition(
+        directory: directory,
+        name: "test",
+        originX: 0,
+        originY: 0,
+        wordWrapPointX: 0,
+        wordWrapPointY: 0,
+        fontHeight: 12,
+        fontColor: BalloonColor(red: 0, green: 0, blue: 0)
+    )
+    let loader = BalloonLoader()
+    for filename in ["arrow0.png", "arrowk0.png", "online0.png", "online1.png"] {
+        try Data().write(to: directory.appending(path: filename))
+    }
+
+    #expect(loader.arrowImageURL(index: 0, speaker: .kero, in: balloon)?.lastPathComponent == "arrowk0.png")
+    #expect(loader.arrowImageURL(index: 0, speaker: .character(scope: 2), in: balloon)?.lastPathComponent == "arrowk0.png")
+    #expect(loader.onlineMarkerImageURLs(speaker: .sakura, in: balloon).map(\.lastPathComponent) == [
+        "online0.png", "online1.png"
+    ])
+
+    try Data().write(to: directory.appending(path: "arrowp2def0.png"))
+    try Data().write(to: directory.appending(path: "onlinep2def0.png"))
+    #expect(loader.arrowImageURL(index: 0, speaker: .character(scope: 2), in: balloon)?.lastPathComponent == "arrowp2def0.png")
+    #expect(loader.onlineMarkerImageURLs(speaker: .character(scope: 2), in: balloon).map(\.lastPathComponent) == [
+        "onlinep2def0.png"
+    ])
 }
 
 @Test

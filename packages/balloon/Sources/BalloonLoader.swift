@@ -168,6 +168,9 @@ public struct BalloonLoader: Sendable {
             arrow1Y: integer("arrow1.y", in: values, default: 0),
             clickWaitMarkerX: values["clickwaitmarker.x"].flatMap(Int.init),
             clickWaitMarkerY: values["clickwaitmarker.y"].flatMap(Int.init),
+            onlineMarkerX: integer("onlinemarker.x", in: values, default: 0),
+            onlineMarkerY: integer("onlinemarker.y", in: values, default: 0),
+            onlineMarkerIntervalMilliseconds: integer("onlinemarker.interval", in: values, default: 500),
             numberFontName: values["number.font.name"],
             numberFontHeight: integer("number.font.height", in: values, default: 10),
             numberFontColor: BalloonColor(
@@ -233,11 +236,44 @@ public struct BalloonLoader: Sendable {
         {
             return url
         }
-        let url = balloon.directory.appending(
-            path: "arrow\(index).png",
-            directoryHint: .notDirectory
-        )
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        let names: [String] = switch speaker {
+        case .sakura:
+            ["arrows\(index).png", "arrow\(index).png"]
+        case .kero:
+            ["arrowk\(index).png", "arrow\(index).png"]
+        case let .character(scope):
+            ["arrowp\(scope)def\(index).png", "arrowk\(index).png", "arrow\(index).png"]
+        }
+        return firstExistingImage(named: names, in: balloon.directory)
+    }
+
+    public func onlineMarkerImageURLs(
+        speaker: BalloonSpeaker,
+        style: Int = 0,
+        in balloon: BalloonDefinition
+    ) -> [URL] {
+        if let filename = overrideValues(
+            speaker: speaker,
+            style: style,
+            in: balloon.directory
+        )?["onlinemarker.filename"] {
+            return numberedImageURLs(prefix: filename, in: balloon.directory)
+        }
+        let prefixes: [String] = switch speaker {
+        case .sakura:
+            ["onlines", "online"]
+        case .kero:
+            ["onlinek", "online"]
+        case let .character(scope):
+            ["onlinep\(scope)def", "onlinek", "online"]
+        }
+        for prefix in prefixes {
+            let urls = numberedImageURLs(prefix: prefix, in: balloon.directory)
+            if !urls.isEmpty {
+                return urls
+            }
+        }
+        return []
     }
 
     public func clickWaitMarkerImageURL(
@@ -317,6 +353,21 @@ public struct BalloonLoader: Sendable {
         let name = URL(filePath: candidate).pathExtension.isEmpty ? "\(candidate).png" : candidate
         let url = directory.appending(path: name, directoryHint: .notDirectory)
         return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private func numberedImageURLs(prefix: String, in directory: URL) -> [URL] {
+        var urls: [URL] = []
+        for index in 0 ..< 1000 {
+            guard let url = imageURL(filename: prefix, suffix: String(index), in: directory) else { break }
+            urls.append(url)
+        }
+        return urls
+    }
+
+    private func firstExistingImage(named names: [String], in directory: URL) -> URL? {
+        names.lazy
+            .map { directory.appending(path: $0, directoryHint: .notDirectory) }
+            .first { FileManager.default.fileExists(atPath: $0.path) }
     }
 
     private func textOrigin(

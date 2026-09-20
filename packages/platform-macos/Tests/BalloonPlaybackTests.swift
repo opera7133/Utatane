@@ -1002,6 +1002,8 @@ func `long balloon text scrolls and follows its bottom`() throws {
     try makePNG(width: 160, height: 100).write(
         to: directory.appending(path: "balloons0.png", directoryHint: .notDirectory)
     )
+    try makePNG(width: 8, height: 8).write(to: directory.appending(path: "arrow0.png"))
+    try makePNG(width: 8, height: 8).write(to: directory.appending(path: "arrow1.png"))
 
     let controller = BalloonWindowController(positionStore: positionStore)
     try controller.show(
@@ -1013,6 +1015,35 @@ func `long balloon text scrolls and follows its bottom`() throws {
 
     #expect(controller.isTextScrollable(scope: 0))
     #expect(controller.isTextAtBottom(scope: 0))
+    let arrows = try #require(controller.scrollArrowVisibility(scope: 0))
+    #expect(arrows.previous)
+    #expect(!arrows.next)
+}
+
+@Test
+@MainActor
+func `online mode displays the balloon online marker`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 160, height: 100).write(to: directory.appending(path: "balloons0.png"))
+    try makePNG(width: 8, height: 8).write(to: directory.appending(path: "online0.png"))
+
+    let controller = BalloonWindowController(positionStore: positionStore)
+    try controller.show(
+        balloon: makeBalloon(directory: directory),
+        text: "online",
+        near: NSRect(x: 500, y: 100, width: 40, height: 80)
+    )
+    defer { controller.hideAll() }
+
+    controller.setOnlineMode(true, scope: 0)
+    #expect(controller.isOnlineMarkerVisible(scope: 0))
+    controller.setOnlineMode(false, scope: 0)
+    #expect(!controller.isOnlineMarkerVisible(scope: 0))
 }
 
 @Test

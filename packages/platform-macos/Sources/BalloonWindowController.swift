@@ -108,6 +108,7 @@ public final class BalloonWindowController {
     private var movementLockedScopes: Set<Int> = []
     private var markerTextByScope: [Int: String] = [:]
     private var numberTextByScope: [Int: String] = [:]
+    private var onlineModeScopes: Set<Int> = []
     private var offsetByScope: [Int: RuntimeOffset] = [:]
     private var alignmentByScope: [Int: BalloonWindowAlignment] = [:]
     private var shellPresentationSettings: [Int: ShellScopePresentationSettings] = [:]
@@ -179,6 +180,7 @@ public final class BalloonWindowController {
         movementLockedScopes.removeAll()
         markerTextByScope.removeAll()
         numberTextByScope.removeAll()
+        onlineModeScopes.removeAll()
         visitedAnchorIDs.removeAll()
         offsetByScope.removeAll()
         alignmentByScope.removeAll()
@@ -246,6 +248,14 @@ public final class BalloonWindowController {
 
     func isTextAtBottom(scope: Int) -> Bool {
         presentations[scope]?.contentView.isTextAtBottom ?? false
+    }
+
+    func scrollArrowVisibility(scope: Int) -> (previous: Bool, next: Bool)? {
+        presentations[scope]?.contentView.scrollArrowVisibility
+    }
+
+    func isOnlineMarkerVisible(scope: Int) -> Bool {
+        presentations[scope]?.contentView.isOnlineMarkerVisible ?? false
     }
 
     func textAttributes(at location: Int, scope: Int) -> [NSAttributedString.Key: Any]? {
@@ -332,11 +342,28 @@ public final class BalloonWindowController {
         let effectiveBalloon = balloonLoader.effectiveDefinition(for: balloon, speaker: speaker, style: style)
         let imageURL = try balloonLoader.imageURL(speaker: speaker, style: style, in: effectiveBalloon)
         let image = try loadImage(imageURL, balloon: effectiveBalloon)
-        let arrowImage = balloonLoader.clickWaitMarkerImageURL(
+        let clickWaitMarkerImage = balloonLoader.clickWaitMarkerImageURL(
             speaker: speaker,
             style: style,
             in: effectiveBalloon
         ).flatMap { try? loadImage($0, balloon: effectiveBalloon) }
+        let scrollArrow0Image = balloonLoader.arrowImageURL(
+            index: 0,
+            speaker: speaker,
+            style: style,
+            in: effectiveBalloon
+        ).flatMap { try? loadImage($0, balloon: effectiveBalloon) }
+        let scrollArrow1Image = balloonLoader.arrowImageURL(
+            index: 1,
+            speaker: speaker,
+            style: style,
+            in: effectiveBalloon
+        ).flatMap { try? loadImage($0, balloon: effectiveBalloon) }
+        let onlineMarkerImages = balloonLoader.onlineMarkerImageURLs(
+            speaker: speaker,
+            style: style,
+            in: effectiveBalloon
+        ).compactMap { try? loadImage($0, balloon: effectiveBalloon) }
         let markerImage = balloonLoader.markerImageURL(speaker: speaker, style: style, in: effectiveBalloon)
             .flatMap { try? loadImage($0, balloon: effectiveBalloon) }
         let scopeDisplayScale = effectiveDisplayScale(scope: scope)
@@ -349,7 +376,10 @@ public final class BalloonWindowController {
         let contentView = BalloonContentView(
             frame: NSRect(origin: .zero, size: scaledSize),
             image: image,
-            arrowImage: arrowImage,
+            clickWaitMarkerImage: clickWaitMarkerImage,
+            scrollArrow0Image: scrollArrow0Image,
+            scrollArrow1Image: scrollArrow1Image,
+            onlineMarkerImages: onlineMarkerImages,
             markerImage: markerImage,
             balloon: effectiveBalloon,
             text: repaintLockedScopes.contains(scope) ? existingPresentation?.contentView.text ?? "" : text,
@@ -374,6 +404,7 @@ public final class BalloonWindowController {
         contentView.isMovementLocked = effectiveMovementLock(scope: scope)
         contentView.setMarkerText(markerTextByScope[scope] ?? "")
         contentView.setNumberText(numberTextByScope[scope] ?? "")
+        contentView.setOnlineMode(onlineModeScopes.contains(scope))
         contentView.setPositionedImages(existingPositionedImages)
 
         let item = existingPresentation?.item ?? makePresentationItem(scope: scope)
@@ -547,6 +578,15 @@ public final class BalloonWindowController {
             markerTextByScope[scope] = text
         }
         presentations[scope]?.contentView.setMarkerText(text)
+    }
+
+    public func setOnlineMode(_ enabled: Bool, scope: Int) {
+        if enabled {
+            onlineModeScopes.insert(scope)
+        } else {
+            onlineModeScopes.remove(scope)
+        }
+        presentations[scope]?.contentView.setOnlineMode(enabled)
     }
 
     public func setNumber(file: String, current: String, maximum: String, scope: Int) {
@@ -897,7 +937,10 @@ private final class BalloonContentView: NSView {
 
     private let textView: InteractiveTextView
     private let scrollView: NSScrollView
-    private let arrowView: NSImageView?
+    private let clickWaitMarkerView: NSImageView?
+    private let scrollArrow0View: ClickableImageView?
+    private let scrollArrow1View: ClickableImageView?
+    private let onlineMarkerView: AnimatedBalloonImageView?
     private let markerImage: NSImage?
     private let markerTextField = NSTextField(labelWithString: "")
     private let numberTextField = NSTextField(labelWithString: "")
@@ -932,15 +975,18 @@ private final class BalloonContentView: NSView {
     }
 
     var isWaitingForClick: Bool {
-        get { arrowView?.isHidden == false }
-        set { arrowView?.isHidden = !newValue }
+        get { clickWaitMarkerView?.isHidden == false }
+        set { clickWaitMarkerView?.isHidden = !newValue }
     }
 
     var isTextScrollable: Bool {
         guard let layoutManager = textView.layoutManager,
               let textContainer = textView.textContainer
         else { return false }
-        return layoutManager.usedRect(for: textContainer).height > scrollView.contentSize.height
+        let used = layoutManager.usedRect(for: textContainer)
+        return isVerticalWriting
+            ? used.width > scrollView.contentSize.width + 1
+            : used.height > scrollView.contentSize.height + 1
     }
 
     var isTextAtBottom: Bool {
@@ -949,6 +995,14 @@ private final class BalloonContentView: NSView {
         else { return true }
         let textBottom = layoutManager.usedRect(for: textContainer).maxY
         return scrollView.documentVisibleRect.maxY >= textBottom - 1
+    }
+
+    var scrollArrowVisibility: (previous: Bool, next: Bool) {
+        (scrollArrow0View?.isHidden == false, scrollArrow1View?.isHidden == false)
+    }
+
+    var isOnlineMarkerVisible: Bool {
+        onlineMarkerView?.isHidden == false
     }
 
     var verticalContentInset: CGFloat {
@@ -1061,10 +1115,17 @@ private final class BalloonContentView: NSView {
         numberTextField.isHidden = text.isEmpty
     }
 
+    func setOnlineMode(_ enabled: Bool) {
+        onlineMarkerView?.setAnimating(enabled)
+    }
+
     init(
         frame: NSRect,
         image: NSImage,
-        arrowImage: NSImage?,
+        clickWaitMarkerImage: NSImage?,
+        scrollArrow0Image: NSImage?,
+        scrollArrow1Image: NSImage?,
+        onlineMarkerImages: [NSImage],
         markerImage: NSImage?,
         balloon: BalloonDefinition,
         text: String,
@@ -1073,7 +1134,13 @@ private final class BalloonContentView: NSView {
     ) {
         textView = InteractiveTextView(frame: .zero)
         scrollView = NSScrollView(frame: .zero)
-        arrowView = arrowImage.map(NSImageView.init(image:))
+        clickWaitMarkerView = clickWaitMarkerImage.map(NSImageView.init(image:))
+        scrollArrow0View = scrollArrow0Image.map(ClickableImageView.init(image:))
+        scrollArrow1View = scrollArrow1Image.map(ClickableImageView.init(image:))
+        onlineMarkerView = onlineMarkerImages.isEmpty ? nil : AnimatedBalloonImageView(
+            images: onlineMarkerImages,
+            intervalMilliseconds: balloon.onlineMarkerIntervalMilliseconds
+        )
         self.markerImage = markerImage
         let fontSize = CGFloat(balloon.fontHeight) * displayScale * textScale
         let namedFont = ghostDialogueFont(named: balloon.fontName, size: fontSize)
@@ -1153,6 +1220,12 @@ private final class BalloonContentView: NSView {
         scrollView.hasHorizontalScroller = balloon.isVertical
         scrollView.autohidesScrollers = true
         scrollView.borderType = .noBorder
+        let observingClipView = ObservingClipView()
+        observingClipView.drawsBackground = false
+        observingClipView.onBoundsChange = { [weak self] in
+            self?.updateScrollArrowVisibility()
+        }
+        scrollView.contentView = observingClipView
         scrollView.documentView = textView
         addSubview(scrollView)
         update(text: text, links: [])
@@ -1189,14 +1262,14 @@ private final class BalloonContentView: NSView {
         )
         addSubview(numberTextField)
 
-        if let arrowView {
-            arrowView.imageScaling = .scaleAxesIndependently
-            let sourceArrowSize = arrowImage?.size ?? .zero
+        if let clickWaitMarkerView {
+            clickWaitMarkerView.imageScaling = .scaleAxesIndependently
+            let sourceArrowSize = clickWaitMarkerImage?.size ?? .zero
             let arrowSize = NSSize(
                 width: sourceArrowSize.width * displayScale,
                 height: sourceArrowSize.height * displayScale
             )
-            arrowView.frame = NSRect(
+            clickWaitMarkerView.frame = NSRect(
                 x: scaledCoordinate(
                     balloon.clickWaitMarkerX,
                     extent: bounds.width
@@ -1208,9 +1281,36 @@ private final class BalloonContentView: NSView {
                 width: arrowSize.width,
                 height: arrowSize.height
             )
-            arrowView.isHidden = true
-            addSubview(arrowView)
+            clickWaitMarkerView.isHidden = true
+            addSubview(clickWaitMarkerView)
         }
+
+        configureScrollArrow(
+            scrollArrow0View,
+            image: scrollArrow0Image,
+            x: balloon.arrow0X,
+            y: balloon.arrow0Y,
+            direction: .previous
+        )
+        configureScrollArrow(
+            scrollArrow1View,
+            image: scrollArrow1Image,
+            x: balloon.arrow1X,
+            y: balloon.arrow1Y,
+            direction: .next
+        )
+        if let onlineMarkerView {
+            onlineMarkerView.frame = NSRect(
+                x: scaledCoordinate(balloon.onlineMarkerX, extent: bounds.width),
+                y: scaledCoordinate(balloon.onlineMarkerY, extent: bounds.height),
+                width: onlineMarkerView.imageSize.width * displayScale,
+                height: onlineMarkerView.imageSize.height * displayScale
+            )
+            onlineMarkerView.imageScaling = .scaleAxesIndependently
+            onlineMarkerView.isHidden = true
+            addSubview(onlineMarkerView)
+        }
+        updateScrollArrowVisibility()
     }
 
     var visitedAnchorIDs: Set<String> {
@@ -1382,6 +1482,7 @@ private extension BalloonContentView {
             scrollView.contentView.scroll(to: .zero)
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
+        updateScrollArrowVisibility()
     }
 
     private func resizeTextDocumentToFitLayout() {
@@ -1492,6 +1593,124 @@ private extension BalloonContentView {
     private func scaledCoordinate(_ value: Int, extent: CGFloat) -> CGFloat {
         let coordinate = CGFloat(value) * displayScale
         return coordinate < 0 ? extent + coordinate : coordinate
+    }
+
+    private enum ScrollArrowDirection {
+        case previous
+        case next
+    }
+
+    private func configureScrollArrow(
+        _ view: ClickableImageView?,
+        image: NSImage?,
+        x: Int,
+        y: Int,
+        direction: ScrollArrowDirection
+    ) {
+        guard let view, let image else { return }
+        view.imageScaling = .scaleAxesIndependently
+        view.frame = NSRect(
+            x: scaledCoordinate(x, extent: bounds.width),
+            y: scaledCoordinate(y, extent: bounds.height),
+            width: image.size.width * displayScale,
+            height: image.size.height * displayScale
+        )
+        view.isHidden = true
+        view.onClick = { [weak self] in
+            self?.scrollText(direction)
+        }
+        addSubview(view)
+    }
+
+    private func updateScrollArrowVisibility() {
+        guard isTextScrollable else {
+            scrollArrow0View?.isHidden = true
+            scrollArrow1View?.isHidden = true
+            return
+        }
+        let visible = scrollView.documentVisibleRect
+        let document = textView.bounds
+        if isVerticalWriting {
+            scrollArrow0View?.isHidden = visible.maxX >= document.maxX - 1
+            scrollArrow1View?.isHidden = visible.minX <= document.minX + 1
+        } else {
+            scrollArrow0View?.isHidden = visible.minY <= document.minY + 1
+            scrollArrow1View?.isHidden = visible.maxY >= document.maxY - 1
+        }
+    }
+
+    private func scrollText(_ direction: ScrollArrowDirection) {
+        var origin = scrollView.documentVisibleRect.origin
+        if isVerticalWriting {
+            let distance = max(1, scrollView.contentSize.width * 0.85)
+            origin.x += direction == .previous ? distance : -distance
+            origin.x = min(max(origin.x, textView.bounds.minX), max(textView.bounds.minX, textView.bounds.maxX - scrollView.contentSize.width))
+        } else {
+            let distance = max(1, scrollView.contentSize.height * 0.85)
+            origin.y += direction == .previous ? -distance : distance
+            origin.y = min(max(origin.y, textView.bounds.minY), max(textView.bounds.minY, textView.bounds.maxY - scrollView.contentSize.height))
+        }
+        scrollView.contentView.scroll(to: origin)
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        updateScrollArrowVisibility()
+    }
+}
+
+private final class ClickableImageView: NSImageView {
+    var onClick: (() -> Void)?
+
+    convenience init(image: NSImage) {
+        self.init(frame: .zero)
+        self.image = image
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        onClick?()
+    }
+}
+
+private final class ObservingClipView: NSClipView {
+    var onBoundsChange: (() -> Void)?
+
+    override func setBoundsOrigin(_ newOrigin: NSPoint) {
+        super.setBoundsOrigin(newOrigin)
+        onBoundsChange?()
+    }
+}
+
+private final class AnimatedBalloonImageView: NSImageView {
+    let imageSize: NSSize
+    private let images: [NSImage]
+    private let intervalNanoseconds: UInt64
+    private var animationTask: Task<Void, Never>?
+    private var imageIndex = 0
+
+    init(images: [NSImage], intervalMilliseconds: Int) {
+        self.images = images
+        imageSize = images.first?.size ?? .zero
+        intervalNanoseconds = UInt64(max(50, intervalMilliseconds)) * 1_000_000
+        super.init(frame: .zero)
+        image = images.first
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    func setAnimating(_ enabled: Bool) {
+        animationTask?.cancel()
+        animationTask = nil
+        isHidden = !enabled
+        guard enabled, images.count > 1 else { return }
+        animationTask = Task { @MainActor [weak self, intervalNanoseconds] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: intervalNanoseconds)
+                guard !Task.isCancelled, let self else { return }
+                imageIndex = (imageIndex + 1) % images.count
+                image = images[imageIndex]
+            }
+        }
     }
 }
 
