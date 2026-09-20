@@ -18,12 +18,12 @@ AUDITED_EVENTS = {
     "otherghostname": ("✅", "起動時に呼び出し起動中の他ゴースト名とscope 0/1のsurface番号をバイト値1区切りでNOTIFY。通常起動側から見える呼出ゴーストのみ"),
     "installedplugin": ("✅", "起動時に認識済みプラグインの「名前、ID」をバイト値1で結合し、Reference列へNOTIFY。ネイティブSHIORI型のロード、定期イベント、メニュー・SakuraScript明示呼び出しを接続"),
     "configuredbiffname": ("✅", "起動時に本体設定で利用可能なPOP3アカウント名をNOTIFY。パスワードはmacOS Keychainへ保存"),
-    "pluginpathlist": ("✅", "起動時に空のNOTIFYを送り、プラグイン格納パスがない状態を通知。プラグイン機能自体は未実装"),
+    "pluginpathlist": ("✅", "起動時に有効な全プラグインフォルダの絶対パスを優先順でNOTIFY。DebugではLocalも含みます"),
     "calendarskinpathlist": ("✅", "起動時にカレンダースキン格納パスをNOTIFY"),
     "calendarpluginpathlist": ("✅", "起動時にカレンダープラグイン格納パスをNOTIFY"),
     "rateofusegraph": ("✅", "起動中ゴーストをboot状態の1レコードとしてNOTIFY。起動回数・時間・割合は0固定で履歴集計は未実装"),
-    "enable_log": ("✅", "起動時にUtataneのアプリ内ログが有効であることをReference0=1でNOTIFY。SSP開発パレット相当の切替UIは未実装"),
-    "enable_debug": ("✅", "起動時にDebugビルドなら1、Releaseなら0をReference0へNOTIFY。実行中の切替UIは未実装"),
+    "enable_log": ("✅", "起動時にUtataneのアプリ内ログが有効であることをReference0=1でNOTIFY。Utataneでは実行中の切替UIを提供しない"),
+    "enable_debug": ("✅", "起動時にDebugビルドなら1、Releaseなら0をReference0へNOTIFY。Utataneでは実行中の切替UIを提供しない"),
     "basewareversion": ("✅", "起動時にUtataneの表示バージョン・本体名・ビルド番号をNOTIFY。SSPの数値形式との完全一致は未確認"),
     "uniqueid": ("✅", "起動時にゴーストのインストールディレクトリ名を一意IDとしてNOTIFY。SSTPでの利用は未確認"),
     "capability": ("✅", "起動時にUtataneが扱う主要SHIORIリクエスト・レスポンスヘッダをNOTIFY。拡張ヘッダの網羅は未対応"),
@@ -51,10 +51,10 @@ AUDITED_EVENTS = {
     "OnSessionReconnect": ("✅", "macOSユーザーセッションがアクティブへ戻った時にUnlockと併せて通知。簡易ユーザー切替と画面ロックを区別しません"),
     "OnAnchorEnter": ("✅", "アンカーへの出入りでラベル・ID・追加引数を通知し、外れた時はReferenceなし。Playerテストで確認"),
     "OnAnchorHover": ("✅", "アンカー上で1秒静止した時にラベル・ID・追加引数を通知。SSPの静止時間との完全一致は未確認"),
-    "OnBalloonScaling": ("✅", "設定でバルーン倍率が変わった時に新旧の縦横パーセントをReference0〜3へ通知。縦横個別設定は未実装"),
+    "OnBalloonScaling": ("✅", "設定でバルーン倍率が変わった時に新旧の縦横パーセントをReference0〜3へ通知。Utataneの倍率設定は縦横同値"),
     "OnChoiceEnter": ("✅", "選択肢への出入りでラベル・ID・追加引数を通知し、外れた時はReferenceなし。Playerテストで確認"),
     "OnChoiceHover": ("✅", "選択肢上で1秒静止した時にラベル・ID・追加引数を通知。SSPの静止時間との完全一致は未確認"),
-    "OnShellScaling": ("✅", "設定でシェル倍率が変わった時に新旧の縦横パーセントをReference0〜3へ通知。縦横個別設定は未実装"),
+    "OnShellScaling": ("✅", "設定でシェル倍率が変わった時に新旧の縦横パーセントをReference0〜3へ通知。Utataneの倍率設定は縦横同値"),
     "OnSoundError": ("✅", "音声ファイル解決・AVAudioPlayer生成・再生終了失敗時にplay・エラーコード・ファイル・説明を通知。実動未確認"),
     "OnSoundStop": ("✅", "SakuraScript音声の自然終了とstop操作でファイル名・end/closeを通知。ループ終了など全経路は未確認"),
     "OnTextDrop": ("✅", "サーフェスへのテキストDnDで改行をバイト値1に変換し本文とscopeを通知。イベント生成テストで確認"),
@@ -69,7 +69,7 @@ AUDITED_EVENTS = {
     "OnChoiceSelectEx": ("✅", "選択肢ラベル・ID・追加引数をReference0以降へ通知し、応答にトークがあれば通常OnChoiceSelectを抑制。Playerテストで確認"),
     "OnChoiceTimeout": ("✅", "選択肢タイムアウト時に対象スクリプト全文をReference0へ通知。Playerテストで確認"),
     "OnClose": ("✅", "終了時に発行するが終了理由・操作scopeのReferenceを送っていない"),
-    "OnCommunicate": ("✅", "他ゴースト連携と入力Boxの両経路で送信元をReference0、本文をReference1へ通知。キャンセル系は未対応"),
+    "OnCommunicate": ("✅", "他ゴースト連携と入力Boxの両経路で送信元をReference0、本文をReference1へ通知。入力キャンセルはOnCommunicateInputCancelとして通知"),
     "OnCommunicateInputCancel": ("✅", "CommunicateBoxをキャンセルまたは閉じた時に空のReference0とReference1=cancelを通知。イベント生成テストで確認"),
     "OnCompressArchiveComplete": ("✅", "実際のZIP圧縮成功後にファイル・出力先・形式・ユーザーIDをReference0〜3へ通知。圧縮処理とイベント生成をテスト済み"),
     "OnCompressArchiveFailure": ("✅", "ZIP圧縮失敗時に対象ファイルとエラー内容をReference0〜1へ通知。失敗経路とイベント生成をテスト済み"),
@@ -197,8 +197,8 @@ AUDITED_EVENTS = {
     "OnUpdateCheckResultEx": ("✅", "複数対象の更新チェック結果を順番どおりReference0以降へ集約して通知。イベント生成テストで確認"),
     "OnUpdateResultExplorer": ("✅", "コンテンツエクスプローラからの単体・一括更新と修復の結果を旧形式でReference0以降へ集約して通知。イベント生成テストで確認"),
     "OnRecommendsiteChoice": ("✅", "おすすめ・ポータルメニュー選択時にサイト名・URL・バナー・種別・選択scope・0始まりの位置をReference0〜5へ通知。イベント生成テストで確認"),
-    "OnUserInput": ("✅", "Onで始まらないInputBox IDの決定時にID・入力内容・空の補足をReference0〜2へ通知。追加reference等は未対応"),
-    "OnUserInputCancel": ("✅", "InputBoxをキャンセルまたは閉じた時にID・close・空の補足をReference0〜2へ通知。タイムアウト理由は未対応"),
+    "OnUserInput": ("✅", "Onで始まらないInputBox IDの決定時にID・入力内容・補足・追加Referenceを通知"),
+    "OnUserInputCancel": ("✅", "InputBoxをキャンセル・閉じた時はclose、時間切れ時はtimeoutを理由としてID・補足とともに通知"),
     "OnWindowStateMinimize": ("✅", "macOSでアプリが非表示になった時にReference0=systemを通知。script・user理由の区別は未対応"),
     "OnWindowStateRestore": ("✅", "macOSでアプリの非表示が解除された時にReference0=systemを通知。script・user理由の区別は未対応"),
     "OnDisplayHandover": ("✅", "シェル位置の初期化時と別スクリーンへの移動時に、scopeと移動前後の画面座標・色深度・主画面フラグを通知"),
@@ -242,7 +242,72 @@ AUDITED_EVENTS.update({
     "property.set": ("✅", "activeghostlist.extの対象ゴーストへ拡張プロパティ設定を中継"),
 })
 
-PLANNED_EVENTS = {}
+PARTIAL_EVENTS = {
+    "OnGhostChanging",
+    "OnGhostCalling",
+    "OnDressupChanged",
+    "OnWindowStateRestore",
+    "OnWindowStateMinimize",
+    "OnInitialize",
+    "OnDestroy",
+    "OnSysResume",
+    "OnSurfaceChange",
+    "OnMouseWheel",
+    "OnMouseEnter",
+    "OnMouseLeave",
+    "OnMouseDragStart",
+    "OnMouseDragEnd",
+    "OnMouseGesture",
+    "OnMouseMove",
+    "OnGamepadButtonDown",
+    "OnGamepadButtonUp",
+    "OnGamepadAxisMove",
+    "OnBalloonBreak",
+    "OnUpdatedataCreating",
+    "OnNarCreating",
+    "OnURLDragDropping",
+    "OnURLDropping",
+    "OnURLQuery",
+    "OnBIFFComplete",
+    "OnScheduleRead",
+    "OnSchedulesenseBegin",
+    "OnSSTPBreak",
+    "OnExecuteHTTPSSLInfo",
+    "OnExecuteRSS_SSLInfo",
+    "OnExecuteWebSocket_SSLInfo",
+    "OnPingComplete",
+    "OnRaiseOtherFailure",
+    "OnNotifyOtherFailure",
+    "OnNetworkHeavy",
+    "OnDisplayChange",
+    "OnDisplayChangeEx",
+    "OnLanguageChange",
+    "OnResetWindowPos",
+    "capability",
+    "rateofusegraph",
+    "OnNotifyBalloonInfo",
+    "OnNotifyDressupInfo",
+    "OnNotifyFontInfo",
+}
+
+# An event belongs here when Utatane has no usable automatic emission path.
+# Keep it separate from PARTIAL_EVENTS so the published table distinguishes an
+# incomplete contract from a wholly unavailable event.
+UNIMPLEMENTED_EVENTS = {
+    "OnSNTPCorrectEx": "`\\6`の要求は受理するが、macOSのシステム時刻を実際に補正する経路がなく、成功イベントは発行されない",
+    "OnSNTPCorrect": "OnSNTPCorrectExからのフォールバック処理はあるが、実補正の成功経路がないため発行されない",
+}
+
+PARTIAL_EVENT_NOTES = {
+    "OnDisplayChangeEx": "画面構成変更時にupdateと全画面の矩形・色深度・プライマリ判定を通知。macOSにはタスクバーがないため末尾はunknown,0。起動時initは未対応",
+    "OnMouseGesture": "右ボタンまたはホイールの8方向ドラッグと終了を、scope・現在位置／開始位置・各collision・角度とともに通知。circle.cw／circle.ccwは未対応",
+    "OnNarCreating": "`createnar`実行直前にinstall.txt由来の名前、出力絶対パス、識別子をReference0〜2へ通知。フォルダD&Dからの作成UIは未実装",
+    "OnNetworkHeavy": "SakuraScriptのHTTP/RSS要求が設定時間でタイムアウトした時、設定秒数と経過秒数を通知。HEADLINEや更新通信は未接続",
+    "OnSSTPBreak": "nobreakなしの新しいSSTPが再生中SSTPを中断する際に発行。Reference0は中断スクリプト、Reference1は0。Reference2は現在0固定",
+    "OnScheduleRead": "カレンダー詳細の「予定を読む」からReference0〜3を通知。スキンアイコンのホバー読み上げは未実装",
+    "OnURLQuery": "URL・scope・推定MIME type・nar/unknownを通知し、スクリプト応答時は標準処理を中止。feed・homeurl判定は未対応",
+    "OnUpdatedataCreating": "`createupdatedata`による`updates2.dau`生成の直前にReferenceなしで通知。フォルダD&Dからの作成UIは未実装",
+}
 
 INAPPLICABLE_EVENTS = {
     "OnFileDropped": "旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行",
@@ -319,7 +384,9 @@ LOW_DIFFICULTY_CATEGORIES = {
 def implementation_metadata(title: str, event_id: str) -> tuple[str, str]:
     if event_id in INAPPLICABLE_EVENTS:
         return "—", "—"
-    if event_id in PLANNED_EVENTS:
+    if event_id in UNIMPLEMENTED_EVENTS:
+        return "イベント発生元の本体機能", "中"
+    if event_id in PARTIAL_EVENTS:
         return "イベント発生元の本体機能", "中"
     if event_id in AUDITED_EVENTS:
         if AUDITED_EVENTS[event_id][0] == "✅":
@@ -385,7 +452,9 @@ def render(ukadoc_file: Path) -> str:
                 status = ONLINE_ADDITIONAL_AUDITED_EVENTS[event_id][0]
             elif event_id in AUDITED_EVENTS:
                 status = AUDITED_EVENTS[event_id][0]
-            elif event_id in PLANNED_EVENTS:
+            elif event_id in UNIMPLEMENTED_EVENTS:
+                status = "❌"
+            elif event_id in PARTIAL_EVENTS:
                 status = "🟡"
             elif event_id in INAPPLICABLE_EVENTS:
                 status = "➖"
@@ -408,12 +477,12 @@ def render(ukadoc_file: Path) -> str:
         "",
         "| 記号 | 意味 |",
         "| --- | --- |",
-        "| ✅ | Utataneが発行経路を提供。macOS固有差や未提供のSSP拡張は備考に記載 |",
-        "| 🟡 | 仕様と不足している実装を確認済み。実装予定 |",
-        "| ❌ | 未分類の一時状態。公開時には残しません |",
+        "| ✅ | 発生条件・Reference・応答処理を実装。実機未確認やmacOS固有差は備考に記載 |",
+        "| 🟡 | 発行経路はあるが、実装可能な発生条件・Reference・応答処理の一部が未対応 |",
+        "| ❌ | Utataneから自動発行する実装がない |",
         "| ➖ | Windows固有などmacOSでは非該当、旧仕様に置き換え済み、または現行UKADOCで契約未定義 |",
         "",
-        "名前がソースに現れるだけでは対応としません。発生条件とReferenceをUKADOCに照らし、提供する契約は✅、未実装は🟡、macOSで成立しないか契約が定義されていないものだけを➖に分類します。",
+        "名前がソースに現れるだけでは対応としません。発生条件・Reference・GET/NOTIFY・応答利用をUKADOCに照らし、契約を満たすものは✅、一部不足は🟡、自動発行経路がないものは❌に分類します。",
         "任意IDを中継できる経路（raise、inputbox、HTTP等）は、そのイベントをベースウェアが自動発行する実装とは数えません。",
         "全イベントを本番Swiftコード（テストコードを除く）の固定IDおよびイベント生成経路と照合します。✅のmacOS固有差と実機確認状況は備考に残します。",
         "➖はWindows固有機能、旧仕様、または現行UKADOCで契約を実装できない根拠を備考へ記録します。Utatane側の機能不足だけを理由に➖へ分類しません。",
@@ -432,9 +501,15 @@ def render(ukadoc_file: Path) -> str:
                 status, note = ONLINE_ADDITIONAL_AUDITED_EVENTS[event_id]
             elif event_id in AUDITED_EVENTS:
                 status, note = AUDITED_EVENTS[event_id]
-            elif event_id in PLANNED_EVENTS:
+            elif event_id in UNIMPLEMENTED_EVENTS:
+                status = "❌"
+                note = UNIMPLEMENTED_EVENTS[event_id]
+            elif event_id in PARTIAL_EVENTS:
                 status = "🟡"
-                note = PLANNED_EVENTS[event_id]
+                note = AUDITED_EVENTS.get(
+                    event_id,
+                    ("🟡", PARTIAL_EVENT_NOTES[event_id]),
+                )[1]
             elif event_id in INAPPLICABLE_EVENTS:
                 status = "➖"
                 note = INAPPLICABLE_EVENTS[event_id]
