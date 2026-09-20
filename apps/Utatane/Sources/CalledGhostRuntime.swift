@@ -222,6 +222,12 @@ final class CalledGhostRuntime {
                     references: event.references
                 ))
             }
+            for event in surfaceController.displayHandoverInitializationEvents() {
+                _ = try? await session.handle(event: .notification(
+                    id: "OnDisplayHandover",
+                    references: event.references
+                ))
+            }
         }
         if let desktopWallpaperEvent {
             _ = try? await session.handle(event: desktopWallpaperGhostEvent(desktopWallpaperEvent))
@@ -436,16 +442,18 @@ final class CalledGhostRuntime {
         return response
     }
 
-    func handleExternalEvent(id: String, arguments: [String], reflectsResponse: Bool) async {
+    @discardableResult
+    func handleExternalEvent(id: String, arguments: [String], reflectsResponse: Bool) async -> Bool {
         guard let response = try? await session.handle(event: .shiori(
             id: id,
             references: Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
                 ($0.offset, $0.element)
             })
-        )) else { return }
+        )) else { return !reflectsResponse }
         if reflectsResponse, !response.rawValue.isEmpty {
             player.play(response, balloon: balloon)
         }
+        return true
     }
 
     func notify(_ event: GhostEvent) async {
@@ -689,6 +697,9 @@ final class CalledGhostRuntime {
             guard let self else { return }
             send(.shiori(id: "OnSurfaceChange", references: currentSurfaceReferences()))
             onSurfaceChanged?(scope, previous, current)
+        }
+        surfaceController.onDisplayHandover = { [weak self] event in
+            self?.send(.shiori(id: "OnDisplayHandover", references: event.references))
         }
         surfaceController.onNarDrop = { [weak self] _, urls in self?.onNarDrop?(urls) }
         surfaceController.onFileDropping = { [weak self] scope, urls in

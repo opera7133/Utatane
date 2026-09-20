@@ -549,7 +549,7 @@ func `per ghost identity switch retires the previous stage`() throws {
 
 @Test
 @MainActor
-func `releasing a ghost presentation retires its stage`() throws {
+func `releasing a ghost presentation retires its stage`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
     let directory = FileManager.default.temporaryDirectory
@@ -558,27 +558,38 @@ func `releasing a ghost presentation retires its stage`() throws {
     defer { try? FileManager.default.removeItem(at: directory) }
     try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
 
+    let window = try makeReleasedPresentationWindow(
+        directory: directory,
+        positionStore: positionStore,
+        defaults: defaults
+    )
+
+    try await requireEventually {
+        !window.isVisible
+    }
+}
+
+@MainActor
+private func makeReleasedPresentationWindow(
+    directory: URL,
+    positionStore: WindowPositionStore,
+    defaults: UserDefaults
+) throws -> NSWindow {
     let coordinator = PresentationCoordinator(mode: .perGhost, defaults: defaults)
-    var session: GhostPresentationSession? = coordinator.makeSession(
+    let session = coordinator.makeSession(
         title: "Called Ghost",
         identifier: "called"
     )
-    var surfaces: SurfaceWindowController? = session.map {
-        SurfaceWindowController(positionStore: positionStore, presentationSession: $0)
-    }
-    try surfaces?.show(
+    let surfaces = SurfaceWindowController(positionStore: positionStore, presentationSession: session)
+    try surfaces.show(
         shell: ShellDefinition(directory: directory, surfaces: [:]),
         scope: 0,
         surfaceID: 0
     )
-    let windowNumber = try #require(surfaces?.windowNumbers.first)
+    let windowNumber = try #require(surfaces.windowNumbers.first)
     let window = try #require(NSApp.window(withWindowNumber: windowNumber))
     #expect(window.isVisible)
-
-    surfaces = nil
-    session = nil
-
-    #expect(!window.isVisible)
+    return window
 }
 
 @Test

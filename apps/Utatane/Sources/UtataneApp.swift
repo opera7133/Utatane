@@ -1849,6 +1849,9 @@ private struct UtataneRootView: View {
                     excluding: ghost.id
                 )
             }
+            surfaceWindowController.onDisplayHandover = { event in
+                sendEvent(.shiori(id: "OnDisplayHandover", references: event.references))
+            }
             surfaceWindowController.onNarDrop = { _, urls in
                 installNars(from: urls)
             }
@@ -2229,6 +2232,12 @@ private struct UtataneRootView: View {
             ) {
                 _ = try? await ghostSession.handle(event: .notification(
                     id: event.id,
+                    references: event.references
+                ))
+            }
+            for event in surfaceWindowController.displayHandoverInitializationEvents() {
+                _ = try? await ghostSession.handle(event: .notification(
+                    id: "OnDisplayHandover",
                     references: event.references
                 ))
             }
@@ -3556,28 +3565,82 @@ private struct UtataneRootView: View {
         reflectsResponse: Bool,
         excluding originID: URL
     ) async {
-        let isAll = target.caseInsensitiveCompare("__SYSTEM_ALL_GHOST__") == .orderedSame
+        let isAll = target.caseInsensitiveCompare("__SYSTEM_ALL_GHOST__") == .orderedSame || target == "*"
         let references = Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
             ($0.offset, $0.element)
         })
+        var failureReason: String?
+        var foundTarget = false
         if let currentGhost,
            currentGhost.id != originID,
-           isAll || ghost(currentGhost, matches: target),
-           let session,
-           let response = try? await session.handle(event: .shiori(id: id, references: references)),
-           reflectsResponse,
-           !response.rawValue.isEmpty,
-           let balloon
+           isAll || ghost(currentGhost, matches: target)
         {
-            scriptPlayer.play(response, balloon: balloon)
+            foundTarget = true
+            if let session,
+               let response = try? await session.handle(event: .shiori(id: id, references: references))
+            {
+                if reflectsResponse, !response.rawValue.isEmpty, let balloon {
+                    scriptPlayer.play(response, balloon: balloon)
+                }
+            } else if reflectsResponse {
+                failureReason = "204"
+            }
         }
         for runtime in calledGhosts.values where runtime.ghost.id != originID
             && (isAll || ghost(runtime.ghost, matches: target))
         {
-            await runtime.handleExternalEvent(
+            foundTarget = true
+            let handled = await runtime.handleExternalEvent(
                 id: id,
                 arguments: arguments,
                 reflectsResponse: reflectsResponse
+            )
+            if !handled {
+                failureReason = "204"
+            }
+        }
+        if !foundTarget {
+            failureReason = "notfound"
+        }
+        if let failureReason {
+            await sendOtherEventFailure(
+                to: originID,
+                target: target,
+                eventID: id,
+                arguments: arguments,
+                reflectsResponse: reflectsResponse,
+                reason: failureReason
+            )
+        }
+    }
+
+    private func sendOtherEventFailure(
+        to originID: URL,
+        target: String,
+        eventID: String,
+        arguments: [String],
+        reflectsResponse: Bool,
+        reason: String
+    ) async {
+        let event = SHIORIEventFactory.otherEventFailure(
+            target: target,
+            eventID: eventID,
+            arguments: arguments,
+            reflectsResponse: reflectsResponse,
+            reason: reason
+        )
+        if currentGhost?.id == originID,
+           let session,
+           let response = try? await session.handle(event: event),
+           !response.rawValue.isEmpty,
+           let balloon
+        {
+            scriptPlayer.play(response, balloon: balloon)
+        } else if let runtime = calledGhosts[originID] {
+            await runtime.handleExternalEvent(
+                id: reflectsResponse ? "OnRaiseOtherFailure" : "OnNotifyOtherFailure",
+                arguments: [reason, target, eventID] + arguments,
+                reflectsResponse: true
             )
         }
     }
@@ -7262,6 +7325,7 @@ func startupInformationEvents(
     installedBalloons: [BalloonDefinition]? = nil,
     installedHeadlines: [InstalledHeadline] = [],
     installedPlugins: [InstalledPlugin] = [],
+    installedCalendarSkinNames: [String]? = nil,
     windowMode: GhostWindowMode,
     speechSynthesisEnabled: Bool = false,
     speechRecognitionEnabled: Bool = false,
@@ -7283,6 +7347,9 @@ func startupInformationEvents(
     let balloons = (installedBalloons ?? [balloon]).sorted {
         $0.name.localizedStandardCompare($1.name) == .orderedAscending
     }
+    let calendarSkinNames = installedCalendarSkinNames ?? CalendarSkinLoader()
+        .load(from: ContentRoot.calendarSkinReadDirectories)
+        .map(\.name)
     let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? version
     let indexed: ([String]) -> [Int: String] = { values in
@@ -7315,6 +7382,8 @@ func startupInformationEvents(
         ("installedshellname", indexed(ghost.shells.map(\.name).sorted())),
         ("installedballoonname", indexed(balloons.map(\.name))),
         ("installedheadlinename", indexed(installedHeadlines.map(\.name).sorted())),
+        ("installedcalendarskinname", indexed(calendarSkinNames.sorted())),
+        ("installedcalendarpluginname", [:]),
         ("ghostpathlist", indexed(ContentRoot.ghostReadDirectories.map(\.path))),
         ("balloonpathlist", indexed(ContentRoot.balloonReadDirectories.map(\.path))),
         ("headlinepathlist", indexed(ContentRoot.headlineReadDirectories.map(\.path))),

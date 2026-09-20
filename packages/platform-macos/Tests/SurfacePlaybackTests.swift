@@ -482,15 +482,18 @@ func `base animation pattern temporarily replaces the whole surface`() async thr
     #expect(ProcessInfo.processInfo.systemUptime - startedAt >= 0.18)
     #expect(controller.renderedImage(for: 0) === initialImage)
 
-    controller.playAnimation(id: 0, minimumFrameDurationMilliseconds: 1000)
+    controller.playAnimation(id: 0, minimumFrameDurationMilliseconds: 30000)
     try await Task.sleep(for: .milliseconds(50))
-    let waitStartedAt = ProcessInfo.processInfo.systemUptime
+    var didFinishWaiting = false
     let waitTask = Task { @MainActor in
         await controller.waitForAnimation(id: 0)
+        didFinishWaiting = true
     }
     controller.stopAnimation(id: 0)
+    try await requireEventually(timeout: .seconds(5)) {
+        didFinishWaiting
+    }
     await waitTask.value
-    #expect(ProcessInfo.processInfo.systemUptime - waitStartedAt < 0.5)
     #expect(controller.renderedImage(for: 0) === initialImage)
 
     controller.playAnimation(id: 0)

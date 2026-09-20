@@ -21,7 +21,10 @@
 
 - SHIORIの共通処理、macOS・Windows向け外部ローダー、各ネイティブ実装を`packages/shiori`配下へ整理した
 - SHIORIイベント互換表を再監査し、`OnClose`、`OnCloseAll`、選択肢・アンカーのhoverイベントを確認済みに更新した
-- 現行UKADOCのSHIORIイベント304件を一括再監査し、発行経路を提供する245件と、前提機能を提供しない59件に分類した。互換表へ未分類の🟡・❌が戻らない検査も追加した
+- 現行UKADOCのSHIORIイベント304件を一括再監査し、対応250件、実装予定46件、macOS非該当または旧仕様8件に分類した。Utatane側の機能不足だけを理由に非該当へ分類しない検査基準へ改めた
+- 起動時に利用可能なカレンダースキン名と、外部カレンダープラグインが未導入であることをSHIORIへ通知するようにした
+- シェルの初期配置と別スクリーンへの移動を`OnDisplayHandover`で通知するようにした
+- `raiseother`／`notifyother`の宛先がない時と、`raiseother`の宛先が204を返した時に、送信元へ`OnRaiseOtherFailure`／`OnNotifyOtherFailure`を通知するようにした
 
 ## [0.2.6] - 2026-09-19
 

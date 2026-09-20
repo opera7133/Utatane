@@ -10,6 +10,8 @@ from pathlib import Path
 
 
 AUDITED_EVENTS = {
+    "OnRaiseOtherFailure": ("✅", "raiseotherの宛先がない時はnotfound、宛先SHIORIが204の時は204をReference0へ入れ、宛先・イベントID・元Referenceとともに送信元へ通知。全ゴースト宛ての複数結果列挙は未対応"),
+    "OnNotifyOtherFailure": ("✅", "notifyotherの宛先がない時にnotfoundをReference0へ入れ、宛先・イベントID・元Referenceとともに送信元へ通知。全ゴースト宛ての複数結果列挙は未対応"),
     "hwnd": ("✅", "起動時に各scopeのNSWindow番号をバイト値1区切りでNOTIFY。macOSではWindows HWNDの代わりにwindowNumberを通知し、未生成バルーンは空欄"),
     "otherghostname": ("✅", "起動時に呼び出し起動中の他ゴースト名とscope 0/1のsurface番号をバイト値1区切りでNOTIFY。通常起動側から見える呼出ゴーストのみ"),
     "installedplugin": ("✅", "起動時に空のNOTIFYを送り、プラグインがインストールされていない状態を通知。プラグイン機能自体は未実装"),
@@ -30,6 +32,8 @@ AUDITED_EVENTS = {
     "installedshellname": ("✅", "起動中ゴーストにインストールされたシェル名をReference列へNOTIFY。他ゴーストのシェルは含めない"),
     "installedballoonname": ("✅", "起動時に全インストール済みバルーン名をReference列へNOTIFY"),
     "installedheadlinename": ("✅", "起動時に全インストール済みRSS・ヘッドライン名をReference列へNOTIFY"),
+    "installedcalendarskinname": ("✅", "起動時に利用可能なカレンダースキン名をReference列へNOTIFY"),
+    "installedcalendarpluginname": ("✅", "起動時に空のNOTIFYを送り、利用可能な外部カレンダープラグインがない状態を通知"),
     "ghostpathlist": ("✅", "起動時にUtataneが参照するゴースト格納フォルダの絶対パスをNOTIFY。DebugではBundledとLocalの双方を含む"),
     "balloonpathlist": ("✅", "起動時にUtataneが参照するバルーン格納フォルダの絶対パスをNOTIFY。DebugではBundledとLocalの双方を含む"),
     "headlinepathlist": ("✅", "起動時にヘッドライン格納フォルダの絶対パスをReference0へNOTIFY"),
@@ -195,71 +199,70 @@ AUDITED_EVENTS = {
     "OnUserInputCancel": ("✅", "InputBoxをキャンセルまたは閉じた時にID・close・空の補足をReference0〜2へ通知。タイムアウト理由は未対応"),
     "OnWindowStateMinimize": ("✅", "macOSでアプリが非表示になった時にReference0=systemを通知。script・user理由の区別は未対応"),
     "OnWindowStateRestore": ("✅", "macOSでアプリの非表示が解除された時にReference0=systemを通知。script・user理由の区別は未対応"),
+    "OnDisplayHandover": ("✅", "シェル位置の初期化時と別スクリーンへの移動時に、scopeと移動前後の画面座標・色深度・主画面フラグを通知"),
 }
 
 # Events whose trigger belongs to an SSP/Windows-only facility or to a feature
 # Utatane intentionally does not provide. Keeping these explicit prevents a
 # missing fixed event ID from being mistaken for an unaudited implementation.
-UNSUPPORTED_EVENTS = {
-    "OnOtherGhostChanged": "Utataneは呼び出しゴースト同士を直接切り替える操作を提供しないため対象外",
-    "OnCacheSuspend": "SSPのキャッシュ休止機能を提供しないため対象外",
-    "OnCacheRestore": "SSPのキャッシュ復帰機能を提供しないため対象外",
-    "OnBasewareUpdating": "実行中のベースウェア自己更新を提供しないため対象外",
-    "OnBasewareUpdated": "実行中のベースウェア自己更新を提供しないため対象外",
-    "OnConfigurationDialogHelp": "SSP形式の設定ダイアログ拡張ヘルプを提供しないため対象外",
-    "OnGhostTermsAccept": "SSP形式のゴースト利用規約ダイアログを提供しないため対象外",
-    "OnGhostTermsDecline": "SSP形式のゴースト利用規約ダイアログを提供しないため対象外",
-    "OnVanishButtonHold": "消滅スクリプトのダブルクリック中断操作を提供しないため対象外",
-    "OnBalloonBreak": "通常トークを途中位置付きで中断する操作を提供しないため対象外",
+PLANNED_EVENTS = {
+    "OnOtherGhostChanged": "Utataneは呼び出しゴースト同士を直接切り替える操作を提供しないため未実装",
+    "OnCacheSuspend": "SSPのキャッシュ休止機能を提供しないため未実装",
+    "OnCacheRestore": "SSPのキャッシュ復帰機能を提供しないため未実装",
+    "OnBasewareUpdating": "実行中のベースウェア自己更新を提供しないため未実装",
+    "OnBasewareUpdated": "実行中のベースウェア自己更新を提供しないため未実装",
+    "OnConfigurationDialogHelp": "SSP形式の設定ダイアログ拡張ヘルプを提供しないため未実装",
+    "OnGhostTermsAccept": "SSP形式のゴースト利用規約ダイアログを提供しないため未実装",
+    "OnGhostTermsDecline": "SSP形式のゴースト利用規約ダイアログを提供しないため未実装",
+    "OnVanishButtonHold": "消滅スクリプトのダブルクリック中断操作を提供しないため未実装",
+    "OnBalloonBreak": "通常トークを途中位置付きで中断する操作を提供しないため未実装",
+    "OnOtherObjectDropping": "SSPの他オブジェクトDnD連携を提供しないため未実装",
+    "OnOtherObjectDropped": "SSPの他オブジェクトDnD連携を提供しないため未実装",
+    "OnWallpaperChange": "画像DnDによる壁紙変更機能を提供しないため未実装",
+    "OnBIFFBegin": "メールアカウントとPOPメールチェック機能を提供しないため未実装",
+    "OnBIFFComplete": "メールアカウントとPOPメールチェック機能を提供しないため未実装",
+    "OnBIFF2Complete": "メールアカウントとPOPメールチェック機能を提供しないため未実装",
+    "OnBIFFFailure": "メールアカウントとPOPメールチェック機能を提供しないため未実装",
+    "OnSSTPBlacklisting": "localhost限定のSSTPで送信元IPを識別・拒否する仕組みが未実装",
+    "OnExecuteHTTPProgress": "execute-httpのprogress-notifyオプションを提供しないため未実装",
+    "OnExecuteHTTPStreaming": "execute-httpのstreamingオプションを提供しないため未実装",
+    "OnExecuteHTTPSSLInfo": "TLS証明書詳細をSHIORIへ公開する機能を提供しないため未実装",
+    "OnExecuteRSS_SSLInfo": "TLS証明書詳細をSHIORIへ公開する機能を提供しないため未実装",
+    "OnExecuteICalComplete": "SakuraScriptからのical-get／ical-post操作を提供しないため未実装",
+    "OnExecuteICalFailure": "SakuraScriptからのical-get／ical-post操作を提供しないため未実装",
+    "OnExecuteICalProgress": "SakuraScriptからのical-get／ical-post操作を提供しないため未実装",
+    "OnExecuteICal_SSLInfo": "SakuraScriptからのical-get／ical-post操作を提供しないため未実装",
+    "OnExecuteScheduleComplete": "SakuraScriptからのschedule-add／schedule-delete操作を提供しないため未実装",
+    "OnExecuteScheduleFailure": "SakuraScriptからのschedule-add／schedule-delete操作を提供しないため未実装",
+    "OnExecuteScheduleGetComplete": "SakuraScriptからのschedule-get操作を提供しないため未実装",
+    "OnExecuteFileWatchChange": "SakuraScriptからのfilewatch操作を提供しないため未実装",
+    "OnExecuteFileWatchFailure": "SakuraScriptからのfilewatch操作を提供しないため未実装",
+    "OnExecuteWebSocketReconnect": "WebSocket自動再接続オプションを提供しないため未実装",
+    "OnExecuteWebSocket_SSLInfo": "TLS証明書詳細をSHIORIへ公開する機能を提供しないため未実装",
+    "OnPingProgress": "pingの応答単位progress通知を提供しないため未実装",
+    "OnOSUpdateInfo": "Windows Update履歴を通知するイベントでありmacOS版では未実装",
+    "OnRecycleBinEmpty": "SakuraScriptからmacOSのゴミ箱を空にする操作を提供しないため未実装",
+    "OnRecycleBinEmptyFromOther": "ゴミ箱を空にする操作を提供しないため未実装。外部変更はOnRecycleBinStatusUpdateで通知",
+    "OnSelectModeBegin": "selectrect画面領域選択モードを提供しないため未実装",
+    "OnSelectModeCancel": "selectrect画面領域選択モードを提供しないため未実装",
+    "OnSelectModeComplete": "selectrect画面領域選択モードを提供しないため未実装",
+    "OnSelectModeMouseDown": "selectrect画面領域選択モードを提供しないため未実装",
+    "OnSelectModeMouseUp": "selectrect画面領域選択モードを提供しないため未実装",
+    "OnTranslate": "SHIORIをMAKOTOとして再呼び出しする翻訳フックを提供しないため未実装",
+    "OnOtherGhostTalk": "他ゴーストの全発話を監視するopt-in機能を提供しないため未実装",
+    "property.get": "SSPのactiveghostlist.ext拡張プロパティを提供しないため未実装",
+    "property.set": "SSPのactiveghostlist.ext拡張プロパティを提供しないため未実装",
+}
+
+INAPPLICABLE_EVENTS = {
     "OnTrayBalloonClick": "Windows通知領域のトレイバルーン機能でありmacOS版では対象外",
     "OnTrayBalloonTimeout": "Windows通知領域のトレイバルーン機能でありmacOS版では対象外",
     "OnFileDropped": "旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行",
     "OnFileDrop": "旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行",
     "OnFileDropEx": "旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行",
-    "OnOtherObjectDropping": "SSPの他オブジェクトDnD連携を提供しないため対象外",
-    "OnOtherObjectDropped": "SSPの他オブジェクトDnD連携を提供しないため対象外",
-    "OnWallpaperChange": "画像DnDによる壁紙変更機能を提供しないため対象外",
-    "OnBIFFBegin": "メールアカウントとPOPメールチェック機能を提供しないため対象外",
-    "OnBIFFComplete": "メールアカウントとPOPメールチェック機能を提供しないため対象外",
-    "OnBIFF2Complete": "メールアカウントとPOPメールチェック機能を提供しないため対象外",
-    "OnBIFFFailure": "メールアカウントとPOPメールチェック機能を提供しないため対象外",
-    "OnSSTPBlacklisting": "UtataneのSSTPはlocalhostだけを受け付け、IPブラックリストを持たないため対象外",
-    "OnExecuteHTTPProgress": "execute-httpのprogress-notifyオプションを提供しないため対象外",
-    "OnExecuteHTTPStreaming": "execute-httpのstreamingオプションを提供しないため対象外",
-    "OnExecuteHTTPSSLInfo": "TLS証明書詳細をSHIORIへ公開する機能を提供しないため対象外",
-    "OnExecuteRSS_SSLInfo": "TLS証明書詳細をSHIORIへ公開する機能を提供しないため対象外",
-    "OnExecuteICalComplete": "SakuraScriptからのical-get／ical-post操作を提供しないため対象外",
-    "OnExecuteICalFailure": "SakuraScriptからのical-get／ical-post操作を提供しないため対象外",
-    "OnExecuteICalProgress": "SakuraScriptからのical-get／ical-post操作を提供しないため対象外",
-    "OnExecuteICal_SSLInfo": "SakuraScriptからのical-get／ical-post操作を提供しないため対象外",
-    "OnExecuteScheduleComplete": "SakuraScriptからのschedule-add／schedule-delete操作を提供しないため対象外",
-    "OnExecuteScheduleFailure": "SakuraScriptからのschedule-add／schedule-delete操作を提供しないため対象外",
-    "OnExecuteScheduleGetComplete": "SakuraScriptからのschedule-get操作を提供しないため対象外",
-    "OnExecuteFileWatchChange": "SakuraScriptからのfilewatch操作を提供しないため対象外",
-    "OnExecuteFileWatchFailure": "SakuraScriptからのfilewatch操作を提供しないため対象外",
-    "OnExecuteWebSocketReconnect": "WebSocket自動再接続オプションを提供しないため対象外",
-    "OnExecuteWebSocket_SSLInfo": "TLS証明書詳細をSHIORIへ公開する機能を提供しないため対象外",
-    "OnPingProgress": "pingの応答単位progress通知を提供しないため対象外",
-    "OnRaiseOtherFailure": "他ベースウェア宛てraise配送を提供しないため対象外",
-    "OnNotifyOtherFailure": "他ベースウェア宛てnotify配送を提供しないため対象外",
-    "OnDisplayHandover": "画面間移動の監視を提供しないため対象外",
     "OnTabletMode": "macOSに対応するタブレットモードがないため対象外",
-    "OnOSUpdateInfo": "Windows Update履歴を通知するイベントでありmacOS版では対象外",
-    "OnRecycleBinEmpty": "SakuraScriptからmacOSのゴミ箱を空にする操作を提供しないため対象外",
-    "OnRecycleBinEmptyFromOther": "ゴミ箱を空にする操作を提供しないため対象外。外部変更はOnRecycleBinStatusUpdateで通知",
-    "OnSelectModeBegin": "selectrect画面領域選択モードを提供しないため対象外",
-    "OnSelectModeCancel": "selectrect画面領域選択モードを提供しないため対象外",
-    "OnSelectModeComplete": "selectrect画面領域選択モードを提供しないため対象外",
-    "OnSelectModeMouseDown": "selectrect画面領域選択モードを提供しないため対象外",
-    "OnSelectModeMouseUp": "selectrect画面領域選択モードを提供しないため対象外",
-    "OnTranslate": "SHIORIをMAKOTOとして再呼び出しする翻訳フックを提供しないため対象外",
-    "OnOtherGhostTalk": "他ゴーストの全発話を監視するopt-in機能を提供しないため対象外",
     "OnEmbryoExist": "Windows用Materiaの同時起動検出イベントでありmacOS版では対象外",
     "OnNekodorifExist": "Windows用猫どりふの同時起動検出イベントでありmacOS版では対象外",
-    "property.get": "SSPのactiveghostlist.ext拡張プロパティを提供しないため対象外",
-    "property.set": "SSPのactiveghostlist.ext拡張プロパティを提供しないため対象外",
-    "installedcalendarskinname": "カレンダースキンの起動時一覧通知を提供しないため対象外",
-    "installedcalendarpluginname": "外部カレンダープラグインを提供しないため対象外",
 }
 
 HIGH_DIFFICULTY_CATEGORIES = {
@@ -289,8 +292,10 @@ LOW_DIFFICULTY_CATEGORIES = {
 
 
 def implementation_metadata(title: str, event_id: str) -> tuple[str, str]:
-    if event_id in UNSUPPORTED_EVENTS:
+    if event_id in INAPPLICABLE_EVENTS:
         return "—", "—"
+    if event_id in PLANNED_EVENTS:
+        return "イベント発生元の本体機能", "中"
     if event_id in AUDITED_EVENTS:
         if AUDITED_EVENTS[event_id][0] == "✅":
             return "—", "—"
@@ -345,7 +350,12 @@ def render(ukadoc_file: Path) -> str:
             unique_sections.append((title, unique_ids))
     sections = unique_sections
     event_count = len(seen)
-    status_counts = {"✅": 0, "🟡": 0, "❌": event_count - len(AUDITED_EVENTS) - len(UNSUPPORTED_EVENTS), "➖": len(UNSUPPORTED_EVENTS)}
+    status_counts = {
+        "✅": 0,
+        "🟡": len(PLANNED_EVENTS),
+        "❌": event_count - len(AUDITED_EVENTS) - len(PLANNED_EVENTS) - len(INAPPLICABLE_EVENTS),
+        "➖": len(INAPPLICABLE_EVENTS),
+    }
     for status, _ in AUDITED_EVENTS.values():
         status_counts[status] += 1
     lines = [
@@ -365,14 +375,14 @@ def render(ukadoc_file: Path) -> str:
         "| 記号 | 意味 |",
         "| --- | --- |",
         "| ✅ | Utataneが発行経路を提供。macOS固有差や未提供のSSP拡張は備考に記載 |",
-        "| 🟡 | 再監査中の一時状態。公開時には残しません |",
+        "| 🟡 | 仕様と不足している実装を確認済み。実装予定 |",
         "| ❌ | 未分類の一時状態。公開時には残しません |",
-        "| ➖ | 対応する本体機能を提供しない、macOSでは非該当、または新仕様に置き換え済み |",
+        "| ➖ | Windows固有などmacOSでは非該当、または新仕様に置き換え済み |",
         "",
-        "名前がソースに現れるだけでは対応としません。発生条件とReferenceをUKADOCに照らし、提供する契約は✅、発生元機能を提供しないものは➖に分類します。",
+        "名前がソースに現れるだけでは対応としません。発生条件とReferenceをUKADOCに照らし、提供する契約は✅、未実装は🟡、macOSで成立しないものだけを➖に分類します。",
         "任意IDを中継できる経路（raise、inputbox、HTTP等）は、そのイベントをベースウェアが自動発行する実装とは数えません。",
         "全イベントを本番Swiftコード（テストコードを除く）の固定IDおよびイベント生成経路と照合します。✅のmacOS固有差と実機確認状況は備考に残します。",
-        "➖はイベントだけを単独実装せず、前提となる本体機能を将来追加する際に再評価します。",
+        "➖はWindows固有機能か旧仕様である根拠を備考へ記録します。Utatane側の機能不足だけを理由に➖へ分類しません。",
         "",
     ]
     for title, event_ids in sections:
@@ -386,9 +396,12 @@ def render(ukadoc_file: Path) -> str:
             link = f"https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#{event_id}"
             if event_id in AUDITED_EVENTS:
                 status, note = AUDITED_EVENTS[event_id]
-            elif event_id in UNSUPPORTED_EVENTS:
+            elif event_id in PLANNED_EVENTS:
+                status = "🟡"
+                note = PLANNED_EVENTS[event_id]
+            elif event_id in INAPPLICABLE_EVENTS:
                 status = "➖"
-                note = UNSUPPORTED_EVENTS[event_id]
+                note = INAPPLICABLE_EVENTS[event_id]
             else:
                 status = "❌"
                 note = "本番コードにベースウェアからの自動発行経路なし"

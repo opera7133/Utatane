@@ -69,6 +69,23 @@ public enum SHIORIEventFactory {
         ])
     }
 
+    public static func otherEventFailure(
+        target: String,
+        eventID: String,
+        arguments: [String],
+        reflectsResponse: Bool,
+        reason: String
+    ) -> GhostEvent {
+        var references = [0: reason, 1: target, 2: eventID]
+        for (index, argument) in arguments.enumerated() {
+            references[index + 3] = argument
+        }
+        return .shiori(
+            id: reflectsResponse ? "OnRaiseOtherFailure" : "OnNotifyOtherFailure",
+            references: references
+        )
+    }
+
     public static func ghostCallComplete(
         characterName: String,
         startupScript: String,

@@ -60,10 +60,10 @@ def main() -> int:
         failures.append(f"SHIORI Event inventory has {len(event_rows)} rows; expected 304")
     if len(event_ids) != len(set(event_ids)):
         failures.append("SHIORI Event inventory contains duplicate event IDs")
-    unresolved = [event_id for event_id, status in event_rows if status in {"🟡", "❌"}]
-    if unresolved:
+    unclassified = [event_id for event_id, status in event_rows if status == "❌"]
+    if unclassified:
         failures.append(
-            "SHIORI Event inventory has unresolved classifications: " + ", ".join(unresolved)
+            "SHIORI Event inventory has unclassified events: " + ", ".join(unclassified)
         )
     counts = {status: sum(row_status == status for _, row_status in event_rows) for status in ("✅", "🟡", "❌", "➖")}
     expected_summary = (

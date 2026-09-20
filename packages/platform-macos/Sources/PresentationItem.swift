@@ -431,6 +431,13 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         setShowsWindowFrame(restoredState?.showsWindowFrame ?? true)
     }
 
+    deinit {
+        MainActor.assumeIsolated {
+            window.orderOut(nil)
+            window.close()
+        }
+    }
+
     var itemCount: Int {
         items.count
     }

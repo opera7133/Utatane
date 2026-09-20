@@ -523,6 +523,27 @@ import Testing
     ))
 }
 
+@Test func `other ghost delivery failures preserve the attempted event`() {
+    #expect(SHIORIEventFactory.otherEventFailure(
+        target: "Emily",
+        eventID: "OnPing",
+        arguments: ["one", "two"],
+        reflectsResponse: true,
+        reason: "notfound"
+    ) == .shiori(id: "OnRaiseOtherFailure", references: [
+        0: "notfound", 1: "Emily", 2: "OnPing", 3: "one", 4: "two"
+    ]))
+    #expect(SHIORIEventFactory.otherEventFailure(
+        target: "Emily",
+        eventID: "OnNotice",
+        arguments: [],
+        reflectsResponse: false,
+        reason: "notfound"
+    ) == .shiori(id: "OnNotifyOtherFailure", references: [
+        0: "notfound", 1: "Emily", 2: "OnNotice"
+    ]))
+}
+
 @Test func `archive events select standard and custom IDs`() {
     #expect(SHIORIEventFactory.extractArchiveComplete(
         eventID: "extract-task",

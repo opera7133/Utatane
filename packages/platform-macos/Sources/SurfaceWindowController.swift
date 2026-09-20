@@ -88,6 +88,7 @@ public final class SurfaceWindowController {
     private var stayOnTop = true
     private var stickyGroups: [Set<Int>] = []
     private var collisionMode = (enabled: false, showsNames: true)
+    private var displayHandoverTracker = DisplayHandoverTracker()
 
     public var isCollisionModeEnabled: Bool {
         collisionMode.enabled
@@ -102,6 +103,7 @@ public final class SurfaceWindowController {
     public var onMouseGesture: (@MainActor (GhostMouseGestureEvent) -> Void)?
     public var onSurfaceChange: (@MainActor (Int, Int?, Int) -> Void)?
     public var onWindowMove: (@MainActor (Int, NSPoint) -> Void)?
+    public var onDisplayHandover: (@MainActor (DisplayHandoverEvent) -> Void)?
     var onPresentationMove: (@MainActor (Int, NSPoint, PresentationItemMoveReason) -> Void)?
     public var onNarDrop: (@MainActor (Int, [URL]) -> Void)?
     public var onFileDropping: (@MainActor (Int, [URL]) -> Void)?
@@ -159,6 +161,14 @@ public final class SurfaceWindowController {
         self.geometryProvider = geometryProvider
         presentationHost = DesktopPresentationHost(geometryProvider: geometryProvider)
         self.interactionHoverDelay = interactionHoverDelay
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            for character in characters.values {
+                character.discard()
+            }
+        }
     }
 
     public func setStayOnTop(_ stayOnTop: Bool) {
@@ -358,6 +368,17 @@ public final class SurfaceWindowController {
 
     public var windowNumbers: [Int] {
         characters.keys.sorted().compactMap { characters[$0]?.windowNumber }
+    }
+
+    public func displayHandoverInitializationEvents() -> [DisplayHandoverEvent] {
+        visibleScopes.compactMap { scope in
+            guard let frame = windowFrame(for: scope) else { return nil }
+            return displayHandoverTracker.initialize(
+                scope: scope,
+                windowFrame: frame,
+                screens: geometryProvider.screens
+            )
+        }
     }
 
     public func renderedImage(for scope: Int = 0) -> NSImage? {
@@ -707,6 +728,7 @@ public final class SurfaceWindowController {
             character.discard()
         }
         characters.removeAll()
+        displayHandoverTracker.reset()
         shell = nil
         defaultSurfaceIDs.removeAll()
         enabledBindGroups.removeAll()
@@ -834,8 +856,17 @@ public final class SurfaceWindowController {
             self?.handleWindowDragDelta(scope: scope, delta: delta)
         }
         character.onWindowMove = { [weak self] delta, reason in
-            self?.onWindowMove?(scope, delta)
-            self?.onPresentationMove?(scope, delta, reason)
+            guard let self else { return }
+            onWindowMove?(scope, delta)
+            onPresentationMove?(scope, delta, reason)
+            guard let frame = character.windowFrame,
+                  let event = displayHandoverTracker.update(
+                      scope: scope,
+                      windowFrame: frame,
+                      screens: geometryProvider.screens
+                  )
+            else { return }
+            onDisplayHandover?(event)
         }
         character.contextMenuItems = { [weak self] in
             self?.contextMenuItems?(scope) ?? []
