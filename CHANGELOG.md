@@ -10,12 +10,14 @@
 - SakuraScriptからカレンダースキンとMenuBarアイコンを変更し、プラグインイベントを遅延・反復実行できるようにした
 - SakuraScriptのパスワード・日付・時刻・スライダー・IPアドレス入力を専用UIで開き、timeout・文字数制限・追加Referenceを扱えるようにした
 - `\![update,platform]`からSparkleの本体更新確認を開けるようにした
+- SakuraScriptの`file:`・`mailto:`リンクをmacOSの関連付けアプリで安全に開けるようにした
 
 ### 修正
 
 - シェルのelement画像が一部欠けている場合も、残っているelementを使ってサーフェスを表示するようにした
 - SakuraScript互換表の集計を実際の分類行から検査し、現行UKADOCとの差を追跡できるようにした
 - InputBoxを閉じた理由が時間切れか利用者操作かを区別して`OnUserInputCancel`へ通知するようにした
+- InputBoxの時間切れイベントが未処理の場合、互換動作として`timeout`を入力値にして通知するようにした
 
 ## [0.2.7] - 2026-09-20
 

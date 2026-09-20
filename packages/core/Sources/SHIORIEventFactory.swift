@@ -520,6 +520,31 @@ public enum SHIORIEventFactory {
         .choice(id: id, arguments: arguments)
     }
 
+    public static func userInput(
+        id: String,
+        value: String,
+        supplementalValue: String = "",
+        additionalReferences: [String] = []
+    ) -> GhostEvent {
+        if id.hasPrefix("On") {
+            return .shiori(
+                id: id,
+                references: indexedReferences([value, supplementalValue] + additionalReferences)
+            )
+        }
+        return .shiori(
+            id: "OnUserInput",
+            references: indexedReferences([id, value, supplementalValue] + additionalReferences)
+        )
+    }
+
+    public static func userInputCancel(id: String, timedOut: Bool) -> GhostEvent {
+        .shiori(
+            id: "OnUserInputCancel",
+            references: [0: id, 1: timedOut ? "timeout" : "close", 2: ""]
+        )
+    }
+
     public static func balloonChange(name: String, path: String) -> GhostEvent {
         .shiori(id: "OnBalloonChange", references: [0: name, 1: path])
     }

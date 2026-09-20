@@ -374,6 +374,28 @@ import Testing
     ) == .choice(id: "LikeSeason", arguments: ["月見", "菊"]))
 }
 
+@Test func `input events preserve SSP IDs values and cancellation reasons`() {
+    #expect(SHIORIEventFactory.userInput(
+        id: "name",
+        value: "Ria",
+        supplementalValue: "detail",
+        additionalReferences: ["extra"]
+    ) == .shiori(id: "OnUserInput", references: [
+        0: "name", 1: "Ria", 2: "detail", 3: "extra"
+    ]))
+    #expect(SHIORIEventFactory.userInput(
+        id: "OnNameInput",
+        value: "Ria",
+        additionalReferences: ["extra"]
+    ) == .shiori(id: "OnNameInput", references: [
+        0: "Ria", 1: "", 2: "extra"
+    ]))
+    #expect(SHIORIEventFactory.userInputCancel(id: "name", timedOut: true) == .shiori(
+        id: "OnUserInputCancel",
+        references: [0: "name", 1: "timeout", 2: ""]
+    ))
+}
+
 @Test func `balloon and name lookup events follow UKADOC references`() {
     #expect(SHIORIEventFactory.balloonChange(
         name: "Test Balloon",

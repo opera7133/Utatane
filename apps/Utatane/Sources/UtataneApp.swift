@@ -2083,10 +2083,14 @@ private struct UtataneRootView: View {
                     showSpeechHistory()
                     return
                 }
-                guard let url = URL(string: target),
-                      let scheme = url.scheme?.lowercased(),
-                      ["http", "https"].contains(scheme)
-                else { return }
+                let masterDirectory = ghost.rootDirectory.appending(
+                    path: "ghost/master",
+                    directoryHint: .isDirectory
+                )
+                guard let url = SakuraScriptOpenTargetResolver.resolve(
+                    target,
+                    relativeTo: masterDirectory
+                ) else { return }
                 NSWorkspace.shared.open(url)
             }
             scriptPlayer.configure(resourceBaseDirectory: ghost.rootDirectory.appending(
@@ -2271,28 +2275,25 @@ private struct UtataneRootView: View {
                 )
                 guard case let .submitted(value) = result else {
                     let timedOut = result == .cancelled(timedOut: true)
-                    return try? await activeSession.handle(event: .shiori(
-                        id: "OnUserInputCancel",
-                        references: [0: command.id, 1: timedOut ? "timeout" : "close", 2: ""]
-                    ))
-                }
-                if command.id.hasPrefix("On") {
-                    var references = [0: value, 1: command.supplementalValue]
-                    for (offset, reference) in command.references.enumerated() {
-                        references[offset + 2] = reference
-                    }
-                    return try? await activeSession.handle(event: .shiori(
+                    let response = try? await activeSession.handle(event: SHIORIEventFactory.userInputCancel(
                         id: command.id,
-                        references: references
+                        timedOut: timedOut
                     ))
+                    if timedOut, response?.rawValue.isEmpty != false {
+                        return try? await activeSession.handle(event: SHIORIEventFactory.userInput(
+                            id: command.id,
+                            value: "timeout",
+                            supplementalValue: command.supplementalValue,
+                            additionalReferences: command.references
+                        ))
+                    }
+                    return response
                 }
-                var references = [0: command.id, 1: value, 2: command.supplementalValue]
-                for (offset, reference) in command.references.enumerated() {
-                    references[offset + 3] = reference
-                }
-                return try? await activeSession.handle(event: .shiori(
-                    id: "OnUserInput",
-                    references: references
+                return try? await activeSession.handle(event: SHIORIEventFactory.userInput(
+                    id: command.id,
+                    value: value,
+                    supplementalValue: command.supplementalValue,
+                    additionalReferences: command.references
                 ))
             }
             scriptPlayer.onCloseInputBox = { id in

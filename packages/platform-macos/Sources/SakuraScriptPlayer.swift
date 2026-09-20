@@ -3,6 +3,33 @@ import CoreText
 import UtataneBalloon
 import UtataneSakuraScript
 
+public enum SakuraScriptOpenTargetResolver {
+    public static func resolve(_ target: String, relativeTo masterDirectory: URL) -> URL? {
+        guard let url = URL(string: target), let scheme = url.scheme?.lowercased() else {
+            return nil
+        }
+        switch scheme {
+        case "http", "https", "mailto":
+            return url
+        case "file":
+            let absoluteURL = URL(fileURLWithPath: url.path).standardizedFileURL
+            if FileManager.default.fileExists(atPath: absoluteURL.path) {
+                return absoluteURL
+            }
+            let relativePath = url.path.drop(while: { $0 == "/" })
+            guard !relativePath.isEmpty else { return nil }
+            let root = masterDirectory.standardizedFileURL
+            let candidate = root.appending(path: String(relativePath)).standardizedFileURL
+            guard candidate.path.hasPrefix(root.path + "/"),
+                  FileManager.default.fileExists(atPath: candidate.path)
+            else { return nil }
+            return candidate
+        default:
+            return nil
+        }
+    }
+}
+
 public enum SakuraScriptPlaybackPolicy: Sendable, Equatable {
     case trusted
     case externalMessage

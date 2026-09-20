@@ -5,6 +5,30 @@ import Testing
 import UtataneBalloon
 import UtataneCore
 @testable import UtatanePlatformMacOS
+
+@Test func `resolves SakuraScript web mail and ghost relative file targets`() throws {
+    let root = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = root.appending(path: "descript.txt")
+    try Data("name,test".utf8).write(to: file)
+
+    #expect(SakuraScriptOpenTargetResolver.resolve(
+        "https://example.com/",
+        relativeTo: root
+    )?.absoluteString == "https://example.com/")
+    #expect(SakuraScriptOpenTargetResolver.resolve(
+        "mailto:test@example.com",
+        relativeTo: root
+    )?.absoluteString == "mailto:test@example.com")
+    #expect(SakuraScriptOpenTargetResolver.resolve(
+        "file:///descript.txt",
+        relativeTo: root
+    ) == file.standardizedFileURL)
+    #expect(SakuraScriptOpenTargetResolver.resolve("javascript:alert(1)", relativeTo: root) == nil)
+}
+
 import UtataneSakuraScript
 import UtataneShell
 

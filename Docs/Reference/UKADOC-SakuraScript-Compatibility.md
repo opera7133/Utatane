@@ -26,7 +26,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 調査日: 2026-09-20
 UKADOC掲載構文数: 359
 UKADOC分類行数: 143
-調査結果: ✅ 91 / 🟡 46 / ❌ 0 / ➖ 6
+調査結果: ✅ 94 / 🟡 43 / ❌ 0 / ➖ 6
 
 ### 基本仕様
 
@@ -42,13 +42,13 @@ UKADOC分類行数: 143
 | --- | --- | --- |
 | `\0`, `\h` | ✅ | scope 0 |
 | `\1`, `\u` | ✅ | scope 1 |
-| `\pID`, `\p[ID]` | 🟡 | 整数scopeに対応。UKADOCどおり括弧なしは1桁、複数桁は括弧形式 |
+| `\pID`, `\p[ID]` | ✅ | 整数scopeに対応。UKADOCどおり括弧なしは1桁、複数桁は括弧形式。Parserテストで確認 |
 
 ### サーフェス・アニメーション・ウィンドウ
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\sID`, `\s[ID]` | 🟡 | 数値IDに対応。UKADOCどおり括弧なしは1桁、複数桁は括弧形式 |
+| `\sID`, `\s[ID]` | ✅ | 数値IDに対応。UKADOCどおり括弧なしは1桁、複数桁は括弧形式。Parserテストで確認 |
 | `\s[識別子]` | ✅ | sakura／kero／charのsurface aliasと、`surfaces.txt`の各surfaceに書く`name`を解決。候補が複数あるalias／nameはその中から選択 |
 | `\i[ID]`, `\i[ID,wait]` | ✅ | 数値IDと`animation*.name`のSERIKOアニメーション開始、実完了待ちに対応 |
 | `\![anim,clear/pause/resume/offset/add/stop,...]` | 🟡 | ID・名前指定の`clear`・`stop`・`pause`・`resume`・`offset`を実装。pause中はフレーム残り時間も停止。add・textは未実装 |
@@ -172,10 +172,10 @@ UKADOC分類行数: 143
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\j[ID]`, `\![open,browser,...]` | 🟡 | メイン／呼び出しゴーストともHTTP・HTTPSを既定ブラウザで開きます。`file:`・`mailto:`は未対応 |
+| `\j[ID]`, `\![open,browser,...]` | ✅ | メイン／呼び出しゴーストともHTTP・HTTPSを既定ブラウザで開き、`mailto:`を標準メールアプリへ、`file:`の絶対パスまたは`ghost/master`相対パスを関連付けアプリへ渡します。危険なURL schemeとゴースト外へ抜ける相対パスは拒否 |
 | mailer / addressbar / editor / explorer | ➖ | macOSでの代替と安全境界が必要 |
 | teachbox / communicatebox | ✅ | `\![open,communicatebox,初期値]` / `\![open,teachbox,初期値]` に対応し、入力値を `OnCommunicate` / `OnTeach` イベントとして SHIORI へ通知 |
-| `\![open,inputbox,...]` | 🟡 | 旧形式と`--timeout`・`--text`・`--limit`・`--reference`を解析。時間切れと手動closeを区別し、入力値・補足・追加Referenceを指定イベントへ返します。noclose／noclearとballoon画像指定は未対応 |
+| `\![open,inputbox,...]` | 🟡 | 旧形式と`--timeout`・`--text`・`--limit`・`--reference`を解析。時間切れと手動closeを区別し、`OnUserInputCancel`が空応答なら`timeout`値の入力イベントへフォールバック。入力値・補足・追加Referenceも指定イベントへ返します。noclose／noclearとballoon画像指定は未対応 |
 | password/date/slider/time/ip input | ✅ | パスワード欄、DatePicker、Slider、時刻選択、IPv4入力を使い、各形式のReference値を返します。旧形式と`--text`形式をParserテストで確認 |
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
 | configuration / 各explorer / graph / calendar | 🟡 | `\![open,configurationdialog]`で設定画面、`ghostexplorer`／`shellexplorer`／`balloonexplorer`／`headlinesensorexplorer`／`pluginexplorer`で共通コンテンツエクスプローラ、`calendar`でカレンダーを開きます。graphとdressup explorerは未実装 |
