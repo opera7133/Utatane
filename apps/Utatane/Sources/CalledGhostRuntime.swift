@@ -665,6 +665,10 @@ final class CalledGhostRuntime {
             guard let self, !player.isTimeCritical else { return }
             dispatchMouseEvent(event)
         }
+        surfaceController.onMouseGesture = { [weak self] event in
+            guard let self, !player.isTimeCritical else { return }
+            send(.shiori(id: "OnMouseGesture", references: event.references))
+        }
         surfaceController.onSurfaceChange = { [weak self] scope, previous, current in
             guard let self else { return }
             send(.shiori(id: "OnSurfaceChange", references: currentSurfaceReferences()))
@@ -744,6 +748,9 @@ final class CalledGhostRuntime {
         }
         player.onSoundStop = { [weak self] file, reason in
             self?.send(.shiori(id: "OnSoundStop", references: [0: file, 1: reason]))
+        }
+        player.onSoundLoop = { [weak self] file in
+            self?.send(.shiori(id: "OnSoundLoop", references: [0: file]))
         }
         player.onSoundError = { [weak self] file, error in
             let nsError = error as NSError

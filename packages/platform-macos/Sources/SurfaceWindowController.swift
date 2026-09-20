@@ -99,6 +99,7 @@ public final class SurfaceWindowController {
 
     public var onMouseClick: (@MainActor (Int, String?) -> Void)?
     public var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
+    public var onMouseGesture: (@MainActor (GhostMouseGestureEvent) -> Void)?
     public var onSurfaceChange: (@MainActor (Int, Int?, Int) -> Void)?
     public var onWindowMove: (@MainActor (Int, NSPoint) -> Void)?
     var onPresentationMove: (@MainActor (Int, NSPoint, PresentationItemMoveReason) -> Void)?
@@ -814,6 +815,9 @@ public final class SurfaceWindowController {
         character.onMouseEvent = { [weak self] event in
             self?.onMouseEvent?(event)
         }
+        character.onMouseGesture = { [weak self] event in
+            self?.onMouseGesture?(event)
+        }
         character.onNarDrop = { [weak self] urls in
             self?.onNarDrop?(scope, urls)
         }
@@ -995,6 +999,7 @@ private final class CharacterSurfaceController {
 
     var onMouseClick: (@MainActor (String?) -> Void)?
     var onMouseEvent: (@MainActor (GhostMouseEvent) -> Void)?
+    var onMouseGesture: (@MainActor (GhostMouseGestureEvent) -> Void)?
     var onNarDrop: (@MainActor ([URL]) -> Void)?
     var onFileDropping: (@MainActor ([URL]) -> Void)?
     var onFileDrop: (@MainActor ([URL]) -> Void)?
@@ -2115,6 +2120,20 @@ private final class CharacterSurfaceController {
                 )
             )
         }
+        imageView.onMouseGesture = { [weak self] gesture in
+            guard let self else { return }
+            onMouseGesture?(GhostMouseGestureEvent(
+                scope: scope,
+                x: gesture.x,
+                y: gesture.y,
+                region: gesture.region,
+                startX: gesture.startX,
+                startY: gesture.startY,
+                startRegion: gesture.startRegion,
+                direction: gesture.direction,
+                angle: gesture.angle
+            ))
+        }
         imageView.onPointerMove = { [weak self] x, y in
             self?.updateNijigeneratePointer(x: x, y: y)
         }
@@ -2725,6 +2744,17 @@ private final class NijigenerateSurfaceContainerView: NSView {
     }
 }
 
+private struct SurfaceMouseGesture {
+    var x: Int
+    var y: Int
+    var region: String?
+    var startX: Int
+    var startY: Int
+    var startRegion: String?
+    var direction: String
+    var angle: Int
+}
+
 private final class SurfaceImageView: NSImageView {
     var collisions: [SurfaceCollision] = []
     var cursorDefinitions: [SurfaceCursorDefinition] = []
@@ -2747,6 +2777,7 @@ private final class SurfaceImageView: NSImageView {
     var flipsVertically = false
     var onMouseClick: ((String?) -> Void)?
     var onMouseEvent: ((GhostMouseEvent.Kind, String?, Int, Int, Int) -> Void)?
+    var onMouseGesture: ((SurfaceMouseGesture) -> Void)?
     var onPointerMove: ((Int, Int) -> Void)?
     var onPointerExit: (() -> Void)?
     var parameterDragRegion: String?
@@ -2784,6 +2815,10 @@ private final class SurfaceImageView: NSImageView {
     private var suppressDragClick = false
     private var parameterDragStart: (x: Int, y: Int)?
     private var didParameterDrag = false
+    private var gestureStart: (x: Int, y: Int, region: String?)?
+    private var gestureLastPoint: (x: Int, y: Int)?
+    private var gestureLastAngle = 0
+    private var didGesture = false
     private var hoverWorkItem: DispatchWorkItem?
     var hoverDelay: TimeInterval = 1
     var presentationFrame: (() -> NSRect?)?
@@ -2822,6 +2857,7 @@ private final class SurfaceImageView: NSImageView {
         }
         parameterDragStart = nil
         didParameterDrag = false
+        cancelGesture()
         if let endingEvent {
             sendMouseEvent(.dragEnd, event: endingEvent)
         }
@@ -3100,25 +3136,48 @@ private final class SurfaceImageView: NSImageView {
         sendMouseEvent(.down, event: event)
         cancelHoverEvent()
         setCursor(.mouseRightDown, for: hitTest(event).region)
-        super.rightMouseDown(with: event)
+        startGesture(event)
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        updateGesture(event)
     }
 
     override func rightMouseUp(with event: NSEvent) {
         sendMouseEvent(.up, event: event)
         setCursor(.mouseUp, for: hitTest(event).region)
+        if finishGesture(event) {
+            scheduleHoverEvent(for: hitTest(event), event: event)
+            return
+        }
         sendClickEvent(event)
-        super.rightMouseUp(with: event)
+        if let menu = menu(for: event) {
+            NSMenu.popUpContextMenu(menu, with: event, for: self)
+        }
     }
 
     override func otherMouseDown(with event: NSEvent) {
         sendMouseEvent(.down, event: event)
         cancelHoverEvent()
+        if buttonNumber(event) == 2 {
+            startGesture(event)
+        }
         super.otherMouseDown(with: event)
+    }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        guard buttonNumber(event) == 2 else {
+            super.otherMouseDragged(with: event)
+            return
+        }
+        updateGesture(event)
     }
 
     override func otherMouseUp(with event: NSEvent) {
         sendMouseEvent(.up, event: event)
-        sendClickEvent(event)
+        if !finishGesture(event) {
+            sendClickEvent(event)
+        }
         super.otherMouseUp(with: event)
     }
 
@@ -3200,6 +3259,63 @@ private final class SurfaceImageView: NSImageView {
         }
         onMouseEvent?(kind, hit.region, hit.x, hit.y, buttonNumber(event))
         scheduleHoverEvent(for: hit, event: event)
+    }
+
+    private func startGesture(_ event: NSEvent) {
+        let hit = hitTest(event)
+        gestureStart = (hit.x, hit.y, hit.region)
+        gestureLastPoint = (hit.x, hit.y)
+        gestureLastAngle = 0
+        didGesture = false
+    }
+
+    private func updateGesture(_ event: NSEvent) {
+        guard let start = gestureStart, let previous = gestureLastPoint else { return }
+        let hit = hitTest(event)
+        let deltaX = hit.x - previous.x
+        let deltaY = previous.y - hit.y
+        guard hypot(Double(deltaX), Double(deltaY)) >= 8 else { return }
+        let angle = SurfaceMouseGesturePolicy.angle(deltaX: deltaX, deltaY: deltaY)
+        gestureLastPoint = (hit.x, hit.y)
+        gestureLastAngle = angle
+        didGesture = true
+        onMouseGesture?(SurfaceMouseGesture(
+            x: hit.x,
+            y: hit.y,
+            region: hit.region,
+            startX: start.x,
+            startY: start.y,
+            startRegion: start.region,
+            direction: SurfaceMouseGesturePolicy.direction(angle: angle),
+            angle: angle
+        ))
+    }
+
+    private func finishGesture(_ event: NSEvent) -> Bool {
+        guard let start = gestureStart else { return false }
+        let completed = didGesture
+        if completed {
+            let hit = hitTest(event)
+            onMouseGesture?(SurfaceMouseGesture(
+                x: hit.x,
+                y: hit.y,
+                region: hit.region,
+                startX: start.x,
+                startY: start.y,
+                startRegion: start.region,
+                direction: "end",
+                angle: gestureLastAngle
+            ))
+        }
+        cancelGesture()
+        return completed
+    }
+
+    private func cancelGesture() {
+        gestureStart = nil
+        gestureLastPoint = nil
+        gestureLastAngle = 0
+        didGesture = false
     }
 
     private func scheduleHoverEvent(
@@ -3432,6 +3548,19 @@ private final class SurfaceImageView: NSImageView {
 enum SurfaceStrokeEventPolicy {
     static func minimumDistance(for region: String) -> CGFloat {
         region.caseInsensitiveCompare("Head") == .orderedSame ? 2 : 4
+    }
+}
+
+enum SurfaceMouseGesturePolicy {
+    static func angle(deltaX: Int, deltaY: Int) -> Int {
+        let degrees = atan2(Double(deltaY), Double(deltaX)) * 180 / .pi
+        let rounded = Int(degrees.rounded())
+        return (rounded % 360 + 360) % 360
+    }
+
+    static func direction(angle: Int) -> String {
+        let directions = ["right", "right_up", "up", "left_up", "left", "left_down", "down", "right_down"]
+        return directions[Int((Double(angle) + 22.5) / 45) % directions.count]
     }
 }
 

@@ -52,6 +52,52 @@ public struct GhostMouseEvent: Sendable, Equatable {
     }
 }
 
+public struct GhostMouseGestureEvent: Sendable, Equatable {
+    public let scope: Int
+    public let x: Int
+    public let y: Int
+    public let region: String?
+    public let startX: Int
+    public let startY: Int
+    public let startRegion: String?
+    public let direction: String
+    public let angle: Int
+
+    public init(
+        scope: Int,
+        x: Int,
+        y: Int,
+        region: String?,
+        startX: Int,
+        startY: Int,
+        startRegion: String?,
+        direction: String,
+        angle: Int
+    ) {
+        self.scope = scope
+        self.x = x
+        self.y = y
+        self.region = region
+        self.startX = startX
+        self.startY = startY
+        self.startRegion = startRegion
+        self.direction = direction
+        self.angle = angle
+    }
+
+    public var references: [Int: String] {
+        [
+            0: String(scope),
+            1: "\(x)\u{01}\(y)",
+            2: region ?? "",
+            3: "\(startX)\u{01}\(startY)",
+            4: startRegion ?? "",
+            5: direction,
+            6: String(angle)
+        ]
+    }
+}
+
 public enum GhostStopReason: Sendable, Equatable {
     case close
     case vanish

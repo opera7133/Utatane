@@ -4,7 +4,14 @@ import UtataneSakuraScript
 
 @MainActor
 final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
+    enum CompletionAction: Equatable {
+        case loop
+        case stop
+        case error
+    }
+
     var onStop: ((String, String) -> Void)?
+    var onLoop: ((String) -> Void)?
     var onError: ((String, Error) -> Void)?
     var resourceBaseDirectory: URL?
     private var audioPlayer: AVAudioPlayer?
@@ -32,7 +39,7 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
                 loadedFile = file
             }
             player.delegate = self
-            player.numberOfLoops = loop ? -1 : 0
+            player.numberOfLoops = 0
             apply(options: options, to: player)
             player.prepareToPlay()
             player.play()
@@ -80,16 +87,33 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
 
     nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
         Task { @MainActor [weak self] in
-            guard let self, let loadedFile else { return }
-            if flag {
-                onStop?(loadedFile, "end")
-            } else {
-                onError?(loadedFile, CocoaError(.fileReadCorruptFile))
-            }
-            audioPlayer = nil
-            self.loadedFile = nil
-            isLooping = false
+            self?.handlePlaybackFinished(successfully: flag)
         }
+    }
+
+    func handlePlaybackFinished(successfully flag: Bool) {
+        guard let loadedFile else { return }
+        switch Self.completionAction(isLooping: isLooping, successfully: flag) {
+        case .loop:
+            guard let audioPlayer else { return }
+            onLoop?(loadedFile)
+            audioPlayer.currentTime = 0
+            audioPlayer.prepareToPlay()
+            audioPlayer.play()
+            return
+        case .stop:
+            onStop?(loadedFile, "end")
+        case .error:
+            onError?(loadedFile, CocoaError(.fileReadCorruptFile))
+        }
+        audioPlayer = nil
+        self.loadedFile = nil
+        isLooping = false
+    }
+
+    static func completionAction(isLooping: Bool, successfully: Bool) -> CompletionAction {
+        guard successfully else { return .error }
+        return isLooping ? .loop : .stop
     }
 
     private func apply(options: [String], to player: AVAudioPlayer) {

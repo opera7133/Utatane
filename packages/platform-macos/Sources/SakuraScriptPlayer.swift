@@ -106,6 +106,7 @@ public final class SakuraScriptPlayer {
     public var onAnchorEnter: (@MainActor (String?, String?, [String]) -> Void)?
     public var onAnchorHover: (@MainActor (String, String, [String]) -> Void)?
     public var onSoundStop: (@MainActor (String, String) -> Void)?
+    public var onSoundLoop: (@MainActor (String) -> Void)?
     public var onSoundError: (@MainActor (String, Error) -> Void)?
     public var onChoiceTimeout: (@MainActor (String) -> Void)?
     public var onBalloonClose: (@MainActor (String) -> Void)?
@@ -184,6 +185,7 @@ public final class SakuraScriptPlayer {
         self.postDialogueDismissalMilliseconds = postDialogueDismissalMilliseconds
         self.surfaceRestoreDelayMilliseconds = max(0, surfaceRestoreDelayMilliseconds)
         soundPlayer.onStop = { [weak self] file, reason in self?.onSoundStop?(file, reason) }
+        soundPlayer.onLoop = { [weak self] file in self?.onSoundLoop?(file) }
         soundPlayer.onError = { [weak self] file, error in self?.onSoundError?(file, error) }
         balloonWindowController.onClick = { [weak self] _ in
             self?.advance()

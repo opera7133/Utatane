@@ -1827,6 +1827,10 @@ private struct UtataneRootView: View {
                 }
                 dispatchMouseEvent(event)
             }
+            surfaceWindowController.onMouseGesture = { event in
+                guard !scriptPlayer.isTimeCritical else { return }
+                sendEvent(.shiori(id: "OnMouseGesture", references: event.references))
+            }
             surfaceWindowController.onSurfaceChange = { scope, previous, current in
                 sendEvent(.shiori(
                     id: "OnSurfaceChange",
@@ -1930,6 +1934,9 @@ private struct UtataneRootView: View {
             }
             scriptPlayer.onSoundStop = { file, reason in
                 sendEvent(.shiori(id: "OnSoundStop", references: [0: file, 1: reason]))
+            }
+            scriptPlayer.onSoundLoop = { file in
+                sendEvent(.shiori(id: "OnSoundLoop", references: [0: file]))
             }
             scriptPlayer.onSoundError = { file, error in
                 let nsError = error as NSError

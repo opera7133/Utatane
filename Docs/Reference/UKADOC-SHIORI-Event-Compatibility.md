@@ -7,8 +7,8 @@
 基準: [SHIORI Eventリスト](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html)
 
 UKADOC掲載イベント数: 290
-調査日: 2026-09-17
-調査結果: ✅ 105 / 🟡 135 / ❌ 46 / ➖ 4
+調査日: 2026-09-20
+調査結果: ✅ 105 / 🟡 137 / ❌ 44 / ➖ 4
 
 ## 判定
 
@@ -151,7 +151,7 @@ UKADOC掲載イベント数: 290
 | [`OnMouseDragStart`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseDragStart) | 🟡 | 通知経路のUKADOC照合 | 低 | 2px以上のキャラクター移動ドラッグ開始時にReference0〜6を通知。左ボタン以外のドラッグは未対応 |
 | [`OnMouseDragEnd`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseDragEnd) | 🟡 | 通知経路のUKADOC照合 | 低 | キャラクター移動ドラッグ終了時にReference0〜6を通知。左ボタン以外のドラッグは未対応 |
 | [`OnMouseHover`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseHover) | ✅ | — | — | キャラクター上でマウス移動が1秒止まった時にReference0〜6を通知。入力からSHIORI変換まで自動テスト済み |
-| [`OnMouseGesture`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseGesture) | ❌ | 既存マウス処理への通知追加 | 低 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnMouseGesture`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMouseGesture) | 🟡 | 円ジェスチャーの認識 | 中 | 右ボタンまたはホイールの8方向ドラッグと終了を、scope・現在位置／開始位置・各collision・角度とともに通知。circle.cw／circle.ccwは未対応 |
 
 ## ゲームパッドイベント
 
@@ -413,7 +413,7 @@ UKADOC掲載イベント数: 290
 | [`OnEmbryoExist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnEmbryoExist) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnNekodorifExist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNekodorifExist) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
 | [`OnSoundStop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundStop) | 🟡 | 通知経路のUKADOC照合 | 低 | SakuraScript音声の自然終了とstop操作でファイル名・end/closeを通知。ループ終了など全経路は未確認 |
-| [`OnSoundLoop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundLoop) | ❌ | イベント発生元の本体機能 | 中 | 本番コードにベースウェアからの自動発行経路なし |
+| [`OnSoundLoop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundLoop) | 🟡 | 実音声での周回確認 | 低 | SakuraScriptのループ音声が末尾から次の周回へ入るたびにファイル名をReference0へ通知。周回・終了・失敗の判定を自動テスト済み |
 | [`OnSoundError`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundError) | 🟡 | 通知経路のUKADOC照合 | 低 | 音声ファイル解決・AVAudioPlayer生成・再生終了失敗時にplay・エラーコード・ファイル・説明を通知。実動未確認 |
 | [`OnMusicPlayEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMusicPlayEx) | 🟡 | macOSの「再生中」情報を監視 | 中 | 設定有効時、ブラウザ以外の曲変更を検出して通知。無反応ならOnMusicPlayへフォールバック。判定不能な再生元もこちらへ送る。実アプリでの通知は未確認 |
 | [`OnMusicPlay`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMusicPlay) | ✅ | OnMusicPlayExのフォールバック | 低 | 拡張イベントへの無反応時にタイトル・アーティストを通知。SSTP/1.1のSongヘッダ経路も対応 |
