@@ -70,6 +70,29 @@ func `renders both installed twin characters with default bindings`() throws {
 
 @Test
 @MainActor
+func `renders the installed rage partner when optional element images are missing`() throws {
+    let repositoryRoot = URL(filePath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let shellDirectory = repositoryRoot.appending(
+        path: "Content/Local/Ghosts/rage/shell/master",
+        directoryHint: .isDirectory
+    )
+    guard FileManager.default.fileExists(atPath: shellDirectory.path) else { return }
+    let shell = try ShellLoader().load(from: shellDirectory)
+    let controller = SurfaceWindowController()
+    defer { controller.hideAll() }
+
+    try controller.show(shell: shell, scope: 1, surfaceID: 10)
+
+    #expect(controller.surfaceID(for: 1) == 10)
+    #expect(try #require(controller.renderedImage(for: 1)).hasVisiblePixels)
+}
+
+@Test
+@MainActor
 func `shell presentation defaults place and align a surface`() throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

@@ -185,6 +185,36 @@ import UtataneShell
 }
 
 @MainActor
+@Test func `renders remaining elements when an optional element image is missing`() throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try makePNG(width: 4, height: 4, color: .green).write(to: directory.appending(path: "body.png"))
+    try makePNG(width: 2, height: 2, color: .blue).write(to: directory.appending(path: "badge.png"))
+    let definition = SurfaceDefinition(
+        id: 5,
+        elements: [
+            SurfaceElement(id: 0, method: "base", filename: "body.png", x: 0, y: 0),
+            SurfaceElement(id: 1, method: "overlay", filename: "missing.png", x: 0, y: 0),
+            SurfaceElement(id: 2, method: "overlay", filename: "badge.png", x: 0, y: 0)
+        ],
+        collisions: [],
+        animations: []
+    )
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(
+        shell: ShellDefinition(directory: directory, surfaces: [5: definition], usesSelfAlpha: true),
+        surfaceID: 5
+    )
+    defer { controller.hideAll() }
+
+    #expect(controller.renderedImage() != nil)
+}
+
+@MainActor
 @Test func `renders an asis bind pattern without applying its transparency`() throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

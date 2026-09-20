@@ -9,8 +9,10 @@ const progress = document.querySelector("#progress");
 const progressMessage = document.querySelector("#progress-message");
 const requestError = document.querySelector("#request-error");
 const results = document.querySelector("#results");
+const downloadReportButton = document.querySelector("#download-report");
 const maximumBytes = Number(document.body.dataset.maximumBytes);
 let selected = null;
+let downloadableReport = null;
 const maximumBusyRetries = 2;
 
 const supportLabels = {
@@ -48,6 +50,8 @@ function showError(message) {
 function chooseFile(file) {
   requestError.hidden = true;
   results.hidden = true;
+  downloadableReport = null;
+  downloadReportButton.hidden = true;
   if (!file) {
     selected = null;
     selectedFile.hidden = true;
@@ -222,9 +226,38 @@ function renderReport(report, requestId) {
 
   document.querySelector("#request-id").textContent =
     `Request ID: ${requestId}`;
+  downloadableReport = {
+    format: "utatane-validator-report",
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    sourceFile: selected
+      ? { name: selected.name, size: selected.size }
+      : null,
+    requestId,
+    report,
+  };
+  downloadReportButton.hidden = false;
   results.hidden = false;
   results.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+downloadReportButton.addEventListener("click", () => {
+  if (!downloadableReport) return;
+  const blob = new Blob(
+    [`${JSON.stringify(downloadableReport, null, 2)}\n`],
+    { type: "application/json;charset=utf-8" },
+  );
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const sourceName = downloadableReport.sourceFile?.name || "validation";
+  const baseName = sourceName.replace(/\.(nar|zip)$/i, "") || "validation";
+  link.href = url;
+  link.download = `${baseName.replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")}-utatane-report.json`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+});
 
 function renderDiagnostic(item) {
   const row = document.createElement("article");

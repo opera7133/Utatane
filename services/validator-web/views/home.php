@@ -97,6 +97,9 @@ $maximumMegabytes = (int) floor($config->maximumUploadBytes / 1024 / 1024);
             <summary>検査内容 <span id="diagnostic-count"></span></summary>
             <div id="diagnostics"></div>
         </details>
+        <div class="result-actions">
+            <button class="button-secondary" id="download-report" type="button" hidden>検査結果をJSONで保存</button>
+        </div>
         <p class="request-id" id="request-id"></p>
     </section>
 

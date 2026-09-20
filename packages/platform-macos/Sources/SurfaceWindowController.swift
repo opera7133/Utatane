@@ -2216,34 +2216,39 @@ private final class CharacterSurfaceController {
     }
 
     private func render(elements: [SurfaceElement], shell: ShellDefinition) throws -> NSImage {
-        guard let first = elements.first else {
-            throw ShellError.missingSurface(id: -1, directory: shell.directory)
-        }
-        var result = try imageLoader.load(
-            shellLoader.loadElement(filename: first.filename, from: shell.directory),
-            usesSelfAlpha: shell.usesSelfAlpha,
-            usesFullSelfAlpha: shell.usesFullSelfAlpha,
-            ignoresTransparency: first.method.caseInsensitiveCompare("asis") == .orderedSame
-        )
-        for element in elements.dropFirst() {
+        var result: NSImage?
+        for element in elements {
             let ignoresTransparency = element.method.caseInsensitiveCompare("asis") == .orderedSame
             // SSP treats drawing methods that do not apply to element definitions
             // as overlay. `asis` is also overlay, but loads its pixels without alpha.
             let operation = surfaceCompositingOperation(for: element.method) ?? .sourceOver
-            let overlay = try imageLoader.load(
-                shellLoader.loadElement(filename: element.filename, from: shell.directory),
-                usesSelfAlpha: shell.usesSelfAlpha,
-                usesFullSelfAlpha: shell.usesFullSelfAlpha,
-                ignoresTransparency: ignoresTransparency
-            )
-            result = imageLoader.composite(
-                base: result,
-                overlay: overlay,
-                x: element.x,
-                y: element.y,
-                operation: operation,
-                clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(element.method)
-            )
+            let overlay: NSImage
+            do {
+                overlay = try imageLoader.load(
+                    shellLoader.loadElement(filename: element.filename, from: shell.directory),
+                    usesSelfAlpha: shell.usesSelfAlpha,
+                    usesFullSelfAlpha: shell.usesFullSelfAlpha,
+                    ignoresTransparency: ignoresTransparency
+                )
+            } catch let error as ShellError {
+                guard case .missingElement = error else { throw error }
+                continue
+            }
+            if let base = result {
+                result = imageLoader.composite(
+                    base: base,
+                    overlay: overlay,
+                    x: element.x,
+                    y: element.y,
+                    operation: operation,
+                    clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(element.method)
+                )
+            } else {
+                result = overlay
+            }
+        }
+        guard let result else {
+            throw ShellError.missingSurface(id: -1, directory: shell.directory)
         }
         return result
     }
