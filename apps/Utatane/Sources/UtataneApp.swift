@@ -72,6 +72,7 @@ struct UtataneApp: App {
         try? ContentRoot.prepareDirectories()
         try? ContentRoot.installBundledContent()
         let settings = UtataneSettingsStore()
+        NSApplication.shared.setActivationPolicy(settings.showsDockIcon ? .regular : .accessory)
         let systemGeometry = SystemPresentationGeometryProvider()
         let presentationCoordinator = PresentationCoordinator(
             mode: settings.windowMode,
@@ -488,6 +489,16 @@ private struct UtataneRootView: View {
                     windowScope: windowScope
                 )
             }
+            menuBarBalloonController.configureMenu(actions: .init(
+                currentGhostName: { currentGhost?.name },
+                playRandomTalk: { sendEvent(.randomTalk) },
+                changeGhost: { showGhostPicker() },
+                restoreSurfaces: { surfaceWindowController.restoreSurfaces() },
+                showSpeechHistory: { showSpeechHistory() },
+                showSettings: { showSettingsPane(.general) },
+                showHelp: { UtataneHelp.open() },
+                quit: { applicationDelegate.terminate(menuScope: 0, windowScope: 0) }
+            ))
             presentationCoordinator.onCloseRequest = { mode, identifier in
                 if mode == .shared {
                     NSApplication.shared.terminate(nil)
@@ -623,6 +634,9 @@ private struct UtataneRootView: View {
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "appearance", id: networkSettings.appearance) {
             applyAppearance()
+        }
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "dock-icon", id: networkSettings.showsDockIcon) {
+            NSApplication.shared.setActivationPolicy(networkSettings.showsDockIcon ? .regular : .accessory)
         }
         .applicationRuntimeTask(
             in: applicationDelegate.runtimeTasks,
@@ -4809,6 +4823,7 @@ private struct UtataneRootView: View {
     private func showSettingsPane(_ pane: UtataneSettingsStore.Pane) {
         networkSettings.selectedPane = pane
         openSettings()
+        NSApplication.shared.activate(ignoringOtherApps: true)
     }
 
     private func settingsMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {

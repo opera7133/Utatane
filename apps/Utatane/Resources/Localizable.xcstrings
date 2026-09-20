@@ -1248,6 +1248,35 @@
         }
       }
     },
+    "Dockにアプリアイコンを表示" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Utatane in the Dock"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dock에 앱 아이콘 표시"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在程序坞中显示应用图标"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在 Dock 中顯示應用程式圖示"
+          }
+        }
+      }
+    },
     "Finderで表示" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14874,6 +14903,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "顯示開發工具面板"
+          }
+        }
+      }
+    },
+    "非表示にしても、MenuBarのUtataneアイコンから設定や終了操作を開ける。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Even when hidden, you can open settings or quit from the Utatane icon in the menu bar."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숨겨도 메뉴 막대의 Utatane 아이콘에서 설정을 열거나 종료할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即使隐藏，也可以从菜单栏中的 Utatane 图标打开设置或退出。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即使隱藏，也可以從選單列中的 Utatane 圖示開啟設定或結束程式。"
           }
         }
       }

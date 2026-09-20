@@ -313,6 +313,7 @@ final class UtataneSettingsStore: ObservableObject {
         static let mailUser = "network.mail.user"
         static let mailUsesTLS = "network.mail.usesTLS"
         static let startupBehavior = "general.startupBehavior"
+        static let showsDockIcon = "general.showsDockIcon"
         static let appearance = "general.appearance"
         static let windowLevelBehavior = "general.windowLevelBehavior"
         static let windowMode = "general.windowMode"
@@ -411,6 +412,10 @@ final class UtataneSettingsStore: ObservableObject {
 
     @Published var startupBehavior: StartupBehavior {
         didSet { defaults.set(startupBehavior.rawValue, forKey: Key.startupBehavior) }
+    }
+
+    @Published var showsDockIcon: Bool {
+        didSet { defaults.set(showsDockIcon, forKey: Key.showsDockIcon) }
     }
 
     @Published var appearance: Appearance {
@@ -623,6 +628,7 @@ final class UtataneSettingsStore: ObservableObject {
         startupBehavior = StartupBehavior(
             rawValue: defaults.string(forKey: Key.startupBehavior) ?? ""
         ) ?? .restore
+        showsDockIcon = defaults.object(forKey: Key.showsDockIcon) as? Bool ?? true
         appearance = Appearance(
             rawValue: defaults.string(forKey: Key.appearance) ?? ""
         ) ?? .system
@@ -903,6 +909,10 @@ struct UtataneSettingsView: View {
                         Text("ライト").tag(UtataneSettingsStore.Appearance.light)
                         Text("ダーク").tag(UtataneSettingsStore.Appearance.dark)
                     }
+                    Toggle("Dockにアプリアイコンを表示", isOn: $settings.showsDockIcon)
+                    Text("非表示にしても、MenuBarのUtataneアイコンから設定や終了操作を開ける。")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     Text("Shell、バルーン、キャラクター位置は、最後に使った状態がゴーストごとに復元される。")
                         .foregroundStyle(.secondary)
                 }
@@ -1277,7 +1287,7 @@ struct UtataneSettingsView: View {
             .tabItem { Label("詳細", systemImage: "wrench.and.screwdriver") }
             .tag(UtataneSettingsStore.Pane.advanced)
         }
-        .frame(width: 560, height: 520)
+        .frame(width: 840, height: 600)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
