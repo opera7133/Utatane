@@ -477,7 +477,7 @@ func `unified choice callback suppresses independent legacy dispatch`() async th
 
 @Test
 @MainActor
-func `choice and anchor enter events preserve link references and exit kind`() async throws {
+func `choice and anchor enter and hover events preserve link references`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
     let directory = FileManager.default.temporaryDirectory
@@ -501,8 +501,12 @@ func `choice and anchor enter events preserve link references and exit kind`() a
     )
     var choiceEvents: [(String?, String?, [String])] = []
     var anchorEvents: [(String?, String?, [String])] = []
+    var choiceHoverEvents: [(String, String, [String])] = []
+    var anchorHoverEvents: [(String, String, [String])] = []
     player.onChoiceEnter = { choiceEvents.append(($0, $1, $2)) }
     player.onAnchorEnter = { anchorEvents.append(($0, $1, $2)) }
+    player.onChoiceHover = { choiceHoverEvents.append(($0, $1, $2)) }
+    player.onAnchorHover = { anchorHoverEvents.append(($0, $1, $2)) }
 
     await player.playAndWait(
         SakuraScript(rawValue: #"\q[選択肢,choice-id,extra]\n\_a[anchor-id,anchor-extra]アンカー\_a\e"#),
@@ -516,6 +520,8 @@ func `choice and anchor enter events preserve link references and exit kind`() a
     balloonController.onLinkEnter?(nil, nil)
     balloonController.onLinkEnter?(anchor, "アンカー")
     balloonController.onLinkEnter?(nil, nil)
+    balloonController.onLinkHover?(choice, "選択肢")
+    balloonController.onLinkHover?(anchor, "アンカー")
 
     #expect(choiceEvents.count == 2)
     #expect(choiceEvents[0].0 == "選択肢")
@@ -527,6 +533,14 @@ func `choice and anchor enter events preserve link references and exit kind`() a
     #expect(anchorEvents[0].1 == "anchor-id")
     #expect(anchorEvents[0].2 == ["anchor-extra"])
     #expect(anchorEvents[1].0 == nil)
+    #expect(choiceHoverEvents.count == 1)
+    #expect(choiceHoverEvents[0].0 == "選択肢")
+    #expect(choiceHoverEvents[0].1 == "choice-id")
+    #expect(choiceHoverEvents[0].2 == ["extra"])
+    #expect(anchorHoverEvents.count == 1)
+    #expect(anchorHoverEvents[0].0 == "アンカー")
+    #expect(anchorHoverEvents[0].1 == "anchor-id")
+    #expect(anchorHoverEvents[0].2 == ["anchor-extra"])
 }
 
 @Test

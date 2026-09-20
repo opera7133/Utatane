@@ -466,8 +466,12 @@ private struct UtataneRootView: View {
             }
         }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "startup") {
-            applicationDelegate.onTerminationRequest = {
-                requestApplicationTermination()
+            applicationDelegate.onTerminationRequest = { reason, menuScope, windowScope in
+                requestApplicationTermination(
+                    reason: reason,
+                    menuScope: menuScope,
+                    windowScope: windowScope
+                )
             }
             presentationCoordinator.onCloseRequest = { mode, identifier in
                 if mode == .shared {
@@ -3319,12 +3323,16 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func dismissCurrentGhost() {
+    private func dismissCurrentGhost(menuScope: Int = 0, windowScope: Int = 0) {
         guard !isClosingCurrentGhost else { return }
         isClosingCurrentGhost = true
         Task {
             defer { isClosingCurrentGhost = false }
-            await closeCurrentGhost(reason: .close)
+            _ = await closeCurrentGhost(reason: .closeDetailed(
+                reason: "user",
+                menuScope: menuScope,
+                windowScope: windowScope
+            ))
             scriptPlayer.cancel()
             surfaceWindowController.resetContent()
             balloonWindowController.resetContent()
@@ -3667,10 +3675,12 @@ private struct UtataneRootView: View {
         items.append(informationMenu(for: target))
         items.append(languageMenu())
         items.append(.separator)
-        items.append(closeGhostMenuItem(for: target))
+        items.append(closeGhostMenuItem(for: target, scope: scope))
         items.append(.action(
             title: String(localized: "すべて終了"),
-            handler: { NSApplication.shared.terminate(nil) }
+            handler: {
+                applicationDelegate.terminate(menuScope: scope, windowScope: scope)
+            }
         ))
         return items
     }
@@ -4520,16 +4530,19 @@ private struct UtataneRootView: View {
         return result
     }
 
-    private func closeGhostMenuItem(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
+    private func closeGhostMenuItem(
+        for target: GhostContextMenuTarget,
+        scope: Int
+    ) -> SurfaceContextMenuItem {
         .action(
             title: String(localized: "このゴーストを閉じる"),
             isEnabled: !isTransitioningGhost && !isClosingCurrentGhost,
             handler: {
                 switch target {
                 case .primary:
-                    dismissCurrentGhost()
+                    dismissCurrentGhost(menuScope: scope, windowScope: scope)
                 case let .called(runtime):
-                    dismissCalledGhost(runtime.ghost)
+                    dismissCalledGhost(runtime.ghost, menuScope: scope, windowScope: scope)
                 }
             }
         )
@@ -4655,11 +4668,15 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func dismissCalledGhost(_ ghost: InstalledGhost) {
+    private func dismissCalledGhost(
+        _ ghost: InstalledGhost,
+        menuScope: Int = 0,
+        windowScope: Int = 0
+    ) {
         guard let runtime = calledGhosts.removeValue(forKey: ghost.id) else { return }
         configureContextMenu()
         Task {
-            let finalScript = await runtime.stop()
+            let finalScript = await runtime.stop(menuScope: menuScope, windowScope: windowScope)
             sendEvent(SHIORIEventFactory.otherGhostClosed(
                 characterName: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
                 finalScript: finalScript,
@@ -7194,26 +7211,29 @@ private struct UtataneRootView: View {
         ]
     }
 
-    private func requestApplicationTermination() {
+    private func requestApplicationTermination(
+        reason: String,
+        menuScope: Int,
+        windowScope: Int
+    ) {
         applicationDelegate.runtimeTasks.stop()
         sstpServer.stop()
         ipMessengerWindowController.stop()
         networkStatusMonitor.stop()
         Task {
-            let closeAll = GhostEvent.shiori(
-                id: "OnCloseAll", references: [0: "user", 1: "0", 2: "0"]
-            )
-            if let session {
-                _ = try? await session.handle(event: closeAll)
-            }
             for runtime in calledGhosts.values {
-                await runtime.notify(closeAll)
-            }
-            for runtime in calledGhosts.values {
-                _ = await runtime.stop()
+                _ = await runtime.stopForApplicationTermination(
+                    reason: reason,
+                    menuScope: menuScope,
+                    windowScope: windowScope
+                )
             }
             calledGhosts.removeAll()
-            await closeCurrentGhost(reason: .close)
+            _ = await closeCurrentGhost(reason: .closeAll(
+                reason: reason,
+                menuScope: menuScope,
+                windowScope: windowScope
+            ))
             scriptPlayer.cancel()
             surfaceWindowController.hideAll()
             applicationDelegate.completeTermination()
@@ -7435,7 +7455,7 @@ func linkEventReferences(_ label: String?, _ id: String?, _ arguments: [String])
 private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate {
     let runtimeTasks = ApplicationRuntimeTasks()
     let runtimeWindow = RuntimeHostWindowLifetime()
-    var onTerminationRequest: (() -> Void)?
+    var onTerminationRequest: ((String, Int, Int) -> Void)?
     private var onOpenNar: (([URL]) -> Void)?
     private var pendingNarURLs: [URL] = []
     private var onOpenURL: (([URL]) -> Void)?
@@ -7443,6 +7463,33 @@ private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate 
 
     private var isAwaitingTermination = false
     private var isTerminationApproved = false
+    private var terminationReason = "user"
+    private var terminationMenuScope = 0
+    private var terminationWindowScope = 0
+
+    override init() {
+        super.init()
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(workspaceWillPowerOff),
+            name: NSWorkspace.willPowerOffNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
+    }
+
+    @objc private func workspaceWillPowerOff() {
+        terminationReason = "system"
+    }
+
+    func terminate(menuScope: Int, windowScope: Int) {
+        terminationMenuScope = menuScope
+        terminationWindowScope = windowScope
+        NSApplication.shared.terminate(nil)
+    }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
         false
@@ -7461,7 +7508,7 @@ private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate 
         }
         if !isAwaitingTermination {
             isAwaitingTermination = true
-            onTerminationRequest()
+            onTerminationRequest(terminationReason, terminationMenuScope, terminationWindowScope)
         }
         return .terminateLater
     }

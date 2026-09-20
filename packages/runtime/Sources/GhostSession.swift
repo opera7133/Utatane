@@ -61,23 +61,48 @@ public actor GhostSession {
     public func stop(reason: GhostStopReason = .close) async throws -> SakuraScript? {
         guard state == .running else { return nil }
         state = .stopped
-        let event: GhostEvent = switch reason {
+        let events: (primary: GhostEvent, fallback: GhostEvent?) = switch reason {
         case .close:
-            .close
+            (.close, nil)
+        case let .closeDetailed(reason, menuScope, windowScope):
+            (
+                .shiori(id: "OnClose", references: [
+                    0: reason, 1: String(menuScope), 2: String(windowScope)
+                ]),
+                nil
+            )
+        case let .closeAll(reason, menuScope, windowScope):
+            (
+                .shiori(id: "OnCloseAll", references: [0: reason]),
+                .shiori(id: "OnClose", references: [
+                    0: reason, 1: String(menuScope), 2: String(windowScope)
+                ])
+            )
         case .vanish:
-            .shiori(id: "OnVanishSelected", references: [:])
+            (.shiori(id: "OnVanishSelected", references: [:]), nil)
         case let .ghostChanging(name):
-            .ghostChanging(name: name)
+            (.ghostChanging(name: name), nil)
         case let .ghostChangingDetailed(name, mode, ghostName, path):
-            SHIORIEventFactory.ghostChanging(
-                characterName: name ?? "",
-                mode: mode,
-                ghostName: ghostName,
-                ghostPath: path
+            (
+                SHIORIEventFactory.ghostChanging(
+                    characterName: name ?? "",
+                    mode: mode,
+                    ghostName: ghostName,
+                    ghostPath: path
+                ),
+                .shiori(id: "OnClose", references: [
+                    0: "user", 1: "0", 2: "0"
+                ])
             )
         }
         do {
-            let script = try await handleLogged(event: event)
+            let script: SakuraScript? = if let primary = try await handleLogged(event: events.primary) {
+                primary
+            } else if let fallback = events.fallback {
+                try await handleLogged(event: fallback)
+            } else {
+                nil
+            }
             await personalityEngine.shutdown()
             return script
         } catch {

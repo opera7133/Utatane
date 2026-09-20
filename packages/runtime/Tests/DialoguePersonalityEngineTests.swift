@@ -89,10 +89,16 @@ func `session records normalized SHIORI requests and responses`() async throws {
 
 private actor RecordingPersonalityEngine: PersonalityEngine {
     private(set) var lastEvent: GhostEvent?
+    private let responseEventIDs: Set<String>
+
+    init(responseEventIDs: Set<String> = []) {
+        self.responseEventIDs = responseEventIDs
+    }
 
     func handle(event: GhostEvent) async throws -> SakuraScript? {
         lastEvent = event
-        return nil
+        guard case let .shiori(id, _) = event, responseEventIDs.contains(id) else { return nil }
+        return SakuraScript(rawValue: "handled")
     }
 }
 
@@ -131,7 +137,7 @@ func `session accepts events only while running`() async throws {
 
 @Test
 func `session sends detailed ghost changing references`() async throws {
-    let engine = RecordingPersonalityEngine()
+    let engine = RecordingPersonalityEngine(responseEventIDs: ["OnGhostChanging"])
     let session = GhostSession(personalityEngine: engine)
     _ = try await session.start()
     _ = try await session.stop(reason: .ghostChangingDetailed(
@@ -141,6 +147,56 @@ func `session sends detailed ghost changing references`() async throws {
     #expect(await engine.lastEvent == .shiori(id: "OnGhostChanging", references: [
         0: "Emily", 1: "manual", 2: "Emily/Phase4.5", 3: "/ghost/emily"
     ]))
+}
+
+@Test
+func `session sends close references`() async throws {
+    let engine = RecordingPersonalityEngine()
+    let session = GhostSession(personalityEngine: engine)
+    _ = try await session.start()
+    _ = try await session.stop(reason: .closeDetailed(reason: "user", menuScope: 1, windowScope: 2))
+
+    #expect(await engine.lastEvent == .shiori(id: "OnClose", references: [
+        0: "user", 1: "1", 2: "2"
+    ]))
+}
+
+@Test
+func `session falls back from close all to close only for no content`() async throws {
+    let fallbackEngine = LifecycleRecordingEngine(scripts: ["OnClose": #"\0close\e"#])
+    let fallbackSession = GhostSession(personalityEngine: fallbackEngine)
+    _ = try await fallbackSession.start()
+    let fallback = try await fallbackSession.stop(reason: .closeAll(
+        reason: "user", menuScope: 0, windowScope: 0
+    ))
+    #expect(fallback?.rawValue == #"\0close\e"#)
+    #expect(await fallbackEngine.eventIDs == ["other", "OnCloseAll", "OnClose"])
+
+    let handledEngine = LifecycleRecordingEngine(scripts: ["OnCloseAll": #"\0all\e"#])
+    let handledSession = GhostSession(personalityEngine: handledEngine)
+    _ = try await handledSession.start()
+    let handled = try await handledSession.stop(reason: .closeAll(
+        reason: "system", menuScope: 0, windowScope: 0
+    ))
+    #expect(handled?.rawValue == #"\0all\e"#)
+    #expect(await handledEngine.eventIDs == ["other", "OnCloseAll"])
+}
+
+@Test
+func `session falls back from ghost changing to close only for no content`() async throws {
+    let engine = LifecycleRecordingEngine(scripts: ["OnClose": #"\0close\e"#])
+    let session = GhostSession(personalityEngine: engine)
+    _ = try await session.start()
+
+    let fallback = try await session.stop(reason: .ghostChangingDetailed(
+        name: "さくら",
+        mode: "manual",
+        ghostName: "次のゴースト",
+        path: "/tmp/next"
+    ))
+
+    #expect(fallback?.rawValue == #"\0close\e"#)
+    #expect(await engine.eventIDs == ["other", "OnGhostChanging", "OnClose"])
 }
 
 @Test

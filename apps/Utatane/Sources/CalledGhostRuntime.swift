@@ -479,8 +479,24 @@ final class CalledGhostRuntime {
         }
     }
 
-    func stop() async -> String {
-        await stop(reason: .close)
+    func stop(menuScope: Int = 0, windowScope: Int = 0) async -> String {
+        await stop(reason: .closeDetailed(
+            reason: "user",
+            menuScope: menuScope,
+            windowScope: windowScope
+        ))
+    }
+
+    func stopForApplicationTermination(
+        reason: String,
+        menuScope: Int,
+        windowScope: Int
+    ) async -> String {
+        await stop(reason: .closeAll(
+            reason: reason,
+            menuScope: menuScope,
+            windowScope: windowScope
+        ))
     }
 
     func stopForVanish() async -> String {

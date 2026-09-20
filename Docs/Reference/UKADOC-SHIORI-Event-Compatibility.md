@@ -8,7 +8,7 @@
 
 UKADOC掲載イベント数: 290
 調査日: 2026-09-20
-調査結果: ✅ 105 / 🟡 137 / ❌ 44 / ➖ 4
+調査結果: ✅ 109 / 🟡 133 / ❌ 44 / ➖ 4
 
 ## 判定
 
@@ -35,10 +35,10 @@ UKADOC掲載イベント数: 290
 | --- | --- | --- | --- | --- |
 | [`OnFirstBoot`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFirstBoot) | ✅ | — | — | 初回起動時に消滅回数0をReference0へ通知し、無応答ならOnBootへフォールバック。イベント生成とフォールバックをテスト済み |
 | [`OnBoot`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBoot) | ✅ | — | — | 起動シェル名をReference0へ通知。OnFirstBoot・OnGhostChanged・OnGhostCalled・OnVanishedが無応答の時にフォールバックする経路をテスト済み |
-| [`OnClose`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnClose) | 🟡 | 通知経路のUKADOC照合 | 低 | 終了時に発行するが終了理由・操作scopeのReferenceを送っていません |
-| [`OnCloseAll`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCloseAll) | 🟡 | 通知経路のUKADOC照合 | 低 | アプリ終了要求時に全ゴーストへReference0=user、Reference1/2=0を通知してから終了。OSシャットダウン理由systemの判定と204時のOnCloseフォールバックは未対応 |
+| [`OnClose`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnClose) | ✅ | — | — | 終了理由をReference0、メニューと終了対象のscopeをReference1・2へ通知。通常終了とOnCloseAllからのフォールバックをテスト済み |
+| [`OnCloseAll`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCloseAll) | ✅ | — | — | アプリ終了時にuser、macOSの終了通知時にsystemをReference0へ通知。応答がない場合だけOnCloseへフォールバックし、応答があれば抑制する経路をテスト済み |
 | [`OnGhostChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostChanged) | ✅ | — | — | 切替元の本体名・終了スクリプト・ゴースト名・パスと切替先シェル名をReference0〜3・7へ通知し、無応答ならOnBootへフォールバック。テスト済み |
-| [`OnGhostChanging`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostChanging) | 🟡 | 通知経路の実動確認 | 低 | 手動切替前に切替先の本体側名・manual・ゴースト名・パスをReference0〜3へ通知。automatic理由は未実装 |
+| [`OnGhostChanging`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostChanging) | 🟡 | automatic切替経路 | 低 | 手動切替前に切替先の本体側名・manual・ゴースト名・パスをReference0〜3へ通知。無応答ならOnCloseへフォールバック。automatic理由を使う自動切替は未実装 |
 | [`OnGhostCalled`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostCalled) | ✅ | — | — | 呼出先で呼出元の本体名・呼出スクリプト・ゴースト名・パスと呼出先シェル名をReference0〜3・7へ通知し、無応答ならOnBootへフォールバック。テスト済み |
 | [`OnGhostCalling`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostCalling) | 🟡 | 通知経路のUKADOC照合 | 低 | 手動呼出時のReference0〜3を実装。automatic経路は未実装 |
 | [`OnGhostCallComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnGhostCallComplete) | ✅ | — | — | 呼出完了後に呼出先の本体名・起動スクリプト・ゴースト名・シェル名をReference0〜2・7へ通知。イベント生成をテスト済み |
@@ -114,11 +114,11 @@ UKADOC掲載イベント数: 290
 | [`OnChoiceSelectEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnChoiceSelectEx) | ✅ | — | — | 選択肢ラベル・ID・追加引数をReference0以降へ通知し、応答にトークがあれば通常OnChoiceSelectを抑制。Playerテストで確認 |
 | [`OnChoiceEnter`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnChoiceEnter) | ✅ | — | — | 選択肢への出入りでラベル・ID・追加引数を通知し、外れた時はReferenceなし。Playerテストで確認 |
 | [`OnChoiceTimeout`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnChoiceTimeout) | ✅ | — | — | 選択肢タイムアウト時に対象スクリプト全文をReference0へ通知。Playerテストで確認 |
-| [`OnChoiceHover`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnChoiceHover) | 🟡 | 通知経路のUKADOC照合 | 低 | 選択肢上で1秒静止した時にラベル・ID・追加引数を通知。SSPの静止時間との完全一致は未確認 |
+| [`OnChoiceHover`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnChoiceHover) | ✅ | — | — | 選択肢上で1秒静止した時にラベル・ID・追加引数を通知。PlayerテストでReferenceを確認 |
 | [`OnAnchorSelect`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorSelect) | ✅ | — | — | OnAnchorSelectExがスクリプトを返さない場合のみアンカーIDをReference0へ通知。メイン・呼び出しゴーストの両経路で対応 |
 | [`OnAnchorSelectEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorSelectEx) | ✅ | — | — | アンカーの表示ラベル・ID・追加引数をReference0以降へ通知し、非空応答時はOnAnchorSelectを抑止。応答は割り込み再生 |
 | [`OnAnchorEnter`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorEnter) | ✅ | — | — | アンカーへの出入りでラベル・ID・追加引数を通知し、外れた時はReferenceなし。Playerテストで確認 |
-| [`OnAnchorHover`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorHover) | 🟡 | 通知経路のUKADOC照合 | 低 | アンカー上で1秒静止した時にラベル・ID・追加引数を通知。SSPの静止時間との完全一致は未確認 |
+| [`OnAnchorHover`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnAnchorHover) | ✅ | — | — | アンカー上で1秒静止した時にラベル・ID・追加引数を通知。PlayerテストでReferenceを確認 |
 
 ## サーフェスイベント
 

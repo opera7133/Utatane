@@ -100,6 +100,8 @@ public struct GhostMouseGestureEvent: Sendable, Equatable {
 
 public enum GhostStopReason: Sendable, Equatable {
     case close
+    case closeDetailed(reason: String, menuScope: Int, windowScope: Int)
+    case closeAll(reason: String, menuScope: Int, windowScope: Int)
     case vanish
     case ghostChanging(name: String?)
     case ghostChangingDetailed(name: String?, mode: String, ghostName: String, path: String)

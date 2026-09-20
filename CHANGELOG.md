@@ -11,10 +11,12 @@
 
 - 同梱ゴースト「りあ」でRSSやHEADLINEセンサーを取得した時、最新の1件だけでなく取得した見出しをまとめて表示するようにした
 - `OnMouseUp`へ応答するゴーストでダブルクリックと複数クリックのイベントが抑止される問題を修正した
+- 終了時の`OnClose`へ終了理由と操作対象scopeを渡し、`OnCloseAll`と`OnGhostChanging`が無応答の場合だけ`OnClose`へフォールバックするようにした
 
 ### 開発・検証
 
 - SHIORIの共通処理、macOS・Windows向け外部ローダー、各ネイティブ実装を`packages/shiori`配下へ整理した
+- SHIORIイベント互換表を再監査し、`OnClose`、`OnCloseAll`、選択肢・アンカーのhoverイベントを確認済みに更新した
 
 ## [0.2.6] - 2026-09-19
 
