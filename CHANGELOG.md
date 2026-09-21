@@ -2,40 +2,41 @@
 
 ## [Unreleased]
 
-### 追加
+## [0.2.8] - 2026-09-21
 
-- バルーンの`recommended.ghost`／`recommended.ghost.path`を照合し、推奨対象ではないゴーストへ切り替える時に確認できるようにした
-- `install.txt`の`type,supplement`を、対象ゴーストの既存ファイルを残しながら追加・上書きするバックアップ付きインストールとして扱えるようにした
+### 主な追加
+
 - Web版Utatane NAR検査で、検査結果を共有・保存用のJSONファイルとしてダウンロードできるようにした
-- SakuraScriptから着せ替え一覧、画像ビューア、アーカイブビューアを開けるようにした
-- SakuraScriptからSHIORI・MAKOTOのロード状態とSHIORIデバッグ画面を切り替えられるようにした
-- SakuraScriptからカレンダースキンとMenuBarアイコンを変更し、プラグインイベントを遅延・反復実行できるようにした
-- SakuraScriptのパスワード・日付・時刻・スライダー・IPアドレス入力を専用UIで開き、timeout・文字数制限・追加Referenceを扱えるようにした
-- `\![update,platform]`からSparkleの本体更新確認を開けるようにした
-- SakuraScriptの`file:`・`mailto:`リンクをmacOSの関連付けアプリで安全に開けるようにした
-- SakuraScriptの動的サーフェス合成・移動・文字描画、バルーン画像の切り抜き・拡大縮小・前面表示に対応した
-- SakuraScriptからゴースト・シェル・複数コンテンツの更新、イベント有無を指定したゴースト／シェル切り替え、壁紙の保存・復元・変更を実行できるようにした
-- SakuraScriptで選択肢・アンカーの表示色と形状を変更し、MenuBarアイコンを連番画像でアニメーションできるようにした
-- Property SystemでOS、locale、CPU、メモリ、ディスク、起動中ゴースト、各種コンテンツ一覧の取得範囲を広げた
 - SakuraScriptの`open,aigraph`でSHIORIのAI状態をレーダーチャート表示し、複数グラフと表示中の再読み込みに対応した
+- Property SystemでOS、locale、CPU、メモリ、ディスク、起動中ゴースト、各種コンテンツ一覧の取得範囲を広げた
+
+### SakuraScript
+
+- パスワード・日付・時刻・スライダー・IPアドレス入力を専用UIで開き、timeout、文字数制限、追加Reference、`noclose`／`noclear`、入力用バルーン画像を扱えるようにした
+- 動的なサーフェス合成・移動・文字描画、バルーン画像の切り抜き・拡大縮小・前面表示、選択肢・アンカーの色と形状、MenuBarアイコンの連番アニメーションに対応した
+- ゴースト・シェル・複数コンテンツの更新、イベント有無を指定した切り替え、カレンダースキンの変更、壁紙の保存・復元・変更、プラグインイベントの遅延・反復実行に対応した
+- 着せ替え一覧、画像・アーカイブビューア、SHIORI Request、SHIORIデバッグ、SHIORI・MAKOTOのロード切り替えと再読み込み対象を追加した
+- `createnar`の保存先選択、`dumpsurface`のscope・複数surface・prefix・完了件数、pingのパケット分割禁止とUTF-8データ指定に対応した
+- `\![update,platform]`からSparkleの本体更新確認を開き、`file:`・`mailto:`リンクをmacOSの関連付けアプリで安全に開けるようにした
+
+### コンテンツ互換性
+
+- Ghost `descript.txt`の既定シェル、初期配置、バルーン移動・拡大追従、MenuBarアイコン、キャラクター名上書き可否、SSTPの無指定送信・COMMUNICATE受信設定を実際の動作へ反映した
+- `surfaces.txt`の`point.basepos`をサーフェス切り替えと位置保存の基準へ、`icon.rect`を発話履歴の顔サムネイル切り抜きへ反映した
+- バルーンの無効文字スタイルと入力ボタン画像を反映し、`recommended.ghost`／`recommended.ghost.path`の対象外ゴーストへ切り替える時に確認できるようにした
+- `install.txt`の`type,supplement`を、対象ゴーストの既存ファイルを残しながら追加・上書きするバックアップ付きインストールとして扱えるようにした
 
 ### 修正
 
-- バルーンの`disable.font.*`をSakuraScriptの無効文字表示へ反映し、入力パネルで`ok_up/down.png`と`cancel_up/down.png`をボタン画像として使うようにした
-- SHIORIイベント互換表で、一部の発生条件やReferenceだけに対応する項目を部分対応、実際の発行経路がない項目を未対応として区別するようにした
 - シェルのelement画像が一部欠けている場合も、残っているelementを使ってサーフェスを表示するようにした
-- SakuraScript互換表の集計を実際の分類行から検査し、現行UKADOCとの差を追跡できるようにした
-- InputBoxを閉じた理由が時間切れか利用者操作かを区別して`OnUserInputCancel`へ通知するようにした
-- InputBoxの時間切れイベントが未処理の場合、互換動作として`timeout`を入力値にして通知するようにした
-- SakuraScriptの色指定で3桁16進数、CSS Color Level 3の拡張色名、無効色、選択肢・アンカーの既定色参照を扱えるようにした
+- InputBoxを閉じた理由が時間切れか利用者操作かを区別し、時間切れイベントが未処理の場合は互換動作として`timeout`を入力値にして通知するようにした
+- 3桁16進数、CSS Color Level 3の拡張色名、無効色、バルーン既定色をSakuraScriptの色指定で使えるようにした
 - `%selfname2`がゴーストまたは現在のシェルの`descript.txt`にある`sakura.name2`を使うようにした
-- SakuraScriptの`createnar`を引数なしで実行し、保存先を選んで現在のゴーストをNAR化できるようにした
-- SakuraScriptのInputBoxで`noclose`・`noclear`による継続入力と、`--balloon=ID`による入力用バルーン画像指定に対応した
-- SakuraScriptのSHIORI・MAKOTO再読み込みと、headline・plugin・カレンダースキンを含む`descript.txt`再読み込み対象を追加した
-- SakuraScriptの`dumpsurface`でscope・複数surface・prefix・完了件数を扱い、出力先を実行元ゴースト配下に制限した
-- SakuraScriptのpingでパケット分割禁止とUTF-8データ指定を扱えるようにした
-- Ghost `descript.txt`の既定シェル、初期配置、バルーン移動・拡大追従、MenuBarアイコン、キャラクター名上書き可否、SSTPの無指定送信・COMMUNICATE受信設定を実際の動作へ反映した
-- `surfaces.txt`の`point.basepos`をサーフェス切替と位置保存の基準へ、`icon.rect`を発話履歴の顔サムネイル切り抜きへ反映した
+
+### 開発・検証
+
+- 現行UKADOCのSakuraScript 359構文を147行へ分類し、対応117件、部分対応21件、未対応0件、macOS非該当9件として実装経路とテストを再監査した
+- SHIORIイベント互換表で、発生条件やReferenceの一部だけに対応する項目と、実際の発行経路がない項目を区別するようにした
 
 ## [0.2.7] - 2026-09-20
 
@@ -691,7 +692,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.7...HEAD
+[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.8...HEAD
+[0.2.8]: https://github.com/opera7133/Utatane/compare/v0.2.7...v0.2.8
 [0.2.7]: https://github.com/opera7133/Utatane/compare/v0.2.6...v0.2.7
 [0.2.6]: https://github.com/opera7133/Utatane/compare/v0.2.5...v0.2.6
 [0.2.5]: https://github.com/opera7133/Utatane/compare/v0.2.4...v0.2.5
