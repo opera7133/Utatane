@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import CoreText
 import SwiftUI
 import Testing
@@ -924,7 +925,7 @@ private final class RecordingSpeechSynthesizer: SpeechSynthesizing {
 
 @Test
 @MainActor
-func `speech history updates the current entry while text is being displayed`() {
+func `speech history batches live updates and commits the complete entry`() {
     let history = SpeechHistoryStore()
     var recorder = SpeechHistoryRecorder(
         store: history,
@@ -944,12 +945,41 @@ func `speech history updates the current entry while text is being displayed`() 
     recorder.append("言")
     #expect(history.entries.count == 1)
     #expect(history.entries.first?.id == firstID)
+    #expect(history.entries.first?.text == "一")
+
+    recorder.finish()
     #expect(history.entries.first?.text == "一言")
 
     recorder.setScope(1)
     recorder.append("返")
     #expect(history.entries.map(\.text) == ["一言", "返"])
     #expect(Set(history.entries.map(\.talkIdentifier)).count == 1)
+}
+
+@Test
+@MainActor
+func `speech history does not publish every displayed character`() {
+    let history = SpeechHistoryStore()
+    var publicationCount = 0
+    let observation = history.objectWillChange.sink { publicationCount += 1 }
+    var recorder = SpeechHistoryRecorder(
+        store: history,
+        context: SpeechHistoryContext(
+            ghostIdentifier: "test-ghost",
+            ghostName: "テストゴースト"
+        ),
+        initialScope: 0,
+        surfaceID: { _ in 0 }
+    )
+
+    for _ in 0 ..< 100 {
+        recorder.append("字")
+    }
+    recorder.finish()
+
+    #expect(history.entries.first?.text.count == 100)
+    #expect(publicationCount < 20)
+    withExtendedLifetime(observation) {}
 }
 
 @Test

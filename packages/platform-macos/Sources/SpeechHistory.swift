@@ -324,6 +324,7 @@ public final class SpeechHistoryWindowController: NSWindowController {
     private let store: SpeechHistoryStore
     private let frameAutosaveName: String?
     private var hostingController: NSHostingController<SpeechHistoryView>?
+    private var lastContentSize: NSSize?
 
     public init(
         store: SpeechHistoryStore,
@@ -365,6 +366,15 @@ public final class SpeechHistoryWindowController: NSWindowController {
             window.title = "\(String(localized: "発話履歴")) — \(ghostName)"
             hostingController.rootView = content
             return window
+        } else if let window {
+            window.title = "\(String(localized: "発話履歴")) — \(ghostName)"
+            let hostingController = NSHostingController(rootView: content)
+            window.contentViewController = hostingController
+            if let lastContentSize {
+                window.setContentSize(lastContentSize)
+            }
+            self.hostingController = hostingController
+            return window
         } else {
             let window = NSWindow(
                 contentRect: NSRect(origin: .zero, size: Self.initialContentSize),
@@ -374,6 +384,7 @@ public final class SpeechHistoryWindowController: NSWindowController {
             )
             window.contentMinSize = Self.minimumContentSize
             window.title = "\(String(localized: "発話履歴")) — \(ghostName)"
+            window.delegate = self
             let hostingController = NSHostingController(rootView: content)
             window.contentViewController = hostingController
             window.isReleasedWhenClosed = false
@@ -394,6 +405,19 @@ public final class SpeechHistoryWindowController: NSWindowController {
             self.window = window
             return window
         }
+    }
+}
+
+extension SpeechHistoryWindowController: NSWindowDelegate {
+    public func windowWillClose(_ notification: Notification) {
+        // A closed NSWindowController keeps its view hierarchy alive. Detach the
+        // history view so its ObservableObject subscription cannot make every
+        // subsequent character rebuild a hidden, ever-growing history list.
+        if let window {
+            lastContentSize = window.contentLayoutRect.size
+            window.contentViewController = nil
+        }
+        hostingController = nil
     }
 }
 
@@ -439,7 +463,9 @@ public final class SpeechHistoryPresenter {
     }
 
     public func hide() {
-        item?.hide()
+        guard let item else { return }
+        item.hide()
+        item.contentView = NSView()
     }
 
     public func setTextScale(_ scale: CGFloat) {
@@ -468,6 +494,7 @@ public final class SpeechHistoryPresenter {
 
 @MainActor
 struct SpeechHistoryRecorder {
+    private static let liveUpdateCharacterStride = 8
     private let store: SpeechHistoryStore
     private let context: SpeechHistoryContext
     private let surfaceID: (Int) -> Int?
@@ -480,6 +507,8 @@ struct SpeechHistoryRecorder {
     private var timestamp: Date?
     private var entrySurfaceID: Int?
     private var entryThumbnailPNGData: Data?
+    private var charactersSincePublication = 0
+    private var hasPublishedCurrentEntry = false
     private let talkIdentifier = UUID()
 
     init(
@@ -512,13 +541,17 @@ struct SpeechHistoryRecorder {
         case .defaultValue:
             markStarted()
             text.append(character)
-            publish()
+            charactersSincePublication += 1
+            publishIfNeeded()
         case .disabled:
             break
         case .alternate:
+            let needsPublication = !alternateHasVisibleContent
             alternateHasVisibleContent = true
             markStarted()
-            publish()
+            if needsPublication {
+                publish(force: true)
+            }
         }
     }
 
@@ -548,21 +581,29 @@ struct SpeechHistoryRecorder {
         guard case let .alternate(alternate) = mode, alternateHasVisibleContent else { return }
         text.append(alternate)
         alternateHasVisibleContent = false
-        publish()
+        publish(force: true)
     }
 
     private mutating func commit() {
         flushAlternateText()
-        publish()
+        publish(force: true)
         text = ""
         entryID = nil
         timestamp = nil
         entrySurfaceID = nil
         entryThumbnailPNGData = nil
         alternateHasVisibleContent = false
+        charactersSincePublication = 0
+        hasPublishedCurrentEntry = false
     }
 
-    private mutating func publish() {
+    private mutating func publishIfNeeded() {
+        publish(force: !hasPublishedCurrentEntry
+            || charactersSincePublication >= Self.liveUpdateCharacterStride)
+    }
+
+    private mutating func publish(force: Bool) {
+        guard force else { return }
         let displayedText: String = if case let .alternate(alternate) = mode, alternateHasVisibleContent {
             text + alternate
         } else {
@@ -583,6 +624,8 @@ struct SpeechHistoryRecorder {
             text: displayedText,
             timestamp: timestamp ?? Date()
         ))
+        charactersSincePublication = 0
+        hasPublishedCurrentEntry = true
     }
 }
 

@@ -404,11 +404,14 @@ func `standalone speech history keeps its size when reopened`() {
     let resizedContentSize = NSSize(width: 840, height: 700)
     window.setContentSize(resizedContentSize)
     window.close()
+    #expect(window.contentViewController == nil)
 
-    _ = controller.prepareWindow(ghostIdentifier: "ghost", ghostName: "Ghost")
+    let reopenedWindow = controller.prepareWindow(ghostIdentifier: "ghost", ghostName: "Ghost")
 
-    #expect(abs(window.contentLayoutRect.width - resizedContentSize.width) < 1)
-    #expect(abs(window.contentLayoutRect.height - resizedContentSize.height) < 1)
+    #expect(reopenedWindow === window)
+    #expect(abs(reopenedWindow.contentLayoutRect.width - resizedContentSize.width) < 1)
+    #expect(abs(reopenedWindow.contentLayoutRect.height - resizedContentSize.height) < 1)
+    #expect(reopenedWindow.contentViewController != nil)
 }
 
 @Test
