@@ -1026,16 +1026,65 @@ final class CalledGhostRuntime {
                 id: "inputbox.autocomplete",
                 references: [0: command.inputTypeName, 1: command.id]
             ))
+            let autocompleteValues = TextInputWindowController.autocompleteValues(
+                from: autocomplete?.rawValue
+            )
+            let appearance = textInputAppearance(style: .input, balloonID: command.balloonID)
+            if command.keepsOpenAfterSubmit {
+                textInputWindowController.showPersistentInput(
+                    id: command.id,
+                    title: String(localized: "文字を入力"),
+                    initialValue: command.initialValue,
+                    maximumLength: command.maximumLength,
+                    autocompleteValues: autocompleteValues,
+                    appearance: appearance,
+                    timeoutMilliseconds: command.timeoutMilliseconds,
+                    clearsValueAfterSubmit: !command.keepsValueAfterSubmit,
+                    onSubmit: { [weak self] value in
+                        guard let self else { return }
+                        Task {
+                            if let response = try? await session.handle(event: SHIORIEventFactory.userInput(
+                                id: command.id,
+                                value: value,
+                                supplementalValue: command.supplementalValue,
+                                additionalReferences: command.references
+                            )), !response.rawValue.isEmpty {
+                                player.play(response, balloon: balloon)
+                            }
+                        }
+                    },
+                    onCancel: { [weak self] timedOut in
+                        guard let self else { return }
+                        Task {
+                            let response = try? await session.handle(event: SHIORIEventFactory.userInputCancel(
+                                id: command.id,
+                                timedOut: timedOut
+                            ))
+                            if let response, !response.rawValue.isEmpty {
+                                player.play(response, balloon: balloon)
+                            } else if timedOut,
+                                      let fallback = try? await session.handle(event: SHIORIEventFactory.userInput(
+                                          id: command.id,
+                                          value: "timeout",
+                                          supplementalValue: command.supplementalValue,
+                                          additionalReferences: command.references
+                                      )), !fallback.rawValue.isEmpty
+                            {
+                                player.play(fallback, balloon: balloon)
+                            }
+                        }
+                    }
+                )
+                return nil
+            }
             let result = await textInputWindowController.showInput(
                 id: command.id,
                 title: String(localized: "文字を入力"),
                 initialValue: command.initialValue,
                 inputKind: .init(command.kind),
                 maximumLength: command.maximumLength,
-                autocompleteValues: TextInputWindowController.autocompleteValues(
-                    from: autocomplete?.rawValue
-                ),
-                appearance: textInputAppearance(style: .input),
+                autocompleteValues: autocompleteValues,
+                appearance: appearance,
                 timeoutMilliseconds: command.timeoutMilliseconds
             )
             guard case let .submitted(value) = result else {
@@ -1856,12 +1905,16 @@ final class CalledGhostRuntime {
         }
     }
 
-    private func textInputAppearance(style: BalloonInputStyle) -> TextInputWindowController.Appearance {
+    private func textInputAppearance(
+        style: BalloonInputStyle,
+        balloonID: Int? = nil
+    ) -> TextInputWindowController.Appearance {
         let loader = BalloonLoader()
-        let effective = loader.effectiveInputDefinition(for: balloon, style: style)
+        let id = balloonID ?? style.rawValue
+        let effective = loader.effectiveInputDefinition(for: balloon, id: id)
         return TextInputWindowController.Appearance(
             balloon: effective,
-            backgroundImageURL: loader.inputImageURL(style: style, in: balloon)
+            backgroundImageURL: loader.inputImageURL(id: id, in: balloon)
         )
     }
 

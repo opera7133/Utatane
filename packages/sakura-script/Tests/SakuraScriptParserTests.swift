@@ -49,7 +49,7 @@ func `parses initial playback command set`() {
 
 @Test func `parses specialized input boxes and modern options`() {
     let tokens = SakuraScriptParser().parse(
-        #"\![open,passwordinput,OnPassword,--timeout=1500,--text=secret,--limit=8,--reference=extra]\![open,dateinput,date,0,2026,9,20]\![open,sliderinput,volume,--text="50,0,100"]\![open,timeinput,time,0,23,45,12]\![open,ipinput,address,0,192,168,0,1]"#
+        #"\![open,passwordinput,OnPassword,--timeout=1500,--text=secret,--limit=8,--reference=extra]\![open,dateinput,date,0,2026,9,20]\![open,sliderinput,volume,--text="50,0,100"]\![open,timeinput,time,0,23,45,12]\![open,ipinput,address,0,192,168,0,1]\![open,inputbox,memo,--option=noclose,--option=noclear,--balloon=7]"#
     )
 
     #expect(tokens == [
@@ -69,8 +69,22 @@ func `parses initial playback command set`() {
             initialValue: "50"
         )),
         .inputBox(.init(kind: .time, id: "time", timeoutMilliseconds: 0, initialValue: "23,45,12")),
-        .inputBox(.init(kind: .ipAddress, id: "address", timeoutMilliseconds: 0, initialValue: "192,168,0,1"))
+        .inputBox(.init(kind: .ipAddress, id: "address", timeoutMilliseconds: 0, initialValue: "192,168,0,1")),
+        .inputBox(.init(
+            kind: .text,
+            id: "memo",
+            timeoutMilliseconds: nil,
+            initialValue: "",
+            options: ["noclose", "noclear"],
+            balloonID: 7
+        ))
     ])
+    guard case let .inputBox(persistent) = tokens.last else {
+        Issue.record("persistent input command was not parsed")
+        return
+    }
+    #expect(persistent.keepsOpenAfterSubmit)
+    #expect(persistent.keepsValueAfterSubmit)
 }
 
 @Test func `parses SNTP commands`() {

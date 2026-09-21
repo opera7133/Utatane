@@ -66,6 +66,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         public let actionTitle: String
         public let allowsCancel: Bool
         public let appearance: Appearance?
+        public let keepsOpenAfterCommit: Bool
+        public let clearsValueAfterCommit: Bool
         public let onCommit: @MainActor @Sendable (String) -> Void
         public let onCancel: (@MainActor @Sendable () -> Void)?
 
@@ -81,6 +83,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             actionTitle: String = String(localized: "OK"),
             allowsCancel: Bool = true,
             appearance: Appearance? = nil,
+            keepsOpenAfterCommit: Bool = false,
+            clearsValueAfterCommit: Bool = false,
             onCommit: @escaping @MainActor @Sendable (String) -> Void,
             onCancel: (@MainActor @Sendable () -> Void)? = nil
         ) {
@@ -95,6 +99,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             self.actionTitle = actionTitle
             self.allowsCancel = allowsCancel
             self.appearance = appearance
+            self.keepsOpenAfterCommit = keepsOpenAfterCommit
+            self.clearsValueAfterCommit = clearsValueAfterCommit
             self.onCommit = onCommit
             self.onCancel = onCancel
         }
@@ -116,10 +122,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         let view = TextInputDialogView(
             request: request,
             onCommit: { [weak self] text in
-                guard let self else { return }
-                let req = currentRequest
-                closeCurrentWindow(invokeCancel: false)
-                req?.onCommit(text)
+                self?.submitCurrent(text)
             },
             onCancel: { [weak self] in
                 guard let self else { return }
@@ -150,6 +153,18 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         panel.makeKeyAndOrderFront(nil)
         NSApplication.shared.activate(ignoringOtherApps: true)
         window = panel
+    }
+
+    func submitCurrent(_ text: String) {
+        let request = currentRequest
+        if request?.keepsOpenAfterCommit == true {
+            timeoutTask?.cancel()
+            timeoutTask = nil
+            timeoutHandler = nil
+        } else {
+            closeCurrentWindow(invokeCancel: false)
+        }
+        request?.onCommit(text)
     }
 
     public func showPrompt(
@@ -225,6 +240,41 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
                     closeCurrentWindow(invokeCancel: false)
                     handler?()
                 }
+            }
+        }
+    }
+
+    public func showPersistentInput(
+        id: String,
+        title: String,
+        initialValue: String,
+        maximumLength: Int?,
+        autocompleteValues: [String],
+        appearance: Appearance?,
+        timeoutMilliseconds: Int?,
+        clearsValueAfterSubmit: Bool,
+        onSubmit: @escaping @MainActor @Sendable (String) -> Void,
+        onCancel: @escaping @MainActor @Sendable (Bool) -> Void
+    ) {
+        show(Request(
+            id: id,
+            title: title,
+            initialValue: initialValue,
+            inputKind: .text,
+            maximumLength: maximumLength,
+            autocompleteValues: autocompleteValues,
+            appearance: appearance,
+            keepsOpenAfterCommit: true,
+            clearsValueAfterCommit: clearsValueAfterSubmit,
+            onCommit: onSubmit,
+            onCancel: { onCancel(false) }
+        ))
+        if let timeoutMilliseconds, timeoutMilliseconds > 0 {
+            timeoutTask = Task { [weak self] in
+                try? await Task.sleep(for: .milliseconds(timeoutMilliseconds))
+                guard !Task.isCancelled, let self else { return }
+                closeCurrentWindow(invokeCancel: false)
+                onCancel(true)
             }
         }
     }
@@ -325,7 +375,7 @@ private struct TextInputDialogView: View {
                         SecureField(request.placeholder ?? "", text: $text)
                             .textFieldStyle(.roundedBorder)
                             .focused($isFocused)
-                            .onSubmit { onCommit(submittedValue) }
+                            .onSubmit { submit() }
                     case .date:
                         DatePicker("", selection: $dateValue, displayedComponents: .date)
                             .labelsHidden()
@@ -352,7 +402,7 @@ private struct TextInputDialogView: View {
                         .textFieldStyle(.roundedBorder)
                         .focused($isFocused)
                         .onSubmit {
-                            onCommit(submittedValue)
+                            submit()
                         }
                     default:
                         AutocompleteTextField(
@@ -380,7 +430,7 @@ private struct TextInputDialogView: View {
                     }
                     Spacer()
                     Button(request.actionTitle) {
-                        onCommit(submittedValue)
+                        submit()
                     }
                     .keyboardShortcut(.defaultAction)
                 }
@@ -403,6 +453,13 @@ private struct TextInputDialogView: View {
                     text = filtered
                 }
             }
+        }
+    }
+
+    private func submit() {
+        onCommit(submittedValue)
+        if request.keepsOpenAfterCommit, request.clearsValueAfterCommit {
+            text = ""
         }
     }
 

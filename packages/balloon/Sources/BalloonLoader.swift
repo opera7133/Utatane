@@ -93,11 +93,18 @@ public struct BalloonLoader: Sendable {
         for balloon: BalloonDefinition,
         style: BalloonInputStyle
     ) -> BalloonDefinition {
+        effectiveInputDefinition(for: balloon, id: style.rawValue)
+    }
+
+    public func effectiveInputDefinition(
+        for balloon: BalloonDefinition,
+        id: Int
+    ) -> BalloonDefinition {
         let descriptURL = balloon.directory.appending(path: "descript.txt", directoryHint: .notDirectory)
         guard let baseText = try? readText(from: descriptURL) else { return balloon }
         var values = parser.parse(baseText)
         let overrideURL = balloon.directory.appending(
-            path: "balloonc\(style.rawValue)s.txt",
+            path: "balloonc\(id)s.txt",
             directoryHint: .notDirectory
         )
         if let overrideText = try? readText(from: overrideURL) {
@@ -107,8 +114,12 @@ public struct BalloonLoader: Sendable {
     }
 
     public func inputImageURL(style: BalloonInputStyle, in balloon: BalloonDefinition) -> URL? {
+        inputImageURL(id: style.rawValue, in: balloon)
+    }
+
+    public func inputImageURL(id: Int, in balloon: BalloonDefinition) -> URL? {
         let url = balloon.directory.appending(
-            path: "balloonc\(style.rawValue).png",
+            path: "balloonc\(id).png",
             directoryHint: .notDirectory
         )
         return FileManager.default.fileExists(atPath: url.path) ? url : nil

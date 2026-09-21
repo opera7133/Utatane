@@ -67,6 +67,29 @@ struct TextInputWindowControllerTests {
     }
 
     @Test
+    func `persistent input accepts repeated submissions until closed`() {
+        let controller = TextInputWindowController()
+        var submissions: [String] = []
+        var cancelled = false
+
+        controller.show(.init(
+            id: "persistent-input",
+            title: "継続入力",
+            keepsOpenAfterCommit: true,
+            onCommit: { submissions.append($0) },
+            onCancel: { cancelled = true }
+        ))
+
+        controller.submitCurrent("first")
+        controller.submitCurrent("second")
+        #expect(submissions == ["first", "second"])
+        #expect(!cancelled)
+
+        controller.close(id: "persistent-input")
+        #expect(cancelled)
+    }
+
+    @Test
     func `times out an input window`() async {
         let controller = TextInputWindowController()
 

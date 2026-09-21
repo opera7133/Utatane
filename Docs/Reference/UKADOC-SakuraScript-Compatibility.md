@@ -26,7 +26,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 調査日: 2026-09-20
 UKADOC掲載構文数: 359
 UKADOC分類行数: 147
-調査結果: ✅ 116 / 🟡 22 / ❌ 0 / ➖ 9
+調査結果: ✅ 117 / 🟡 21 / ❌ 0 / ➖ 9
 
 ### 基本仕様
 
@@ -178,7 +178,7 @@ UKADOC分類行数: 147
 | `\j[ID]`, `\![open,browser,...]` | ✅ | メイン／呼び出しゴーストともHTTP・HTTPSを既定ブラウザで開き、`mailto:`を標準メールアプリへ、`file:`の絶対パスまたは`ghost/master`相対パスを関連付けアプリへ渡します。危険なURL schemeとゴースト外へ抜ける相対パスは拒否 |
 | mailer / addressbar / editor / explorer | ➖ | macOSでの代替と安全境界が必要 |
 | teachbox / communicatebox | ✅ | `\![open,communicatebox,初期値]` / `\![open,teachbox,初期値]` に対応し、入力値を `OnCommunicate` / `OnTeach` イベントとして SHIORI へ通知 |
-| `\![open,inputbox,...]` | 🟡 | 旧形式と`--timeout`・`--text`・`--limit`・`--reference`を解析。時間切れと手動closeを区別し、`OnUserInputCancel`が空応答なら`timeout`値の入力イベントへフォールバック。入力値・補足・追加Referenceも指定イベントへ返します。noclose／noclearとballoon画像指定は未対応 |
+| `\![open,inputbox,...]` | ✅ | 旧形式と`--timeout`・`--text`・`--limit`・`--reference`・`--balloon`を解析。時間切れと手動closeを区別し、`OnUserInputCancel`が空応答なら`timeout`値の入力イベントへフォールバック。通常のInputBoxでは`noclose`による複数回入力と、`noclear`による入力値保持にも対応 |
 | password/date/slider/time/ip input | ✅ | パスワード欄、DatePicker、Slider、時刻選択、IPv4入力を使い、各形式のReference値を返します。旧形式と`--text`形式をParserテストで確認 |
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
 | configuration / 各explorer / calendar | ✅ | configurationの画面IDをUtataneの設定ペインへ対応付け、ghost／shell／balloon／headline／plugin explorerを共通コンテンツ画面、calendarを予定表として開く |

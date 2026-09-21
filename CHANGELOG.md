@@ -26,6 +26,7 @@
 - SakuraScriptの色指定で3桁16進数、CSS Color Level 3の拡張色名、無効色、選択肢・アンカーの既定色参照を扱えるようにした
 - `%selfname2`がゴーストまたは現在のシェルの`descript.txt`にある`sakura.name2`を使うようにした
 - SakuraScriptの`createnar`を引数なしで実行し、保存先を選んで現在のゴーストをNAR化できるようにした
+- SakuraScriptのInputBoxで`noclose`・`noclear`による継続入力と、`--balloon=ID`による入力用バルーン画像指定に対応した
 
 ## [0.2.7] - 2026-09-20
 

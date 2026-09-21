@@ -286,6 +286,8 @@ func `loads input appearance and balloonc surface overrides`() throws {
     communicatebox.width,280
     """.utf8).write(to: directory.appending(path: "balloonc1s.txt"))
     try Data().write(to: directory.appending(path: "balloonc1.png"))
+    try Data("communicatebox.x,48\n".utf8).write(to: directory.appending(path: "balloonc7s.txt"))
+    try Data().write(to: directory.appending(path: "balloonc7.png"))
     let loader = BalloonLoader()
     let balloon = try loader.load(from: directory)
 
@@ -300,6 +302,8 @@ func `loads input appearance and balloonc surface overrides`() throws {
     #expect(effective.communicateBoxWidth == 280)
     #expect(effective.communicateBoxHeight == 28)
     #expect(loader.inputImageURL(style: .communicate, in: balloon)?.lastPathComponent == "balloonc1.png")
+    #expect(loader.effectiveInputDefinition(for: balloon, id: 7).communicateBoxX == 48)
+    #expect(loader.inputImageURL(id: 7, in: balloon)?.lastPathComponent == "balloonc7.png")
 }
 
 @Test

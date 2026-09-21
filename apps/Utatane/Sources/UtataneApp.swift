@@ -1689,12 +1689,16 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func textInputAppearance(style: BalloonInputStyle) -> TextInputWindowController.Appearance? {
+    private func textInputAppearance(
+        style: BalloonInputStyle,
+        balloonID: Int? = nil
+    ) -> TextInputWindowController.Appearance? {
         guard let balloon else { return nil }
-        let effective = balloonLoader.effectiveInputDefinition(for: balloon, style: style)
+        let id = balloonID ?? style.rawValue
+        let effective = balloonLoader.effectiveInputDefinition(for: balloon, id: id)
         return TextInputWindowController.Appearance(
             balloon: effective,
-            backgroundImageURL: balloonLoader.inputImageURL(style: style, in: balloon)
+            backgroundImageURL: balloonLoader.inputImageURL(id: id, in: balloon)
         )
     }
 
@@ -2443,16 +2447,67 @@ private struct UtataneRootView: View {
                     id: "inputbox.autocomplete",
                     references: [0: command.inputTypeName, 1: command.id]
                 ))
+                let autocompleteValues = TextInputWindowController.autocompleteValues(
+                    from: autocomplete?.rawValue
+                )
+                let appearance = textInputAppearance(style: .input, balloonID: command.balloonID)
+                if command.keepsOpenAfterSubmit {
+                    textInputWindowController.showPersistentInput(
+                        id: command.id,
+                        title: String(localized: "文字を入力"),
+                        initialValue: command.initialValue,
+                        maximumLength: command.maximumLength,
+                        autocompleteValues: autocompleteValues,
+                        appearance: appearance,
+                        timeoutMilliseconds: command.timeoutMilliseconds,
+                        clearsValueAfterSubmit: !command.keepsValueAfterSubmit,
+                        onSubmit: { value in
+                            Task {
+                                if let response = try? await activeSession.handle(event: SHIORIEventFactory.userInput(
+                                    id: command.id,
+                                    value: value,
+                                    supplementalValue: command.supplementalValue,
+                                    additionalReferences: command.references
+                                )), !response.rawValue.isEmpty, let balloon {
+                                    scriptPlayer.play(response, balloon: balloon)
+                                }
+                            }
+                        },
+                        onCancel: { timedOut in
+                            Task {
+                                let response = try? await activeSession.handle(event: SHIORIEventFactory.userInputCancel(
+                                    id: command.id,
+                                    timedOut: timedOut
+                                ))
+                                if let response, !response.rawValue.isEmpty {
+                                    if let balloon {
+                                        scriptPlayer.play(response, balloon: balloon)
+                                    }
+                                } else if timedOut,
+                                          let fallback = try? await activeSession.handle(event: SHIORIEventFactory.userInput(
+                                              id: command.id,
+                                              value: "timeout",
+                                              supplementalValue: command.supplementalValue,
+                                              additionalReferences: command.references
+                                          )), !fallback.rawValue.isEmpty
+                                {
+                                    if let balloon {
+                                        scriptPlayer.play(fallback, balloon: balloon)
+                                    }
+                                }
+                            }
+                        }
+                    )
+                    return nil
+                }
                 let result = await textInputWindowController.showInput(
                     id: command.id,
                     title: String(localized: "文字を入力"),
                     initialValue: command.initialValue,
                     inputKind: .init(command.kind),
                     maximumLength: command.maximumLength,
-                    autocompleteValues: TextInputWindowController.autocompleteValues(
-                        from: autocomplete?.rawValue
-                    ),
-                    appearance: textInputAppearance(style: .input),
+                    autocompleteValues: autocompleteValues,
+                    appearance: appearance,
                     timeoutMilliseconds: command.timeoutMilliseconds
                 )
                 guard case let .submitted(value) = result else {

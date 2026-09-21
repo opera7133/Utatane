@@ -1646,7 +1646,8 @@ public struct SakuraScriptParser: Sendable {
             initialValue: initialValue,
             maximumLength: optionValue("limit", in: options).flatMap(Int.init),
             references: optionValues("reference", in: options),
-            options: options.compactMap { optionValue("option", in: [$0]) }
+            options: options.compactMap { optionValue("option", in: [$0]) },
+            balloonID: optionValue("balloon", in: options).flatMap(Int.init)
         )
     }
 

@@ -182,6 +182,7 @@ public struct SakuraScriptInputCommand: Sendable, Equatable {
     public let maximumLength: Int?
     public let references: [String]
     public let options: [String]
+    public let balloonID: Int?
 
     public init(
         kind: Kind,
@@ -190,7 +191,8 @@ public struct SakuraScriptInputCommand: Sendable, Equatable {
         initialValue: String,
         maximumLength: Int? = nil,
         references: [String] = [],
-        options: [String] = []
+        options: [String] = [],
+        balloonID: Int? = nil
     ) {
         self.kind = kind
         self.id = id
@@ -199,6 +201,15 @@ public struct SakuraScriptInputCommand: Sendable, Equatable {
         self.maximumLength = maximumLength
         self.references = references
         self.options = options
+        self.balloonID = balloonID
+    }
+
+    public var keepsOpenAfterSubmit: Bool {
+        kind == .text && options.contains { $0.caseInsensitiveCompare("noclose") == .orderedSame }
+    }
+
+    public var keepsValueAfterSubmit: Bool {
+        keepsOpenAfterSubmit && options.contains { $0.caseInsensitiveCompare("noclear") == .orderedSame }
     }
 
     public var supplementalValue: String {
