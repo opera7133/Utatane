@@ -27,6 +27,7 @@
 - `%selfname2`がゴーストまたは現在のシェルの`descript.txt`にある`sakura.name2`を使うようにした
 - SakuraScriptの`createnar`を引数なしで実行し、保存先を選んで現在のゴーストをNAR化できるようにした
 - SakuraScriptのInputBoxで`noclose`・`noclear`による継続入力と、`--balloon=ID`による入力用バルーン画像指定に対応した
+- SakuraScriptのSHIORI・MAKOTO再読み込みと、headline・plugin・カレンダースキンを含む`descript.txt`再読み込み対象を追加した
 
 ## [0.2.7] - 2026-09-20
 

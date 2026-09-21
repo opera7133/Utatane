@@ -219,7 +219,7 @@ UKADOC分類行数: 147
 | emptyrecyclebin | ✅ | ユーザーの`~/.Trash`を空にし、実行元と他ゴーストへ前後の件数・容量・成否を通知 |
 | create shortcut | ➖ | Windowsショートカット固有のためmacOSでは対象外 |
 | passive / induction / select / collision mode | 🟡 | passive／induction、collision表示に加え、selectrectの全画面矩形選択と開始・終了・マウス・キャンセル通知に対応。メニュー・DnD・更新・最小化・終了等の全制限は未実装 |
-| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | ghost・shell・balloonに加え、旧`reloadsurface`、surface、shiori、descriptの全体指定とghost／shell／balloon対象指定を実装。shioriとghost descriptは人格全体の再起動で代替。makoto・headline・plugin・aigraphは未対応 |
+| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | 旧`reloadsurface`、surface、shell、balloon、ghost、shiori、makotoを実装。`reload,descript`は全体指定とghost／shell／balloon／headline／plugin／calendar.skinの対象指定に対応する。SHIORIとMAKOTOは結合された人格エンジンを再生成する。language／calendar.pluginと、表示画面を持たないaigraphは未対応 |
 | `\![unload/load,shiori]` | ✅ | 実行中の人格エンジンを解放し、load時にゴースト設定から再生成。unload中はイベントに応答しない |
 | `\![unload/load,makoto]` | 🟡 | MAKOTO変換を外した／含めた人格エンジンへ切り替える。切り替え時にSHIORIも再生成される点はSSPと異なる |
 | `\![set,shioridebugmode,true/false]` | ✅ | 開発用パレットのSHIORIリクエスト画面を表示／非表示にする。Utataneは通常時もSHIORI通信をログへ記録する |

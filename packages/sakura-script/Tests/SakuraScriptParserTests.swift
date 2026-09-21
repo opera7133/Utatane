@@ -907,17 +907,24 @@ func `parses communicatebox and teachbox commands`() {
 @Test
 func `parses reload content actions and createnar commands`() {
     #expect(SakuraScriptParser().parse(
-        #"\![reload,ghost]\![reload,shell]\![reload,balloon]\![reloadsurface]\![reload,surface]\![reload,shiori]\![reload,descript]\![reload,descript,shell balloon]\![execute,createnar,/tmp/out.nar,/tmp/target,--event=OnExported]"#
+        #"\![reload,ghost]\![reload,shell]\![reload,balloon]\![reloadsurface]\![reload,surface]\![reload,shiori]\![reload,makoto]\![reload,descript]\![reload,descript,shell balloon headline plugin calendar skin]\![execute,createnar,/tmp/out.nar,/tmp/target,--event=OnExported]"#
     ) == [
         .contentAction(.reloadGhost),
         .contentAction(.reloadShell),
         .contentAction(.reloadBalloon),
         .contentAction(.reloadShell),
         .contentAction(.reloadShell),
+        .contentAction(.reloadShiori),
+        .contentAction(.reloadMakoto),
         .contentAction(.reloadGhost),
-        .contentAction(.reloadGhost),
+        .contentAction(.reloadHeadlines),
+        .contentAction(.reloadPlugins),
+        .contentAction(.reloadCalendarSkins),
         .contentAction(.reloadShell),
         .contentAction(.reloadBalloon),
+        .contentAction(.reloadHeadlines),
+        .contentAction(.reloadPlugins),
+        .contentAction(.reloadCalendarSkins),
         .archive(.createNar(
             narPath: "/tmp/out.nar",
             sourceDirectoryPath: "/tmp/target",

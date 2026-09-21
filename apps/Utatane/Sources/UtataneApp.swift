@@ -3876,6 +3876,16 @@ private struct UtataneRootView: View {
             } else if let balloon {
                 select(balloon: balloon)
             }
+        case .reloadShiori:
+            Task { await reloadScriptComponents(calledRuntime: calledRuntime) }
+        case .reloadMakoto:
+            Task { await setScriptComponent(.makoto, loads: true, calledRuntime: calledRuntime) }
+        case .reloadHeadlines:
+            reloadHeadlines()
+        case .reloadPlugins:
+            Task { await reloadPlugins() }
+        case .reloadCalendarSkins:
+            calendarWindowController.reloadSkins()
         case let .openContentExplorer(target):
             let kind: ContentExplorerKind? = switch target.lowercased() {
             case "ghostexplorer": .ghost
@@ -4127,6 +4137,24 @@ private struct UtataneRootView: View {
             } catch {
                 showError(error.localizedDescription)
             }
+        }
+    }
+
+    private func reloadScriptComponents(calledRuntime: CalledGhostRuntime? = nil) async {
+        guard let ghost = calledRuntime?.ghost ?? currentGhost,
+              let targetSession = calledRuntime?.session ?? session,
+              await targetSession.isPersonalityEngineLoaded
+        else { return }
+
+        await targetSession.unloadPersonalityEngine()
+        do {
+            let engine = try personalityEngine(
+                for: ghost,
+                includesMakoto: !makotoDisabledGhostIDs.contains(ghost.id)
+            )
+            await targetSession.loadPersonalityEngine(engine)
+        } catch {
+            showError(error.localizedDescription)
         }
     }
 

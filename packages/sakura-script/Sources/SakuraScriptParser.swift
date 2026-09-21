@@ -1229,12 +1229,19 @@ public struct SakuraScriptParser: Sendable {
                         case "ghost": tokens.append(.contentAction(.reloadGhost))
                         case "surface", "shell": tokens.append(.contentAction(.reloadShell))
                         case "balloon": tokens.append(.contentAction(.reloadBalloon))
-                        case "shiori": tokens.append(.contentAction(.reloadGhost))
+                        case "shiori": tokens.append(.contentAction(.reloadShiori))
+                        case "makoto": tokens.append(.contentAction(.reloadMakoto))
                         case "descript":
-                            let targets = arguments.dropFirst(2)
-                                .flatMap { $0.lowercased().split(whereSeparator: { $0.isWhitespace }) }
+                            let targetList = arguments.dropFirst(2).joined(separator: " ")
+                                .lowercased()
+                                .replacingOccurrences(of: "calendar skin", with: "calendar.skin")
+                                .replacingOccurrences(of: "calendar plugin", with: "calendar.plugin")
+                            let targets = targetList
+                                .split(whereSeparator: { $0.isWhitespace })
                                 .map(String.init)
-                            let effectiveTargets = targets.isEmpty ? ["ghost", "shell", "balloon"] : targets
+                            let effectiveTargets = targets.isEmpty
+                                ? ["ghost", "shell", "balloon", "headline", "plugin", "calendar.skin"]
+                                : targets
                             var actions: [SakuraScriptContentAction] = []
                             if effectiveTargets.contains("ghost") {
                                 actions.append(.reloadGhost)
@@ -1245,6 +1252,15 @@ public struct SakuraScriptParser: Sendable {
                                 if effectiveTargets.contains("balloon") {
                                     actions.append(.reloadBalloon)
                                 }
+                            }
+                            if effectiveTargets.contains("headline") {
+                                actions.append(.reloadHeadlines)
+                            }
+                            if effectiveTargets.contains("plugin") {
+                                actions.append(.reloadPlugins)
+                            }
+                            if effectiveTargets.contains("calendar.skin") {
+                                actions.append(.reloadCalendarSkins)
                             }
                             if actions.isEmpty {
                                 tokens.append(.unknown("\\![\(argument)]"))

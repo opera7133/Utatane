@@ -469,6 +469,11 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case reloadGhost
     case reloadShell
     case reloadBalloon
+    case reloadShiori
+    case reloadMakoto
+    case reloadHeadlines
+    case reloadPlugins
+    case reloadCalendarSkins
     case openContentExplorer(String)
     case openDressupExplorer
     case openPictureViewer(String?)
