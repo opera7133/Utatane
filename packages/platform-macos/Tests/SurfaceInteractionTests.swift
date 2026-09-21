@@ -197,6 +197,43 @@ struct SurfaceDragTests {
         #expect(controller.dragPosition(for: 0) == nil)
     }
 
+    @Test @MainActor
+    func `user desktop bottom lock overrides free shell alignment at startup`() throws {
+        let (defaults, positionStore) = makePositionStore()
+        defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "utatane-bottom-lock-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try makePNG(width: 80, height: 120).write(to: directory.appending(path: "surface0.png"))
+        let shell = ShellDefinition(
+            directory: directory,
+            surfaces: [:],
+            surfaceTable: nil,
+            maximumSurfaceWidth: nil,
+            desktopAlignment: .free
+        )
+        let controller = SurfaceWindowController(positionStore: positionStore, interactionHoverDelay: 0)
+        controller.setPlacement(locksToDesktopBottom: true, keepsOnScreen: true)
+        try controller.show(shell: shell, scope: 0, surfaceID: 0)
+        defer { controller.hideAll() }
+        let windowNumber = try #require(controller.windowNumbers.first)
+        let window = try #require(NSApp.window(withWindowNumber: windowNumber))
+        let view = try #require(window.contentView)
+        let start = window.frame
+        let pointer = NSPoint(x: start.midX, y: start.midY)
+
+        try view.mouseDown(with: surfaceDragEvent(.leftMouseDown, pointer: pointer, window: window))
+        try view.mouseDragged(with: surfaceDragEvent(
+            .leftMouseDragged,
+            pointer: NSPoint(x: pointer.x + 30, y: pointer.y + 80),
+            window: window
+        ))
+
+        #expect(window.frame.minX == start.minX + 30)
+        #expect(window.frame.minY == start.minY)
+    }
+
     @Test(arguments: ["escape", "hide", "lock", "replace", "deactivate"])
     @MainActor
     func `surface drag feedback clears when interrupted`(reason: String) async throws {

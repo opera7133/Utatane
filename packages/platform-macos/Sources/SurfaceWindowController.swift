@@ -2029,18 +2029,18 @@ private final class CharacterSurfaceController {
     func setPlacement(locksToDesktopBottom: Bool, keepsOnScreen: Bool) {
         self.locksToDesktopBottom = locksToDesktopBottom
         self.keepsOnScreen = keepsOnScreen
-        imageView?.locksVerticalMovement = locksToDesktopBottom
-        item?.setPlacementPolicy(.init(
-            edge: effectiveDesktopEdge,
-            keepsOnScreen: keepsOnScreen
-        ))
+        applyPlacementConstraints()
     }
 
     func setDesktopAlignment(_ alignment: SurfaceDesktopAlignment) {
         desktopAlignment = alignment
-        imageView?.locksHorizontalMovement = [.left, .right].contains(alignment)
-        imageView?.locksVerticalMovement = [.top, .bottom].contains(alignment)
-            || (alignment == .defaultValue && locksToDesktopBottom)
+        applyPlacementConstraints()
+    }
+
+    private func applyPlacementConstraints() {
+        imageView?.locksHorizontalMovement = [.left, .right].contains(desktopAlignment)
+        imageView?.locksVerticalMovement = locksToDesktopBottom
+            || [.top, .bottom].contains(desktopAlignment)
         item?.setPlacementPolicy(.init(
             edge: effectiveDesktopEdge,
             keepsOnScreen: keepsOnScreen
@@ -2048,13 +2048,16 @@ private final class CharacterSurfaceController {
     }
 
     private var effectiveDesktopEdge: FloatingWindowPlacementPolicy.Edge? {
-        switch desktopAlignment {
+        if locksToDesktopBottom {
+            return .bottom
+        }
+        return switch desktopAlignment {
         case .top: .top
         case .bottom: .bottom
         case .left: .left
         case .right: .right
         case .free: nil
-        case .defaultValue: locksToDesktopBottom ? .bottom : nil
+        case .defaultValue: nil
         }
     }
 
@@ -2400,8 +2403,8 @@ private final class CharacterSurfaceController {
         imageView.flipsHorizontally = effectiveRuntimeScaleX < 0
         imageView.flipsVertically = effectiveRuntimeScaleY < 0
         imageView.locksHorizontalMovement = [.left, .right].contains(desktopAlignment)
-        imageView.locksVerticalMovement = [.top, .bottom].contains(desktopAlignment)
-            || (desktopAlignment == .defaultValue && locksToDesktopBottom)
+        imageView.locksVerticalMovement = locksToDesktopBottom
+            || [.top, .bottom].contains(desktopAlignment)
         imageView.isMovementLocked = isMovementLocked
         imageView.hoverDelay = interactionHoverDelay
         imageView.collisions = effectiveCollisions(for: definition, shell: shell)

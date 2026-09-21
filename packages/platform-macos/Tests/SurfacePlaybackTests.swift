@@ -156,6 +156,7 @@ func `shell presentation defaults place and align a surface`() throws {
         ]
     )
     let controller = SurfaceWindowController(positionStore: positionStore, geometryProvider: geometry)
+    controller.setPlacement(locksToDesktopBottom: false, keepsOnScreen: true)
     defer { controller.hideAll() }
 
     try controller.show(shell: shell, surfaceID: 0)
@@ -271,6 +272,7 @@ func `surface base position stays fixed across changes scaling and saved positio
     )
     positionStore.setContentID(directory)
     let controller = SurfaceWindowController(positionStore: positionStore)
+    controller.setPlacement(locksToDesktopBottom: false, keepsOnScreen: true)
     try controller.show(shell: shell, surfaceID: 0)
     controller.restoreLayoutPresetPositions([0: NSPoint(x: 500, y: 500)])
 
@@ -281,6 +283,7 @@ func `surface base position stays fixed across changes scaling and saved positio
     controller.resetContent()
 
     let restored = SurfaceWindowController(positionStore: positionStore)
+    restored.setPlacement(locksToDesktopBottom: false, keepsOnScreen: true)
     defer { restored.resetContent() }
     try restored.show(shell: shell, surfaceID: 1)
     #expect(restored.windowFrame(for: 0)?.origin == NSPoint(x: 470, y: 550))
