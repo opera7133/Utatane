@@ -577,8 +577,7 @@ public final class SakuraScriptPlayer {
                     surfaceWindowController?.surfaceID(for: scope)
                 },
                 thumbnailPNGData: { [weak surfaceWindowController] scope in
-                    guard let image = surfaceWindowController?.renderedImage(for: scope) else { return nil }
-                    return SpeechHistoryThumbnail.pngData(from: image)
+                    surfaceWindowController?.speechHistoryThumbnailPNGData(for: scope)
                 }
             )
         }()

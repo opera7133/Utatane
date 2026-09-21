@@ -3,6 +3,7 @@ import Combine
 import Foundation
 import SwiftUI
 import UtataneSakuraScript
+import UtataneShell
 
 public struct SpeechHistoryContext: Sendable, Equatable {
     public var ghostIdentifier: String
@@ -586,8 +587,14 @@ struct SpeechHistoryRecorder {
 }
 
 enum SpeechHistoryThumbnail {
-    static func pngData(from image: NSImage, pixelSize: Int = 64) -> Data? {
+    static func pngData(
+        from image: NSImage,
+        iconRect: SurfaceRect? = nil,
+        pixelSize: Int = 64
+    ) -> Data? {
         guard pixelSize > 0, image.size.width > 0, image.size.height > 0,
+              let sourceBitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first
+              ?? image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)),
               let bitmap = NSBitmapImageRep(
                   bitmapDataPlanes: nil,
                   pixelsWide: pixelSize,
@@ -599,29 +606,55 @@ enum SpeechHistoryThumbnail {
                   colorSpaceName: .deviceRGB,
                   bytesPerRow: pixelSize * 4,
                   bitsPerPixel: 32
-              ),
-              let context = NSGraphicsContext(bitmapImageRep: bitmap)
+              )
         else { return nil }
 
-        let side = min(image.size.width, image.size.height)
-        let source = NSRect(
-            x: (image.size.width - side) / 2,
-            y: image.size.height - side,
+        let source = sourceRect(for: image.size, iconRect: iconRect)
+        for destinationY in 0 ..< pixelSize {
+            for destinationX in 0 ..< pixelSize {
+                let sourceX = source.minX
+                    + (CGFloat(destinationX) + 0.5) / CGFloat(pixelSize) * source.width
+                let sourceYFromTop = source.minY
+                    + (CGFloat(pixelSize - destinationY) - 0.5) / CGFloat(pixelSize) * source.height
+                let pixelX = Int(sourceX / image.size.width * CGFloat(sourceBitmap.pixelsWide))
+                let pixelY = sourceBitmap.pixelsHigh - 1
+                    - Int(sourceYFromTop / image.size.height * CGFloat(sourceBitmap.pixelsHigh))
+                let color = if (0 ..< sourceBitmap.pixelsWide).contains(pixelX),
+                               (0 ..< sourceBitmap.pixelsHigh).contains(pixelY)
+                {
+                    sourceBitmap.colorAt(x: pixelX, y: pixelY)?.usingColorSpace(.deviceRGB) ?? .clear
+                } else {
+                    NSColor.clear
+                }
+                bitmap.setColor(color, atX: destinationX, y: destinationY)
+            }
+        }
+        return bitmap.representation(using: .png, properties: [:])
+    }
+
+    private static func sourceRect(for imageSize: NSSize, iconRect: SurfaceRect?) -> NSRect {
+        guard let iconRect else {
+            let side = min(imageSize.width, imageSize.height)
+            return NSRect(
+                x: (imageSize.width - side) / 2,
+                y: 0,
+                width: side,
+                height: side
+            )
+        }
+
+        let left = CGFloat(min(iconRect.left, iconRect.right))
+        let right = CGFloat(max(iconRect.left, iconRect.right))
+        let top = CGFloat(min(iconRect.top, iconRect.bottom))
+        let bottom = CGFloat(max(iconRect.top, iconRect.bottom))
+        let side = max(1, max(right - left, bottom - top))
+        let centerX = (left + right) / 2
+        let centerYFromTop = (top + bottom) / 2
+        return NSRect(
+            x: centerX - side / 2,
+            y: centerYFromTop - side / 2,
             width: side,
             height: side
         )
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        context.imageInterpolation = .high
-        image.draw(
-            in: NSRect(x: 0, y: 0, width: pixelSize, height: pixelSize),
-            from: source,
-            operation: .copy,
-            fraction: 1,
-            respectFlipped: false,
-            hints: nil
-        )
-        NSGraphicsContext.restoreGraphicsState()
-        return bitmap.representation(using: .png, properties: [:])
     }
 }

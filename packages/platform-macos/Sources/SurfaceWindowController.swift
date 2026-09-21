@@ -364,7 +364,13 @@ public final class SurfaceWindowController {
                 origin
             }
             character.setOrigin(constrained)
-            positionStore.save(constrained, for: .surface, scope: scope, coordinateSpace: geometryProvider.coordinateSpace)
+            positionStore.save(
+                constrained,
+                for: .surface,
+                scope: scope,
+                coordinateSpace: geometryProvider.coordinateSpace,
+                anchorOffset: character.basePositionOffset
+            )
         }
     }
 
@@ -393,6 +399,10 @@ public final class SurfaceWindowController {
 
     public func renderedImage(for scope: Int = 0) -> NSImage? {
         characters[scope]?.renderedImage
+    }
+
+    public func speechHistoryThumbnailPNGData(for scope: Int) -> Data? {
+        characters[scope]?.speechHistoryThumbnailPNGData
     }
 
     public func dumpSurfaceImages(
@@ -986,7 +996,8 @@ public final class SurfaceWindowController {
             windowSize: frame.size,
             visibleFrames: geometryProvider.visibleFrames,
             constrainsToVisibleFrame: keepsOnScreen,
-            coordinateSpace: geometryProvider.coordinateSpace
+            coordinateSpace: geometryProvider.coordinateSpace,
+            anchorOffset: character.basePositionOffset
         ) {
             character.setOrigin(restoredOrigin)
             return
@@ -1182,6 +1193,32 @@ private final class CharacterSurfaceController {
         imageView?.image
     }
 
+    var speechHistoryThumbnailPNGData: Data? {
+        guard let renderedImage else { return nil }
+        return SpeechHistoryThumbnail.pngData(
+            from: renderedImage,
+            iconRect: currentSurfaceDefinition?.iconRect
+        )
+    }
+
+    var basePositionOffset: NSPoint {
+        guard let frame = item?.frame,
+              let imageSize = surfaceBaseImage?.size ?? baseImage?.size,
+              imageSize.width > 0,
+              imageSize.height > 0
+        else { return .zero }
+
+        let point = currentSurfaceDefinition?.points["basepos"]
+        let sourceX = CGFloat(point?.x ?? Int(imageSize.width / 2))
+        let sourceY = CGFloat(point?.y ?? Int(imageSize.height))
+        let xRatio = sourceX / imageSize.width
+        let yRatio = sourceY / imageSize.height
+        return NSPoint(
+            x: (effectiveRuntimeScaleX < 0 ? 1 - xRatio : xRatio) * frame.width,
+            y: (effectiveRuntimeScaleY < 0 ? yRatio : 1 - yRatio) * frame.height
+        )
+    }
+
     func popUp(menu: NSMenu) -> Bool {
         guard let imageView else { return false }
         menu.popUp(
@@ -1367,13 +1404,14 @@ private final class CharacterSurfaceController {
         guard redraw, let shell, let baseSurfaceID, let item,
               let rendered = try? render(surfaceID: baseSurfaceID, shell: shell)
         else { return }
-        let origin = item.frame.origin
+        let anchor = presentationAnchor
         item.contentView = rendered.view
         item.setContentSize(displaySize(for: rendered.image))
-        item.setFrameOrigin(origin)
         imageView = rendered.view
+        surfaceBaseImage = rendered.image
         baseImage = rendered.image
         renderedLayerCache[baseSurfaceID] = rendered.image
+        restorePresentationAnchor(anchor)
         scheduleAutomaticAnimations()
     }
 
@@ -1638,6 +1676,7 @@ private final class CharacterSurfaceController {
 
     func changeSurface(to surfaceID: Int) throws {
         guard let shell, let item else { return }
+        let anchor = presentationAnchor
         let sharedResumePoints = Dictionary(uniqueKeysWithValues: (currentSurfaceDefinition?.animations ?? [])
             .filter { $0.options.contains("shared-index") && animationTasks[$0.id] != nil }
             .compactMap { animation in
@@ -1670,11 +1709,9 @@ private final class CharacterSurfaceController {
             return
         }
 
-        let origin = item.frame.origin
         let rendered = try render(surfaceID: surfaceID, shell: shell)
         item.contentView = rendered.view
         item.setContentSize(displaySize(for: rendered.image))
-        item.setFrameOrigin(origin)
         item.show(activating: false)
         imageView = rendered.view
         baseSurfaceID = surfaceID
@@ -1682,6 +1719,7 @@ private final class CharacterSurfaceController {
         baseImage = rendered.image
         renderedLayerCache[surfaceID] = rendered.image
         persistentAnimationLayers.removeAll()
+        restorePresentationAnchor(anchor)
         resumeSharedAnimations(from: sharedResumePoints)
         scheduleAutomaticAnimations()
     }
@@ -1908,28 +1946,28 @@ private final class CharacterSurfaceController {
 
     func setDisplayScale(_ scale: CGFloat) {
         guard displayScale != scale else { return }
+        let anchor = presentationAnchor
         displayScale = scale
         if let nijigenerateBaseSize, let item {
-            let origin = item.frame.origin
             let size = displaySize(forNijigenerateBaseSize: nijigenerateBaseSize)
             item.setContentSize(size)
-            item.setFrameOrigin(origin)
             updateImageViewCoordinateScale()
             updateNijigenerateScale()
+            restorePresentationAnchor(anchor)
             return
         }
         guard let shell, let baseSurfaceID, let item else { return }
-        let origin = item.frame.origin
         guard let rendered = try? render(surfaceID: baseSurfaceID, shell: shell) else { return }
         item.contentView = rendered.view
         item.setContentSize(displaySize(for: rendered.image))
-        item.setFrameOrigin(origin)
         imageView = rendered.view
         baseImage = rendered.image
+        restorePresentationAnchor(anchor)
         scheduleAutomaticAnimations()
     }
 
     func setAutomaticallyFitsLargeSurfaces(_ enabled: Bool) {
+        let anchor = presentationAnchor
         automaticallyFitsLargeSurfaces = enabled
         guard let baseImage else { return }
         automaticFitScale = enabled
@@ -1941,6 +1979,7 @@ private final class CharacterSurfaceController {
         guard let item else { return }
         item.setContentSize(displaySize(for: baseImage))
         updateImageViewCoordinateScale()
+        restorePresentationAnchor(anchor)
     }
 
     func setRuntimeScale(
@@ -1948,6 +1987,7 @@ private final class CharacterSurfaceController {
         vertical: CGFloat,
         durationMilliseconds: Int
     ) async {
+        let anchor = presentationAnchor
         runtimeScaleX = horizontal
         runtimeScaleY = vertical
         if let nijigenerateBaseSize, let item {
@@ -1958,9 +1998,11 @@ private final class CharacterSurfaceController {
             let targetSize = displaySize(forNijigenerateBaseSize: nijigenerateBaseSize)
             guard durationMilliseconds > 0 else {
                 item.setContentSize(targetSize)
+                restorePresentationAnchor(anchor)
                 return
             }
             await item.animateContentSize(targetSize, duration: Double(durationMilliseconds) / 1000)
+            restorePresentationAnchor(anchor)
             return
         }
         guard let shell, let baseSurfaceID, let item,
@@ -1975,10 +2017,12 @@ private final class CharacterSurfaceController {
         let targetSize = displaySize(for: rendered.image)
         guard durationMilliseconds > 0 else {
             item.setContentSize(targetSize)
+            restorePresentationAnchor(anchor)
             scheduleAutomaticAnimations()
             return
         }
         await item.animateContentSize(targetSize, duration: Double(durationMilliseconds) / 1000)
+        restorePresentationAnchor(anchor)
         scheduleAutomaticAnimations()
     }
 
@@ -2242,6 +2286,7 @@ private final class CharacterSurfaceController {
 
     private func refreshAnimationScale() {
         guard let item else { return }
+        let anchor = presentationAnchor
         imageView?.flipsHorizontally = effectiveRuntimeScaleX < 0
         imageView?.flipsVertically = effectiveRuntimeScaleY < 0
         updateImageViewCoordinateScale()
@@ -2251,6 +2296,19 @@ private final class CharacterSurfaceController {
         } else if let baseImage {
             item.setContentSize(displaySize(for: baseImage))
         }
+        restorePresentationAnchor(anchor)
+    }
+
+    private var presentationAnchor: NSPoint? {
+        guard let origin = item?.frame.origin else { return nil }
+        let offset = basePositionOffset
+        return NSPoint(x: origin.x + offset.x, y: origin.y + offset.y)
+    }
+
+    private func restorePresentationAnchor(_ anchor: NSPoint?) {
+        guard let anchor else { return }
+        let offset = basePositionOffset
+        item?.setFrameOrigin(NSPoint(x: anchor.x - offset.x, y: anchor.y - offset.y))
     }
 
     var onWindowDragDelta: ((_ delta: NSPoint) -> Void)?
@@ -2611,14 +2669,15 @@ private final class CharacterSurfaceController {
         let item = presentationHost.makeItem(
             kind: .surface,
             title: "Ghost Surface \(scope)",
-            restoredOrigin: { [positionStore, scope] coordinateSpace, itemSize, visibleFrames in
+            restoredOrigin: { [weak self, positionStore, scope] coordinateSpace, itemSize, visibleFrames in
                 positionStore.restoredOrigin(
                     for: .surface,
                     scope: scope,
                     windowSize: itemSize,
                     visibleFrames: visibleFrames,
                     constrainsToVisibleFrame: constrainsToVisibleFrame,
-                    coordinateSpace: coordinateSpace
+                    coordinateSpace: coordinateSpace,
+                    anchorOffset: self?.basePositionOffset
                 )
             },
             onMove: { [weak self, positionStore, geometryProvider, scope] origin, reason in
@@ -2627,7 +2686,8 @@ private final class CharacterSurfaceController {
                         origin,
                         for: .surface,
                         scope: scope,
-                        coordinateSpace: geometryProvider.coordinateSpace
+                        coordinateSpace: geometryProvider.coordinateSpace,
+                        anchorOffset: self?.basePositionOffset
                     )
                 }
                 let oldOrigin = previousOrigin

@@ -239,6 +239,90 @@ func `changes to a surface by its surfaces txt name`() throws {
 
 @Test
 @MainActor
+func `surface base position stays fixed across changes scaling and saved positions`() async throws {
+    let (defaults, positionStore) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 40, height: 80).write(to: directory.appending(path: "surface0000.png"))
+    try makePNG(width: 100, height: 60).write(to: directory.appending(path: "surface0001.png"))
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [
+            0: SurfaceDefinition(
+                id: 0,
+                points: ["basepos": SurfacePoint(x: 10, y: 20)],
+                collisions: [],
+                animations: []
+            ),
+            1: SurfaceDefinition(
+                id: 1,
+                points: ["basepos": SurfacePoint(x: 40, y: 50)],
+                collisions: [],
+                animations: []
+            )
+        ],
+        surfaceTable: nil,
+        maximumSurfaceWidth: nil,
+        desktopAlignment: .free
+    )
+    positionStore.setContentID(directory)
+    let controller = SurfaceWindowController(positionStore: positionStore)
+    try controller.show(shell: shell, surfaceID: 0)
+    controller.restoreLayoutPresetPositions([0: NSPoint(x: 500, y: 500)])
+
+    try controller.changeSurface(to: 1)
+    #expect(controller.windowFrame(for: 0)?.origin == NSPoint(x: 470, y: 550))
+    await controller.setRuntimeScale(horizontal: 2, vertical: 2, scope: 0, durationMilliseconds: 0)
+    #expect(controller.windowFrame(for: 0)?.origin == NSPoint(x: 430, y: 540))
+    controller.resetContent()
+
+    let restored = SurfaceWindowController(positionStore: positionStore)
+    defer { restored.resetContent() }
+    try restored.show(shell: shell, surfaceID: 1)
+    #expect(restored.windowFrame(for: 0)?.origin == NSPoint(x: 470, y: 550))
+}
+
+@Test
+@MainActor
+func `speech history thumbnail uses the surface icon rectangle`() throws {
+    let bitmap = try #require(NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: 100,
+        pixelsHigh: 100,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 400,
+        bitsPerPixel: 32
+    ))
+    let red = NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    let blue = NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    for y in 0 ..< 100 {
+        for x in 0 ..< 100 {
+            bitmap.setColor(x < 40 && y >= 60 ? red : blue, atX: x, y: y)
+        }
+    }
+    let image = NSImage(size: NSSize(width: 100, height: 100))
+    image.addRepresentation(bitmap)
+
+    let data = try #require(SpeechHistoryThumbnail.pngData(
+        from: image,
+        iconRect: SurfaceRect(left: 0, top: 0, right: 40, bottom: 40),
+        pixelSize: 32
+    ))
+    let thumbnail = try #require(NSBitmapImageRep(data: data))
+    let center = try #require(thumbnail.colorAt(x: 16, y: 16)?.usingColorSpace(.deviceRGB))
+    #expect(center.redComponent > 0.9)
+    #expect(center.blueComponent < 0.1)
+}
+
+@Test
+@MainActor
 func `combines shell surface and SakuraScript balloon offsets`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

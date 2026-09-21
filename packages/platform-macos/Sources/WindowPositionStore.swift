@@ -22,10 +22,21 @@ public final class WindowPositionStore {
         _ origin: NSPoint,
         for kind: FloatingWindowKind,
         scope: Int,
-        coordinateSpace: PresentationCoordinateSpace = .desktop
+        coordinateSpace: PresentationCoordinateSpace = .desktop,
+        anchorOffset: NSPoint? = nil
     ) {
+        let storedPoint = anchorOffset.map {
+            NSPoint(x: origin.x + $0.x, y: origin.y + $0.y)
+        } ?? origin
+        var value: [String: Any] = [
+            "x": Double(storedPoint.x),
+            "y": Double(storedPoint.y)
+        ]
+        if anchorOffset != nil {
+            value["storesAnchor"] = true
+        }
         defaults.set(
-            ["x": Double(origin.x), "y": Double(origin.y)],
+            value,
             forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace)
         )
     }
@@ -44,7 +55,8 @@ public final class WindowPositionStore {
         windowSize: NSSize,
         screens: [NSScreen] = NSScreen.screens,
         constrainsToVisibleFrame: Bool = true,
-        coordinateSpace: PresentationCoordinateSpace = .desktop
+        coordinateSpace: PresentationCoordinateSpace = .desktop,
+        anchorOffset: NSPoint? = nil
     ) -> NSPoint? {
         restoredOrigin(
             for: kind,
@@ -52,7 +64,8 @@ public final class WindowPositionStore {
             windowSize: windowSize,
             visibleFrames: screens.map(\.visibleFrame),
             constrainsToVisibleFrame: constrainsToVisibleFrame,
-            coordinateSpace: coordinateSpace
+            coordinateSpace: coordinateSpace,
+            anchorOffset: anchorOffset
         )
     }
 
@@ -62,7 +75,8 @@ public final class WindowPositionStore {
         windowSize: NSSize,
         visibleFrames: [NSRect],
         constrainsToVisibleFrame: Bool = true,
-        coordinateSpace: PresentationCoordinateSpace = .desktop
+        coordinateSpace: PresentationCoordinateSpace = .desktop,
+        anchorOffset: NSPoint? = nil
     ) -> NSPoint? {
         guard let value = defaults.dictionary(
             forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace)
@@ -73,7 +87,12 @@ public final class WindowPositionStore {
             return nil
         }
 
-        let origin = NSPoint(x: x, y: y)
+        let storesAnchor = value["storesAnchor"] as? Bool == true
+        let origin = if storesAnchor, let anchorOffset {
+            NSPoint(x: x - anchorOffset.x, y: y - anchorOffset.y)
+        } else {
+            NSPoint(x: x, y: y)
+        }
         guard constrainsToVisibleFrame else { return origin }
         guard let visibleFrame = visibleFrames.first(where: {
             $0.intersects(NSRect(origin: origin, size: windowSize))

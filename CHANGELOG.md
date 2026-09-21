@@ -32,6 +32,7 @@
 - SakuraScriptの`dumpsurface`でscope・複数surface・prefix・完了件数を扱い、出力先を実行元ゴースト配下に制限した
 - SakuraScriptのpingでパケット分割禁止とUTF-8データ指定を扱えるようにした
 - Ghost `descript.txt`の既定シェル、初期配置、バルーン移動・拡大追従、MenuBarアイコン、キャラクター名上書き可否、SSTPの無指定送信・COMMUNICATE受信設定を実際の動作へ反映した
+- `surfaces.txt`の`point.basepos`をサーフェス切替と位置保存の基準へ、`icon.rect`を発話履歴の顔サムネイル切り抜きへ反映した
 
 ## [0.2.7] - 2026-09-20
 
