@@ -303,11 +303,36 @@ public enum SakuraScriptInstallSource: Sendable, Equatable {
     case url(String, type: String?)
 }
 
+public struct SakuraScriptDumpSurfaceCommand: Sendable, Equatable {
+    public let directoryPath: String?
+    public let scope: Int
+    public let surfaceList: String?
+    public let prefix: String
+    public let eventID: String?
+    public let cropsFromZero: Bool
+
+    public init(
+        directoryPath: String? = nil,
+        scope: Int = 0,
+        surfaceList: String? = nil,
+        prefix: String = "surface",
+        eventID: String? = nil,
+        cropsFromZero: Bool = false
+    ) {
+        self.directoryPath = directoryPath
+        self.scope = scope
+        self.surfaceList = surfaceList
+        self.prefix = prefix.isEmpty ? "surface" : prefix
+        self.eventID = eventID
+        self.cropsFromZero = cropsFromZero
+    }
+}
+
 public enum SakuraScriptArchiveCommand: Sendable, Equatable {
     case extract(archivePath: String, destinationPath: String, eventID: String?, password: String?)
     case compress(archivePath: String, sourceDirectoryPath: String, eventID: String?, password: String?)
     case createNar(narPath: String?, sourceDirectoryPath: String?, eventID: String?)
-    case dumpSurface(path: String?, eventID: String?)
+    case dumpSurface(SakuraScriptDumpSurfaceCommand)
     case createUpdateData(directoryPath: String?, eventID: String?)
 }
 
@@ -320,7 +345,16 @@ public enum SakuraScriptWebSocketCommand: Sendable, Equatable {
 }
 
 public enum SakuraScriptNetworkDiagnostic: Sendable, Equatable {
-    case ping(host: String, eventID: String, count: Int, size: Int, timeoutMilliseconds: Int, ttl: Int?)
+    case ping(
+        host: String,
+        eventID: String,
+        count: Int,
+        size: Int,
+        timeoutMilliseconds: Int,
+        ttl: Int?,
+        dontFragment: Bool,
+        data: String?
+    )
     case nslookup(host: String, eventID: String)
 }
 
@@ -474,10 +508,12 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case reloadHeadlines
     case reloadPlugins
     case reloadCalendarSkins
+    case reloadAIGraph
     case openContentExplorer(String)
     case openDressupExplorer
     case openPictureViewer(String?)
     case openArchiveViewer(String?)
+    case openAIGraph
     case setTaskTrayIcon(file: String, tooltip: String?, durationMilliseconds: Int?, runCount: Int?)
     case openDeveloperTool(String)
     case openConfigurationDialog(String?)

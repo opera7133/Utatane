@@ -24,19 +24,57 @@ public enum NetworkDiagnosticRunner {
         size: Int,
         timeoutMilliseconds: Int,
         ttl: Int?,
+        dontFragment: Bool = false,
+        data: String? = nil,
         progress: (@Sendable (NetworkPingProgress) async -> Void)? = nil
     ) async -> NetworkDiagnosticResult {
         await run(
             executable: "/sbin/ping",
-            arguments: ["-n", "-c", String(max(1, min(count, 20))), "-s", String(max(0, min(size, 65507))),
-                        "-W", String(max(1, timeoutMilliseconds))]
-                + (ttl.map { ["-m", String(max(1, min($0, 255)))] } ?? [])
-                + [host],
+            arguments: pingArguments(
+                host: host,
+                count: count,
+                size: size,
+                timeoutMilliseconds: timeoutMilliseconds,
+                ttl: ttl,
+                dontFragment: dontFragment,
+                data: data
+            ),
             lineHandler: { line in
                 guard let value = pingProgress(from: line) else { return }
                 await progress?(value)
             }
         )
+    }
+
+    static func pingArguments(
+        host: String,
+        count: Int,
+        size: Int,
+        timeoutMilliseconds: Int,
+        ttl: Int?,
+        dontFragment: Bool,
+        data: String?
+    ) -> [String] {
+        let payloadSize = data.map { Data($0.utf8).count }
+        var arguments = [
+            "-n", "-c", String(max(1, min(count, 20))),
+            "-s", String(max(0, min(payloadSize ?? size, 65507))),
+            "-W", String(max(1, timeoutMilliseconds))
+        ]
+        if let ttl {
+            arguments += ["-m", String(max(1, min(ttl, 255)))]
+        }
+        if dontFragment {
+            arguments.append("-D")
+        }
+        if let data, !data.isEmpty {
+            let pattern = Data(data.utf8.prefix(16)).map { String(format: "%02x", $0) }.joined()
+            if !pattern.isEmpty {
+                arguments += ["-p", pattern]
+            }
+        }
+        arguments.append(host)
+        return arguments
     }
 
     public static func nslookup(host: String) async -> NetworkDiagnosticResult {

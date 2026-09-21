@@ -15,6 +15,7 @@
 - SakuraScriptからゴースト・シェル・複数コンテンツの更新、イベント有無を指定したゴースト／シェル切り替え、壁紙の保存・復元・変更を実行できるようにした
 - SakuraScriptで選択肢・アンカーの表示色と形状を変更し、MenuBarアイコンを連番画像でアニメーションできるようにした
 - Property SystemでOS、locale、CPU、メモリ、ディスク、起動中ゴースト、各種コンテンツ一覧の取得範囲を広げた
+- SakuraScriptの`open,aigraph`でSHIORIのAI状態をレーダーチャート表示し、複数グラフと表示中の再読み込みに対応した
 
 ### 修正
 
@@ -28,6 +29,8 @@
 - SakuraScriptの`createnar`を引数なしで実行し、保存先を選んで現在のゴーストをNAR化できるようにした
 - SakuraScriptのInputBoxで`noclose`・`noclear`による継続入力と、`--balloon=ID`による入力用バルーン画像指定に対応した
 - SakuraScriptのSHIORI・MAKOTO再読み込みと、headline・plugin・カレンダースキンを含む`descript.txt`再読み込み対象を追加した
+- SakuraScriptの`dumpsurface`でscope・複数surface・prefix・完了件数を扱い、出力先を実行元ゴースト配下に制限した
+- SakuraScriptのpingでパケット分割禁止とUTF-8データ指定を扱えるようにした
 
 ## [0.2.7] - 2026-09-20
 

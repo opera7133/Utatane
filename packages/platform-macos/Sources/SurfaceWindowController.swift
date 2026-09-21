@@ -395,6 +395,85 @@ public final class SurfaceWindowController {
         characters[scope]?.renderedImage
     }
 
+    public func dumpSurfaceImages(
+        to directory: URL,
+        scope: Int,
+        surfaceList: String?,
+        prefix: String = "surface",
+        cropsFromZero: Bool = false
+    ) throws -> Int {
+        guard let shell, let character = characters[scope] else { return 0 }
+        guard !prefix.isEmpty,
+              prefix != ".", prefix != "..",
+              !prefix.contains("/"), !prefix.contains("\\"), !prefix.contains(":")
+        else { throw CocoaError(.fileWriteInvalidFileName) }
+        let ids = dumpSurfaceIDs(surfaceList, shell: shell, currentSurfaceID: character.currentSurfaceID ?? 0)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var count = 0
+        for id in ids {
+            guard let image = try? character.dumpImage(surfaceID: id, cropsFromZero: cropsFromZero),
+                  let tiffData = image.tiffRepresentation,
+                  let bitmap = NSBitmapImageRep(data: tiffData),
+                  let pngData = bitmap.representation(using: NSBitmapImageRep.FileType.png, properties: [:])
+            else { continue }
+            try pngData.write(
+                to: directory.appending(path: "\(prefix)\(id).png"),
+                options: Data.WritingOptions.atomic
+            )
+            count += 1
+        }
+        return count
+    }
+
+    private func dumpSurfaceIDs(
+        _ selector: String?,
+        shell: ShellDefinition,
+        currentSurfaceID: Int
+    ) -> [Int] {
+        guard let selector, !selector.isEmpty else { return [currentSurfaceID] }
+        if selector.caseInsensitiveCompare("__system_surface_defined__") == .orderedSame {
+            return shell.surfaces.keys.sorted()
+        }
+        if selector.caseInsensitiveCompare("__system_surface_all__") == .orderedSame {
+            let fileIDs = (try? FileManager.default.contentsOfDirectory(
+                at: shell.directory,
+                includingPropertiesForKeys: nil
+            ))?.compactMap { url -> Int? in
+                let name = url.deletingPathExtension().lastPathComponent.lowercased()
+                guard name.hasPrefix("surface") else { return nil }
+                return Int(name.dropFirst("surface".count))
+            } ?? []
+            return Set(shell.surfaces.keys).union(fileIDs).sorted()
+        }
+
+        var included = Set<Int>()
+        var excluded = Set<Int>()
+        for rawPart in selector.split(separator: ",", omittingEmptySubsequences: true) {
+            var part = rawPart.trimmingCharacters(in: .whitespaces)
+            let isExcluded = part.hasPrefix("!")
+            if isExcluded {
+                part.removeFirst()
+            }
+            if part.lowercased().hasPrefix("surface") {
+                part.removeFirst("surface".count)
+            }
+            let bounds = part.split(separator: "-", omittingEmptySubsequences: false)
+            let ids: [Int] = if bounds.count == 1, let id = Int(bounds[0]) {
+                [id]
+            } else if bounds.count == 2, let start = Int(bounds[0]), let end = Int(bounds[1]) {
+                start <= end ? Array(start ... end) : Array(end ... start)
+            } else {
+                []
+            }
+            if isExcluded {
+                excluded.formUnion(ids)
+            } else {
+                included.formUnion(ids)
+            }
+        }
+        return included.subtracting(excluded).sorted()
+    }
+
     public func balloonOffset(for scope: Int) -> NSPoint {
         characters[scope]?.balloonOffset ?? .zero
     }
@@ -1035,6 +1114,13 @@ private final class CharacterSurfaceController {
     private var isDragging = false
     private(set) var isMovementLocked = false
     private var collisionMode = (enabled: false, showsNames: true)
+
+    func dumpImage(surfaceID: Int, cropsFromZero _: Bool) throws -> NSImage {
+        guard let shell else {
+            throw ShellError.missingSurface(id: surfaceID, directory: URL(fileURLWithPath: "/"))
+        }
+        return try render(surfaceID: surfaceID, shell: shell).image
+    }
 
     func setStayOnTop(_ stayOnTop: Bool) {
         self.stayOnTop = stayOnTop

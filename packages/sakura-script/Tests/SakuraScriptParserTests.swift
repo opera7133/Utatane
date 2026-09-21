@@ -117,9 +117,12 @@ func `parses all HTTP methods and common request options`() {
 @Test
 func `parses ping and nslookup diagnostics`() {
     #expect(SakuraScriptParser().parse(
-        #"\![execute,ping,--host=example.com,--event=OnChecked,--count=2,--size=64,--timeout=1000,--ttl=32]\![execute,nslookup,--host=127.0.0.1,--event=lookup]"#
+        #"\![execute,ping,--host=example.com,--event=OnChecked,--count=2,--size=64,--timeout=1000,--ttl=32,--df=true,--data=hello]\![execute,nslookup,--host=127.0.0.1,--event=lookup]"#
     ) == [
-        .networkDiagnostic(.ping(host: "example.com", eventID: "OnChecked", count: 2, size: 64, timeoutMilliseconds: 1000, ttl: 32)),
+        .networkDiagnostic(.ping(
+            host: "example.com", eventID: "OnChecked", count: 2, size: 64,
+            timeoutMilliseconds: 1000, ttl: 32, dontFragment: true, data: "hello"
+        )),
         .networkDiagnostic(.nslookup(host: "127.0.0.1", eventID: "lookup"))
     ])
 }
@@ -1002,7 +1005,7 @@ func `parses passive and induction mode commands`() {
 @Test
 func `parses open ui dialog and utility commands`() {
     #expect(SakuraScriptParser().parse(
-        #"\![open,configurationdialog]\![open,readme]\![open,help]\![open,terms]\![open,file,/tmp/a.txt]\![open,folder,/tmp]\![execute,dumpsurface,/tmp/out.png,--event=OnDumped]\![execute,createupdatedata,/tmp/dir,--event=OnUpdated]"#
+        #"\![open,configurationdialog]\![open,readme]\![open,help]\![open,terms]\![open,file,/tmp/a.txt]\![open,folder,/tmp]\![execute,dumpsurface,/tmp/out,1,"surface0-2,!surface1",dump,OnDumped,1]\![execute,createupdatedata,/tmp/dir,--event=OnUpdated]"#
     ) == [
         .contentAction(.openConfigurationDialog(nil)),
         .contentAction(.openReadme),
@@ -1010,8 +1013,19 @@ func `parses open ui dialog and utility commands`() {
         .contentAction(.openTerms),
         .contentAction(.openFile("/tmp/a.txt")),
         .contentAction(.openFolder("/tmp")),
-        .archive(.dumpSurface(path: "/tmp/out.png", eventID: "OnDumped")),
+        .archive(.dumpSurface(.init(
+            directoryPath: "/tmp/out", scope: 1, surfaceList: "surface0-2,!surface1",
+            prefix: "dump", eventID: "OnDumped", cropsFromZero: true
+        ))),
         .archive(.createUpdateData(directoryPath: "/tmp/dir", eventID: "OnUpdated"))
+    ])
+}
+
+@Test
+func `parses AI graph open and reload commands`() {
+    #expect(SakuraScriptParser().parse(#"\![open,aigraph]\![reload,aigraph]"#) == [
+        .contentAction(.openAIGraph),
+        .contentAction(.reloadAIGraph)
     ])
 }
 

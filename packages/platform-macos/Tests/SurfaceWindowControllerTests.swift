@@ -126,6 +126,40 @@ import UtataneShell
 }
 
 @MainActor
+@Test func `dumps selected surfaces with a prefix`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    let output = directory.appending(path: "output", directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try makePNG(width: 8, height: 8).write(to: directory.appending(path: "surface0.png"))
+    try makePNG(width: 8, height: 8, color: .red).write(to: directory.appending(path: "surface2.png"))
+
+    let controller = SurfaceWindowController()
+    try controller.show(shell: ShellDefinition(directory: directory, surfaces: [:]), surfaceID: 0)
+    defer { controller.hideAll() }
+
+    let count = try controller.dumpSurfaceImages(
+        to: output,
+        scope: 0,
+        surfaceList: "surface0-2,!surface1",
+        prefix: "preview"
+    )
+    #expect(count == 2)
+    #expect(FileManager.default.fileExists(atPath: output.appending(path: "preview0.png").path))
+    #expect(FileManager.default.fileExists(atPath: output.appending(path: "preview2.png").path))
+
+    #expect(throws: CocoaError.self) {
+        try controller.dumpSurfaceImages(
+            to: output,
+            scope: 0,
+            surfaceList: "surface0",
+            prefix: "../escaped"
+        )
+    }
+}
+
+@MainActor
 @Test func `animates an APNG base after composing a static surface element`() throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

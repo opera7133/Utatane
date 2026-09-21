@@ -2,9 +2,9 @@
 
 SakuraScriptの命令について、Utataneで使える範囲とSSPとの差をまとめた対応表です。[UKADOC](https://ssp.shillest.net/ukadoc/manual/)の項目を基準にしています。
 
-元の表は2026-08-21時点のソースコードを基に作成しています。各節の調査日と備考で、確認した範囲を確認してください。実機で未確認の項目は「対応」に含めません。
+この表は2026-09-21時点のソースコードを基にしています。各節の調査日と備考で、確認した範囲を確認してください。実機で未確認の項目は「対応」に含めません。
 
-現行UKADOCには、構文違いを個別に数えて359件のSakuraScript項目があります。この表では同じ実装経路を使う構文をまとめ、143行に分類しています。集計と行数はCIで検査します。
+現行UKADOCには、構文違いを個別に数えて359件のSakuraScript項目があります。この表では同じ実装経路を使う構文をまとめ、147行に分類しています。集計と行数はCIで検査します。
 
 ## 判定
 
@@ -23,7 +23,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 
 基準: [さくらスクリプトリスト](https://ssp.shillest.net/ukadoc/manual/list_sakura_script.html)
 
-調査日: 2026-09-20
+調査日: 2026-09-21
 UKADOC掲載構文数: 359
 UKADOC分類行数: 147
 調査結果: ✅ 117 / 🟡 21 / ❌ 0 / ➖ 9
@@ -182,7 +182,7 @@ UKADOC分類行数: 147
 | password/date/slider/time/ip input | ✅ | パスワード欄、DatePicker、Slider、時刻選択、IPv4入力を使い、各形式のReference値を返します。旧形式と`--text`形式をParserテストで確認 |
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
 | configuration / 各explorer / calendar | ✅ | configurationの画面IDをUtataneの設定ペインへ対応付け、ghost／shell／balloon／headline／plugin explorerを共通コンテンツ画面、calendarを予定表として開く |
-| graph / aigraph | 🟡 | SSPのグラフ／AI会話グラフ表示に相当する画面は未実装 |
+| graph / aigraph | 🟡 | `open,aigraph`で`getaistateex`の複数グラフと従来の`getaistate`をレーダーチャート表示し、`reload,aigraph`で表示中だけ再取得します。ゴースト／バルーン利用率グラフは未実装 |
 | help / messenger / readme / terms / file | ✅ | `terms`はterms.txtをダイアログ表示して同意・拒否イベントを通知。`messenger`、`readme`、`help`、`file`、`folder`も対応 |
 | open/save/folder/color dialog、close dialog | ✅ | AppKit標準のopen／save／folder／colorパネルをID別に管理し、title、dir、filter、ext、name、colorを反映。結果を`OnSystemDialog`／Cancelまたは指定イベントへ通知し、個別・一括closeにも対応 |
 | surfacetest / developer / shiorirequest / errorlog | ✅ | 開発用パレットのサーフェステスト、イベントID・Reference指定のSHIORI Request、エラー絞り込み済みログへ接続 |
@@ -212,14 +212,14 @@ UKADOC分類行数: 147
 | websocket execute/send/close/cancel | 🟡 | ws/wss接続、Open、header・subprotocol、テキスト／バイナリ送受信、close／cancel、最大5回の自動再接続とTLS情報通知に対応。証明書subject／issuerは空欄 |
 | `\![cancel,http/http-get/ical,...]` | ✅ | 特定URLまたは全実行中のHTTP・iCalendarリクエストをキャンセル |
 | `\![execute,extractarchive/compressarchive,...]` | 🟡 | ghost/master配下に限定してZIP展開・圧縮を実行し、結果またはエラーコードをイベント通知。パストラバーサル・シンボリックリンクを拒否。SSP管理下の他フォルダと暗号化方式の完全互換は未対応 |
-| dumpsurface | 🟡 | 表示中サーフェスのPNG出力と完了通知に対応。scope・surface列挙・prefix・cropなどUKADOCの全引数は未実装 |
+| dumpsurface | 🟡 | ゴースト配下へのPNG出力、scope、surface ID／範囲／除外指定、`__system_surface_all__`／`__system_surface_defined__`、prefix、イベント完了時の成功件数に対応。通常描画器が負座標を切り落とすため、ゼロ位置切り出しを無効にした時の負座標拡張は未対応 |
 | `\![execute,install,path/url,...]` | ✅ | ローカルファイルパスまたはURL指定のNARインストールコマンドを接続 |
-| ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl、応答単位progress、完了・失敗イベントに対応。df/dataは未対応 |
+| ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl/df/data、応答単位progress、完了・失敗イベントに対応。macOS `ping`の制約によりdataは先頭16バイトのパターンを指定サイズまで繰り返します |
 | createnar / createupdatedata | 🟡 | `createupdatedata`は引数なしで実行元ゴーストの`updates2.dau`を生成（明示パス拡張も対応）。`createnar`は引数なしで保存先を選び、実行元ゴーストをNAR化する。スクリプトが任意の絶対パスへ直接書き出す動作は安全のため制限 |
 | emptyrecyclebin | ✅ | ユーザーの`~/.Trash`を空にし、実行元と他ゴーストへ前後の件数・容量・成否を通知 |
 | create shortcut | ➖ | Windowsショートカット固有のためmacOSでは対象外 |
 | passive / induction / select / collision mode | 🟡 | passive／induction、collision表示に加え、selectrectの全画面矩形選択と開始・終了・マウス・キャンセル通知に対応。メニュー・DnD・更新・最小化・終了等の全制限は未実装 |
-| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | 旧`reloadsurface`、surface、shell、balloon、ghost、shiori、makotoを実装。`reload,descript`は全体指定とghost／shell／balloon／headline／plugin／calendar.skinの対象指定に対応する。SHIORIとMAKOTOは結合された人格エンジンを再生成する。language／calendar.pluginと、表示画面を持たないaigraphは未対応 |
+| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | 旧`reloadsurface`、surface、shell、balloon、ghost、shiori、makoto、表示中のaigraphを実装。`reload,descript`は全体指定とghost／shell／balloon／headline／plugin／calendar.skinの対象指定に対応する。SHIORIとMAKOTOは結合された人格エンジンを再生成する。language／calendar.pluginは未対応 |
 | `\![unload/load,shiori]` | ✅ | 実行中の人格エンジンを解放し、load時にゴースト設定から再生成。unload中はイベントに応答しない |
 | `\![unload/load,makoto]` | 🟡 | MAKOTO変換を外した／含めた人格エンジンへ切り替える。切り替え時にSHIORIも再生成される点はSSPと異なる |
 | `\![set,shioridebugmode,true/false]` | ✅ | 開発用パレットのSHIORIリクエスト画面を表示／非表示にする。Utataneは通常時もSHIORI通信をログへ記録する |

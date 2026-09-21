@@ -803,6 +803,11 @@ public struct SakuraScriptParser: Sendable {
                               ["backlogviewer", "calendar", "messenger"].contains(arguments[1].lowercased())
                     {
                         tokens.append(.open(arguments[1]))
+                    } else if arguments.count == 2,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "aigraph"
+                    {
+                        tokens.append(.contentAction(.openAIGraph))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "sound"
                     {
@@ -1231,6 +1236,7 @@ public struct SakuraScriptParser: Sendable {
                         case "balloon": tokens.append(.contentAction(.reloadBalloon))
                         case "shiori": tokens.append(.contentAction(.reloadShiori))
                         case "makoto": tokens.append(.contentAction(.reloadMakoto))
+                        case "aigraph": tokens.append(.contentAction(.reloadAIGraph))
                         case "descript":
                             let targetList = arguments.dropFirst(2).joined(separator: " ")
                                 .lowercased()
@@ -1310,10 +1316,19 @@ public struct SakuraScriptParser: Sendable {
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "dumpsurface"
                     {
-                        let options = Array(arguments.dropFirst(2))
-                        let path = options.first { !$0.hasPrefix("--") }
-                        let eventID = Self.optionValue("event", in: options)
-                        tokens.append(.archive(.dumpSurface(path: path, eventID: eventID)))
+                        let operands = Array(arguments.dropFirst(2))
+                        let optionEventID = Self.optionValue("event", in: operands)
+                        let positional = operands.filter { !$0.hasPrefix("--") }
+                        tokens.append(.archive(.dumpSurface(.init(
+                            directoryPath: positional.first,
+                            scope: positional.indices.contains(1) ? Int(positional[1]) ?? 0 : 0,
+                            surfaceList: positional.indices.contains(2) && !positional[2].isEmpty
+                                ? positional[2] : nil,
+                            prefix: positional.indices.contains(3) ? positional[3] : "surface",
+                            eventID: optionEventID ?? (positional.indices.contains(4) && !positional[4].isEmpty
+                                ? positional[4] : nil),
+                            cropsFromZero: positional.indices.contains(5) && positional[5] == "1"
+                        ))))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "createupdatedata"
@@ -1514,7 +1529,12 @@ public struct SakuraScriptParser: Sendable {
                                 count: Self.optionValue("count", in: options).flatMap(Int.init) ?? 3,
                                 size: Self.optionValue("size", in: options).flatMap(Int.init) ?? 32,
                                 timeoutMilliseconds: Self.optionValue("timeout", in: options).flatMap(Int.init) ?? 5000,
-                                ttl: Self.optionValue("ttl", in: options).flatMap(Int.init)
+                                ttl: Self.optionValue("ttl", in: options).flatMap(Int.init),
+                                dontFragment: options.contains { option in
+                                    option.caseInsensitiveCompare("--df") == .orderedSame
+                                        || Self.optionValue("df", in: [option])?.lowercased() == "true"
+                                },
+                                data: Self.optionValue("data", in: options)
                             )))
                         } else {
                             tokens.append(.networkDiagnostic(.nslookup(host: host, eventID: eventID)))

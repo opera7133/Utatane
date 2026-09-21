@@ -355,6 +355,7 @@ private struct UtataneRootView: View {
     @State private var activeSSTPScripts: [URL: String] = [:]
     @State private var contentPickerController = ContentPickerWindowController()
     @State private var contentExplorerController = ContentExplorerWindowController()
+    @State private var aiGraphWindowController = AIGraphWindowController()
     @State private var ipMessengerWindowController = IPMessengerWindowController()
     @State private var textInputWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
@@ -3401,39 +3402,29 @@ private struct UtataneRootView: View {
                     1: "open failed"
                 ]))
             }
-        case let .dumpSurface(path, eventID):
-            let destinationURL: URL
-            if let path, !path.isEmpty {
-                let resolved = resolvePath(path)
-                var isDir: ObjCBool = false
-                if FileManager.default.fileExists(atPath: resolved.path, isDirectory: &isDir), isDir.boolValue {
-                    destinationURL = resolved.appending(path: "surface0.png")
-                } else if path.hasSuffix("/") {
-                    destinationURL = resolved.appending(path: "surface0.png")
-                } else {
-                    destinationURL = resolved
-                }
-            } else {
-                destinationURL = masterDirectory.appending(path: "var/surface0.png")
-            }
-
+        case let .dumpSurface(command):
+            let destinationURL = command.directoryPath.map(resolvePath)
+                ?? masterDirectory.appending(path: "var", directoryHint: .isDirectory)
             do {
-                guard let image = surfaceWindowController.renderedImage(for: 0),
-                      let tiffData = image.tiffRepresentation,
-                      let bitmap = NSBitmapImageRep(data: tiffData),
-                      let pngData = bitmap.representation(using: .png, properties: [:])
-                else {
-                    throw CocoaError(.fileWriteUnknown)
+                let root = currentGhost.rootDirectory.resolvingSymlinksInPath().standardizedFileURL.path
+                let destination = destinationURL.resolvingSymlinksInPath().standardizedFileURL.path
+                guard destination == root || destination.hasPrefix(root + "/") else {
+                    throw CocoaError(.fileWriteNoPermission)
                 }
-                try FileManager.default.createDirectory(at: destinationURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try pngData.write(to: destinationURL, options: .atomic)
-                guard let eventID else { return nil }
+                let count = try surfaceWindowController.dumpSurfaceImages(
+                    to: destinationURL,
+                    scope: command.scope,
+                    surfaceList: command.surfaceList,
+                    prefix: command.prefix,
+                    cropsFromZero: command.cropsFromZero
+                )
+                guard let eventID = command.eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? eventID : "OnDumpSurfaceComplete"
                 return try await activeSession.handle(event: .shiori(id: id, references: [
-                    0: destinationURL.path
+                    0: String(count)
                 ]))
             } catch {
-                guard let eventID else { return nil }
+                guard let eventID = command.eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnDumpSurfaceFailure"
                 return try? await activeSession.handle(event: .shiori(id: id, references: [
                     0: destinationURL.path
@@ -3479,14 +3470,16 @@ private struct UtataneRootView: View {
     private func handleNetworkDiagnostic(_ command: SakuraScriptNetworkDiagnostic) async -> SakuraScript? {
         guard let session else { return nil }
         switch command {
-        case let .ping(host, eventID, count, size, timeout, ttl):
+        case let .ping(host, eventID, count, size, timeout, ttl, dontFragment, data):
             guard !host.isEmpty else { return nil }
             let result = await NetworkDiagnosticRunner.ping(
                 host: host,
                 count: count,
                 size: size,
                 timeoutMilliseconds: timeout,
-                ttl: ttl
+                ttl: ttl,
+                dontFragment: dontFragment,
+                data: data
             ) { progress in
                 let id = eventID.hasPrefix("On") ? eventID : "OnPingProgress"
                 _ = try? await session.handle(event: .shiori(id: id, references: [
@@ -3886,6 +3879,8 @@ private struct UtataneRootView: View {
             Task { await reloadPlugins() }
         case .reloadCalendarSkins:
             calendarWindowController.reloadSkins()
+        case .reloadAIGraph:
+            showAIGraph(calledRuntime: calledRuntime, onlyIfVisible: true)
         case let .openContentExplorer(target):
             let kind: ContentExplorerKind? = switch target.lowercased() {
             case "ghostexplorer": .ghost
@@ -3911,6 +3906,8 @@ private struct UtataneRootView: View {
                 allowedContentTypes: [.archive],
                 calledRuntime: calledRuntime
             )
+        case .openAIGraph:
+            showAIGraph(calledRuntime: calledRuntime)
         case let .setTaskTrayIcon(file, tooltip, durationMilliseconds, runCount):
             let ghost = calledRuntime?.ghost ?? currentGhost
             let candidates = [
@@ -4011,6 +4008,40 @@ private struct UtataneRootView: View {
                 : (baseDir?.appending(path: folderPath) ?? URL(fileURLWithPath: folderPath))
             if FileManager.default.fileExists(atPath: folderURL.path) {
                 NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: folderURL.path)
+            }
+        }
+    }
+
+    private func showAIGraph(
+        calledRuntime: CalledGhostRuntime? = nil,
+        onlyIfVisible: Bool = false
+    ) {
+        guard !onlyIfVisible || aiGraphWindowController.isVisible else { return }
+        guard let targetSession = calledRuntime?.session ?? session else { return }
+        let title = "\(calledRuntime?.ghost.name ?? currentGhost?.name ?? "Utatane") - AIグラフ"
+
+        Task { @MainActor in
+            var graphs: [AIGraphSeries] = []
+            for index in 0 ..< 32 {
+                guard let response = try? await targetSession.handle(event: .shiori(
+                    id: "getaistateex",
+                    references: [0: String(index)]
+                )),
+                    let graph = AIGraphSeries(id: index, response: response.rawValue)
+                else { break }
+                graphs.append(graph)
+            }
+            if graphs.isEmpty,
+               let response = try? await targetSession.handle(event: .shiori(
+                   id: "getaistate",
+                   references: [:]
+               )),
+               let graph = AIGraphSeries(id: 0, response: response.rawValue)
+            {
+                graphs = [graph]
+            }
+            if !graphs.isEmpty {
+                aiGraphWindowController.show(title: title, series: graphs)
             }
         }
     }
@@ -7454,10 +7485,10 @@ private struct UtataneRootView: View {
             return SSTPResponse(statusCode: 204, reason: "No Content")
         case "dumpsurface":
             let path = parsed.parameters.first(where: { !$0.hasPrefix("--") })
-            _ = await handleArchive(.dumpSurface(
-                path: path,
+            _ = await handleArchive(.dumpSurface(.init(
+                directoryPath: path,
                 eventID: sstpOption("--event", in: parsed.parameters)
-            ))
+            )))
             return SSTPResponse(statusCode: 204, reason: "No Content")
         default:
             return SSTPResponse(statusCode: 501, reason: "Not Implemented")
