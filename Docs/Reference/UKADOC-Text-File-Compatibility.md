@@ -21,10 +21,10 @@
 | --- | --- | --- | --- |
 | Ghost `descript.txt` | 🟡 | UTF-8／Shift_JIS、基本情報、SHIORI名、キャラクター名、既定surface・shell・balloon、初期配置、MenuBarアイコン、shell側キャラクター名の上書き可否、SSTPの無指定送信・COMMUNICATE受信制御、更新URL、README | 74項目中、SSTP常時変換、SHIORI詳細設定、カーソル、メニュー、最小化アイコン、推奨balloon等が未反映 |
 | Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`（`full`を含む）、bindgroup／bindoption、着せ替えmenuitem、初期位置・上下配置、z-order、sticky-window、balloonのoffset／alignment／dontmove／syncscale | 102項目中、画像ベース座標の全用途、オーナードローメニュー装飾、DPI、透過・crossfade等が未反映 |
-| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、scroll arrow／clickwaitmarker／online marker／SSTP marker／number、cursor／anchor／anchor.visited、透過方式、windowposition、入力欄 | 162項目中、blendmethod、recommended ghost等が未反映 |
+| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本・無効フォント、装飾・shadow、scroll arrow／clickwaitmarker／online marker／SSTP marker／number、cursor／anchor／anchor.visited、透過方式、windowposition、入力欄とボタン画像 | 162項目中、blendmethod、recommended ghost等が未反映 |
 | Plugin `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、name、id、filename、type、charset、作者、更新URL、README、secondchangeinterval、otherghosttalkを読み込み、SHIORI／dylib／Windows DLLへ分類。Utatane拡張の`filename.macos`でmacOS用モジュールを優先指定可能。メニューから実行、README表示、ネットワーク更新が可能。ネイティブSHIORI型は実体をロードし、OnSecondChange・OnMenuExec・raiseplugin／notifypluginを配送。AKARIの`_create_thread`は独立評価ワーカーで実行し、変更されたグローバル変数を完了時に反映。YAYA製wallet_of_unyuとAKARI製sudohaikuyuは実ファイルでOnMenuExecを確認。macOS dylibは標準`loadu/load`・`unload`・`request`を優先 | dylib実物とWine DLL、AKARIワーカー内の外部通信を伴う長時間処理は未確認 |
 | Headline `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、名前、DLL名、URL、open URL、homeurl、charset、alwaysdisplay、readme、readme.charset。RSS用`type`・`feed`拡張も利用 | UKADOC掲載項目は保持・利用。Windows DLL実行は実行環境依存 |
-| `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストールに加え、refreshとrefreshundeletemaskをバックアップ付き置換で実装 | supplement・languageは未対応 |
+| `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストール、supplementの差分追加、refreshとrefreshundeletemaskをバックアップ付きで実装 | languageは未対応 |
 | `delete.txt` | ✅ | UTF-8／Shift_JIS、charset行、Windows区切りの相対ファイル・ディレクトリを事前検証し、更新ファイルの置換と同じロールバック境界で安全に削除 | — |
 | `developer_options.txt` | 🟡 | `noupdate`／`nonar`に加え、`.narignore`／`.updateignore`／`.narinclude`／`.updateinclude`の主要gitignore構文と`include:`を各生成処理へ反映 | 文字クラス・エスケープ等、gitignoreの全細則は未対応 |
 | `surfaces.txt`／`surfaces*.txt` | 🟡 | 複数ファイルをファイル名順に読み、各ファイルのdescript設定を分離。surface selector、append、alias、PNG／APNG／GIF／WebPのelement、rect／ellipse／circle／polygon／region collision、主要animationとoption | 保持だけのsurface属性が未対応 |
@@ -86,15 +86,16 @@ UKADOC掲載は162項目。現在の実利用項目は以下。
 | 利用 | `type`、`name`、`origin.x/y`、`validrect.left/top/right/bottom`、`wordwrappoint.x/y`、`vertical` |
 | 利用 | `font.name`、`font.height`、`font.color.r/g/b`、`font.shadowcolor.r/g/b`、`font.shadowstyle` |
 | 利用 | `font.bold`、`font.italic`、`font.underline`、`font.strike`、`font.outline`、`arrow0.x/y`、`arrow1.x/y`、`clickwaitmarker.x/y` |
+| 利用 | `disable.font.*`。明示したフォント・色・装飾を`\f[disable]`へ反映し、`\f[color,disable]`でも指定色を利用。色を省略した場合はmacOSの無効文字色を利用 |
 | 利用 | `onlinemarker.x/y`、`onlinemarker.interval`。`online0.png`から始まる連番画像を`onlinemode`中にアニメーション表示 |
 | 利用 | `sstpmarker.x/y`、`sstpmessage.font.name/height/color`、`sstpmessage.x/y/xr/yb`。SSTP受信トークでmarker画像とSenderを表示 |
 | 利用 | `number.font.name/height/color`、`number.xr/y`、`use_self_alpha`（`full`を含む）、`windowposition.x`、`windowposition.y`、`windowposition.limit` |
 | 利用 | `communicatebox.font.name/height/color`、`communicatebox.background.color`、`communicatebox.x`、`communicatebox.y`、`communicatebox.width`、`communicatebox.height` |
-| 画像として利用 | `balloonc1.png`／`balloonc2.png`／`balloonc3.png`と対応する`balloonc*s.txt`を、communicatebox／teachbox／inputboxのネイティブ入力パネルへ反映 |
+| 画像として利用 | `balloonc1.png`／`balloonc2.png`／`balloonc3.png`と対応する`balloonc*s.txt`を、communicatebox／teachbox／inputboxのネイティブ入力パネルへ反映。`ok_up/down.png`と`cancel_up/down.png`があれば通常・押下中のボタン画像として利用 |
 | 利用 | cursor、cursor.notselect、anchor、anchor.notselect、anchor.visitedの`style`、font／pen／brush RGB。訪問済みアンカーはゴーストの実行中にID単位で保持 |
 | 画像として利用 | balloon画像、marker画像、clickwaitmarker／arrow／online／SSTP marker画像。`balloons*s.txt`等のサーフェス別上書きと`marker.filename`／`clickwaitmarker.filename`／`arrow.filename`／`onlinemarker.filename`／`sstpmarker.filename`を反映 |
 | 別経路で利用 | `readme`、`readme.charset` |
-| 未反映 | disable.font、blendmethod、入力画像上のボタン自体のオーナードロー、recommended ghost |
+| 未反映 | Win32 SetROP2依存のblendmethod、modeボタン、recommended ghost |
 
 `origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックします。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置します。入力欄は従来どおり横書き。
 
@@ -112,12 +113,13 @@ UKADOC掲載の主要15項目・構文に対する状況。
 | --- | --- | --- |
 | charset | 🟡 | 宣言値は参照せずUTF-8→Shift_JISで判定 |
 | name | ✅ | インストール結果の表示名に利用 |
-| type | 🟡 | ghost、shell、balloon、headline、packageに対応。他種別は拒否 |
-| directory | ✅ | 1階層の安全な名前に限定して利用 |
+| type | 🟡 | ghost、shell、supplement、balloon、headline、plugin、calendar skin、calendar plugin、packageに対応。languageは未対応 |
+| directory | ✅ | supplement／package以外では、1階層の安全な名前に限定して利用 |
 | accept | 🟡 | 起動中の本体側名・キャラクター名を照合し、対象不在時は拒否、呼び出しゴーストなら完了通知を転送。実機確認は未実施 |
 | bootghost | ✅ | package内で指定されたディレクトリのゴーストを、全オブジェクトのインストール完了後に選択・起動 |
 | refresh | ✅ | `1`の場合のみ既存内容をバックアップして置換し、失敗時は旧内容へ復元 |
 | refreshundeletemask | ✅ | コロン区切りのファイル名を全階層で保持。NAR側に同名の新ファイルがある場合は新内容を優先 |
+| supplement | ✅ | acceptで一致した起動中ゴースト、または選択中ゴーストへ差分を重ねる。既存内容を一時コピーしてから追加・上書きし、失敗時は元のディレクトリへ復元 |
 | `*.directory`／`*.source.directory` | 🟡 | Ghost／Shell同梱のballoon・headlineと、末尾番号による複数同梱に対応 |
 | `*.refresh`／`*.refreshundeletemask` | ✅ | 同梱balloon・headline・plugin・calendar.skin・calendar.pluginの各項目に対応 |
 | developer_optionsの相対パス規則 | ✅ | `noupdate`／`nonar`のファイル・フォルダ・glob指定を各生成処理へ反映 |
@@ -161,4 +163,5 @@ size／date／charset拡張フィールドとVersion 3の`charset,`・未知行�
 ## 優先度
 
 1. pattern methodの近似描画を実画像で比較し、互換差が大きい演算を優先して補正します。
-2. Balloon `descript.txt`のblendmethodと入力画像上のボタン描画を実装します。
+2. Balloon `descript.txt`のblendmethodとrecommended ghostを、macOS上の代替挙動を含めて整理します。
+3. `install.txt`のlanguageをUtataneのローカライズ構造へ接続できるか調査します。

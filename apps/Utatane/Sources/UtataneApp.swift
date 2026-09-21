@@ -8669,7 +8669,8 @@ private struct UtataneRootView: View {
              .tooManyEntries, .extractedContentTooLarge:
             return "extraction"
         case .missingInstallFile, .ambiguousInstallFile, .unsupportedTextEncoding,
-             .invalidDirectoryName, .missingSourceDirectory, .shellRequiresGhost:
+             .invalidDirectoryName, .missingSourceDirectory, .shellRequiresGhost,
+             .supplementRequiresGhost:
             return "invalid type"
         case .unsupportedType, .missingArchive, .archiveTooLarge, .destinationExists, .refused:
             return "unsupported"

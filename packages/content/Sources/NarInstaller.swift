@@ -5,6 +5,7 @@ public enum NarContentType: String, Sendable, Equatable {
     case ghost
     case balloon
     case shell
+    case supplement
     case headline
     case plugin
     case calendarSkin = "calendar skin"
@@ -96,6 +97,7 @@ public enum NarInstallError: LocalizedError, Equatable {
     case invalidDirectoryName(String)
     case missingSourceDirectory(String)
     case shellRequiresGhost
+    case supplementRequiresGhost
     case destinationExists(URL)
     case refused(accept: String, type: String, name: String)
     case commandFailed(String)
@@ -116,6 +118,7 @@ public enum NarInstallError: LocalizedError, Equatable {
         case let .invalidDirectoryName(name): "不正なインストール先ディレクトリ名: \(name)"
         case let .missingSourceDirectory(name): "同梱コンテンツが見つからない: \(name)"
         case .shellRequiresGhost: "Shellのインストール先ゴーストが選択されていない"
+        case .supplementRequiresGhost: "追加ファイルのインストール先ゴーストが選択されていない"
         case let .destinationExists(url): "同名のコンテンツが既にある: \(url.path)"
         case let .refused(accept, _, _): "このアーカイブは起動中の「\(accept)」用に指定されている"
         case let .commandFailed(message): "アーカイブの展開に失敗した: \(message)"
@@ -131,6 +134,25 @@ public struct NarInstaller: Sendable {
         let name: String
         let refreshes: Bool
         let undeleteMask: Set<String>
+        let merges: Bool
+
+        init(
+            source: URL,
+            destination: URL,
+            type: NarContentType,
+            name: String,
+            refreshes: Bool,
+            undeleteMask: Set<String>,
+            merges: Bool = false
+        ) {
+            self.source = source
+            self.destination = destination
+            self.type = type
+            self.name = name
+            self.refreshes = refreshes
+            self.undeleteMask = undeleteMask
+            self.merges = merges
+        }
     }
 
     private let maximumArchiveBytes: Int
@@ -249,37 +271,39 @@ public struct NarInstaller: Sendable {
         }
 
         for operation in operations
-            where fileManager.fileExists(atPath: operation.destination.path) && !operation.refreshes
+            where fileManager.fileExists(atPath: operation.destination.path)
+            && !operation.refreshes && !operation.merges
         {
             throw NarInstallError.destinationExists(operation.destination)
         }
 
-        var installedURLs: [URL] = []
-        var backups: [(destination: URL, backup: URL)] = []
+        var installations: [(destination: URL, backup: URL?)] = []
         do {
             for operation in operations {
-                if let backup = try installCopy(
+                let backup = try installCopy(
                     from: operation.source,
                     to: operation.destination,
                     refreshes: operation.refreshes,
-                    undeleteMask: operation.undeleteMask
-                ) {
-                    backups.append((operation.destination, backup))
-                }
-                installedURLs.append(operation.destination)
+                    undeleteMask: operation.undeleteMask,
+                    merges: operation.merges
+                )
+                installations.append((operation.destination, backup))
             }
-            for record in backups {
-                try? fileManager.removeItem(at: record.backup)
+            for installation in installations {
+                if let backup = installation.backup {
+                    try? fileManager.removeItem(at: backup)
+                }
             }
         } catch {
-            for url in installedURLs.reversed() {
-                try? fileManager.removeItem(at: url)
-                if let record = backups.first(where: { $0.destination == url }) {
-                    try? fileManager.moveItem(at: record.backup, to: record.destination)
+            for installation in installations.reversed() {
+                try? fileManager.removeItem(at: installation.destination)
+                if let backup = installation.backup {
+                    try? fileManager.moveItem(at: backup, to: installation.destination)
                 }
             }
             throw error
         }
+        let installedURLs = installations.map(\.destination)
         return NarInstallResult(
             primaryType: primaryType,
             items: zip(operations, installedURLs).map { operation, url in
@@ -479,8 +503,10 @@ public struct NarInstaller: Sendable {
         guard let rawType = metadata["type"], let contentType = contentType(rawType),
               contentType != .package
         else { throw NarInstallError.unsupportedType(metadata["type"] ?? "") }
-        let directoryName = try validatedDirectoryName(metadata["directory"] ?? "")
-        let primaryName = metadata["name"] ?? directoryName
+        let directoryName = contentType == .supplement
+            ? ""
+            : try validatedDirectoryName(metadata["directory"] ?? "")
+        let primaryName = metadata["name"] ?? (directoryName.isEmpty ? "supplement" : directoryName)
         let refreshes = metadata["refresh"] == "1"
         let undeleteMask = refreshUndeleteMask(metadata["refreshundeletemask"])
         let acceptedGhostName = metadata["accept"]?.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -543,6 +569,19 @@ public struct NarInstaller: Sendable {
                     .appending(path: directoryName, directoryHint: .isDirectory), type: .shell, name: primaryName,
                 refreshes: refreshes, undeleteMask: undeleteMask))
             try appendBundledOperations()
+        case .supplement:
+            guard let targetGhostDirectory = acceptedGhostDirectory ?? selectedGhostDirectory else {
+                throw NarInstallError.supplementRequiresGhost
+            }
+            operations.append(InstallOperation(
+                source: sourceRoot,
+                destination: targetGhostDirectory,
+                type: .supplement,
+                name: primaryName,
+                refreshes: false,
+                undeleteMask: [],
+                merges: true
+            ))
         case .headline:
             operations.append(InstallOperation(source: sourceRoot, destination: roots.headlinesDirectory.appending(
                 path: directoryName,
@@ -595,7 +634,7 @@ public struct NarInstaller: Sendable {
         case .calendarSkin: roots.calendarSkinsDirectory
         case .calendarPlugin: roots.calendarPluginsDirectory
         case .ghost: roots.ghostsDirectory
-        case .shell, .package: roots.ghostsDirectory
+        case .shell, .supplement, .package: roots.ghostsDirectory
         }
     }
 
@@ -603,7 +642,8 @@ public struct NarInstaller: Sendable {
         from source: URL,
         to destination: URL,
         refreshes: Bool,
-        undeleteMask: Set<String>
+        undeleteMask: Set<String>,
+        merges: Bool
     ) throws -> URL? {
         let fileManager = FileManager.default
         let parent = destination.deletingLastPathComponent()
@@ -613,7 +653,15 @@ public struct NarInstaller: Sendable {
             directoryHint: .isDirectory
         )
         defer { try? fileManager.removeItem(at: staging) }
-        try fileManager.copyItem(at: source, to: staging)
+        if merges {
+            guard fileManager.fileExists(atPath: destination.path) else {
+                throw NarInstallError.supplementRequiresGhost
+            }
+            try fileManager.copyItem(at: destination, to: staging)
+            try overlayContents(from: source, to: staging, excludingRootInstallFile: true)
+        } else {
+            try fileManager.copyItem(at: source, to: staging)
+        }
         if refreshes, fileManager.fileExists(atPath: destination.path), !undeleteMask.isEmpty,
            let enumerator = fileManager.enumerator(at: destination, includingPropertiesForKeys: [.isRegularFileKey])
         {
@@ -634,7 +682,7 @@ public struct NarInstaller: Sendable {
             }
         }
         var backup: URL?
-        if refreshes, fileManager.fileExists(atPath: destination.path) {
+        if refreshes || merges, fileManager.fileExists(atPath: destination.path) {
             let candidate = parent.appending(path: ".utatane-backup-\(UUID().uuidString)")
             try fileManager.moveItem(at: destination, to: candidate)
             backup = candidate
@@ -648,6 +696,37 @@ public struct NarInstaller: Sendable {
             throw error
         }
         return backup
+    }
+
+    private func overlayContents(
+        from source: URL,
+        to destination: URL,
+        excludingRootInstallFile: Bool = false
+    ) throws {
+        let fileManager = FileManager.default
+        let children = try fileManager.contentsOfDirectory(
+            at: source,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: []
+        )
+        for child in children {
+            if excludingRootInstallFile,
+               child.lastPathComponent.caseInsensitiveCompare("install.txt") == .orderedSame
+            {
+                continue
+            }
+            let target = destination.appending(path: child.lastPathComponent)
+            let sourceIsDirectory = try child.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
+            let targetIsDirectory = (try? target.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            if sourceIsDirectory, targetIsDirectory {
+                try overlayContents(from: child, to: target)
+                continue
+            }
+            if fileManager.fileExists(atPath: target.path) {
+                try fileManager.removeItem(at: target)
+            }
+            try fileManager.copyItem(at: child, to: target)
+        }
     }
 
     @discardableResult

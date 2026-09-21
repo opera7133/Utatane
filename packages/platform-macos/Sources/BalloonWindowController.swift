@@ -96,6 +96,7 @@ public struct BalloonTextStyle: Sendable, Equatable {
     public var strike = false
     public var underline = false
     public var baseline = 0
+    public var resetsFontDecorations = false
 
     public init() {}
 }
@@ -1668,15 +1669,17 @@ private extension BalloonContentView {
         }
         if style.italic {
             result[.obliqueness] = 0.2
+        } else if style.resetsFontDecorations {
+            result[.obliqueness] = 0
         }
         if let color = style.color {
             result[.foregroundColor] = NSColor(balloonColor: color)
         }
-        if style.strike {
-            result[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
+        if style.strike || style.resetsFontDecorations {
+            result[.strikethroughStyle] = style.strike ? NSUnderlineStyle.single.rawValue : 0
         }
-        if style.underline {
-            result[.underlineStyle] = NSUnderlineStyle.single.rawValue
+        if style.underline || style.resetsFontDecorations {
+            result[.underlineStyle] = style.underline ? NSUnderlineStyle.single.rawValue : 0
         }
         if style.baseline != 0 {
             result[.baselineOffset] = CGFloat(style.baseline) * font.pointSize * 0.3
@@ -1730,6 +1733,8 @@ private extension BalloonContentView {
         if style.outline {
             result[.strokeColor] = NSColor.white
             result[.strokeWidth] = 3
+        } else if style.resetsFontDecorations, style.shadowStyle != "outline" {
+            result[.strokeWidth] = 0
         }
         return result
     }

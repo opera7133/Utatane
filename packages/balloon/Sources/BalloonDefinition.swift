@@ -22,6 +22,7 @@ public struct BalloonDefinition: Sendable, Equatable {
     public let fontUnderline: Bool
     public let fontStrike: Bool
     public let fontOutline: Bool
+    public let disabledFontStyle: BalloonFontStyle
     public let arrow0X: Int
     public let arrow0Y: Int
     public let arrow1X: Int
@@ -86,6 +87,7 @@ public struct BalloonDefinition: Sendable, Equatable {
         fontUnderline: Bool = false,
         fontStrike: Bool = false,
         fontOutline: Bool = false,
+        disabledFontStyle: BalloonFontStyle = .init(),
         arrow0X: Int = 0,
         arrow0Y: Int = 0,
         arrow1X: Int = 0,
@@ -149,6 +151,7 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.fontUnderline = fontUnderline
         self.fontStrike = fontStrike
         self.fontOutline = fontOutline
+        self.disabledFontStyle = disabledFontStyle
         self.arrow0X = arrow0X
         self.arrow0Y = arrow0Y
         self.arrow1X = arrow1X
@@ -190,6 +193,43 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.anchorStyle = anchorStyle
         self.anchorNotSelectedStyle = anchorNotSelectedStyle
         self.anchorVisitedStyle = anchorVisitedStyle
+    }
+}
+
+public struct BalloonFontStyle: Sendable, Equatable {
+    public let name: String?
+    public let height: Int?
+    public let color: BalloonColor?
+    public let shadowColor: BalloonColor?
+    public let shadowStyle: String?
+    public let bold: Bool?
+    public let italic: Bool?
+    public let underline: Bool?
+    public let strike: Bool?
+    public let outline: Bool?
+
+    public init(
+        name: String? = nil,
+        height: Int? = nil,
+        color: BalloonColor? = nil,
+        shadowColor: BalloonColor? = nil,
+        shadowStyle: String? = nil,
+        bold: Bool? = nil,
+        italic: Bool? = nil,
+        underline: Bool? = nil,
+        strike: Bool? = nil,
+        outline: Bool? = nil
+    ) {
+        self.name = name
+        self.height = height
+        self.color = color
+        self.shadowColor = shadowColor
+        self.shadowStyle = shadowStyle
+        self.bold = bold
+        self.italic = italic
+        self.underline = underline
+        self.strike = strike
+        self.outline = outline
     }
 }
 

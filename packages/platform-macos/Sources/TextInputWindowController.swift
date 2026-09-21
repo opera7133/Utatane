@@ -40,6 +40,10 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         public let inputWidth: Int?
         public let inputHeight: Int?
         public let backgroundImageURL: URL?
+        public let confirmButtonUpImageURL: URL?
+        public let confirmButtonDownImageURL: URL?
+        public let cancelButtonUpImageURL: URL?
+        public let cancelButtonDownImageURL: URL?
 
         public init(balloon: BalloonDefinition, backgroundImageURL: URL?) {
             fontName = balloon.communicateBoxFontName
@@ -51,6 +55,22 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             inputWidth = balloon.communicateBoxWidth
             inputHeight = balloon.communicateBoxHeight
             self.backgroundImageURL = backgroundImageURL
+            confirmButtonUpImageURL = Self.imageURL(named: "ok_up.png", in: balloon.directory)
+            confirmButtonDownImageURL = Self.imageURL(named: "ok_down.png", in: balloon.directory)
+            cancelButtonUpImageURL = Self.imageURL(named: "cancel_up.png", in: balloon.directory)
+            cancelButtonDownImageURL = Self.imageURL(named: "cancel_down.png", in: balloon.directory)
+        }
+
+        private static func imageURL(named name: String, in directory: URL) -> URL? {
+            let direct = directory.appending(path: name, directoryHint: .notDirectory)
+            if FileManager.default.fileExists(atPath: direct.path) {
+                return direct
+            }
+            return try? FileManager.default.contentsOfDirectory(
+                at: directory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            ).first { $0.lastPathComponent.caseInsensitiveCompare(name) == .orderedSame }
         }
     }
 
@@ -425,13 +445,21 @@ private struct TextInputDialogView: View {
                 .background(inputBackgroundColor, in: RoundedRectangle(cornerRadius: 5))
                 HStack {
                     if request.allowsCancel {
-                        Button(String(localized: "キャンセル"), action: onCancel)
-                            .keyboardShortcut(.cancelAction)
+                        dialogButton(
+                            title: String(localized: "キャンセル"),
+                            upURL: request.appearance?.cancelButtonUpImageURL,
+                            downURL: request.appearance?.cancelButtonDownImageURL,
+                            action: onCancel
+                        )
+                        .keyboardShortcut(.cancelAction)
                     }
                     Spacer()
-                    Button(request.actionTitle) {
-                        submit()
-                    }
+                    dialogButton(
+                        title: request.actionTitle,
+                        upURL: request.appearance?.confirmButtonUpImageURL,
+                        downURL: request.appearance?.confirmButtonDownImageURL,
+                        action: submit
+                    )
                     .keyboardShortcut(.defaultAction)
                 }
             }
@@ -460,6 +488,23 @@ private struct TextInputDialogView: View {
         onCommit(submittedValue)
         if request.keepsOpenAfterCommit, request.clearsValueAfterCommit {
             text = ""
+        }
+    }
+
+    @ViewBuilder
+    private func dialogButton(
+        title: String,
+        upURL: URL?,
+        downURL: URL?,
+        action: @escaping () -> Void
+    ) -> some View {
+        if let upURL, let upImage = NSImage(contentsOf: upURL) {
+            let downImage = downURL.flatMap(NSImage.init(contentsOf:)) ?? upImage
+            Button(title, action: action)
+                .buttonStyle(BalloonImageButtonStyle(upImage: upImage, downImage: downImage))
+                .accessibilityLabel(title)
+        } else {
+            Button(title, action: action)
         }
     }
 
@@ -565,6 +610,19 @@ private struct TextInputDialogView: View {
             blue: CGFloat(value.blue) / 255,
             alpha: 1
         )
+    }
+}
+
+private struct BalloonImageButtonStyle: ButtonStyle {
+    let upImage: NSImage
+    let downImage: NSImage
+
+    func makeBody(configuration: Configuration) -> some View {
+        let image = configuration.isPressed ? downImage : upImage
+        Image(nsImage: image)
+            .resizable()
+            .frame(width: max(image.size.width, 1), height: max(image.size.height, 1))
+            .contentShape(Rectangle())
     }
 }
 

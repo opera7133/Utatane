@@ -175,6 +175,45 @@ func `loads default balloon font decoration`() throws {
 }
 
 @Test
+func `loads disabled balloon font overrides`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    type,balloon
+    name,Disabled Font Balloon
+    disable.font.name,Helvetica
+    disable.font.height,15
+    disable.font.color.r,120
+    disable.font.color.g,130
+    disable.font.color.b,140
+    disable.font.shadowcolor.r,20
+    disable.font.shadowcolor.g,30
+    disable.font.shadowcolor.b,40
+    disable.font.shadowstyle,outline
+    disable.font.bold,1
+    disable.font.italic,0
+    disable.font.underline,on
+    disable.font.strike,off
+    disable.font.outline,true
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+
+    let style = try BalloonLoader().load(from: directory).disabledFontStyle
+
+    #expect(style.name == "Helvetica")
+    #expect(style.height == 15)
+    #expect(style.color == BalloonColor(red: 120, green: 130, blue: 140))
+    #expect(style.shadowColor == BalloonColor(red: 20, green: 30, blue: 40))
+    #expect(style.shadowStyle == "outline")
+    #expect(style.bold == true)
+    #expect(style.italic == false)
+    #expect(style.underline == true)
+    #expect(style.strike == false)
+    #expect(style.outline == true)
+}
+
+@Test
 func `loads marker number transparency and window placement settings`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

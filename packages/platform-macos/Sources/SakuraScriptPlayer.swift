@@ -1350,7 +1350,8 @@ public final class SakuraScriptPlayer {
                         arguments: arguments,
                         style: &textStyleByScope[scope, default: BalloonTextStyle()],
                         defaultHeight: Double(balloon.fontHeight),
-                        fontDirectories: [resourceBaseDirectory, balloon.directory].compactMap(\.self)
+                        fontDirectories: [resourceBaseDirectory, balloon.directory].compactMap(\.self),
+                        balloon: balloon
                     )
                     if name == "align",
                        let alignment = textStyleByScope[scope]?.alignment
@@ -1944,12 +1945,15 @@ public final class SakuraScriptPlayer {
         arguments: [String],
         style: inout BalloonTextStyle,
         defaultHeight: Double,
-        fontDirectories: [URL]
+        fontDirectories: [URL],
+        balloon: BalloonDefinition
     ) {
         let value = arguments.first?.lowercased() ?? ""
         switch name {
-        case "default", "disable":
+        case "default":
             style = BalloonTextStyle()
+        case "disable":
+            style = disabledTextStyle(for: balloon)
         case "name":
             if value == "default" {
                 style.fontName = nil
@@ -2020,6 +2024,33 @@ public final class SakuraScriptPlayer {
         }
     }
 
+    private func disabledTextStyle(for balloon: BalloonDefinition) -> BalloonTextStyle {
+        let disabled = balloon.disabledFontStyle
+        var style = BalloonTextStyle()
+        style.fontName = disabled.name ?? balloon.fontName
+        style.fontHeight = Double(disabled.height ?? balloon.fontHeight)
+        style.color = disabled.color ?? systemDisabledBalloonColor()
+        style.shadowColor = disabled.shadowColor ?? balloon.fontShadowColor
+        style.shadowStyle = disabled.shadowStyle ?? balloon.fontShadowStyle
+        style.bold = disabled.bold ?? balloon.fontBold
+        style.italic = disabled.italic ?? balloon.fontItalic
+        style.underline = disabled.underline ?? balloon.fontUnderline
+        style.strike = disabled.strike ?? balloon.fontStrike
+        style.outline = disabled.outline ?? balloon.fontOutline
+        style.resetsFontDecorations = true
+        return style
+    }
+
+    private func systemDisabledBalloonColor() -> BalloonColor {
+        let color = NSColor.disabledControlTextColor.usingColorSpace(.deviceRGB)
+            ?? NSColor.disabledControlTextColor
+        return BalloonColor(
+            red: Int((color.redComponent * 255).rounded()),
+            green: Int((color.greenComponent * 255).rounded()),
+            blue: Int((color.blueComponent * 255).rounded())
+        )
+    }
+
     private func applyLinkAppearanceCommand(
         name: String,
         arguments: [String],
@@ -2087,13 +2118,7 @@ public final class SakuraScriptPlayer {
     private func parseColor(_ arguments: [String]) -> BalloonColor? {
         guard let first = arguments.first?.lowercased(), first != "default" else { return nil }
         if first == "disable" {
-            let color = NSColor.disabledControlTextColor.usingColorSpace(.deviceRGB)
-                ?? NSColor.disabledControlTextColor
-            return BalloonColor(
-                red: Int((color.redComponent * 255).rounded()),
-                green: Int((color.greenComponent * 255).rounded()),
-                blue: Int((color.blueComponent * 255).rounded())
-            )
+            return currentBalloon?.disabledFontStyle.color ?? systemDisabledBalloonColor()
         }
         if first.hasPrefix("default."), let balloon = currentBalloon {
             let plain = balloon.fontColor

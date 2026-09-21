@@ -155,4 +155,32 @@ struct TextInputWindowControllerTests {
 
         #expect(size == NSSize(width: 640, height: 166))
     }
+
+    @Test
+    func `loads owner drawn button images from the balloon directory`() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        for name in ["ok_up.png", "ok_down.png", "cancel_up.png", "cancel_down.png"] {
+            try Data([0]).write(to: directory.appending(path: name))
+        }
+        let balloon = BalloonDefinition(
+            directory: directory,
+            name: "test",
+            originX: 0,
+            originY: 0,
+            wordWrapPointX: 0,
+            wordWrapPointY: 0,
+            fontHeight: 12,
+            fontColor: BalloonColor(red: 0, green: 0, blue: 0)
+        )
+
+        let appearance = TextInputWindowController.Appearance(balloon: balloon, backgroundImageURL: nil)
+
+        #expect(appearance.confirmButtonUpImageURL?.lastPathComponent == "ok_up.png")
+        #expect(appearance.confirmButtonDownImageURL?.lastPathComponent == "ok_down.png")
+        #expect(appearance.cancelButtonUpImageURL?.lastPathComponent == "cancel_up.png")
+        #expect(appearance.cancelButtonDownImageURL?.lastPathComponent == "cancel_down.png")
+    }
 }

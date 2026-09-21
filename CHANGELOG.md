@@ -4,6 +4,7 @@
 
 ### 追加
 
+- `install.txt`の`type,supplement`を、対象ゴーストの既存ファイルを残しながら追加・上書きするバックアップ付きインストールとして扱えるようにした
 - Web版Utatane NAR検査で、検査結果を共有・保存用のJSONファイルとしてダウンロードできるようにした
 - SakuraScriptから着せ替え一覧、画像ビューア、アーカイブビューアを開けるようにした
 - SakuraScriptからSHIORI・MAKOTOのロード状態とSHIORIデバッグ画面を切り替えられるようにした
@@ -19,6 +20,7 @@
 
 ### 修正
 
+- バルーンの`disable.font.*`をSakuraScriptの無効文字表示へ反映し、入力パネルで`ok_up/down.png`と`cancel_up/down.png`をボタン画像として使うようにした
 - SHIORIイベント互換表で、一部の発生条件やReferenceだけに対応する項目を部分対応、実際の発行経路がない項目を未対応として区別するようにした
 - シェルのelement画像が一部欠けている場合も、残っているelementを使ってサーフェスを表示するようにした
 - SakuraScript互換表の集計を実際の分類行から検査し、現行UKADOCとの差を追跡できるようにした

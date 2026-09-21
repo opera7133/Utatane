@@ -547,6 +547,11 @@ func `font colors can reuse balloon link defaults`() async throws {
         wordWrapPointY: -4,
         fontHeight: 14,
         fontColor: BalloonColor(red: 12, green: 34, blue: 56),
+        disabledFontStyle: BalloonFontStyle(
+            color: BalloonColor(red: 110, green: 120, blue: 130),
+            bold: true,
+            underline: true
+        ),
         cursorStyle: BalloonLinkAppearance(
             shape: .underline,
             fontColor: BalloonColor(red: 210, green: 20, blue: 30)
@@ -562,7 +567,7 @@ func `font colors can reuse balloon link defaults`() async throws {
     )
 
     await player.playAndWait(
-        SakuraScript(rawValue: #"\f[color,default.anchor]A\f[color,default.anchorvisited]B\f[color,default.plain]C\f[color,disable]D\e"#),
+        SakuraScript(rawValue: #"\f[color,default.anchor]A\f[color,default.anchorvisited]B\f[color,default.plain]C\f[disable]D\f[default]\f[color,disable]E\e"#),
         balloon: balloon,
         characterDelayMilliseconds: 0
     )
@@ -573,7 +578,14 @@ func `font colors can reuse balloon link defaults`() async throws {
     #expect(anchor.greenComponent > 0.8)
     #expect(visited.blueComponent > 0.8)
     #expect(abs(plain.redComponent - 12.0 / 255.0) < 0.01)
-    #expect(balloonController.textAttributes(at: 3, scope: 0)?[.foregroundColor] is NSColor)
+    let disabled = try #require(balloonController.textAttributes(at: 3, scope: 0))
+    let disabledColor = try #require(disabled[.foregroundColor] as? NSColor)
+    #expect(abs(disabledColor.redComponent - 110.0 / 255.0) < 0.01)
+    #expect(disabled[.underlineStyle] as? Int == NSUnderlineStyle.single.rawValue)
+    let disabledFont = try #require(disabled[.font] as? NSFont)
+    #expect(disabledFont.fontDescriptor.symbolicTraits.contains(.bold))
+    let colorOnly = try #require(balloonController.textAttributes(at: 4, scope: 0)?[.foregroundColor] as? NSColor)
+    #expect(abs(colorOnly.greenComponent - 120.0 / 255.0) < 0.01)
 }
 
 @Test

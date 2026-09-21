@@ -173,6 +173,18 @@ public struct BalloonLoader: Sendable {
             fontUnderline: boolean("font.underline", in: values),
             fontStrike: boolean("font.strike", in: values),
             fontOutline: boolean("font.outline", in: values),
+            disabledFontStyle: BalloonFontStyle(
+                name: values["disable.font.name"],
+                height: values["disable.font.height"].flatMap(Int.init),
+                color: color(prefix: "disable.font.color", in: values),
+                shadowColor: color(prefix: "disable.font.shadowcolor", in: values),
+                shadowStyle: values["disable.font.shadowstyle"]?.lowercased(),
+                bold: optionalBoolean("disable.font.bold", in: values),
+                italic: optionalBoolean("disable.font.italic", in: values),
+                underline: optionalBoolean("disable.font.underline", in: values),
+                strike: optionalBoolean("disable.font.strike", in: values),
+                outline: optionalBoolean("disable.font.outline", in: values)
+            ),
             arrow0X: integer("arrow0.x", in: values, default: 0),
             arrow0Y: integer("arrow0.y", in: values, default: 0),
             arrow1X: integer("arrow1.x", in: values, default: 0),
@@ -434,6 +446,11 @@ public struct BalloonLoader: Sendable {
     private func boolean(_ key: String, in values: [String: String]) -> Bool {
         guard let value = values[key]?.lowercased() else { return false }
         return value == "1" || value == "true" || value == "on"
+    }
+
+    private func optionalBoolean(_ key: String, in values: [String: String]) -> Bool? {
+        guard values[key] != nil else { return nil }
+        return boolean(key, in: values)
     }
 
     private func windowPositionX(in values: [String: String]) -> BalloonWindowPositionX {

@@ -231,6 +231,62 @@ func `honors install accept and reports a missing target`() throws {
 }
 
 @Test
+func `merges a supplement into the selected ghost transactionally`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let target = fixture.roots.ghostsDirectory.appending(path: "target-ghost", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(
+        at: target.appending(path: "ghost/master", directoryHint: .isDirectory),
+        withIntermediateDirectories: true
+    )
+    try FileManager.default.createDirectory(
+        at: target.appending(path: "shell/master", directoryHint: .isDirectory),
+        withIntermediateDirectories: true
+    )
+    try Data("old dictionary".utf8).write(to: target.appending(path: "ghost/master/talk.dic"))
+    try Data("keep shell".utf8).write(to: target.appending(path: "shell/master/descript.txt"))
+
+    let package = fixture.source.appending(path: "package", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(
+        at: package.appending(path: "ghost/master", directoryHint: .isDirectory),
+        withIntermediateDirectories: true
+    )
+    try Data("type,supplement\nname,Talk Patch\n".utf8).write(
+        to: package.appending(path: "install.txt")
+    )
+    try Data("new dictionary".utf8).write(to: package.appending(path: "ghost/master/talk.dic"))
+    try Data("new file".utf8).write(to: package.appending(path: "ghost/master/extra.dic"))
+    let archive = try makeArchive(from: fixture.source, at: fixture.root)
+
+    let result = try NarInstaller().install(
+        archiveURL: archive,
+        roots: fixture.roots,
+        selectedGhostDirectory: target
+    )
+
+    #expect(result.primaryType == .supplement)
+    #expect(result.items == [NarInstalledItem(type: .supplement, name: "Talk Patch", url: target)])
+    #expect(try String(contentsOf: target.appending(path: "ghost/master/talk.dic"), encoding: .utf8) == "new dictionary")
+    #expect(try String(contentsOf: target.appending(path: "ghost/master/extra.dic"), encoding: .utf8) == "new file")
+    #expect(try String(contentsOf: target.appending(path: "shell/master/descript.txt"), encoding: .utf8) == "keep shell")
+    #expect(!FileManager.default.fileExists(atPath: target.appending(path: "install.txt").path))
+}
+
+@Test
+func `requires a target ghost for a supplement`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    try Data("type,supplement\nname,Orphan Patch\n".utf8).write(
+        to: fixture.source.appending(path: "install.txt")
+    )
+    let archive = try makeArchive(from: fixture.source, at: fixture.root)
+
+    #expect(throws: NarInstallError.supplementRequiresGhost) {
+        try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+    }
+}
+
+@Test
 func `installs a ghost and its numbered bundled objects together`() throws {
     let fixture = try makeFixture()
     defer { try? FileManager.default.removeItem(at: fixture.root) }
