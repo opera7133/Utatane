@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UtataneCore
 @testable import UtataneShell
 
 @Test
@@ -308,6 +309,53 @@ func `parses shell window and balloon presentation defaults`() throws {
     #expect(sakura.preventsBalloonMovement)
     #expect(sakura.synchronizesBalloonScale)
     #expect(shell.presentationSettings[2]?.desktopAlignment == .top)
+}
+
+@Test
+func `shell presentation settings override ghost defaults by documented priority`() {
+    let directory = URL(filePath: "/tmp/ghost-presentation")
+    let ghost = InstalledGhost(
+        name: "Presentation Ghost",
+        rootDirectory: directory,
+        defaultShellDirectory: directory,
+        characters: [
+            InstalledGhostCharacter(
+                scope: 0,
+                defaultSurfaceID: 0,
+                presentationSettings: .init(
+                    desktopAlignment: .free,
+                    defaultLeft: 24,
+                    defaultTop: 36
+                )
+            ),
+            InstalledGhostCharacter(scope: 1, defaultSurfaceID: 10)
+        ],
+        desktopAlignment: .bottom,
+        preventsBalloonMovement: true,
+        synchronizesBalloonScale: true
+    )
+    let shell = ShellDefinition(
+        directory: directory,
+        surfaces: [:],
+        surfaceTable: nil,
+        maximumSurfaceWidth: nil,
+        presentationSettings: [
+            0: .init(
+                desktopAlignment: .top,
+                defaultLeft: 48,
+                preventsBalloonMovement: false
+            )
+        ]
+    ).applyingPresentationDefaults(from: ghost)
+
+    #expect(shell.presentationSettings[0]?.desktopAlignment == .top)
+    #expect(shell.presentationSettings[0]?.defaultLeft == 48)
+    #expect(shell.presentationSettings[0]?.defaultTop == 36)
+    #expect(shell.presentationSettings[0]?.preventsBalloonMovement == false)
+    #expect(shell.presentationSettings[0]?.synchronizesBalloonScale == true)
+    #expect(shell.presentationSettings[1]?.desktopAlignment == .bottom)
+    #expect(shell.presentationSettings[1]?.preventsBalloonMovement == true)
+    #expect(shell.presentationSettings[1]?.synchronizesBalloonScale == true)
 }
 
 @Test

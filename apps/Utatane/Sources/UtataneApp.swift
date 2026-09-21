@@ -2088,6 +2088,7 @@ private struct UtataneRootView: View {
         session = nil
         balloon = nil
         currentGhost = ghost
+        configureMenuBarIcon(for: ghost)
         siteMenuResources[ghost.id] = GhostSiteMenuResources()
         mainPresentationSession.setTitle(ghost.name)
         mainPresentationSession.setIdentifier(ghost.id.path)
@@ -2651,6 +2652,7 @@ private struct UtataneRootView: View {
             siteMenuResources[ghost.id] = await loadSiteMenuResources(from: ghostSession)
             configureContextMenu()
             let shellDefinition = try shellLoader.load(from: shellChoice.directory)
+                .applyingPresentationDefaults(from: ghost)
             for event in startupInformationEvents(
                 ghost: ghost,
                 shell: shellChoice,
@@ -2768,6 +2770,25 @@ private struct UtataneRootView: View {
             balloon = nil
             return .failure(error)
         }
+    }
+
+    private func configureMenuBarIcon(for ghost: InstalledGhost) {
+        guard let filename = ghost.iconFilename else {
+            menuBarBalloonController.setStatusIcon(nil, tooltip: ghost.name)
+            return
+        }
+        let master = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
+            .resolvingSymlinksInPath().standardizedFileURL
+        let normalized = filename.replacingOccurrences(of: "\\", with: "/")
+        let candidate = master.appending(path: normalized, directoryHint: .notDirectory)
+            .resolvingSymlinksInPath().standardizedFileURL
+        guard candidate.path.hasPrefix(master.path + "/"),
+              let image = NSImage(contentsOf: candidate)
+        else {
+            menuBarBalloonController.setStatusIcon(nil, tooltip: ghost.name)
+            return
+        }
+        menuBarBalloonController.setStatusIcon(image, tooltip: ghost.name)
     }
 
     private func hasBooted(_ ghost: InstalledGhost) -> Bool {
@@ -3597,7 +3618,8 @@ private struct UtataneRootView: View {
 
     private func show(shell installedShell: InstalledShell, restoring presentation: SurfaceWindowController.ReloadPresentation? = nil) throws {
         scriptPlayer.cancel()
-        let shell = try shellLoader.load(from: installedShell.directory)
+        let loadedShell = try shellLoader.load(from: installedShell.directory)
+        let shell = currentGhost.map { loadedShell.applyingPresentationDefaults(from: $0) } ?? loadedShell
         currentShellDefinition = shell
         balloonWindowController.configure(shell: shell)
         let characters = currentGhost?.characters ?? []
@@ -7270,6 +7292,9 @@ private struct UtataneRootView: View {
             )
         }
         if request.method == "COMMUNICATE" {
+            guard target.ghost.allowsSSTPCommunicate else {
+                return SSTPResponse(statusCode: 403, reason: "Forbidden")
+            }
             return await handleSSTPCommunicate(request, target: target)
         }
         if request.method == "GIVE" {
@@ -7299,7 +7324,7 @@ private struct UtataneRootView: View {
             }
             script = try? await activeSession.handle(event: .shiori(id: eventID, references: references))
         }
-        if script == nil, let fallback = selectedSSTPScript(in: request, for: target.ghost) {
+        if script == nil, let fallback = selectedSSTPScript(in: request, for: target) {
             script = SakuraScript(rawValue: fallback)
         }
         guard let script else {
@@ -7348,17 +7373,19 @@ private struct UtataneRootView: View {
             })
             return result
         }()
-        guard let requestedName else { return targets.first }
+        guard let requestedName else {
+            return targets.first { $0.ghost.allowsUnspecifiedSSTP }
+        }
         return targets.first { target in
-            let sakuraName = target.ghost.characters.first(where: { $0.scope == 0 })?.name
+            let sakuraName = target.ghost.characterName(for: 0, shell: target.shell)
             return target.ghost.name.caseInsensitiveCompare(requestedName) == .orderedSame
                 || sakuraName?.caseInsensitiveCompare(requestedName) == .orderedSame
         }
     }
 
-    private func selectedSSTPScript(in request: SSTPRequest, for ghost: InstalledGhost) -> String? {
-        let sakuraName = ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
-        let keroName = ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+    private func selectedSSTPScript(in request: SSTPRequest, for target: SSTPTarget) -> String? {
+        let sakuraName = target.ghost.characterName(for: 0, shell: target.shell) ?? target.ghost.name
+        let keroName = target.ghost.characterName(for: 1, shell: target.shell) ?? ""
         var defaultScript: String?
         var pendingNames: [String]?
         for header in request.headers {
@@ -7425,8 +7452,8 @@ private struct UtataneRootView: View {
         case "getname":
             guard let target else { return SSTPResponse(statusCode: 503, reason: "Service Unavailable") }
             data = [
-                target.ghost.characters.first(where: { $0.scope == 0 })?.name ?? target.ghost.name,
-                target.ghost.characters.first(where: { $0.scope == 1 })?.name ?? ""
+                target.ghost.characterName(for: 0, shell: target.shell) ?? target.ghost.name,
+                target.ghost.characterName(for: 1, shell: target.shell) ?? ""
             ].joined(separator: ",")
         case "getnames", "getghostnamelist":
             data = model.ghosts.map(\.name).joined(separator: "\r\n")

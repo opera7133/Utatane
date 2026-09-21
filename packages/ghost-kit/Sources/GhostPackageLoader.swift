@@ -36,21 +36,35 @@ public struct GhostPackageLoader: Sendable {
             ? (try? descriptParser.parse(contentsOf: aliasURL)) ?? [:]
             : [:]
         let shells = try findShells(in: rootDirectory)
-        let shellDirectory = try findDefaultShell(in: rootDirectory, shells: shells)
         let name = metadata["name"] ?? rootDirectory.lastPathComponent
         let macOSShiori = metadata["shiori.macos"].flatMap { $0.isEmpty ? nil : $0 }
         let commonShiori = metadata["shiori"] ?? aliasMetadata["shiori"]
+        let defaultShellDirectoryName = metadata["seriko.defaultsurfacedirectoryname"]
+        let defaultShellDirectory = try findDefaultShell(
+            in: rootDirectory,
+            shells: shells,
+            preferredDirectoryName: defaultShellDirectoryName
+        )
 
         return InstalledGhost(
             name: name,
             rootDirectory: rootDirectory,
-            defaultShellDirectory: shellDirectory,
+            defaultShellDirectory: defaultShellDirectory,
             shells: shells,
             characters: characters(from: metadata),
             shioriFilename: commonShiori,
             shioriMacOSFilename: macOSShiori,
             charset: metadata["charset"],
-            defaultBalloonDirectoryName: metadata["balloon"]
+            defaultBalloonDirectoryName: metadata["balloon"],
+            allowsShellCharacterNameOverride: Self.boolean(metadata["name.allowoverride"], default: true),
+            allowsUnspecifiedSSTP: Self.boolean(metadata["sstp.allowunspecifiedsend"], default: true),
+            allowsSSTPCommunicate: Self.boolean(metadata["sstp.allowcommunicate"], default: true),
+            desktopAlignment: metadata["seriko.alignmenttodesktop"].flatMap {
+                GhostDesktopAlignment(rawValue: $0.lowercased())
+            },
+            preventsBalloonMovement: Self.boolean(metadata["balloon.dontmove"], default: false),
+            synchronizesBalloonScale: Self.boolean(metadata["balloon.syncscale"], default: false),
+            iconFilename: metadata["icon"].flatMap { $0.isEmpty ? nil : $0 }
         )
     }
 
@@ -63,14 +77,16 @@ public struct GhostPackageLoader: Sendable {
                 secondaryName: metadata["sakura.name2"],
                 defaultSurfaceID: metadata["sakura.seriko.defaultsurface"].flatMap(Int.init) ?? 0,
                 defaultBalloonSurfaceID: metadata["sakura.balloon.defaultsurface"].flatMap(Int.init)
-                    ?? commonBalloonSurfaceID
+                    ?? commonBalloonSurfaceID,
+                presentationSettings: presentationSettings(prefix: "sakura", metadata: metadata)
             ),
             InstalledGhostCharacter(
                 scope: 1,
                 name: metadata["kero.name"],
                 defaultSurfaceID: metadata["kero.seriko.defaultsurface"].flatMap(Int.init) ?? 10,
                 defaultBalloonSurfaceID: metadata["kero.balloon.defaultsurface"].flatMap(Int.init)
-                    ?? commonBalloonSurfaceID
+                    ?? commonBalloonSurfaceID,
+                presentationSettings: presentationSettings(prefix: "kero", metadata: metadata)
             )
         ]
 
@@ -92,11 +108,26 @@ public struct GhostPackageLoader: Sendable {
                     name: metadata["\(prefix).name"],
                     defaultSurfaceID: surfaceID,
                     defaultBalloonSurfaceID: metadata["\(prefix).balloon.defaultsurface"].flatMap(Int.init)
-                        ?? commonBalloonSurfaceID
+                        ?? commonBalloonSurfaceID,
+                    presentationSettings: presentationSettings(prefix: prefix, metadata: metadata)
                 )
             )
         }
         return characters
+    }
+
+    private func presentationSettings(
+        prefix: String,
+        metadata: [String: String]
+    ) -> GhostScopePresentationSettings {
+        GhostScopePresentationSettings(
+            desktopAlignment: metadata["\(prefix).seriko.alignmenttodesktop"]
+                .flatMap { GhostDesktopAlignment(rawValue: $0.lowercased()) },
+            defaultX: metadata["\(prefix).defaultx"].flatMap(Int.init),
+            defaultY: metadata["\(prefix).defaulty"].flatMap(Int.init),
+            defaultLeft: metadata["\(prefix).defaultleft"].flatMap(Int.init),
+            defaultTop: metadata["\(prefix).defaulttop"].flatMap(Int.init)
+        )
     }
 
     private func findShells(in rootDirectory: URL) throws -> [InstalledShell] {
@@ -136,9 +167,17 @@ public struct GhostPackageLoader: Sendable {
 
     private func findDefaultShell(
         in rootDirectory: URL,
-        shells: [InstalledShell]
+        shells: [InstalledShell],
+        preferredDirectoryName: String? = nil
     ) throws -> URL {
         let shellsDirectory = rootDirectory.appending(path: "shell", directoryHint: .isDirectory)
+        if let preferredDirectoryName,
+           let preferred = shells.first(where: {
+               $0.directory.lastPathComponent.caseInsensitiveCompare(preferredDirectoryName) == .orderedSame
+           })
+        {
+            return preferred.directory
+        }
         if let master = shells.first(where: {
             $0.directory.lastPathComponent.caseInsensitiveCompare("master") == .orderedSame
         }) {
@@ -149,5 +188,14 @@ public struct GhostPackageLoader: Sendable {
         }
 
         throw GhostPackageError.missingDefaultShell(shellsDirectory)
+    }
+
+    private static func boolean(_ value: String?, default defaultValue: Bool) -> Bool {
+        guard let value else { return defaultValue }
+        return switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "0", "false", "off", "no": false
+        case "1", "true", "on", "yes": true
+        default: defaultValue
+        }
     }
 }

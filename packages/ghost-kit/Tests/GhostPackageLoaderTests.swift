@@ -132,6 +132,65 @@ func `loads and names every installed shell with master as default`() throws {
 }
 
 @Test
+func `uses ghost descript shell and SSTP policies`() throws {
+    let root = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let master = root.appending(path: "shell/master", directoryHint: .isDirectory)
+    let alternate = root.appending(path: "shell/alternate", directoryHint: .isDirectory)
+    let ghostMaster = root.appending(path: "ghost/master", directoryHint: .isDirectory)
+    for directory in [master, alternate, ghostMaster] {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+    try Data("""
+    NAME,Policy Ghost
+    sakura.name,Ghost Sakura
+    sakura.name2,Ghost Sakura 2
+    name.allowoverride,0
+    seriko.defaultsurfacedirectoryname,alternate
+    seriko.alignmenttodesktop,bottom
+    sakura.seriko.alignmenttodesktop,free
+    sakura.defaultleft,24
+    sakura.defaulttop,36
+    balloon.dontmove,true
+    balloon.syncscale,1
+    icon,icons/tray.png
+    sstp.allowunspecifiedsend,0
+    sstp.allowcommunicate,false
+    """.utf8).write(to: ghostMaster.appending(path: "descript.txt"))
+    try Data("name,Master\nsakura.name,Master Sakura\n".utf8)
+        .write(to: master.appending(path: "descript.txt"))
+    try Data("name,Alternate\nsakura.name,Alternate Sakura\nsakura.name2,Alternate Sakura 2\n".utf8)
+        .write(to: alternate.appending(path: "descript.txt"))
+
+    let ghost = try GhostPackageLoader().loadGhost(at: root)
+    let selectedShell = try #require(ghost.shells.first {
+        $0.directory.lastPathComponent.caseInsensitiveCompare("alternate") == .orderedSame
+    })
+
+    #expect(ghost.name == "Policy Ghost")
+    #expect(
+        ghost.defaultShellDirectory.resolvingSymlinksInPath().standardizedFileURL
+            == alternate.resolvingSymlinksInPath().standardizedFileURL
+    )
+    #expect(ghost.characterName(for: 0, shell: selectedShell) == "Ghost Sakura")
+    #expect(ghost.secondaryCharacterName(shell: selectedShell) == "Ghost Sakura 2")
+    #expect(!ghost.allowsShellCharacterNameOverride)
+    #expect(!ghost.allowsUnspecifiedSSTP)
+    #expect(!ghost.allowsSSTPCommunicate)
+    #expect(ghost.desktopAlignment == .bottom)
+    #expect(ghost.preventsBalloonMovement)
+    #expect(ghost.synchronizesBalloonScale)
+    #expect(ghost.iconFilename == "icons/tray.png")
+    #expect(ghost.characters[0].presentationSettings == GhostScopePresentationSettings(
+        desktopAlignment: .free,
+        defaultLeft: 24,
+        defaultTop: 36
+    ))
+}
+
+@Test
 func `loads a legacy SHIORI declaration from alias txt`() throws {
     let root = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)

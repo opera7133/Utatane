@@ -16,7 +16,7 @@ public struct DescriptParser: Sendable {
             let key = trimmed[..<separator].trimmingCharacters(in: .whitespaces)
             let valueStart = trimmed.index(after: separator)
             let value = trimmed[valueStart...].trimmingCharacters(in: .whitespaces)
-            result[key] = value
+            result[key.lowercased()] = value
         }
     }
 

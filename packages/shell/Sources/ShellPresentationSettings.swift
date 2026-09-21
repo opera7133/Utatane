@@ -45,6 +45,8 @@ public struct ShellScopePresentationSettings: Sendable, Equatable {
     public let balloonAlignment: ShellBalloonAlignment?
     public let preventsBalloonMovement: Bool
     public let synchronizesBalloonScale: Bool
+    public let hasBalloonMovementSetting: Bool
+    public let hasBalloonScaleSetting: Bool
 
     public init(
         desktopAlignment: ShellDesktopAlignment? = nil,
@@ -54,8 +56,8 @@ public struct ShellScopePresentationSettings: Sendable, Equatable {
         defaultTop: Int? = nil,
         balloonOffsets: ShellBalloonOffsets = .init(),
         balloonAlignment: ShellBalloonAlignment? = nil,
-        preventsBalloonMovement: Bool = false,
-        synchronizesBalloonScale: Bool = false
+        preventsBalloonMovement: Bool? = nil,
+        synchronizesBalloonScale: Bool? = nil
     ) {
         self.desktopAlignment = desktopAlignment
         self.defaultX = defaultX
@@ -64,7 +66,9 @@ public struct ShellScopePresentationSettings: Sendable, Equatable {
         self.defaultTop = defaultTop
         self.balloonOffsets = balloonOffsets
         self.balloonAlignment = balloonAlignment
-        self.preventsBalloonMovement = preventsBalloonMovement
-        self.synchronizesBalloonScale = synchronizesBalloonScale
+        self.preventsBalloonMovement = preventsBalloonMovement ?? false
+        self.synchronizesBalloonScale = synchronizesBalloonScale ?? false
+        hasBalloonMovementSetting = preventsBalloonMovement != nil
+        hasBalloonScaleSetting = synchronizesBalloonScale != nil
     }
 }

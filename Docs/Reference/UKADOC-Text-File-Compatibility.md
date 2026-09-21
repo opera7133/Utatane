@@ -2,7 +2,7 @@
 
 ゴーストの設定や配布に使うテキストファイルについて、Utataneが読み取る項目と、実際の動作に使う項目をまとめています。項目の基準はUKADOCです。
 
-調査日: 2026-09-20
+調査日: 2026-09-21
 調査対象: [UKADOC](https://ssp.shillest.net/ukadoc/manual/)とUtatane本番Swiftコード・テスト
 
 ## 判定
@@ -19,7 +19,7 @@
 
 | ファイル | 状況 | 現在の実装 | 主な不足 |
 | --- | --- | --- | --- |
-| Ghost `descript.txt` | 🟡 | UTF-8／Shift_JIS、基本情報、SHIORI名、キャラクター名、既定surface・balloon、更新URL、README、推奨balloon | 74項目中、配置、SSTP制御、SHIORI詳細設定、カーソル、メニュー、アイコン等が未反映 |
+| Ghost `descript.txt` | 🟡 | UTF-8／Shift_JIS、基本情報、SHIORI名、キャラクター名、既定surface・shell・balloon、初期配置、MenuBarアイコン、shell側キャラクター名の上書き可否、SSTPの無指定送信・COMMUNICATE受信制御、更新URL、README | 74項目中、SSTP常時変換、SHIORI詳細設定、カーソル、メニュー、最小化アイコン、推奨balloon等が未反映 |
 | Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`（`full`を含む）、bindgroup／bindoption、着せ替えmenuitem、初期位置・上下配置、z-order、sticky-window、balloonのoffset／alignment／dontmove／syncscale | 102項目中、画像ベース座標の全用途、オーナードローメニュー装飾、DPI、透過・crossfade等が未反映 |
 | Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本フォント、装飾・shadow、scroll arrow／clickwaitmarker／online marker／SSTP marker／number、cursor／anchor／anchor.visited、透過方式、windowposition、入力欄 | 162項目中、blendmethod、recommended ghost等が未反映 |
 | Plugin `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、name、id、filename、type、charset、作者、更新URL、README、secondchangeinterval、otherghosttalkを読み込み、SHIORI／dylib／Windows DLLへ分類。Utatane拡張の`filename.macos`でmacOS用モジュールを優先指定可能。メニューから実行、README表示、ネットワーク更新が可能。ネイティブSHIORI型は実体をロードし、OnSecondChange・OnMenuExec・raiseplugin／notifypluginを配送。AKARIの`_create_thread`は独立評価ワーカーで実行し、変更されたグローバル変数を完了時に反映。YAYA製wallet_of_unyuとAKARI製sudohaikuyuは実ファイルでOnMenuExecを確認。macOS dylibは標準`loadu/load`・`unload`・`request`を優先 | dylib実物とWine DLL、AKARIワーカー内の外部通信を伴う長時間処理は未確認 |
@@ -35,7 +35,7 @@
 | `updates.txt` | 🟡 | `charset,`と`file,`行、path・MD5・拡張フィールド、未知行の無視に対応 | Version 3形式の生成は未対応 |
 | `readme.txt`／`readme.md` | 🟡 | Ghost／選択中Shell／Balloon／Headlineのdescript.txtにあるreadme指定と既定候補を安全に解決し、macOSの関連アプリで開きます。readme.charsetも保持 | Markdownの独自表示はせず、文字コードの最終的な解釈は関連アプリに依存 |
 
-現状は ✅ 2 / 🟡 12 / ❌ 1。
+現状は ✅ 3 / 🟡 12 / ❌ 0。
 
 ## Ghost descript.txt
 
@@ -47,10 +47,17 @@ UKADOC掲載は74項目。汎用パーサーはコメントと空行を除いた
 | Utatane拡張 | `shiori.macos`で汎用macOS SHIORIまたはSHIOLINKを優先指定。指定がなければ従来の`shiori`を使用（[開発者向けガイド](../Creators/SHIORI-Development.md)） |
 | 利用 | `sakura.seriko.defaultsurface`、`kero.seriko.defaultsurface`、`char*.seriko.defaultsurface` |
 | 利用 | `balloon.defaultsurface`、scope別`balloon.defaultsurface` |
+| 利用 | `seriko.defaultsurfacedirectoryname`。指定したディレクトリが存在しない場合は`master`へフォールバック |
+| 利用 | `seriko.alignmenttodesktop`、scope別`seriko.alignmenttodesktop`、`defaultleft`／`defaulttop`。Ghost全体＜Ghost scope別＜Shell全体＜Shell scope別の順で優先し、利用者が保存した位置があれば保存値を優先 |
+| 保持 | scope別`defaultx`／`defaulty`。画像ベース座標を使う機能には未接続 |
+| 利用 | `balloon.dontmove`／`balloon.syncscale`。Shell側にscope別指定があればShellの値を優先 |
+| 利用 | `icon`。Ghost master配下の画像をMenuBarアイコンとして使い、読めない場合はUtatane標準アイコンへフォールバック |
+| 利用 | `name.allowoverride`。0の場合はShell側の`sakura.name`／`kero.name`／`sakura.name2`で名前を上書きしない |
+| 利用 | `sstp.allowunspecifiedsend`、`sstp.allowcommunicate`。前者が0なら対象名のないSSTPを受けず、後者が0ならCOMMUNICATEを拒否 |
 | 別経路で利用 | `homeurl`、`readme`、`readme.charset` |
-| 未反映 | charset宣言、作者・ID・title、配置・alignment、SSTP設定、SHIORI version/cache/encoding、イベント抑制、カーソル、メニュー、アイコン、推奨balloon関連 |
+| 未反映 | charset宣言、作者・ID・title、`sstp.alwaystranslate`、SHIORI version/cache/encoding、イベント抑制、カーソル、`icon.minimize`、メニュー、推奨balloon関連 |
 
-文字コードはファイル内`charset`ではなく、UTF-8を試してからShift_JISへフォールバックします。
+項目名は大文字小文字を区別しません。文字コードはファイル内`charset`ではなく、UTF-8を試してからShift_JISへフォールバックするため、宣言と実際の文字コードが違っていても読み込めます。
 
 ## Shell descript.txt
 
@@ -155,4 +162,4 @@ size／date／charset拡張フィールドとVersion 3の`charset,`・未知行�
 
 1. point.baseposを位置保存へ、icon.rectを履歴サムネイルへ接続します。
 2. pattern methodの近似描画を実画像で比較し、互換差が大きい演算を優先して補正します。
-3. Balloon descript.txtのblendmethodと入力画像上のボタン描画を実装します。
+3. Balloon `descript.txt`のblendmethodと入力画像上のボタン描画を実装します。

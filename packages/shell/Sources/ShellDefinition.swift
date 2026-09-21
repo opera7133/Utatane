@@ -1,4 +1,5 @@
 import Foundation
+import UtataneCore
 
 public struct ShellDefinition: Sendable, Equatable {
     public let directory: URL
@@ -138,6 +139,68 @@ public struct ShellDefinition: Sendable, Equatable {
             }
         }
         return result
+    }
+
+    public func applyingPresentationDefaults(from ghost: InstalledGhost) -> ShellDefinition {
+        var mergedPresentationSettings = presentationSettings
+        for character in ghost.characters {
+            let ghostSettings = character.presentationSettings
+            let shellSettings = presentationSettings[character.scope]
+            let ghostScopeAlignment = ghostSettings.desktopAlignment.flatMap {
+                ShellDesktopAlignment(rawValue: $0.rawValue)
+            }
+            let ghostDefaultAlignment = ghost.desktopAlignment.flatMap {
+                ShellDesktopAlignment(rawValue: $0.rawValue)
+            }
+            let effectiveAlignment = shellSettings?.desktopAlignment
+                ?? desktopAlignment
+                ?? ghostScopeAlignment
+                ?? ghostDefaultAlignment
+            let preventsBalloonMovement = if shellSettings?.hasBalloonMovementSetting == true {
+                shellSettings?.preventsBalloonMovement ?? false
+            } else {
+                ghost.preventsBalloonMovement
+            }
+            let synchronizesBalloonScale = if shellSettings?.hasBalloonScaleSetting == true {
+                shellSettings?.synchronizesBalloonScale ?? false
+            } else {
+                ghost.synchronizesBalloonScale
+            }
+            mergedPresentationSettings[character.scope] = ShellScopePresentationSettings(
+                desktopAlignment: effectiveAlignment,
+                defaultX: shellSettings?.defaultX ?? ghostSettings.defaultX,
+                defaultY: shellSettings?.defaultY ?? ghostSettings.defaultY,
+                defaultLeft: shellSettings?.defaultLeft ?? ghostSettings.defaultLeft,
+                defaultTop: shellSettings?.defaultTop ?? ghostSettings.defaultTop,
+                balloonOffsets: shellSettings?.balloonOffsets ?? .init(),
+                balloonAlignment: shellSettings?.balloonAlignment,
+                preventsBalloonMovement: preventsBalloonMovement,
+                synchronizesBalloonScale: synchronizesBalloonScale
+            )
+        }
+
+        return ShellDefinition(
+            directory: directory,
+            surfaces: surfaces,
+            surfaceAliases: surfaceAliases,
+            usesSelfAlpha: usesSelfAlpha,
+            usesFullSelfAlpha: usesFullSelfAlpha,
+            defaultBindGroups: defaultBindGroups,
+            bindGroups: bindGroups,
+            bindOptions: bindOptions,
+            bindMenuItems: bindMenuItems,
+            hiddenBindMenuScopes: hiddenBindMenuScopes,
+            surfaceTable: surfaceTable,
+            maximumSurfaceWidth: maximumSurfaceWidth,
+            cursorDefinitions: cursorDefinitions,
+            tooltips: tooltips,
+            zOrder: zOrder,
+            stickyWindowScopes: stickyWindowScopes,
+            desktopAlignment: desktopAlignment ?? ghost.desktopAlignment.flatMap {
+                ShellDesktopAlignment(rawValue: $0.rawValue)
+            },
+            presentationSettings: mergedPresentationSettings
+        )
     }
 }
 

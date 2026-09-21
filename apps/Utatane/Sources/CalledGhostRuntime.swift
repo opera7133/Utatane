@@ -254,7 +254,9 @@ final class CalledGhostRuntime {
         try show(shell: shell)
         surfaceController.setPresentationHidden(true)
         _ = try? await session.start(event: .shiori(id: "OnInitialize", references: [:]))
-        if let definition = try? shellLoader.load(from: shell.directory) {
+        if let definition = try? shellLoader.load(from: shell.directory)
+            .applyingPresentationDefaults(from: ghost)
+        {
             for event in startupInformationEvents(
                 ghost: ghost,
                 shell: shell,
@@ -768,6 +770,7 @@ final class CalledGhostRuntime {
     private func show(shell newShell: InstalledShell) throws {
         player.cancel()
         let definition = try shellLoader.load(from: newShell.directory)
+            .applyingPresentationDefaults(from: ghost)
         balloonController.configure(shell: definition)
         try surfaceController.show(
             shell: definition,

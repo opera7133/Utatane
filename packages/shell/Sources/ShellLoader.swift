@@ -424,8 +424,8 @@ private struct ShellScopePresentationBuilder {
     var balloonOffsetRightX: Int?
     var balloonOffsetRightY: Int?
     var balloonAlignment: ShellBalloonAlignment?
-    var preventsBalloonMovement = false
-    var synchronizesBalloonScale = false
+    var preventsBalloonMovement: Bool?
+    var synchronizesBalloonScale: Bool?
 
     var settings: ShellScopePresentationSettings {
         ShellScopePresentationSettings(

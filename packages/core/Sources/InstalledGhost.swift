@@ -29,19 +29,50 @@ public struct InstalledGhostCharacter: Sendable, Equatable {
     public let secondaryName: String?
     public let defaultSurfaceID: Int
     public let defaultBalloonSurfaceID: Int
+    public let presentationSettings: GhostScopePresentationSettings
 
     public init(
         scope: Int,
         name: String? = nil,
         secondaryName: String? = nil,
         defaultSurfaceID: Int,
-        defaultBalloonSurfaceID: Int = 0
+        defaultBalloonSurfaceID: Int = 0,
+        presentationSettings: GhostScopePresentationSettings = .init()
     ) {
         self.scope = scope
         self.name = name
         self.secondaryName = secondaryName
         self.defaultSurfaceID = defaultSurfaceID
         self.defaultBalloonSurfaceID = defaultBalloonSurfaceID
+        self.presentationSettings = presentationSettings
+    }
+}
+
+public enum GhostDesktopAlignment: String, Sendable, Equatable {
+    case top
+    case bottom
+    case free
+}
+
+public struct GhostScopePresentationSettings: Sendable, Equatable {
+    public let desktopAlignment: GhostDesktopAlignment?
+    public let defaultX: Int?
+    public let defaultY: Int?
+    public let defaultLeft: Int?
+    public let defaultTop: Int?
+
+    public init(
+        desktopAlignment: GhostDesktopAlignment? = nil,
+        defaultX: Int? = nil,
+        defaultY: Int? = nil,
+        defaultLeft: Int? = nil,
+        defaultTop: Int? = nil
+    ) {
+        self.desktopAlignment = desktopAlignment
+        self.defaultX = defaultX
+        self.defaultY = defaultY
+        self.defaultLeft = defaultLeft
+        self.defaultTop = defaultTop
     }
 }
 
@@ -57,6 +88,13 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
     public let shioriMacOSFilename: String?
     public let charset: String?
     public let defaultBalloonDirectoryName: String?
+    public let allowsShellCharacterNameOverride: Bool
+    public let allowsUnspecifiedSSTP: Bool
+    public let allowsSSTPCommunicate: Bool
+    public let desktopAlignment: GhostDesktopAlignment?
+    public let preventsBalloonMovement: Bool
+    public let synchronizesBalloonScale: Bool
+    public let iconFilename: String?
 
     public var id: URL {
         rootDirectory
@@ -70,11 +108,14 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
     }
 
     public func characterName(for scope: Int, shell: InstalledShell? = nil) -> String? {
-        shell?.characterNames[scope] ?? characters.first(where: { $0.scope == scope })?.name
+        if allowsShellCharacterNameOverride, let shellName = shell?.characterNames[scope] {
+            return shellName
+        }
+        return characters.first(where: { $0.scope == scope })?.name
     }
 
     public func secondaryCharacterName(shell: InstalledShell? = nil) -> String? {
-        shell?.secondaryCharacterName
+        (allowsShellCharacterNameOverride ? shell?.secondaryCharacterName : nil)
             ?? characters.first(where: { $0.scope == 0 })?.secondaryName
             ?? characterName(for: 0, shell: shell)
     }
@@ -88,7 +129,14 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
         shioriFilename: String? = nil,
         shioriMacOSFilename: String? = nil,
         charset: String? = nil,
-        defaultBalloonDirectoryName: String? = nil
+        defaultBalloonDirectoryName: String? = nil,
+        allowsShellCharacterNameOverride: Bool = true,
+        allowsUnspecifiedSSTP: Bool = true,
+        allowsSSTPCommunicate: Bool = true,
+        desktopAlignment: GhostDesktopAlignment? = nil,
+        preventsBalloonMovement: Bool = false,
+        synchronizesBalloonScale: Bool = false,
+        iconFilename: String? = nil
     ) {
         self.name = name
         self.rootDirectory = rootDirectory
@@ -108,5 +156,12 @@ public struct InstalledGhost: Identifiable, Sendable, Equatable {
         self.shioriMacOSFilename = shioriMacOSFilename
         self.charset = charset
         self.defaultBalloonDirectoryName = defaultBalloonDirectoryName
+        self.allowsShellCharacterNameOverride = allowsShellCharacterNameOverride
+        self.allowsUnspecifiedSSTP = allowsUnspecifiedSSTP
+        self.allowsSSTPCommunicate = allowsSSTPCommunicate
+        self.desktopAlignment = desktopAlignment
+        self.preventsBalloonMovement = preventsBalloonMovement
+        self.synchronizesBalloonScale = synchronizesBalloonScale
+        self.iconFilename = iconFilename
     }
 }
