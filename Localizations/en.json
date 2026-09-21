@@ -538,5 +538,8 @@
   "ゴーストがメールチェックを要求した時だけ接続する。通常はPOP3 over TLSの995番を使う。" : "Connects only when a ghost requests a mail check. POP3 over TLS normally uses port 995.",
   "この設定のヘルプ" : "Help for This Setting",
   "Dockにアプリアイコンを表示" : "Show Utatane in the Dock",
-  "非表示にしても、MenuBarのUtataneアイコンから設定や終了操作を開ける。" : "Even when hidden, you can open settings or quit from the Utatane icon in the menu bar."
+  "非表示にしても、MenuBarのUtataneアイコンから設定や終了操作を開ける。" : "Even when hidden, you can open settings or quit from the Utatane icon in the menu bar.",
+  "このバルーンは別のゴースト向けです" : "This Balloon Is Intended for Another Ghost",
+  "「%@」は「%@」向けに作られています。現在のゴースト「%@」で使うと、表示が崩れることがあります。" : "“%@” was made for “%@”. It may not display correctly with the current ghost “%@”.",
+  "このまま使う" : "Use Anyway"
 }

@@ -3673,7 +3673,12 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func select(balloon selectedBalloon: BalloonDefinition) {
+    private func select(balloon selectedBalloon: BalloonDefinition, checksRecommendation: Bool = true) {
+        if checksRecommendation, let currentGhost,
+           !confirmBalloonRecommendation(selectedBalloon, for: currentGhost)
+        {
+            return
+        }
         scriptPlayer.cancel()
         balloon = selectedBalloon
         recentContentStore.record(
@@ -3692,6 +3697,30 @@ private struct UtataneRootView: View {
             name: selectedBalloon.name,
             path: selectedBalloon.directory.path
         ))
+    }
+
+    private func select(balloon selectedBalloon: BalloonDefinition, for runtime: CalledGhostRuntime) {
+        guard confirmBalloonRecommendation(selectedBalloon, for: runtime.ghost) else { return }
+        runtime.select(balloon: selectedBalloon)
+        configureContextMenu()
+    }
+
+    private func confirmBalloonRecommendation(
+        _ selectedBalloon: BalloonDefinition,
+        for ghost: InstalledGhost
+    ) -> Bool {
+        guard let recommendation = selectedBalloon.recommendedGhostDescription,
+              !selectedBalloon.isRecommended(forGhostNamed: ghost.name, directory: ghost.rootDirectory)
+        else {
+            return true
+        }
+        return alertController.confirmBalloonRecommendation(
+            balloonName: selectedBalloon.name,
+            balloonPath: selectedBalloon.directory.standardizedFileURL.path,
+            recommendedGhost: recommendation,
+            currentGhostName: ghost.name,
+            currentGhostPath: ghost.rootDirectory.standardizedFileURL.path
+        )
     }
 
     private func handleContentAction(
@@ -3784,7 +3813,7 @@ private struct UtataneRootView: View {
                 })
             guard let selected else { return }
             if let calledRuntime {
-                calledRuntime.select(balloon: selected)
+                select(balloon: selected, for: calledRuntime)
             } else {
                 select(balloon: selected)
             }
@@ -3889,7 +3918,7 @@ private struct UtataneRootView: View {
             if let calledRuntime {
                 calledRuntime.select(balloon: calledRuntime.balloon)
             } else if let balloon {
-                select(balloon: balloon)
+                select(balloon: balloon, checksRecommendation: false)
             }
         case .reloadShiori:
             Task { await reloadScriptComponents(calledRuntime: calledRuntime) }
@@ -5705,8 +5734,7 @@ private struct UtataneRootView: View {
                         case .primary:
                             select(balloon: balloon)
                         case let .called(runtime):
-                            runtime.select(balloon: balloon)
-                            configureContextMenu()
+                            select(balloon: balloon, for: runtime)
                         }
                     }
                 )

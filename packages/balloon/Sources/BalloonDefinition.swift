@@ -3,6 +3,8 @@ import Foundation
 public struct BalloonDefinition: Sendable, Equatable {
     public let directory: URL
     public let name: String
+    public let recommendedGhostName: String?
+    public let recommendedGhostPath: String?
     public let originX: Int
     public let originY: Int
     public let wordWrapPointX: Int
@@ -68,6 +70,8 @@ public struct BalloonDefinition: Sendable, Equatable {
     public init(
         directory: URL,
         name: String,
+        recommendedGhostName: String? = nil,
+        recommendedGhostPath: String? = nil,
         originX: Int,
         originY: Int,
         wordWrapPointX: Int,
@@ -132,6 +136,8 @@ public struct BalloonDefinition: Sendable, Equatable {
     ) {
         self.directory = directory
         self.name = name
+        self.recommendedGhostName = recommendedGhostName
+        self.recommendedGhostPath = recommendedGhostPath
         self.originX = originX
         self.originY = originY
         self.wordWrapPointX = wordWrapPointX
@@ -193,6 +199,37 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.anchorStyle = anchorStyle
         self.anchorNotSelectedStyle = anchorNotSelectedStyle
         self.anchorVisitedStyle = anchorVisitedStyle
+    }
+
+    public func isRecommended(forGhostNamed ghostName: String, directory ghostDirectory: URL) -> Bool {
+        let matchesName = recommendedGhostName.map {
+            $0.caseInsensitiveCompare(ghostName) == .orderedSame
+        } ?? true
+        let matchesPath = recommendedGhostPath.map { path in
+            var expected = Self.pathComponents(of: path)
+            if let first = expected.first, first == "ghost" || first == "ghosts" {
+                expected.removeFirst()
+            }
+            guard !expected.isEmpty else { return false }
+            return Self.pathComponents(of: ghostDirectory.path).suffix(expected.count) == expected[...]
+        } ?? true
+        return matchesName && matchesPath
+    }
+
+    public var recommendedGhostDescription: String? {
+        switch (recommendedGhostName, recommendedGhostPath) {
+        case let (.some(name), .some(path)): "\(name)（\(path)）"
+        case let (.some(name), nil): name
+        case let (nil, .some(path)): path
+        case (nil, nil): nil
+        }
+    }
+
+    private static func pathComponents(of path: String) -> [String] {
+        path.replacingOccurrences(of: "\\", with: "/")
+            .split(separator: "/")
+            .map { $0.lowercased() }
+            .filter { $0 != "." }
     }
 }
 

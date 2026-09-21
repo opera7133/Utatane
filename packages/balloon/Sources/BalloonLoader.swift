@@ -136,6 +136,8 @@ public struct BalloonLoader: Sendable {
         return BalloonDefinition(
             directory: directory,
             name: values["name"] ?? directory.lastPathComponent,
+            recommendedGhostName: nonEmptyValue("recommended.ghost", in: values),
+            recommendedGhostPath: nonEmptyValue("recommended.ghost.path", in: values),
             originX: textOrigin(
                 originKey: "origin.x",
                 validRectKey: isVertical ? "validrect.right" : "validrect.left",
@@ -240,6 +242,13 @@ public struct BalloonLoader: Sendable {
             anchorNotSelectedStyle: linkAppearance(prefix: "anchor.notselect", in: values, defaultShape: .none),
             anchorVisitedStyle: linkAppearance(prefix: "anchor.visited", in: values, defaultShape: .none)
         )
+    }
+
+    private func nonEmptyValue(_ key: String, in values: [String: String]) -> String? {
+        guard let value = values[key]?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+            return nil
+        }
+        return value
     }
 
     public func markerImageURL(speaker: BalloonSpeaker, style: Int = 0, in balloon: BalloonDefinition) -> URL? {

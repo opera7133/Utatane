@@ -4,6 +4,7 @@ import AppKit
 public final class ApplicationAlertController {
     private var displayedMessages: Set<String> = []
     private var lastDisplayedAt: [String: Date] = [:]
+    private var approvedBalloonRecommendations: Set<String> = []
 
     public init() {}
 
@@ -37,6 +38,35 @@ public final class ApplicationAlertController {
         alert.addButton(withTitle: String(localized: "ゴミ箱へ移動"))
         alert.addButton(withTitle: String(localized: "キャンセル"))
         return alert.runModal() == .alertFirstButtonReturn
+    }
+
+    public func confirmBalloonRecommendation(
+        balloonName: String,
+        balloonPath: String,
+        recommendedGhost: String,
+        currentGhostName: String,
+        currentGhostPath: String
+    ) -> Bool {
+        let approvalKey = "\(balloonPath)\u{0}\(currentGhostPath)"
+        if approvedBalloonRecommendations.contains(approvalKey) {
+            return true
+        }
+
+        let alert = NSAlert()
+        alert.alertStyle = .critical
+        alert.icon = NSApplication.shared.applicationIconImage
+        alert.messageText = String(localized: "このバルーンは別のゴースト向けです")
+        alert.informativeText = String(
+            format: String(localized: "「%@」は「%@」向けに作られています。現在のゴースト「%@」で使うと、表示が崩れることがあります。"),
+            balloonName,
+            recommendedGhost,
+            currentGhostName
+        )
+        alert.addButton(withTitle: String(localized: "このまま使う"))
+        alert.addButton(withTitle: String(localized: "キャンセル"))
+        guard alert.runModal() == .alertFirstButtonReturn else { return false }
+        approvedBalloonRecommendations.insert(approvalKey)
+        return true
     }
 }
 

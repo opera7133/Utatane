@@ -4,6 +4,7 @@
 
 ### 追加
 
+- バルーンの`recommended.ghost`／`recommended.ghost.path`を照合し、推奨対象ではないゴーストへ切り替える時に確認できるようにした
 - `install.txt`の`type,supplement`を、対象ゴーストの既存ファイルを残しながら追加・上書きするバックアップ付きインストールとして扱えるようにした
 - Web版Utatane NAR検査で、検査結果を共有・保存用のJSONファイルとしてダウンロードできるようにした
 - SakuraScriptから着せ替え一覧、画像ビューア、アーカイブビューアを開けるようにした

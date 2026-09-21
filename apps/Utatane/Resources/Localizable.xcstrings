@@ -3568,6 +3568,35 @@
         }
       }
     },
+    "「%@」は「%@」向けに作られています。現在のゴースト「%@」で使うと、表示が崩れることがあります。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@” was made for “%@”. It may not display correctly with the current ghost “%@”."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "‘%@’은(는) ‘%@’용으로 제작되었습니다. 현재 고스트 ‘%@’에서 사용하면 표시가 깨질 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”是为“%@”制作的。用于当前 Ghost“%@”时，显示可能会错乱。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」是為「%@」製作的。用於目前 Ghost「%@」時，顯示可能會錯亂。"
+          }
+        }
+      }
+    },
     "「%@」をmacOSのゴミ箱へ移動します。あとから戻すこともできます。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3829,6 +3858,35 @@
         }
       }
     },
+    "このまま使う" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use Anyway"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "그대로 사용"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍然使用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仍然使用"
+          }
+        }
+      }
+    },
     "このゴーストのSHIORIにはまだ対応していない: %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3883,6 +3941,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "關閉此Ghost"
+          }
+        }
+      }
+    },
+    "このバルーンは別のゴースト向けです" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This Balloon Is Intended for Another Ghost"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 벌룬은 다른 고스트용입니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此对话框适用于其他 Ghost"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此對話框適用於其他 Ghost"
           }
         }
       }

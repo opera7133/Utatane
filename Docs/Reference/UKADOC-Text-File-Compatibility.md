@@ -21,7 +21,7 @@
 | --- | --- | --- | --- |
 | Ghost `descript.txt` | 🟡 | UTF-8／Shift_JIS、基本情報、SHIORI名、キャラクター名、既定surface・shell・balloon、初期配置、MenuBarアイコン、shell側キャラクター名の上書き可否、SSTPの無指定送信・COMMUNICATE受信制御、更新URL、README | 74項目中、SSTP常時変換、SHIORI詳細設定、カーソル、メニュー、最小化アイコン、推奨balloon等が未反映 |
 | Shell `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前、`seriko.use_self_alpha`（`full`を含む）、bindgroup／bindoption、着せ替えmenuitem、初期位置・上下配置、z-order、sticky-window、balloonのoffset／alignment／dontmove／syncscale | 102項目中、画像ベース座標の全用途、オーナードローメニュー装飾、DPI、透過・crossfade等が未反映 |
-| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本・無効フォント、装飾・shadow、scroll arrow／clickwaitmarker／online marker／SSTP marker／number、cursor／anchor／anchor.visited、透過方式、windowposition、入力欄とボタン画像 | 162項目中、blendmethod、recommended ghost等が未反映 |
+| Balloon `descript.txt` | 🟡 | UTF-8／Shift_JIS、名前・type、文字領域、折返し、基本・無効フォント、装飾・shadow、scroll arrow／clickwaitmarker／online marker／SSTP marker／number、cursor／anchor／anchor.visited、透過方式、windowposition、入力欄とボタン画像、推奨ゴースト | 162項目中、blendmethodとmodeボタンが未反映 |
 | Plugin `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、name、id、filename、type、charset、作者、更新URL、README、secondchangeinterval、otherghosttalkを読み込み、SHIORI／dylib／Windows DLLへ分類。Utatane拡張の`filename.macos`でmacOS用モジュールを優先指定可能。メニューから実行、README表示、ネットワーク更新が可能。ネイティブSHIORI型は実体をロードし、OnSecondChange・OnMenuExec・raiseplugin／notifypluginを配送。AKARIの`_create_thread`は独立評価ワーカーで実行し、変更されたグローバル変数を完了時に反映。YAYA製wallet_of_unyuとAKARI製sudohaikuyuは実ファイルでOnMenuExecを確認。macOS dylibは標準`loadu/load`・`unload`・`request`を優先 | dylib実物とWine DLL、AKARIワーカー内の外部通信を伴う長時間処理は未確認 |
 | Headline `descript.txt` | 🟡 | UTF-8／Shift_JIS／ASCII、名前、DLL名、URL、open URL、homeurl、charset、alwaysdisplay、readme、readme.charset。RSS用`type`・`feed`拡張も利用 | UKADOC掲載項目は保持・利用。Windows DLL実行は実行環境依存 |
 | `install.txt` | 🟡 | UTF-8／Shift_JIS、name、type、directory、accept、複数インストールpackage、bootghost、Ghost／Shell同梱の複数balloon・headline・plugin・calendar.skin・calendar.plugin、安全な新規インストール、supplementの差分追加、refreshとrefreshundeletemaskをバックアップ付きで実装 | languageは未対応 |
@@ -94,8 +94,9 @@ UKADOC掲載は162項目。現在の実利用項目は以下。
 | 画像として利用 | `balloonc1.png`／`balloonc2.png`／`balloonc3.png`と対応する`balloonc*s.txt`を、communicatebox／teachbox／inputboxのネイティブ入力パネルへ反映。`ok_up/down.png`と`cancel_up/down.png`があれば通常・押下中のボタン画像として利用 |
 | 利用 | cursor、cursor.notselect、anchor、anchor.notselect、anchor.visitedの`style`、font／pen／brush RGB。訪問済みアンカーはゴーストの実行中にID単位で保持 |
 | 画像として利用 | balloon画像、marker画像、clickwaitmarker／arrow／online／SSTP marker画像。`balloons*s.txt`等のサーフェス別上書きと`marker.filename`／`clickwaitmarker.filename`／`arrow.filename`／`onlinemarker.filename`／`sstpmarker.filename`を反映 |
+| 利用 | `recommended.ghost`、`recommended.ghost.path`。名前とゴーストフォルダまでの相対パスを照合し、対象外のゴーストへ明示的に切り替える時は確認を表示。同じ組み合わせを承認した後は、その起動中は再確認しない |
 | 別経路で利用 | `readme`、`readme.charset` |
-| 未反映 | Win32 SetROP2依存のblendmethod、modeボタン、recommended ghost |
+| 未反映 | Win32 SetROP2依存のblendmethod、modeボタン |
 
 `origin`が0または未定義なら横書きは`validrect.left/top`、縦書きは`validrect.right/top`へフォールバックします。縦書きでは`wordwrappoint.y`（未定義時は`validrect.bottom`）で下端を決め、文字を上から下、列を右から左へ配置します。入力欄は従来どおり横書き。
 
@@ -163,5 +164,5 @@ size／date／charset拡張フィールドとVersion 3の`charset,`・未知行�
 ## 優先度
 
 1. pattern methodの近似描画を実画像で比較し、互換差が大きい演算を優先して補正します。
-2. Balloon `descript.txt`のblendmethodとrecommended ghostを、macOS上の代替挙動を含めて整理します。
+2. Balloon `descript.txt`のblendmethodを、macOS上の代替描画を含めて整理します。
 3. `install.txt`のlanguageをUtataneのローカライズ構造へ接続できるか調査します。

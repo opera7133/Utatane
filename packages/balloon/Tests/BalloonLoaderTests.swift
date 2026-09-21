@@ -74,6 +74,39 @@ func `explicit text origin takes precedence over valid rect`() throws {
 }
 
 @Test
+func `reads and evaluates recommended ghost`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try Data("""
+    charset,UTF-8
+    type,balloon
+    name,Dedicated Balloon
+    recommended.ghost,Test Ghost
+    recommended.ghost.path,ghost\\test-ghost
+    """.utf8).write(to: directory.appending(path: "descript.txt"))
+
+    let balloon = try BalloonLoader().load(from: directory)
+
+    #expect(balloon.recommendedGhostName == "Test Ghost")
+    #expect(balloon.recommendedGhostPath == "ghost\\test-ghost")
+    #expect(balloon.recommendedGhostDescription == "Test Ghost（ghost\\test-ghost）")
+    #expect(balloon.isRecommended(
+        forGhostNamed: "test ghost",
+        directory: URL(fileURLWithPath: "/Library/Utatane/Ghost/test-ghost")
+    ))
+    #expect(!balloon.isRecommended(
+        forGhostNamed: "Another Ghost",
+        directory: URL(fileURLWithPath: "/Library/Utatane/Ghost/test-ghost")
+    ))
+    #expect(!balloon.isRecommended(
+        forGhostNamed: "Test Ghost",
+        directory: URL(fileURLWithPath: "/Library/Utatane/Ghost/another-ghost")
+    ))
+}
+
+@Test
 func `loads vertical writing layout using right and bottom valid rect defaults`() throws {
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)
