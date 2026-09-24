@@ -1,6 +1,8 @@
 import AppKit
+import CoreImage
 import Testing
 @testable import UtatanePlatformMacOS
+import UtataneShell
 
 @MainActor
 struct SpeechHistoryMemoryTests {
@@ -77,4 +79,42 @@ struct SpeechHistoryMemoryTests {
         }
         #expect(decoded == nil)
     }
+}
+
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_HISTORY_SHELL"] != nil)) @MainActor
+func `inspect history thumbnails from a real shell`() throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_HISTORY_SHELL"])
+    let root = URL(filePath: path)
+    let (defaults, positions) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let surfaces = SurfaceWindowController(positionStore: positions)
+    defer { surfaces.resetContent() }
+    try surfaces.show(shell: ShellLoader().load(from: root), scope: 0, surfaceID: 0)
+    let data = try #require(surfaces.speechHistoryThumbnailPNGData(for: 0))
+    if let output = ProcessInfo.processInfo.environment["UTATANE_HISTORY_THUMBNAIL_OUTPUT"] {
+        try data.write(to: URL(filePath: output))
+    }
+    let bitmap = try #require(NSBitmapImageRep(data: data))
+    let visible = (0 ..< bitmap.pixelsHigh).reduce(0) { count, y in
+        count + (0 ..< bitmap.pixelsWide).filter { bitmap.colorAt(x: $0, y: y)?.alphaComponent ?? 0 > 0.1 }.count
+    }
+    print("THUMBNAIL alpha pixels \(visible) / \(bitmap.pixelsWide * bitmap.pixelsHigh)")
+    #expect(visible > 100)
+}
+
+@Test @MainActor
+func `history thumbnails convert floating point composited images to visible RGBA`() throws {
+    let rect = CGRect(x: 0, y: 0, width: 20, height: 40)
+    let source = CIImage(color: CIColor(red: 1, green: 0.25, blue: 0, alpha: 1)).cropped(to: rect)
+    let space = try #require(CGColorSpace(name: CGColorSpace.extendedLinearSRGB))
+    let cgImage = try #require(CIContext().createCGImage(source, from: rect, format: .RGBAh, colorSpace: space))
+    let image = NSImage(cgImage: cgImage, size: rect.size)
+    let data = try #require(SpeechHistoryThumbnail.pngData(from: image))
+    let thumbnail = try #require(NSBitmapImageRep(data: data))
+    #expect(thumbnail.pixelsWide == 64)
+    #expect(thumbnail.pixelsHigh == 64)
+    let center = try #require(thumbnail.colorAt(x: 32, y: 32)?.usingColorSpace(.deviceRGB))
+    #expect(center.alphaComponent > 0.99)
+    #expect(center.redComponent > 0.9)
+    #expect(center.blueComponent < 0.1)
 }

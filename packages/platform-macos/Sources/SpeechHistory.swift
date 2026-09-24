@@ -663,8 +663,6 @@ enum SpeechHistoryThumbnail {
         pixelSize: Int = 64
     ) -> Data? {
         guard pixelSize > 0, image.size.width > 0, image.size.height > 0,
-              let sourceBitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first
-              ?? image.tiffRepresentation.flatMap(NSBitmapImageRep.init(data:)),
               let bitmap = NSBitmapImageRep(
                   bitmapDataPlanes: nil,
                   pixelsWide: pixelSize,
@@ -679,26 +677,28 @@ enum SpeechHistoryThumbnail {
               )
         else { return nil }
 
-        let source = sourceRect(for: image.size, iconRect: iconRect)
-        for destinationY in 0 ..< pixelSize {
-            for destinationX in 0 ..< pixelSize {
-                let sourceX = source.minX
-                    + (CGFloat(destinationX) + 0.5) / CGFloat(pixelSize) * source.width
-                let sourceYFromTop = source.minY
-                    + (CGFloat(pixelSize - destinationY) - 0.5) / CGFloat(pixelSize) * source.height
-                let pixelX = Int(sourceX / image.size.width * CGFloat(sourceBitmap.pixelsWide))
-                let pixelY = sourceBitmap.pixelsHigh - 1
-                    - Int(sourceYFromTop / image.size.height * CGFloat(sourceBitmap.pixelsHigh))
-                let color = if (0 ..< sourceBitmap.pixelsWide).contains(pixelX),
-                               (0 ..< sourceBitmap.pixelsHigh).contains(pixelY)
-                {
-                    sourceBitmap.colorAt(x: pixelX, y: pixelY)?.usingColorSpace(.deviceRGB) ?? .clear
-                } else {
-                    NSColor.clear
-                }
-                bitmap.setColor(color, atX: destinationX, y: destinationY)
-            }
-        }
+        // Core Image can produce extended/float color spaces which colorAt cannot
+        // interpret. Let AppKit convert and resample into the small RGBA bitmap.
+        guard let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+        let topOriginSource = sourceRect(for: image.size, iconRect: iconRect)
+        let source = NSRect(
+            x: topOriginSource.minX,
+            y: image.size.height - topOriginSource.maxY,
+            width: topOriginSource.width,
+            height: topOriginSource.height
+        )
+        NSGraphicsContext.saveGraphicsState()
+        defer { NSGraphicsContext.restoreGraphicsState() }
+        NSGraphicsContext.current = context
+        context.imageInterpolation = .high
+        image.draw(
+            in: NSRect(x: 0, y: 0, width: pixelSize, height: pixelSize),
+            from: source,
+            operation: .copy,
+            fraction: 1,
+            respectFlipped: false,
+            hints: nil
+        )
         return bitmap.representation(using: .png, properties: [:])
     }
 

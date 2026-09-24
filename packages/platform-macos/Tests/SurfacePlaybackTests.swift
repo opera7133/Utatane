@@ -295,7 +295,7 @@ func `speech history thumbnail uses the surface icon rectangle`() throws {
     let bitmap = try #require(NSBitmapImageRep(
         bitmapDataPlanes: nil,
         pixelsWide: 100,
-        pixelsHigh: 100,
+        pixelsHigh: 160,
         bitsPerSample: 8,
         samplesPerPixel: 4,
         hasAlpha: true,
@@ -306,12 +306,12 @@ func `speech history thumbnail uses the surface icon rectangle`() throws {
     ))
     let red = NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
     let blue = NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
-    for y in 0 ..< 100 {
+    for y in 0 ..< 160 {
         for x in 0 ..< 100 {
-            bitmap.setColor(x < 40 && y >= 60 ? red : blue, atX: x, y: y)
+            bitmap.setColor(x < 40 && y < 40 ? red : blue, atX: x, y: y)
         }
     }
-    let image = NSImage(size: NSSize(width: 100, height: 100))
+    let image = NSImage(size: NSSize(width: 100, height: 160))
     image.addRepresentation(bitmap)
 
     let data = try #require(SpeechHistoryThumbnail.pngData(
@@ -323,6 +323,13 @@ func `speech history thumbnail uses the surface icon rectangle`() throws {
     let center = try #require(thumbnail.colorAt(x: 16, y: 16)?.usingColorSpace(.deviceRGB))
     #expect(center.redComponent > 0.9)
     #expect(center.blueComponent < 0.1)
+    // Without icon.rect, use the top square of a tall image, not its feet.
+    let defaultData = try #require(SpeechHistoryThumbnail.pngData(from: image, pixelSize: 100))
+    let defaultThumbnail = try #require(NSBitmapImageRep(data: defaultData))
+    let topLeft = try #require(defaultThumbnail.colorAt(x: 20, y: 20)?.usingColorSpace(.deviceRGB))
+    let below = try #require(defaultThumbnail.colorAt(x: 20, y: 80)?.usingColorSpace(.deviceRGB))
+    #expect(topLeft.redComponent > 0.9)
+    #expect(below.blueComponent > 0.9)
 }
 
 @Test
