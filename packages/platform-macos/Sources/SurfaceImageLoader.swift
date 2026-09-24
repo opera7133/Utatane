@@ -5,7 +5,9 @@ import ImageIO
 import UtataneCore
 
 struct SurfaceImageLoader {
-    private let context = CIContext()
+    /// Only the two Core Image blend paths need a context. Share it lazily;
+    /// ordinary PNG shells should not initialize a GPU rendering context per scope.
+    private static let context = CIContext(options: [.cacheIntermediates: false])
 
     func load(
         _ surface: SurfaceAsset,
@@ -196,7 +198,7 @@ struct SurfaceImageLoader {
         clip.inputImage = multiplied
         clip.backgroundImage = baseImage
         guard let outputImage = clip.outputImage?.cropped(to: baseImage.extent),
-              let output = context.createCGImage(outputImage, from: baseImage.extent)
+              let output = Self.context.createCGImage(outputImage, from: baseImage.extent)
         else { return nil }
         return NSImage(cgImage: output, size: base.size)
     }
@@ -286,7 +288,7 @@ struct SurfaceImageLoader {
         filter.inputImage = translatedOverlay
         filter.backgroundImage = baseImage
         guard let outputImage = filter.outputImage?.cropped(to: baseImage.extent),
-              let output = context.createCGImage(outputImage, from: baseImage.extent)
+              let output = Self.context.createCGImage(outputImage, from: baseImage.extent)
         else { return nil }
         return NSImage(cgImage: output, size: base.size)
     }

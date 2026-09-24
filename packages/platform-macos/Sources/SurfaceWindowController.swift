@@ -1076,8 +1076,7 @@ private final class CharacterSurfaceController {
     private var baseSurfaceID: Int?
     private var surfaceBaseImage: NSImage?
     private var baseImage: NSImage?
-    private var renderedLayerCache: [Int: NSImage] = [:]
-    private var opaqueRenderedLayerCache: [Int: NSImage] = [:]
+    private let renderedLayerCache = SurfaceImageCache()
     private var persistentAnimationLayers: [Int: PersistentAnimationLayer] = [:]
     private var enabledBindGroups: Set<Int> = []
     private var animationTasks: [Int: Task<Void, Never>] = [:]
@@ -1274,7 +1273,6 @@ private final class CharacterSurfaceController {
         isRepaintLocked = false
         pendingAnimationImage = nil
         renderedLayerCache.removeAll()
-        opaqueRenderedLayerCache.removeAll()
 
         if scope == 0,
            let runtime = NijigenerateShellRuntime.locate(shellDirectory: shell.directory)
@@ -1391,7 +1389,6 @@ private final class CharacterSurfaceController {
         enabledBindGroups = groups
         schedulerTask?.cancel()
         renderedLayerCache.removeAll()
-        opaqueRenderedLayerCache.removeAll()
         if nijigenerateView != nil {
             if let shell, let baseSurfaceID {
                 imageView?.collisions = effectiveCollisions(
@@ -1897,6 +1894,12 @@ private final class CharacterSurfaceController {
         imageView = nil
         nijigenerateView = nil
         nijigenerateBaseSize = nil
+        renderedLayerCache.removeAll()
+        surfaceBaseImage = nil
+        baseImage = nil
+        pendingAnimationImage = nil
+        persistentAnimationLayers.removeAll()
+        shell = nil
     }
 
     func restore() {
@@ -2631,8 +2634,7 @@ private final class CharacterSurfaceController {
         guard !visited.contains(surfaceID) else {
             throw ShellError.missingSurface(id: surfaceID, directory: shell.directory)
         }
-        let cache = ignoresTransparency ? opaqueRenderedLayerCache : renderedLayerCache
-        if let cached = cache[surfaceID] {
+        if let cached = renderedLayerCache[surfaceID, ignoresTransparency] {
             return cached
         }
         let image: NSImage
@@ -2658,11 +2660,7 @@ private final class CharacterSurfaceController {
                 ? try imageLoader.applyingOpaqueAlpha(to: rendered)
                 : rendered
         }
-        if ignoresTransparency {
-            opaqueRenderedLayerCache[surfaceID] = image
-        } else {
-            renderedLayerCache[surfaceID] = image
-        }
+        renderedLayerCache[surfaceID, ignoresTransparency] = image
         return image
     }
 
