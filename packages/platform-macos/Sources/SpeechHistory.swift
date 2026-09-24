@@ -56,27 +56,48 @@ public struct SpeechHistoryEntry: Identifiable, Sendable, Equatable {
         self.text = text
         self.timestamp = timestamp
     }
+
+    fileprivate func withThumbnail(_ data: Data?) -> Self {
+        Self(
+            id: id, talkIdentifier: talkIdentifier,
+            ghostIdentifier: ghostIdentifier, ghostName: ghostName,
+            scope: scope, speakerName: speakerName, surfaceID: surfaceID,
+            thumbnailPNGData: data, text: text, timestamp: timestamp
+        )
+    }
 }
 
 @MainActor
 public final class SpeechHistoryStore: ObservableObject {
     @Published public private(set) var entries: [SpeechHistoryEntry] = []
     public let capacityPerGhost: Int
+    private let thumbnails = SpeechHistoryThumbnailPool()
+    var uniqueThumbnailCount: Int {
+        thumbnails.count
+    }
 
     public init(capacityPerGhost: Int = 500) {
         self.capacityPerGhost = max(1, capacityPerGhost)
     }
 
     public func append(_ entry: SpeechHistoryEntry) {
-        entries.append(entry)
+        entries.append(entry.withThumbnail(thumbnails.retain(entry.thumbnailPNGData)))
         trimEntries(for: entry.ghostIdentifier)
     }
 
     public func upsert(_ entry: SpeechHistoryEntry) {
         if let index = entries.firstIndex(where: { $0.id == entry.id }) {
-            entries[index] = entry
+            let previous = entries[index].thumbnailPNGData
+            if previous == entry.thumbnailPNGData {
+                // Character-by-character updates keep the already shared bytes.
+                entries[index] = entry.withThumbnail(previous)
+            } else {
+                let data = thumbnails.retain(entry.thumbnailPNGData)
+                thumbnails.release(previous)
+                entries[index] = entry.withThumbnail(data)
+            }
         } else {
-            entries.append(entry)
+            entries.append(entry.withThumbnail(thumbnails.retain(entry.thumbnailPNGData)))
         }
         trimEntries(for: entry.ghostIdentifier)
     }
@@ -88,7 +109,7 @@ public final class SpeechHistoryStore: ObservableObject {
         let overflow = matchingIndices.count - capacityPerGhost
         if overflow > 0 {
             for index in matchingIndices.prefix(overflow).reversed() {
-                entries.remove(at: index)
+                thumbnails.release(entries.remove(at: index).thumbnailPNGData)
             }
         }
     }
@@ -99,9 +120,14 @@ public final class SpeechHistoryStore: ObservableObject {
 
     public func clear(ghostIdentifier: String? = nil) {
         if let ghostIdentifier {
-            entries.removeAll { $0.ghostIdentifier == ghostIdentifier }
+            entries.removeAll {
+                guard $0.ghostIdentifier == ghostIdentifier else { return false }
+                thumbnails.release($0.thumbnailPNGData)
+                return true
+            }
         } else {
             entries.removeAll(keepingCapacity: true)
+            thumbnails.removeAll()
         }
     }
 }
@@ -114,6 +140,7 @@ public struct SpeechHistoryView: View {
     private let background: Color
     private let textScale: CGFloat
     private let onClose: (() -> Void)?
+    @State private var thumbnails = SpeechHistoryThumbnailCache()
     @State private var scrollTarget: SpeechHistoryScrollTarget?
 
     public init(
@@ -179,7 +206,8 @@ public struct SpeechHistoryView: View {
                                         || entries[index - 1].talkIdentifier != entry.talkIdentifier,
                                     endsTalk: index == entries.count - 1
                                         || entries[index + 1].talkIdentifier != entry.talkIdentifier,
-                                    textScale: textScale
+                                    textScale: textScale,
+                                    thumbnails: thumbnails
                                 )
                                 .id(entry.id)
                             }
@@ -232,6 +260,7 @@ private struct SpeechHistoryRow: View {
     let beginsTalk: Bool
     let endsTalk: Bool
     let textScale: CGFloat
+    let thumbnails: SpeechHistoryThumbnailCache
 
     private var accent: Color {
         let colors: [Color] = [.red, .blue, .green, .orange, .purple, .cyan]
@@ -241,9 +270,7 @@ private struct SpeechHistoryRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Group {
-                if let thumbnailPNGData = entry.thumbnailPNGData,
-                   let image = NSImage(data: thumbnailPNGData)
-                {
+                if let image = thumbnails.image(for: entry.thumbnailPNGData) {
                     Image(nsImage: image)
                         .resizable()
                         .scaledToFill()
