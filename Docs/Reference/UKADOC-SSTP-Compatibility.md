@@ -4,7 +4,7 @@
 
 UtataneはSocket SSTPとSSTP over HTTPを扱います。Windowsの`WM_COPYDATA`を使うDirect SSTPは、macOSでは対象外です。
 
-調査日: 2026-08-25
+調査日: 2026-09-24（中断通知・予約再生を追記）
 調査結果: ✅ 18 / 🟡 2 / ❌ 0 / ➖ 3
 
 ## 通信と共通仕様
@@ -29,6 +29,10 @@ UtataneはSocket SSTPとSSTP over HTTPを扱います。Windowsの`WM_COPYDATA`�
 | EXECUTE | ✅ | 下記portable commandを実行。未知commandは501 |
 
 SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを選択できます。`IfGhost`と直後の`Script`の組を出現順に評価し、該当しなければdefault Scriptを使います。`Option: nobreak`は現在の再生完了後へキューイングします。`nodescript`はUtataneに専用SSTPマーカーがないため結果に差はありません。`notranslate`は、SSTPで受け取ったScriptを現在のMAKOTO経路へ渡していないため、指定の有無で差はありません。
+
+新しいSSTPが再生中のSSTPを中断する時は、`OnSSTPBreak`へその時点のスクリプト・話者・タグ込みの文字位置を渡します。`nobreak`の予約内容を中断対象と取り違えないようにし、新しい会話へ置き換えたり再生をキャンセルしたりした時は、残った予約も取り消します。
+
+`Option: strict`の解釈エラーログは未対応です。Parserは元スクリプトの位置情報を保持できますが、不正な引数や存在しないサーフェスなどを診断して記録する処理は別途必要です。
 
 ## EXECUTE command
 

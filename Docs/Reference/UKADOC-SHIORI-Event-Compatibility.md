@@ -95,7 +95,7 @@ UKADOC掲載イベント数: 304
 | [`OnVanishSelecting`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanishSelecting) | ✅ | コンテンツエクスプローラまたは確認付きvanishbymyselfから、確認画面を出す前に発行。実画面での一連操作は未確認 |
 | [`OnVanishSelected`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanishSelected) | ✅ | 確認後または即時vanishbymyselfで、SHIORI終了前に発行して応答スクリプトを再生。実画面での一連操作は未確認 |
 | [`OnVanishCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanishCancel) | ✅ | 消滅確認をキャンセルした時に発行して応答スクリプトを再生。実画面での一連操作は未確認 |
-| [`OnVanishButtonHold`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanishButtonHold) | ✅ | OnVanishSelected再生中のバルーンをダブルクリックした時にスクリプト・scope・表示文字位置を通知し、再生と消滅処理を取り消す |
+| [`OnVanishButtonHold`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanishButtonHold) | ✅ | OnVanishSelected再生中のバルーンをダブルクリックした時にスクリプト・操作scope・タグ込みの中断文字位置を通知し、再生と消滅処理を取り消す。日本語とタグを含む位置をテスト済み、実ゴーストでの操作確認待ち |
 | [`OnVanished`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVanished) | ✅ | 消滅後の切り替え先へ消滅元の本体名・最終スクリプト・ゴースト名と切替先シェル名をReference0〜2・7で通知し、無応答ならOnBootへフォールバック。テスト済み |
 | [`OnOtherGhostVanished`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostVanished) | ✅ | 呼び出しゴーストの消滅後、他の起動中ゴーストへReference0〜2・7を発行し、204時はOnVanishedへフォールバック。実画面での一連操作は未確認 |
 
@@ -160,7 +160,7 @@ UKADOC掲載イベント数: 304
 
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
-| [`OnBalloonBreak`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonBreak) | 🟡 | 通常トークを別のトークが置き換える時にスクリプト・scope・表示文字位置を通知。生SakuraScriptのバイト位置とは一致しない場合あり |
+| [`OnBalloonBreak`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonBreak) | 🟡 | 通常トークを別のトークが置き換える時に、再生中スクリプト・scope・タグ込みの中断文字位置を通知。日本語・エスケープ・翻訳・埋め込み／割り込み応答をテスト済み。補助文字・結合文字のSSPとの数え方の照合と、実ゴーストでの操作確認待ち |
 | [`OnBalloonClose`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonClose) | ✅ | 再生完了後にユーザーがバルーンをクリックして閉じた時、表示スクリプトをReference0へ通知。Playerテストで確認 |
 | [`OnBalloonTimeout`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonTimeout) | ✅ | 選択肢のないバルーンが表示期限で閉じる時、スクリプトと残り時間0を通知。Playerテストで確認 |
 
@@ -293,7 +293,7 @@ UKADOC掲載イベント数: 304
 
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
-| [`OnSSTPBreak`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSSTPBreak) | 🟡 | nobreakなしの新しいSSTPが再生中SSTPを中断する際に発行。Reference0は中断スクリプト、Reference1は0。Reference2は現在0固定 |
+| [`OnSSTPBreak`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSSTPBreak) | 🟡 | nobreakなしの新しいSSTPが再生中SSTPを中断する際に、実際の再生スクリプト・scope・タグ込みの中断文字位置を通知。予約中・完了済み・通常会話と区別するテスト済み。SSTP以外からの中断経路と、補助文字・結合文字のSSPとの数え方の照合は未完了 |
 | [`OnSSTPBlacklisting`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSSTPBlacklisting) | ➖ | UKADOCではMateria専用の送信元ブラックリストイベントであり、SSP互換対象外 |
 
 ## その他通信イベント

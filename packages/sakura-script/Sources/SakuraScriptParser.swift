@@ -8,15 +8,31 @@ public struct SakuraScriptParser: Sendable {
     }
 
     public func parse(_ source: String) -> [SakuraScriptToken] {
+        var locations: [SakuraScriptSourceLocation]?
+        return parse(source, locations: &locations)
+    }
+
+    /// Retains character positions in the source, including tags and escapes.
+    public func parseLocated(_ source: String) -> [SakuraScriptLocatedToken] {
+        var locations: [SakuraScriptSourceLocation]? = []
+        let tokens = parse(source, locations: &locations)
+        return zip(tokens, locations ?? []).map { SakuraScriptLocatedToken(token: $0, location: $1) }
+    }
+
+    private func parse(_ source: String, locations: inout [SakuraScriptSourceLocation]?) -> [SakuraScriptToken] {
         let characters = Array(source)
         var index = 0
         var text = ""
+        var textStart = 0
+        var textEnds: [Int] = []
         var tokens: [SakuraScriptToken] = []
 
         func flushText() {
             guard !text.isEmpty else { return }
             tokens.append(.text(text))
+            locations?.append(.init(range: textStart ..< index, textCharacterEnds: textEnds))
             text = ""
+            textEnds.removeAll(keepingCapacity: true)
         }
 
         while index < characters.count {
@@ -30,6 +46,7 @@ public struct SakuraScriptParser: Sendable {
                     if let property = bracketArgument(in: characters, index: &argumentIndex) {
                         flushText()
                         tokens.append(.property(property))
+                        locations?.append(.init(range: index ..< argumentIndex))
                         index = argumentIndex
                         continue
                     }
@@ -47,28 +64,56 @@ public struct SakuraScriptParser: Sendable {
                 }) {
                     flushText()
                     tokens.append(name == "*" ? .marker : .environmentVariable(name))
+                    locations?.append(.init(range: index ..< (index + name.count + 1)))
                     index += name.count + 1
                     continue
                 }
             }
             guard characters[index] == "\\" else {
+                if text.isEmpty {
+                    textStart = index
+                }
                 text.append(characters[index])
                 index += 1
+                if locations != nil {
+                    textEnds.append(index)
+                }
                 continue
             }
 
             guard index + 1 < characters.count else {
+                if text.isEmpty {
+                    textStart = index
+                }
                 text.append("\\")
+                index += 1
+                if locations != nil {
+                    textEnds.append(index)
+                }
                 break
             }
 
             if characters[index + 1] == "\\" {
+                if text.isEmpty {
+                    textStart = index
+                }
                 text.append("\\")
                 index += 2
+                if locations != nil {
+                    textEnds.append(index)
+                }
                 continue
             }
 
             flushText()
+            let sourceStart = index
+            let tokenStart = tokens.count
+            var literalTextEnds: [Int]?
+            defer {
+                for _ in tokenStart ..< tokens.count {
+                    locations?.append(.init(range: sourceStart ..< index, textCharacterEnds: literalTextEnds))
+                }
+            }
             index += 1
             let command = characters[index]
             index += 1
@@ -332,12 +377,16 @@ public struct SakuraScriptParser: Sendable {
                 {
                     let delimiter = characters[index]
                     index += 1
+                    let literalStart = index
                     let literal = readLiteralSection(
                         endingWith: delimiter,
                         in: characters,
                         index: &index
                     )
                     if !literal.isEmpty {
+                        if locations != nil {
+                            literalTextEnds = Array((literalStart + 1) ... (literalStart + literal.count))
+                        }
                         tokens.append(.text(literal))
                     }
                 } else if index < characters.count, characters[index] == "u" {

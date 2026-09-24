@@ -58,44 +58,57 @@ func filteredSakuraScriptTokens(
     policy: SakuraScriptPlaybackPolicy
 ) -> [SakuraScriptToken] {
     guard policy == .externalMessage else { return tokens }
-    return tokens.filter { token in
-        switch token {
-        case .text,
-             .scope,
-             .surface,
-             .namedSurface,
-             .animation,
-             .stopAnimation,
-             .pauseAnimation,
-             .resumeAnimation,
-             .balloonSurface,
-             .lineBreak,
-             .cursorMove,
-             .automaticLineBreak,
-             .partialClear,
-             .wait,
-             .waitUntil,
-             .waitForClick,
-             .balloonTimeout,
-             .balloonWait,
-             .balloonOffset,
-             .balloonAlignment,
-             .balloonMarker,
-             .balloonNumber,
-             .serikoTalk,
-             .autoscroll,
-             .marker,
-             .font,
-             .quickSection,
-             .voiceMode,
-             .synchronizeScopes,
-             .clear,
-             .clearAll,
-             .end:
-            true
-        default:
-            false
-        }
+    return tokens.filter { allowsSakuraScriptToken($0, policy: policy) }
+}
+
+private func allowsSakuraScriptToken(_ token: SakuraScriptToken, policy: SakuraScriptPlaybackPolicy) -> Bool {
+    guard policy == .externalMessage else { return true }
+    return switch token {
+    case .text,
+         .scope,
+         .surface,
+         .namedSurface,
+         .animation,
+         .stopAnimation,
+         .pauseAnimation,
+         .resumeAnimation,
+         .balloonSurface,
+         .lineBreak,
+         .cursorMove,
+         .automaticLineBreak,
+         .partialClear,
+         .wait,
+         .waitUntil,
+         .waitForClick,
+         .balloonTimeout,
+         .balloonWait,
+         .balloonOffset,
+         .balloonAlignment,
+         .balloonMarker,
+         .balloonNumber,
+         .serikoTalk,
+         .autoscroll,
+         .marker,
+         .font,
+         .quickSection,
+         .voiceMode,
+         .synchronizeScopes,
+         .clear,
+         .clearAll,
+         .end:
+        true
+    default:
+        false
+    }
+}
+
+private struct PlaybackToken {
+    let token: SakuraScriptToken
+    var source: String?
+    var location: SakuraScriptSourceLocation?
+
+    func expandedText(_ text: String) -> PlaybackToken {
+        PlaybackToken(token: .text(text), source: source, location: location.map { .init(range: $0.range) })
     }
 }
 
@@ -111,8 +124,16 @@ public final class SakuraScriptPlayer {
     private var postDialogueDismissalMilliseconds: Int
     private var playbackGeneration: UInt64 = 0
     private var playbackTask: Task<Void, Never>?
-    private var queuedPlaybackTail: Task<Void, Never>?
-    private var pendingInterrupts: [[SakuraScriptToken]] = []
+    private struct QueuedPlayback {
+        let script: SakuraScript
+        let balloon: BalloonDefinition
+        let characterDelayMilliseconds: Int?
+        let policy: SakuraScriptPlaybackPolicy
+        let sstpMessage: String?
+    }
+
+    private var queuedPlaybacks: [QueuedPlayback] = []
+    private var pendingInterrupts: [[PlaybackToken]] = []
     private var dismissalTask: Task<Void, Never>?
     private var surfaceRestoreTask: Task<Void, Never>?
     private let surfaceRestoreDelayMilliseconds: Int
@@ -205,6 +226,24 @@ public final class SakuraScriptPlayer {
     public var onSpeechSynthesisActivity: (@MainActor (Bool) -> Void)?
     public var onSurfaceRestore: (@MainActor () -> Void)?
     public var onPlaybackFinished: (@MainActor () -> Void)?
+
+    /// A snapshot of the script actually being played, after translation.
+    public var playbackPosition: SakuraScriptPlaybackPosition? {
+        guard isDialogueActive else { return nil }
+        return .init(script: currentScriptRawValue, scope: currentPlaybackScope,
+                     characterOffset: currentPlaybackCharacterPosition)
+    }
+
+    public var sstpBreakEvent: GhostEvent? {
+        guard playbackTask != nil, currentSSTPMessage != nil, let playbackPosition else { return nil }
+        return .shiori(id: "OnSSTPBreak", references: playbackPosition.references)
+    }
+
+    private func playbackTokens(_ script: SakuraScript, policy: SakuraScriptPlaybackPolicy = .trusted) -> [PlaybackToken] {
+        parser.parseLocated(script.rawValue).filter { allowsSakuraScriptToken($0.token, policy: policy) }.map {
+            PlaybackToken(token: $0.token, source: script.rawValue, location: $0.location)
+        }
+    }
 
     public var isDialogueActive: Bool {
         playbackTask != nil || isPlaybackComplete
@@ -361,6 +400,22 @@ public final class SakuraScriptPlayer {
         onPresentationReady: (@MainActor () -> Void)? = nil
     ) {
         guard !(preventsUserBreak && playbackTask != nil) else { return }
+        queuedPlaybacks.removeAll()
+        startPlayback(script, balloon: balloon, characterDelayMilliseconds: characterDelayMilliseconds,
+                      policy: policy, sstpMessage: sstpMessage, context: context,
+                      onPresentationReady: onPresentationReady)
+    }
+
+    private func startPlayback(
+        _ script: SakuraScript,
+        balloon: BalloonDefinition,
+        characterDelayMilliseconds: Int? = nil,
+        policy: SakuraScriptPlaybackPolicy = .trusted,
+        sstpMessage: String? = nil,
+        context: SakuraScriptPlaybackContext = .init(),
+        onPresentationReady: (@MainActor () -> Void)? = nil
+    ) {
+        guard !(preventsUserBreak && playbackTask != nil) else { return }
         if playbackTask != nil, currentSSTPMessage == nil, context.eventID != "OnBalloonBreak" {
             onBalloonBreak?(
                 currentScriptRawValue,
@@ -379,6 +434,7 @@ public final class SakuraScriptPlayer {
         isPlaybackComplete = false
         isTimeCritical = false
         currentBalloon = balloon
+        currentScriptRawValue = script.rawValue
         currentPlaybackScope = 0
         currentPlaybackCharacterPosition = 0
         currentSSTPMessage = sstpMessage
@@ -393,17 +449,17 @@ public final class SakuraScriptPlayer {
             guard let self, await suspensionClock.waitUntilActive() else { return }
             let expanded = SakuraScript(rawValue: expandEnvironmentVariables(in: script.rawValue))
             let effectiveScript = await onTranslate?(expanded, context) ?? expanded
-            guard await suspensionClock.waitUntilActive() else { return }
+            guard await suspensionClock.waitUntilActive(), !Task.isCancelled else { return }
             currentScriptRawValue = effectiveScript.rawValue
-            var tokens = filteredSakuraScriptTokens(parser.parse(effectiveScript), policy: policy)
-            let continuesPreviousDialogue = tokens.first == .clearAll
+            var tokens = playbackTokens(effectiveScript, policy: policy)
+            let continuesPreviousDialogue = tokens.first?.token == .clearAll
             if continuesPreviousDialogue {
                 tokens.removeFirst()
             } else {
                 balloonWindowController.hideAll()
                 balloonWindowController.clearPositionedImages()
             }
-            configureCompletionTimeout(for: tokens)
+            configureCompletionTimeout(for: tokens.map(\.token))
             onTalkPlayback?(.before, effectiveScript, context)
             await run(
                 tokens,
@@ -454,20 +510,20 @@ public final class SakuraScriptPlayer {
         policy: SakuraScriptPlaybackPolicy = .trusted,
         sstpMessage: String? = nil
     ) {
-        let previous = queuedPlaybackTail ?? playbackTask
-        let task = Task { @MainActor [weak self] in
-            await previous?.value
-            guard !Task.isCancelled, let self else { return }
-            play(
-                script,
-                balloon: balloon,
-                characterDelayMilliseconds: characterDelayMilliseconds,
-                policy: policy,
-                sstpMessage: sstpMessage
-            )
-            await playbackTask?.value
+        let request = QueuedPlayback(script: script, balloon: balloon,
+                                     characterDelayMilliseconds: characterDelayMilliseconds,
+                                     policy: policy, sstpMessage: sstpMessage)
+        if playbackTask == nil {
+            playQueued(request)
+        } else {
+            queuedPlaybacks.append(request)
         }
-        queuedPlaybackTail = task
+    }
+
+    private func playQueued(_ request: QueuedPlayback) {
+        startPlayback(request.script, balloon: request.balloon,
+                      characterDelayMilliseconds: request.characterDelayMilliseconds,
+                      policy: request.policy, sstpMessage: request.sstpMessage)
     }
 
     public func interrupt(
@@ -485,11 +541,11 @@ public final class SakuraScriptPlayer {
             )
             return
         }
-        var tokens = filteredSakuraScriptTokens(parser.parse(script), policy: policy)
-        if tokens.first == .clearAll {
+        var tokens = playbackTokens(script, policy: policy)
+        if tokens.first?.token == .clearAll {
             tokens.removeFirst()
         }
-        while tokens.last == .end {
+        while tokens.last?.token == .end {
             tokens.removeLast()
         }
         guard !tokens.isEmpty else { return }
@@ -533,8 +589,7 @@ public final class SakuraScriptPlayer {
 
     private func cancel(hidesBalloon: Bool) {
         playbackGeneration &+= 1
-        queuedPlaybackTail?.cancel()
-        queuedPlaybackTail = nil
+        queuedPlaybacks.removeAll()
         pendingInterrupts.removeAll()
         playbackTask?.cancel()
         dismissalTask?.cancel()
@@ -570,7 +625,7 @@ public final class SakuraScriptPlayer {
     }
 
     private func run(
-        _ tokens: [SakuraScriptToken],
+        _ tokens: [PlaybackToken],
         balloon: BalloonDefinition,
         characterDelayMilliseconds: Int,
         continuesPreviousDialogue: Bool,
@@ -826,16 +881,29 @@ public final class SakuraScriptPlayer {
                 guard !Task.isCancelled else { return }
                 if !pendingInterrupts.isEmpty {
                     var interrupt = pendingInterrupts.removeFirst()
-                    interrupt.append(.scope(scope))
+                    interrupt.append(PlaybackToken(token: .scope(scope)))
                     pendingTokens.insert(contentsOf: interrupt, at: 0)
                 }
-                let token = pendingTokens.removeFirst()
-                switch token {
+                let located = pendingTokens.removeFirst()
+                if let source = located.source, let location = located.location {
+                    currentScriptRawValue = source
+                    currentPlaybackCharacterPosition = location.range.lowerBound
+                }
+                defer {
+                    if !Task.isCancelled, let location = located.location {
+                        currentPlaybackCharacterPosition = location.range.upperBound
+                    }
+                }
+                // Commands are consumed atomically; text advances one source character at a time.
+                if case .text = located.token {} else if let location = located.location {
+                    currentPlaybackCharacterPosition = location.range.upperBound
+                }
+                switch located.token {
                 case let .text(text):
                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         revealPresentation()
                     }
-                    for character in text {
+                    for (characterIndex, character) in text.enumerated() {
                         guard !Task.isCancelled else { return }
                         let targetScopes = synchronizedScopes?.sorted() ?? [scope]
                         for targetScope in targetScopes {
@@ -863,7 +931,10 @@ public final class SakuraScriptPlayer {
                             }
                         }
                         speechHistoryRecorder?.append(character)
-                        currentPlaybackCharacterPosition += 1
+                        if let location = located.location {
+                            currentPlaybackCharacterPosition = location.textCharacterEnds?[characterIndex]
+                                ?? location.range.upperBound
+                        }
                         if !fastForwardRequested, !isQuickSection {
                             try await sleep(milliseconds: currentCharacterDelayMilliseconds)
                         }
@@ -1070,7 +1141,7 @@ public final class SakuraScriptPlayer {
                     )
                     if notifiesEvents {
                         if let response = await notifyDressupChanges(changes) {
-                            pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                            pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                         }
                     }
                 case let .balloonSurface(style):
@@ -1348,12 +1419,12 @@ public final class SakuraScriptPlayer {
                     try activateIfNeeded(scope: scope)
                     updateContent(scope: scope)
                 case let .environmentVariable(name):
-                    pendingTokens.insert(.text(environmentValue(for: name)), at: 0)
+                    pendingTokens.insert(located.expandedText(environmentValue(for: name)), at: 0)
                 case let .property(property):
-                    await pendingTokens.insert(.text(onPropertyValue?(property) ?? ""), at: 0)
+                    await pendingTokens.insert(located.expandedText(onPropertyValue?(property) ?? ""), at: 0)
                 case let .getProperties(eventID, properties):
                     if let response = await onGetProperties?(eventID, properties) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .setProperty(property, value):
                     await onSetProperty?(property, value)
@@ -1419,11 +1490,11 @@ public final class SakuraScriptPlayer {
                     try await soundPlayer.execute(command)
                 case let .embeddedEvent(id, arguments):
                     if let embeddedScript = await onEmbeddedEvent?(id, arguments) {
-                        pendingTokens.insert(contentsOf: parser.parse(embeddedScript), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(embeddedScript), at: 0)
                     }
                 case let .raisedEvent(id, arguments):
                     if let raisedScript = await onEmbeddedEvent?(id, arguments) {
-                        pendingTokens = parser.parse(raisedScript)
+                        pendingTokens = playbackTokens(raisedScript)
                     } else {
                         return
                     }
@@ -1435,7 +1506,7 @@ public final class SakuraScriptPlayer {
                     if let response = await onPluginEvent?(target, id, arguments, reflectsResponse),
                        reflectsResponse
                     {
-                        pendingTokens = parser.parse(response)
+                        pendingTokens = playbackTokens(response)
                     }
                 case let .timerEvent(milliseconds, repeats, reflectsResponse, id, arguments):
                     scheduleEventTimer(
@@ -1527,7 +1598,7 @@ public final class SakuraScriptPlayer {
                     onOtherSurfaceChangeNotificationsChange?(enabled)
                 case let .selectRectangle(enabled):
                     if let response = await onSelectRectangle?(scope, enabled) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .otherTimerEvent(target, milliseconds, repeats, reflectsResponse, id, arguments):
                     scheduleOtherEventTimer(
@@ -1546,15 +1617,15 @@ public final class SakuraScriptPlayer {
                     onCloseSystemDialog?(id)
                 case let .communicateBox(initialValue):
                     if let response = await onCommunicateBox?(initialValue) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .teachBox(initialValue):
                     if let response = await onTeachBox?(initialValue) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .archive(command):
                     if let response = await onArchive?(command) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .contentAction(action):
                     onContentAction?(action)
@@ -1569,49 +1640,49 @@ public final class SakuraScriptPlayer {
                     balloonWindowController.resetWindowPositions()
                 case let .inputBox(command):
                     if let response = await onInputBox?(command) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .systemDialog(command):
                     if let response = await onSystemDialog?(command) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .http(request):
                     if let response = await onHTTP?(request) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .schedule(command):
                     if let response = await onSchedule?(command) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .fileWatch(command):
                     if let response = await onFileWatch?(command) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .networkDiagnostic(command):
                     if let response = await onNetworkDiagnostic?(command) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case .emptyRecycleBin:
                     if let response = await onEmptyRecycleBin?() {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .checkMail(account):
                     if let response = await onCheckMail?(account) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .webSocket(command):
                     await onWebSocket?(command)
                 case let .weatherGet(eventID):
                     if let response = await onWeatherGet?(eventID) {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case .sntpStart:
                     if let response = await onSNTPStart?() {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case .sntpCorrect:
                     if let response = await onSNTPCorrect?() {
-                        pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case .clear:
                     textByScope[scope] = ""
@@ -2219,6 +2290,11 @@ public final class SakuraScriptPlayer {
         balloonWindowController.setWaitingForClick(false)
         finishPlaybackWait()
         onPlaybackFinished?()
+        guard playbackTask == nil else { return }
+        if !queuedPlaybacks.isEmpty {
+            playQueued(queuedPlaybacks.removeFirst())
+            return
+        }
         dismissalTask?.cancel()
         guard interactionMode != .passive else { return }
         guard let timeout = completedDialogueTimeoutMilliseconds else { return }

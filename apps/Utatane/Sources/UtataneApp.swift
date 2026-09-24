@@ -352,7 +352,6 @@ private struct UtataneRootView: View {
     @State private var siteMenuResources: [URL: GhostSiteMenuResources] = [:]
     @State private var sstpCookies: [String: [String: String]] = [:]
     @State private var sstpQuietUntil: Date?
-    @State private var activeSSTPScripts: [URL: String] = [:]
     @State private var contentPickerController = ContentPickerWindowController()
     @State private var contentExplorerController = ContentExplorerWindowController()
     @State private var aiGraphWindowController = AIGraphWindowController()
@@ -7323,7 +7322,7 @@ private struct UtataneRootView: View {
         }
         let activeSession = target.session
         let activeBalloon = target.balloon
-        let sstpSender = request.value(for: "Sender") ?? request.value(for: "User-Agent")
+        let sstpSender = request.value(for: "Sender") ?? request.value(for: "User-Agent") ?? ""
         let options = Set((request.value(for: "Option") ?? "").lowercased().split(separator: ",").map {
             $0.trimmingCharacters(in: .whitespaces)
         })
@@ -7352,12 +7351,8 @@ private struct UtataneRootView: View {
         AppLogStore.shared.info("SSTPスクリプト再生", category: "SSTP", details: script.rawValue)
         if options.contains("nobreak") {
             target.player.enqueue(script, balloon: activeBalloon, sstpMessage: sstpSender)
-        } else if let interrupted = activeSSTPScripts[target.ghost.id], target.player.isDialogueActive {
-            let breakResponse = try? await activeSession.handle(event: .shiori(id: "OnSSTPBreak", references: [
-                0: interrupted,
-                1: "0",
-                2: "0"
-            ]))
+        } else if let breakEvent = target.player.sstpBreakEvent {
+            let breakResponse = try? await activeSession.handle(event: breakEvent)
             if let breakResponse, !breakResponse.rawValue.isEmpty {
                 target.player.play(breakResponse, balloon: activeBalloon, sstpMessage: sstpSender)
                 target.player.enqueue(script, balloon: activeBalloon, sstpMessage: sstpSender)
@@ -7367,7 +7362,6 @@ private struct UtataneRootView: View {
         } else {
             target.player.play(script, balloon: activeBalloon, sstpMessage: sstpSender)
         }
-        activeSSTPScripts[target.ghost.id] = script.rawValue
         return SSTPResponse(script: script.rawValue)
     }
 

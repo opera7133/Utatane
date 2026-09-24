@@ -26,25 +26,25 @@ func `cancels vanish playback on a balloon double click`() async throws {
         balloonWindowController: balloonController
     )
     var heldReferences: (String, Int, Int)?
-    var presentationReady = false
     player.onVanishButtonHold = { heldReferences = ($0, $1, $2) }
-    let source = #"消滅します\_w[5000]\e"#
+    let prefix = #"\0消滅します\x"#
+    let source = prefix + #"\e"#
     let playback = Task {
         await player.playAndWait(
             SakuraScript(rawValue: source),
             balloon: makeBalloon(directory: directory),
             characterDelayMilliseconds: 0,
-            context: .init(eventID: "OnVanishSelected"),
-            onPresentationReady: { presentationReady = true }
+            context: .init(eventID: "OnVanishSelected")
         )
     }
-    try await requireEventually { presentationReady }
+    try await requireEventually { player.playbackPosition?.characterOffset == prefix.count }
     balloonController.onDoubleClick?(0)
     await playback.value
 
     #expect(player.didCancelVanishPlayback)
     #expect(heldReferences?.0 == source)
     #expect(heldReferences?.1 == 0)
+    #expect(heldReferences?.2 == prefix.count)
 }
 
 @Test
