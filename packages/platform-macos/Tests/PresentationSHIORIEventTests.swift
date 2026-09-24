@@ -5,6 +5,97 @@ import UtataneCore
 import UtataneSakuraScript
 import UtataneShell
 
+@Test(arguments: [GhostWindowMode.shared, .perGhost]) @MainActor
+func `container resize notifies only sessions on that stage`(mode: GhostWindowMode) async throws {
+    let (defaults, _) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let frame = CGRect(x: 0, y: 0, width: 1200, height: 800)
+    let geometry = MutablePresentationGeometryProvider(screens: [
+        .init(frame: frame, visibleFrame: frame, bitsPerPixel: 32, scale: 1, isPrimary: true)
+    ])
+    let coordinator = PresentationCoordinator(mode: mode, systemGeometry: geometry, defaults: defaults)
+    let main = coordinator.makeSession(title: "main")
+    let called = coordinator.makeSession(title: "called")
+    let item = main.presentationHost.makeItem(kind: .surface, title: "surface", onMove: { _, _ in }, onCancel: nil)
+    defer { item.discard() }
+    let window = try #require(item.captureWindowNumber.flatMap { NSApp.window(withWindowNumber: $0) })
+    let root = try #require(window.contentView as? WindowModeStageRootView)
+    var mainEvents: [[GhostEvent]] = []
+    var calledEvents: [[GhostEvent]] = []
+    main.onDisplayChange = { mainEvents.append($0) }
+    called.onDisplayChange = { calledEvents.append($0) }
+
+    // Exercise layout without depending on native window size constraints in CI.
+    for size in [NSSize(width: 800, height: 600), NSSize(width: 900, height: 700)] {
+        root.setFrameSize(size)
+        root.needsLayout = true
+        root.layoutSubtreeIfNeeded()
+    }
+    try await requireEventually { !mainEvents.isEmpty }
+    let expected: [GhostEvent] = [
+        .shiori(id: "OnDisplayChange", references: [0: "32", 1: "900", 2: "700"]),
+        .shiori(id: "OnDisplayChangeEx", references: [0: "update", 1: "0,0,900,700,32,1,unknown,0"])
+    ]
+    #expect(mainEvents == [expected])
+    #expect(calledEvents == (mode == .shared ? [expected] : []))
+
+    root.setSpeechHistoryHeight(180)
+    try await requireEventually { mainEvents.count == 2 }
+    let withHistory: [GhostEvent] = [
+        .shiori(id: "OnDisplayChange", references: [0: "32", 1: "900", 2: "520"]),
+        .shiori(id: "OnDisplayChangeEx", references: [0: "update", 1: "0,0,900,520,32,1,unknown,0"])
+    ]
+    let updates = [expected, withHistory]
+    #expect(mainEvents == updates)
+    #expect(calledEvents == (mode == .shared ? updates : []))
+
+    let resized = CGRect(x: 0, y: 0, width: 1600, height: 900)
+    geometry.update(screens: [.init(frame: resized, visibleFrame: resized, bitsPerPixel: 32, scale: 1, isPrimary: true)])
+    coordinator.screenParametersDidChange()
+    #expect(mainEvents == updates) // Real monitors do not change virtual screens.
+
+    root.setFrameSize(NSSize(width: 1000, height: 750))
+    root.needsLayout = true
+    root.layoutSubtreeIfNeeded()
+    coordinator.setMode(.off) // A pending callback from the old host must be ignored.
+    await withCheckedContinuation { continuation in
+        DispatchQueue.main.async { continuation.resume() }
+    }
+    #expect(mainEvents == updates)
+    #expect(calledEvents == (mode == .shared ? updates : []))
+
+    geometry.update(screens: [.init(frame: frame, visibleFrame: frame, bitsPerPixel: 32, scale: 1, isPrimary: true)])
+    coordinator.screenParametersDidChange()
+    coordinator.screenParametersDidChange() // Repeated notifications with unchanged geometry are suppressed.
+    #expect(mainEvents.count == 3)
+    #expect(calledEvents.last == geometry.displayChangeEvents())
+    #expect(calledEvents.count == (mode == .shared ? 3 : 1))
+}
+
+@Test @MainActor
+func `discarding stage items releases their cancellation handlers`() {
+    let stage = WindowModePresentationHost(mode: .shared)
+    var currentCancelCount = 0
+    let current = stage.makeItem(kind: .surface, title: "current", onMove: { _, _ in }, onCancel: {
+        currentCancelCount += 1
+    })
+    defer { current.discard() }
+    for _ in 0 ..< 20 {
+        var owner: NSObject? = NSObject()
+        weak let weakOwner = owner
+        let item = stage.makeItem(kind: .balloon, title: "retired", onMove: { _, _ in }, onCancel: { [owner] in
+            _ = owner
+            Issue.record("A discarded item received Escape")
+        })
+        owner = nil
+        #expect(weakOwner != nil)
+        item.discard()
+        #expect(weakOwner == nil)
+    }
+    stage.window.cancelOperation(nil)
+    #expect(currentCancelCount == 1)
+}
+
 @Test @MainActor
 func `display events distinguish startup and updates in primary screen coordinates`() {
     let main = CGRect(x: 0, y: 0, width: 1200, height: 800)

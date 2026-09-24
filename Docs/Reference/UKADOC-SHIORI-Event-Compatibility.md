@@ -367,9 +367,9 @@ UKADOC掲載イベント数: 304
 | [`OnCPULoadLow`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCPULoadLow) | ✅ | CPU High通知後に使用率が60%未満へ戻った時、現在率をReference0へ通知。状態遷移テストで確認 |
 | [`OnMemoryLoadHigh`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMemoryLoadHigh) | ✅ | VM統計のメモリ使用率が80%以上で5秒間隔3回続いた時に現在率をReference0へ通知。状態遷移テストで確認 |
 | [`OnMemoryLoadLow`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMemoryLoadLow) | ✅ | Memory High通知後に使用率が60%未満へ戻った時、現在率をReference0へ通知。状態遷移テストで確認 |
-| [`OnDisplayChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChange) | 🟡 | 起動時NOTIFY、画面構成・ウインドウモード変更時GETで、そのゴーストの表示領域のbpp・幅・高さを通知。生成処理をテスト済み、実機での画面変更確認待ち |
+| [`OnDisplayChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChange) | 🟡 | 起動時NOTIFY、画面構成・ウインドウモード・コンテナ表示領域の変更時GETで、そのゴーストの表示領域のbpp・幅・高さを通知。共有／個別ウインドウの通知先と生成処理をテスト済み、実機での画面変更確認待ち |
 | [`OnDisplayHandover`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayHandover) | ✅ | シェル位置の初期化時と別スクリーンへの移動時に、scopeと移動前後の画面座標・色深度・主画面フラグを通知 |
-| [`OnDisplayChangeEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChangeEx) | 🟡 | 起動時init/NOTIFY、画面構成・ウインドウモード変更時update/GET。上原点の画面矩形・色深度・プライマリ判定を通知し、末尾はunknown,0。コンテナのサイズ変更通知は未接続、実機確認待ち |
+| [`OnDisplayChangeEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChangeEx) | 🟡 | 起動時init/NOTIFY、画面構成・ウインドウモード・コンテナ表示領域の変更時update/GET。上原点の画面矩形・色深度・プライマリ判定を通知し、末尾はunknown,0。ウインドウモード中は実モニター変更を通知せず、コンテナの最終レイアウトを通知。配送・重複抑止をテスト済み、実機確認待ち |
 | [`OnDisplayPowerStatus`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayPowerStatus) | ✅ | macOSのスリープ直前に0、復帰時に1を通知。単独ディスプレイの電源断は検出しません |
 | [`OnBatteryNotify`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryNotify) | ✅ | 起動時と30秒ごとの状態変化時に残量・残り分数・給電状態・状態フラグを通知。バッテリーなしもno_batteryとして通知 |
 | [`OnBatteryLow`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryLow) | ✅ | 残量が33%以下へ遷移した時にOnBatteryNotifyと同じReferenceを通知 |

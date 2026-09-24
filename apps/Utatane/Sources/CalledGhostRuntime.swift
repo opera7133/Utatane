@@ -212,6 +212,7 @@ final class CalledGhostRuntime {
         )
         configureCharacterEnvironment(for: selectedShell)
         configureCallbacks()
+        presentationSession?.onDisplayChange = { [weak self] events in self?.send(events) }
         surfaceController.onUserDressupChange = { [weak self] changes in
             Task { [weak self] in
                 guard let self else { return }
@@ -715,10 +716,6 @@ final class CalledGhostRuntime {
     func setWindowMode(_ mode: GhostWindowMode) async {
         windowMode = mode
         await propertySystem.register(values: ["baseware.windowmode": mode.sspIdentifier])
-    }
-
-    func sendDisplayChangeEvents() {
-        send(presentationGeometry.displayChangeEvents())
     }
 
     func showSpeechHistory() {

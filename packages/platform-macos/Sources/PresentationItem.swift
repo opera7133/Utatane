@@ -1,5 +1,6 @@
 import AppKit
 import UniformTypeIdentifiers
+import UtataneCore
 
 @MainActor
 protocol PresentationHosting: AnyObject {
@@ -359,6 +360,8 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     private var items: [WindowModePresentationItem] = []
     private let onModeRequest: (GhostWindowMode) -> Void
     private let onCloseRequest: () -> Void
+    private let onGeometryChange: (WindowModePresentationHost) -> Void
+    private var geometryChangeScheduled = false
     private let onSpeechHistoryIntegrationRequest: (Bool) -> Void
     private let stateStore: WindowModeStageStateStore?
     private let stateIdentifier: String
@@ -379,6 +382,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         mode: GhostWindowMode = .perGhost,
         onModeRequest: @escaping (GhostWindowMode) -> Void = { _ in },
         onCloseRequest: @escaping () -> Void = {},
+        onGeometryChange: @escaping (WindowModePresentationHost) -> Void = { _ in },
         integratesSpeechHistory: Bool = true,
         onSpeechHistoryIntegrationRequest: @escaping (Bool) -> Void = { _ in },
         stateStore: WindowModeStageStateStore? = nil,
@@ -405,6 +409,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         self.mode = mode
         self.onModeRequest = onModeRequest
         self.onCloseRequest = onCloseRequest
+        self.onGeometryChange = onGeometryChange
         self.integratesSpeechHistory = integratesSpeechHistory
         self.onSpeechHistoryIntegrationRequest = onSpeechHistoryIntegrationRequest
         self.stateStore = stateStore
@@ -839,6 +844,18 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
         persistState()
     }
 
+    fileprivate func scheduleGeometryChange() {
+        guard !geometryChangeScheduled else { return }
+        geometryChangeScheduled = true
+        // Layout can change several times during resize/history integration. Send
+        // the final geometry after layout, without retaining a discarded host.
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            geometryChangeScheduled = false
+            onGeometryChange(self)
+        }
+    }
+
     func windowDidResize(_ notification: Notification) {
         layoutSpeechHistoryItems()
         persistState()
@@ -957,7 +974,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
             onMove: onMove
         )
         if let onCancel {
-            (window as? WindowModeStageWindow)?.cancelHandlers.append(onCancel)
+            (window as? WindowModeStageWindow)?.cancelHandlers.append((ObjectIdentifier(item), onCancel))
         }
         item.containerView.setAccessibilityLabel(title)
         items.append(item)
@@ -995,6 +1012,7 @@ final class WindowModePresentationHost: NSObject, PresentationHosting, NSWindowD
     }
 
     fileprivate func discard(_ item: WindowModePresentationItem) {
+        (window as? WindowModeStageWindow)?.cancelHandlers.removeAll { $0.owner == ObjectIdentifier(item) }
         item.containerView.removeFromSuperview()
         items.removeAll { $0 === item }
         layoutSpeechHistoryItems()
@@ -1065,6 +1083,7 @@ final class WindowModeStageRootView: NSView {
             x: bounds.maxX - inset - buttonSize.width,
             y: bounds.maxY - inset - buttonSize.height
         ))
+        host?.scheduleGeometryChange()
     }
 
     override func draw(_ dirtyRect: NSRect) {
@@ -1225,7 +1244,7 @@ private final class WindowModeTransientButton: NSButton {
 @MainActor
 private final class WindowModeStageWindow: NSWindow {
     weak var host: WindowModePresentationHost?
-    var cancelHandlers: [() -> Void] = []
+    var cancelHandlers: [(owner: ObjectIdentifier, action: () -> Void)] = []
 
     override func cancelOperation(_ sender: Any?) {
         if styleMask.contains(.fullScreen) {
@@ -1233,7 +1252,7 @@ private final class WindowModeStageWindow: NSWindow {
         } else if cancelHandlers.isEmpty {
             super.cancelOperation(sender)
         } else {
-            cancelHandlers.forEach { $0() }
+            cancelHandlers.forEach { $0.action() }
         }
     }
 
@@ -1473,6 +1492,10 @@ final class PresentationHostCoordinator: PresentationHosting, PresentationGeomet
             target.origin.y = min(max(target.minY, visible.minY), visible.maxY - target.height)
         }
         window.setFrame(target, display: true)
+    }
+
+    func uses(_ host: WindowModePresentationHost) -> Bool {
+        activeHost === host
     }
 
     init(initialHost: any PresentationHosting) {
@@ -1811,6 +1834,19 @@ public final class GhostPresentationSession {
     public private(set) var identifier: String
     let presentationHost: PresentationHostCoordinator
     private weak var coordinator: PresentationCoordinator?
+    private var lastDisplayEvents: [GhostEvent]
+    public var onDisplayChange: (@MainActor ([GhostEvent]) -> Void)?
+
+    fileprivate func resetDisplaySnapshot() {
+        lastDisplayEvents = geometryProvider.displayChangeEvents()
+    }
+
+    fileprivate func notifyDisplayChange() {
+        let events = geometryProvider.displayChangeEvents()
+        guard events != lastDisplayEvents else { return }
+        lastDisplayEvents = events
+        onDisplayChange?(events)
+    }
 
     public var geometryProvider: any PresentationGeometryProviding {
         presentationHost
@@ -1835,6 +1871,7 @@ public final class GhostPresentationSession {
         self.title = title
         self.identifier = identifier
         self.presentationHost = presentationHost
+        lastDisplayEvents = presentationHost.displayChangeEvents()
         self.coordinator = coordinator
     }
 
@@ -1903,6 +1940,20 @@ public final class PresentationCoordinator {
                 for: session.title,
                 identifier: session.identifier
             ))
+            // OnWindowModeChange is sent with display events by the runtime.
+            session.resetDisplaySnapshot()
+        }
+    }
+
+    public func screenParametersDidChange() {
+        for session in sessions.compactMap(\.value) where session.geometryProvider.coordinateSpace == .desktop {
+            session.notifyDisplayChange()
+        }
+    }
+
+    private func geometryDidChange(in host: WindowModePresentationHost) {
+        for session in sessions.compactMap(\.value) where session.presentationHost.uses(host) {
+            session.notifyDisplayChange()
         }
     }
 
@@ -1933,6 +1984,7 @@ public final class PresentationCoordinator {
             for: session.title,
             identifier: session.identifier
         ))
+        session.resetDisplaySnapshot()
     }
 
     private func host(for title: String, identifier: String) -> any PresentationHosting {
@@ -1947,6 +1999,7 @@ public final class PresentationCoordinator {
                 mode: .perGhost,
                 onModeRequest: { [weak self] mode in self?.requestMode(mode) },
                 onCloseRequest: { [weak self] in self?.requestClose(identifier: identifier) },
+                onGeometryChange: { [weak self] host in self?.geometryDidChange(in: host) },
                 integratesSpeechHistory: integratesSpeechHistory,
                 onSpeechHistoryIntegrationRequest: { [weak self] integrates in
                     self?.requestSpeechHistoryIntegration(integrates)
@@ -1966,6 +2019,7 @@ public final class PresentationCoordinator {
             mode: .shared,
             onModeRequest: { [weak self] mode in self?.requestMode(mode) },
             onCloseRequest: { [weak self] in self?.requestClose(identifier: nil) },
+            onGeometryChange: { [weak self] host in self?.geometryDidChange(in: host) },
             integratesSpeechHistory: integratesSpeechHistory,
             onSpeechHistoryIntegrationRequest: { [weak self] integrates in
                 self?.requestSpeechHistoryIntegration(integrates)

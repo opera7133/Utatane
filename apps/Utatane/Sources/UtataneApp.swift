@@ -504,6 +504,7 @@ private struct UtataneRootView: View {
                 showHelp: { UtataneHelp.open() },
                 quit: { applicationDelegate.terminate(menuScope: 0, windowScope: 0) }
             ))
+            mainPresentationSession.onDisplayChange = { events in sendEvents(events) }
             presentationCoordinator.onCloseRequest = { mode, identifier in
                 if mode == .shared {
                     NSApplication.shared.terminate(nil)
@@ -1289,10 +1290,7 @@ private struct UtataneRootView: View {
     }
 
     private func dispatchDisplayChangeEvents() {
-        sendEvents(presentationGeometry.displayChangeEvents())
-        for runtime in calledGhosts.values {
-            runtime.sendDisplayChangeEvents()
-        }
+        presentationCoordinator.screenParametersDidChange()
     }
 
     private func dispatchDeviceEvent(id: String, notification: Notification) {
