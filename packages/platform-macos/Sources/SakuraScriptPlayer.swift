@@ -1,6 +1,7 @@
 import AppKit
 import CoreText
 import UtataneBalloon
+import UtataneCore
 import UtataneSakuraScript
 
 public enum SakuraScriptOpenTargetResolver {
@@ -333,6 +334,21 @@ public final class SakuraScriptPlayer {
         }
     }
 
+    private let suspensionClock = SuspensionClock()
+
+    /// Cancels current speech as before, but holds newly arriving scripts until restore.
+    public func setSuspended(_ suspended: Bool) {
+        if suspended {
+            cancel()
+        }
+        suspensionClock.setSuspended(suspended)
+        soundPlayer.setSuspended(suspended)
+    }
+
+    public func discardSoundPlayback() {
+        soundPlayer.discard()
+    }
+
     public func play(
         _ script: SakuraScript,
         balloon: BalloonDefinition,
@@ -372,9 +388,10 @@ public final class SakuraScriptPlayer {
         balloonWindowController.setSSTPMessage(sstpMessage)
         let effectiveCharacterDelay = characterDelayMilliseconds ?? self.characterDelayMilliseconds
         playbackTask = Task { [weak self] in
-            guard let self else { return }
+            guard let self, await suspensionClock.waitUntilActive() else { return }
             let expanded = SakuraScript(rawValue: expandEnvironmentVariables(in: script.rawValue))
             let effectiveScript = await onTranslate?(expanded, context) ?? expanded
+            guard await suspensionClock.waitUntilActive() else { return }
             currentScriptRawValue = effectiveScript.rawValue
             var tokens = filteredSakuraScriptTokens(parser.parse(effectiveScript), policy: policy)
             let continuesPreviousDialogue = tokens.first == .clearAll

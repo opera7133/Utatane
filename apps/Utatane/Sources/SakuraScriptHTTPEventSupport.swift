@@ -1,5 +1,6 @@
 import Foundation
 import UtataneCore
+import UtatanePlatformMacOS
 import UtataneSakuraScript
 
 enum SakuraScriptHTTPEventSupport {

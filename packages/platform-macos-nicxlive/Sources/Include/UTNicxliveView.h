@@ -21,6 +21,9 @@ FOUNDATION_EXPORT NSView * _Nullable UTCreateNicxliveView(
     NSError **error
 );
 
+/// Pause rendering and exclude suspension time from automatic parameters.
+FOUNDATION_EXPORT void UTSetNicxliveViewSuspended(NSView *view, BOOL suspended);
+
 FOUNDATION_EXPORT void UTSetNicxliveViewScale(NSView *view, CGFloat scaleX, CGFloat scaleY);
 FOUNDATION_EXPORT void UTSetNicxliveViewOffset(NSView *view, CGFloat offsetX, CGFloat offsetY);
 

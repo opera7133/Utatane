@@ -79,6 +79,7 @@ public final class SurfaceWindowController {
     private let interactionHoverDelay: TimeInterval
     private var defaultSurfaceIDs: [Int: Int] = [:]
     private var enabledBindGroups: [Int: Set<Int>] = [:]
+    private var isSuspended = false
     private var presentationHidden = false
     private var startupPresentationHidden = false
 
@@ -189,6 +190,18 @@ public final class SurfaceWindowController {
     public func setPositionContentID(_ contentID: URL?) {
         positionStore.setContentID(contentID)
         dressupSelectionStore.setContentID(contentID)
+    }
+
+    /// Cache suspension is independent of fullscreen/startup visibility.
+    func cachedImageCount(scope: Int) -> Int {
+        characters[scope]?.cachedImageCount ?? 0
+    }
+
+    public func setSuspended(_ suspended: Bool) {
+        isSuspended = suspended
+        for character in characters.values {
+            character.setSuspended(suspended)
+        }
     }
 
     public func setPresentationHidden(_ hidden: Bool) {
@@ -934,6 +947,7 @@ public final class SurfaceWindowController {
             interactionHoverDelay: interactionHoverDelay
         )
         character.setPresentationHidden(presentationHidden || startupPresentationHidden)
+        character.setSuspended(isSuspended)
         character.onMouseClick = { [weak self] region in
             self?.onMouseClick?(scope, region)
         }
@@ -1077,6 +1091,11 @@ private final class CharacterSurfaceController {
     private var surfaceBaseImage: NSImage?
     private var baseImage: NSImage?
     private let renderedLayerCache = SurfaceImageCache()
+    private let animationClock = SuspensionClock()
+    var cachedImageCount: Int {
+        renderedLayerCache.count
+    }
+
     private var persistentAnimationLayers: [Int: PersistentAnimationLayer] = [:]
     private var enabledBindGroups: Set<Int> = []
     private var animationTasks: [Int: Task<Void, Never>] = [:]
@@ -1308,7 +1327,9 @@ private final class CharacterSurfaceController {
         baseSurfaceID = surfaceID
         surfaceBaseImage = rendered.image
         baseImage = rendered.image
-        renderedLayerCache[surfaceID] = rendered.image
+        if !animationClock.isSuspended {
+            renderedLayerCache[surfaceID] = rendered.image
+        }
         persistentAnimationLayers.removeAll()
         scheduleAutomaticAnimations()
     }
@@ -1374,6 +1395,7 @@ private final class CharacterSurfaceController {
         }
         self.item = item
         nijigenerateView = view
+        NijigenerateViewFactory.setSuspended(animationClock.isSuspended, on: view)
         nijigenerateBaseSize = baseSize
         imageView = interactionView
         self.shell = shell
@@ -1407,7 +1429,9 @@ private final class CharacterSurfaceController {
         imageView = rendered.view
         surfaceBaseImage = rendered.image
         baseImage = rendered.image
-        renderedLayerCache[baseSurfaceID] = rendered.image
+        if !animationClock.isSuspended {
+            renderedLayerCache[baseSurfaceID] = rendered.image
+        }
         restorePresentationAnchor(anchor)
         scheduleAutomaticAnimations()
     }
@@ -1566,11 +1590,10 @@ private final class CharacterSurfaceController {
             redrawActiveAnimationFrames()
             guard duration > 0 else { return }
             scriptAnimationTasks[id] = Task { [weak self] in
-                try? await Task.sleep(for: .milliseconds(duration))
-                guard !Task.isCancelled else { return }
-                self?.scriptAnimationLayers[id] = nil
-                self?.scriptAnimationTasks[id] = nil
-                self?.redrawActiveAnimationFrames()
+                guard let self, await animationClock.sleep(for: .milliseconds(duration)) else { return }
+                scriptAnimationLayers[id] = nil
+                scriptAnimationTasks[id] = nil
+                redrawActiveAnimationFrames()
             }
         case let .surfaces(method, frames, repeats):
             guard !frames.isEmpty else { return }
@@ -1586,7 +1609,7 @@ private final class CharacterSurfaceController {
                 guard let self else { return }
                 repeat {
                     for frame in frames {
-                        guard !Task.isCancelled else { return }
+                        guard await animationClock.waitUntilActive() else { return }
                         guard let image = try? renderLayer(
                             surfaceID: frame.surfaceID,
                             shell: shell,
@@ -1601,9 +1624,7 @@ private final class CharacterSurfaceController {
                             clipsToBaseAlpha: method == "overlayfast"
                         )
                         redrawActiveAnimationFrames()
-                        if frame.durationMilliseconds > 0 {
-                            try? await Task.sleep(for: .milliseconds(frame.durationMilliseconds))
-                        }
+                        guard await animationClock.sleep(for: .milliseconds(max(1, frame.durationMilliseconds))) else { return }
                     }
                 } while repeats && !Task.isCancelled
                 scriptAnimationTasks[id] = nil
@@ -1714,7 +1735,9 @@ private final class CharacterSurfaceController {
         baseSurfaceID = surfaceID
         surfaceBaseImage = rendered.image
         baseImage = rendered.image
-        renderedLayerCache[surfaceID] = rendered.image
+        if !animationClock.isSuspended {
+            renderedLayerCache[surfaceID] = rendered.image
+        }
         persistentAnimationLayers.removeAll()
         restorePresentationAnchor(anchor)
         resumeSharedAnimations(from: sharedResumePoints)
@@ -1888,6 +1911,7 @@ private final class CharacterSurfaceController {
     }
 
     func discard() {
+        animationClock.finish()
         hide()
         item?.discard()
         item = nil
@@ -1905,6 +1929,22 @@ private final class CharacterSurfaceController {
     func restore() {
         item?.show(activating: false)
         setPresentationHidden(false)
+    }
+
+    func setSuspended(_ suspended: Bool) {
+        animationClock.setSuspended(suspended)
+        if suspended {
+            imageView?.cancelDrag()
+            renderedLayerCache.removeAll()
+        }
+        updateAnimatedImagePlayback()
+        NijigenerateViewFactory.setSuspended(suspended, on: nijigenerateView)
+        item?.alphaValue = presentationAlpha
+    }
+
+    private func updateAnimatedImagePlayback() {
+        guard let imageView, let image = imageView.image else { return }
+        imageView.animates = !animationClock.isSuspended && imageLoader.frameCount(of: image) > 1
     }
 
     func setPresentationHidden(_ hidden: Bool) {
@@ -1944,7 +1984,7 @@ private final class CharacterSurfaceController {
     private var presentationHidden = false
 
     private var presentationAlpha: CGFloat {
-        presentationHidden ? 0 : surfaceAlpha * (isDragging ? 0.5 : 1)
+        (presentationHidden || animationClock.isSuspended) ? 0 : surfaceAlpha * (isDragging ? 0.5 : 1)
     }
 
     func setDisplayScale(_ scale: CGFloat) {
@@ -2139,7 +2179,7 @@ private final class CharacterSurfaceController {
                 durationMilliseconds: reaction.transitionMilliseconds
             )
             guard !Task.isCancelled else { return }
-            try? await Task.sleep(for: .milliseconds(duration))
+            guard await animationClock.sleep(for: .milliseconds(duration)) else { return }
             guard !Task.isCancelled, let surfaceID = baseSurfaceID else { return }
             let baseParameters = nijigenerateConfiguration.parameters(for: surfaceID)
             let restoreValues = Dictionary(uniqueKeysWithValues: reaction.parameters.keys.map {
@@ -2212,7 +2252,7 @@ private final class CharacterSurfaceController {
                 nijigenerateDragValue = value
                 _ = setNijigenerateParameter(drag.parameter, valueX: value.x, valueY: value.y)
                 if frame < frameCount {
-                    try? await Task.sleep(for: .milliseconds(16))
+                    guard await animationClock.sleep(for: .milliseconds(16)) else { return }
                 }
             }
             guard !Task.isCancelled else { return }
@@ -2252,7 +2292,7 @@ private final class CharacterSurfaceController {
                 _ = setNijigenerateParameter(name, valueX: value, valueY: 0)
             }
             if frame < frameCount {
-                try? await Task.sleep(for: .milliseconds(16))
+                guard await animationClock.sleep(for: .milliseconds(16)) else { return }
             }
         }
     }
@@ -2389,7 +2429,7 @@ private final class CharacterSurfaceController {
         let scaledSize = displaySize(for: boundImage)
         let imageView = SurfaceImageView(frame: NSRect(origin: .zero, size: scaledSize))
         imageView.image = boundImage
-        imageView.animates = imageLoader.frameCount(of: boundImage) > 1
+        imageView.animates = !animationClock.isSuspended && imageLoader.frameCount(of: boundImage) > 1
         imageView.imageAlignment = .alignCenter
         imageView.imageScaling = .scaleAxesIndependently
         configureInteractionView(imageView, definition: definition, shell: shell)
@@ -2660,7 +2700,9 @@ private final class CharacterSurfaceController {
                 ? try imageLoader.applyingOpaqueAlpha(to: rendered)
                 : rendered
         }
-        renderedLayerCache[surfaceID, ignoresTransparency] = image
+        if !animationClock.isSuspended {
+            renderedLayerCache[surfaceID, ignoresTransparency] = image
+        }
         return image
     }
 
@@ -2739,12 +2781,8 @@ private final class CharacterSurfaceController {
         schedulerTask = Task { [weak self] in
             var elapsedSeconds: [Int: Int] = [:]
             while !Task.isCancelled {
-                do {
-                    try await Task.sleep(for: .seconds(1))
-                } catch {
-                    return
-                }
-                guard let self else { return }
+                guard let clock = self?.animationClock, await clock.sleep(for: .seconds(1)),
+                      let self else { return }
                 let ready = animations.filter { animation in
                     let components = Set((animation.interval ?? "").lowercased().split(separator: "+").map(String.init))
                     elapsedSeconds[animation.id, default: 0] += 1
@@ -2802,7 +2840,7 @@ private final class CharacterSurfaceController {
             animation.patterns
         }
         for pattern in patterns {
-            guard !Task.isCancelled else { return }
+            guard await animationClock.waitUntilActive() else { return }
             activeAnimationPatternOrders[animation.id] = pattern.order
             let offset = animationOffsets[animation.id] ?? SurfacePoint(x: 0, y: 0)
             let method = pattern.method.lowercased()
@@ -2908,7 +2946,7 @@ private final class CharacterSurfaceController {
     private func waitForAnimationFrame(milliseconds: Int, animationID: Int) async -> Bool {
         var remainingMilliseconds = milliseconds
         while remainingMilliseconds > 0 {
-            guard !Task.isCancelled else { return false }
+            guard await animationClock.waitUntilActive() else { return false }
             if pausedAnimationIDs.contains(animationID) {
                 do {
                     try await Task.sleep(for: .milliseconds(20))
@@ -2918,14 +2956,10 @@ private final class CharacterSurfaceController {
                 continue
             }
             let interval = min(remainingMilliseconds, 20)
-            do {
-                try await Task.sleep(for: .milliseconds(interval))
-            } catch {
-                return false
-            }
+            guard await animationClock.sleep(for: .milliseconds(interval)) else { return false }
             remainingMilliseconds -= interval
         }
-        return !Task.isCancelled
+        return await animationClock.waitUntilActive()
     }
 
     private func startControlledAnimations(_ ids: some Sequence<Int>, sourceID: Int) {
@@ -2970,7 +3004,7 @@ private final class CharacterSurfaceController {
             pendingAnimationImage = image
         } else {
             imageView?.image = image
-            imageView?.animates = imageLoader.frameCount(of: image) > 1
+            imageView?.animates = !animationClock.isSuspended && imageLoader.frameCount(of: image) > 1
         }
     }
 }

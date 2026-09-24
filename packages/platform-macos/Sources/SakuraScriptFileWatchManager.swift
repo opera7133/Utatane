@@ -4,7 +4,8 @@ import UtataneCore
 import UtataneSakuraScript
 
 @MainActor
-final class SakuraScriptFileWatchManager {
+public final class SakuraScriptFileWatchManager {
+    public init() {}
     private struct Watch {
         let source: DispatchSourceFileSystemObject
         var debounceTask: Task<Void, Never>?
@@ -17,9 +18,10 @@ final class SakuraScriptFileWatchManager {
         var modificationDate: Date?
     }
 
+    private let clock = SuspensionClock()
     private var watches: [String: Watch] = [:]
 
-    func handle(
+    public func handle(
         _ command: SakuraScriptFileWatchCommand,
         masterDirectory: URL,
         notify: @escaping @MainActor (GhostEvent) -> Void
@@ -62,11 +64,26 @@ final class SakuraScriptFileWatchManager {
             }
             watches[target.path] = watch
             source.resume()
+            if clock.isSuspended {
+                source.suspend()
+            }
             return nil
         }
     }
 
-    func cancelAll() {
+    public func setSuspended(_ suspended: Bool) {
+        guard suspended != clock.isSuspended else { return }
+        clock.setSuspended(suspended)
+        for watch in watches.values {
+            if suspended {
+                watch.source.suspend()
+            } else {
+                watch.source.resume()
+            }
+        }
+    }
+
+    public func cancelAll() {
         for key in Array(watches.keys) {
             cancel(path: key)
         }
@@ -77,10 +94,7 @@ final class SakuraScriptFileWatchManager {
         watch.debounceTask?.cancel()
         let delay = watch.debounceMilliseconds
         watch.debounceTask = Task { [weak self] in
-            if delay > 0 {
-                try? await Task.sleep(for: .milliseconds(delay))
-            }
-            guard !Task.isCancelled else { return }
+            guard let clock = self?.clock, await clock.sleep(for: .milliseconds(delay)) else { return }
             self?.emitChange(for: key, notify: notify)
         }
         watches[key] = watch
@@ -139,6 +153,9 @@ final class SakuraScriptFileWatchManager {
     private func cancel(path: String) {
         guard let watch = watches.removeValue(forKey: path) else { return }
         watch.debounceTask?.cancel()
+        if clock.isSuspended {
+            watch.source.resume()
+        }
         watch.source.cancel()
     }
 }

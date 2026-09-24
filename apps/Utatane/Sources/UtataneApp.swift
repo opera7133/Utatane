@@ -4996,7 +4996,7 @@ private struct UtataneRootView: View {
                         scriptPlayer.play(SakuraScript(rawValue: entry.selectionScript), balloon: balloon)
                     }
                 case let .called(runtime):
-                    let response = try await runtime.session.response(for: event)
+                    let response = try await runtime.eventDelivery.response(for: event)
                     if let script = response?.script {
                         await runtime.player.playAndWait(script, balloon: runtime.balloon)
                     }
@@ -5791,7 +5791,7 @@ private struct UtataneRootView: View {
 
     private func suspendCalledGhost(_ runtime: CalledGhostRuntime) {
         Task {
-            await runtime.suspendToCache()
+            guard await runtime.suspendToCache() else { return }
             calledGhosts.removeValue(forKey: runtime.ghost.id)
             cachedCalledGhosts[runtime.ghost.id] = runtime
             configureContextMenu()
@@ -5800,9 +5800,9 @@ private struct UtataneRootView: View {
 
     private func restoreCalledGhost(_ runtime: CalledGhostRuntime) {
         Task {
+            guard await runtime.restoreFromCache() else { return }
             cachedCalledGhosts.removeValue(forKey: runtime.ghost.id)
             calledGhosts[runtime.ghost.id] = runtime
-            await runtime.restoreFromCache()
             configureContextMenu()
         }
     }

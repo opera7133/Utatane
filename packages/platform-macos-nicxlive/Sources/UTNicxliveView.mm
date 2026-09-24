@@ -140,6 +140,8 @@ CGImageRef createImageFromBGRA(
     TextureContext *_textureContext; id<MTLCommandQueue> _commandQueue; id<MTLRenderPipelineState> _pipeline; CFAbsoluteTime _started;
     CGFloat _contentOffsetX, _contentOffsetY;
     bool _isShuttingDown;
+    bool _isSuspended;
+    CFAbsoluteTime _suspendedAt;
     bool _lastFrameHadVisiblePixels;
     bool _diagnosticsEnabled;
     bool _didLogFirstFrame;
@@ -219,6 +221,13 @@ CGImageRef createImageFromBGRA(
     self.needsDisplay=YES;
     return YES;
 }
+- (void)setRuntimeSuspended:(BOOL)suspended {
+    if (_isShuttingDown || _isSuspended == (bool)suspended) return;
+    if (suspended) _suspendedAt = CFAbsoluteTimeGetCurrent();
+    else _started += CFAbsoluteTimeGetCurrent() - _suspendedAt;
+    _isSuspended = suspended;
+    self.paused = suspended;
+}
 - (void)applicationWillTerminate:(NSNotification *)notification {
     (void)notification;
     [self shutdownRenderer];
@@ -229,7 +238,7 @@ CGImageRef createImageFromBGRA(
 }
 - (void)drawInMTKView:(MTKView *)view {
     (void)view;
-    if (_isShuttingDown || !_api || !_renderer || !_puppet) return;
+    if (_isShuttingDown || _isSuspended || !_api || !_renderer || !_puppet) return;
     id<CAMetalDrawable> drawable=self.currentDrawable;MTLRenderPassDescriptor *pass=self.currentRenderPassDescriptor;if(!drawable||!pass){if(_diagnosticsEnabled)NSLog(@"Utatane nijigenerate Metal frame skipped: drawable=%@ pass=%@ frame=%@ drawableSize=%@",drawable,pass,NSStringFromRect(self.frame),NSStringFromSize(self.drawableSize));return;}
     int layoutWidth=self.bounds.size.width, layoutHeight=self.bounds.size.height;
     double elapsed=CFAbsoluteTimeGetCurrent()-_started; std::vector<ParameterUpdate> updates;
@@ -297,4 +306,9 @@ BOOL UTNicxliveViewLastFrameHadVisiblePixels(NSView *view) {
 CGImageRef UTNicxliveViewCreateSnapshot(NSView *view) {
     if (![view isKindOfClass:UTNicxliveView.class]) return nil;
     return [(UTNicxliveView *)view createSnapshot];
+}
+
+void UTSetNicxliveViewSuspended(NSView *view, BOOL suspended) {
+    if ([view isKindOfClass:UTNicxliveView.class])
+        [(UTNicxliveView *)view setRuntimeSuspended:suspended];
 }

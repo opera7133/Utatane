@@ -16,6 +16,10 @@ final class CalledGhostRuntime {
     let balloonController: BalloonWindowController
     let player: SakuraScriptPlayer
     let session: GhostSession
+    let eventDelivery: SuspendingGhostEventDelivery
+    private var isCached = false
+    private var isCacheTransitioning = false
+    private var isStopping = false
 
     private let shellLoader: ShellLoader
     private let selectionStore: ContentSelectionStore
@@ -187,6 +191,7 @@ final class CalledGhostRuntime {
             logStore: .shared,
             ghostName: ghost.name
         )
+        eventDelivery = SuspendingGhostEventDelivery(session: session)
         player.configurePlayback(
             characterDelayMilliseconds: characterDelayMilliseconds,
             postDialogueDismissalMilliseconds: dialogueDismissalMilliseconds
@@ -267,23 +272,23 @@ final class CalledGhostRuntime {
                 speechRecognitionEnabled: speechRecognitionEnabled,
                 configuredBiffNames: configuredBiffNames
             ) {
-                _ = try? await session.handle(event: .notification(
+                _ = try? await eventDelivery.handle(event: .notification(
                     id: event.id,
                     references: event.references
                 ))
             }
             for event in surfaceController.displayHandoverInitializationEvents() {
-                _ = try? await session.handle(event: .notification(
+                _ = try? await eventDelivery.handle(event: .notification(
                     id: "OnDisplayHandover",
                     references: event.references
                 ))
             }
         }
         if let desktopWallpaperEvent {
-            _ = try? await session.handle(event: desktopWallpaperGhostEvent(desktopWallpaperEvent))
+            _ = try? await eventDelivery.handle(event: desktopWallpaperGhostEvent(desktopWallpaperEvent))
         }
         if let event = await MacOSOSUpdateHistorySampler().event() {
-            _ = try? await session.handle(event: event)
+            _ = try? await eventDelivery.handle(event: event)
         }
         let script = try await session.handle(
             event: event,
@@ -310,7 +315,7 @@ final class CalledGhostRuntime {
 
     private func requestMouseEvent(_ event: GhostEvent) async -> PersonalityResponse? {
         do {
-            return try await session.response(for: event)
+            return try await eventDelivery.response(for: event)
         } catch {
             AppLogStore.shared.error(
                 "マウスイベント処理エラー: \(error.localizedDescription)",
@@ -333,7 +338,7 @@ final class CalledGhostRuntime {
     func send(_ event: GhostEvent, fallingBackTo fallback: GhostEvent) {
         Task {
             do {
-                let response = try await session.response(for: event)
+                let response = try await eventDelivery.response(for: event)
                 if let script = response?.script, !script.rawValue.isEmpty {
                     player.play(script, balloon: balloon)
                     if let response {
@@ -341,7 +346,7 @@ final class CalledGhostRuntime {
                     }
                     return
                 }
-                guard let fallbackResponse = try await session.response(for: fallback) else { return }
+                guard let fallbackResponse = try await eventDelivery.response(for: fallback) else { return }
                 if let script = fallbackResponse.script, !script.rawValue.isEmpty {
                     player.play(script, balloon: balloon)
                 }
@@ -369,7 +374,7 @@ final class CalledGhostRuntime {
         Task {
             do {
                 for event in events {
-                    guard let response = try await session.response(for: event) else { continue }
+                    guard let response = try await eventDelivery.response(for: event) else { continue }
                     if let script = response.script {
                         player.play(script, balloon: balloon, context: event.playbackContext)
                     }
@@ -391,7 +396,7 @@ final class CalledGhostRuntime {
         let route = track.sspEventRoute
         Task {
             do {
-                let extended = try await session.response(for: .shiori(
+                let extended = try await eventDelivery.response(for: .shiori(
                     id: route.extendedEventID,
                     references: track.sspExtendedReferences
                 ))
@@ -403,7 +408,7 @@ final class CalledGhostRuntime {
                     }
                 }
                 guard let legacyEventID = route.legacyEventID,
-                      let legacy = try await session.response(for: .shiori(
+                      let legacy = try await eventDelivery.response(for: .shiori(
                           id: legacyEventID,
                           references: [0: track.title, 1: track.artist]
                       )) else { return }
@@ -424,13 +429,14 @@ final class CalledGhostRuntime {
     }
 
     func sendSecondChange(references: [Int: String]) {
+        guard !eventDelivery.isSuspended, !isStopping else { return }
         let canTalk = player.canTalk
         var references = references
         // UKADOC / SSP standard: 1 for talkable, 0 while dialogue is being played.
         references[3] = canTalk ? "1" : "0"
         periodicEventRunner.submit { [self] in
             do {
-                guard let response = try await session.response(for: .shiori(
+                guard let response = try await eventDelivery.response(for: .shiori(
                     id: "OnSecondChange",
                     references: references
                 )) else { return }
@@ -452,12 +458,13 @@ final class CalledGhostRuntime {
     }
 
     func sendTimedEvent(id: String, references: [Int: String], waitsUntilTalkable: Bool) {
+        guard !eventDelivery.isSuspended, !isStopping else { return }
         let canTalk = player.canTalk
         guard !waitsUntilTalkable || canTalk else { return }
         var references = references
         references[3] = canTalk ? "1" : "0"
         Task {
-            guard let response = try? await session.response(for: .shiori(id: id, references: references)) else {
+            guard let response = try? await eventDelivery.response(for: .shiori(id: id, references: references)) else {
                 return
             }
             guard canTalk else { return }
@@ -479,7 +486,7 @@ final class CalledGhostRuntime {
     }
 
     func communicate(from sender: String, sentence: String) async -> PersonalityResponse? {
-        let response = try? await session.response(for: .shiori(
+        let response = try? await eventDelivery.response(for: .shiori(
             id: "OnCommunicate",
             references: [0: sender, 1: sentence]
         ))
@@ -491,7 +498,7 @@ final class CalledGhostRuntime {
 
     @discardableResult
     func handleExternalEvent(id: String, arguments: [String], reflectsResponse: Bool) async -> Bool {
-        guard let response = try? await session.handle(event: .shiori(
+        guard let response = try? await eventDelivery.handle(event: .shiori(
             id: id,
             references: Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
                 ($0.offset, $0.element)
@@ -504,12 +511,12 @@ final class CalledGhostRuntime {
     }
 
     func extensionProperty(named name: String) async -> String? {
-        try? await session.handle(event: .shiori(id: "property.get", references: [0: name]))?.rawValue
+        try? await eventDelivery.handle(event: .shiori(id: "property.get", references: [0: name]))?.rawValue
     }
 
     func setExtensionProperty(named name: String, value: String) async -> Bool {
         do {
-            _ = try await session.handle(event: .shiori(
+            _ = try await eventDelivery.handle(event: .shiori(
                 id: "property.set",
                 references: [0: name, 1: value]
             ))
@@ -520,7 +527,7 @@ final class CalledGhostRuntime {
     }
 
     func notify(_ event: GhostEvent) async {
-        _ = try? await session.handle(event: event)
+        _ = try? await eventDelivery.handle(event: event)
     }
 
     func prepareVanish() async {
@@ -534,7 +541,7 @@ final class CalledGhostRuntime {
     func notifyOtherGhostVanished(references: [Int: String]) async {
         var references = references
         references[7] = shell.name
-        let otherScript = try? await session.handle(event: .shiori(
+        let otherScript = try? await eventDelivery.handle(event: .shiori(
             id: "OnOtherGhostVanished",
             references: references
         ))
@@ -542,7 +549,7 @@ final class CalledGhostRuntime {
             player.play(otherScript, balloon: balloon)
             return
         }
-        if let fallback = try? await session.handle(event: .shiori(
+        if let fallback = try? await eventDelivery.handle(event: .shiori(
             id: "OnVanished",
             references: references
         )) {
@@ -583,22 +590,61 @@ final class CalledGhostRuntime {
         ) : .silent)
     }
 
-    func suspendToCache() async {
-        _ = try? await session.handle(event: .shiori(id: "OnCacheSuspend", references: [:]))
-        player.cancel()
-        surfaceController.setPresentationHidden(true)
+    func suspendToCache() async -> Bool {
+        guard !isCached, !isCacheTransitioning, !isStopping else { return false }
+        isCacheTransitioning = true
+        defer { isCacheTransitioning = false }
+        // Record suspension before awaiting SHIORI so termination can unpause
+        // the renderer for its final script even during OnCacheSuspend.
+        isCached = true
+        eventDelivery.setSuspended(true)
+        fileWatchManager.setSuspended(true)
+        periodicEventRunner.cancel()
+        mouseEventCoordinator.cancel()
+        player.setSuspended(true)
+        surfaceController.setSuspended(true)
         balloonController.setPresentationHidden(true)
+        speechHistoryPresenter?.hide()
+        speechHistoryWindowController.close()
+        _ = try? await session.handle(event: .shiori(id: "OnCacheSuspend", references: [:]))
+        guard !isStopping else { return false }
+        return true
     }
 
-    func restoreFromCache() async {
-        surfaceController.setPresentationHidden(false)
+    func restoreFromCache() async -> Bool {
+        guard isCached, !isCacheTransitioning, !isStopping else { return false }
+        isCacheTransitioning = true
+        defer { isCacheTransitioning = false }
+        let script = try? await session.handle(event: .shiori(id: "OnCacheRestore", references: [:]))
+        guard !isStopping else { return false }
+        surfaceController.setSuspended(false)
         balloonController.setPresentationHidden(false)
-        if let script = try? await session.handle(event: .shiori(id: "OnCacheRestore", references: [:])) {
+        player.setSuspended(false)
+        isCached = false
+        eventDelivery.setSuspended(false)
+        fileWatchManager.setSuspended(false)
+        if let script {
             player.play(script, balloon: balloon)
         }
+        return true
     }
 
     private func stop(reason: GhostStopReason) async -> String {
+        isStopping = true
+        if reason != .vanish {
+            eventDelivery.finish()
+        } else {
+            eventDelivery.setSuspended(false)
+        }
+        player.cancel()
+        if reason != .vanish {
+            player.discardSoundPlayback()
+        }
+        player.setSuspended(false)
+        if isCached {
+            surfaceController.setPresentationHidden(true)
+            surfaceController.setSuspended(false)
+        }
         var finalScript = ""
         if reason == .vanish {
             if let script = try? await session.handle(event: .shiori(id: "OnVanishSelected", references: [:])) {
@@ -609,6 +655,12 @@ final class CalledGhostRuntime {
                     context: .init(eventID: "OnVanishSelected")
                 )
                 if player.didCancelVanishPlayback {
+                    isStopping = false
+                    eventDelivery.setSuspended(isCached)
+                    fileWatchManager.setSuspended(isCached)
+                    player.setSuspended(isCached)
+                    surfaceController.setSuspended(isCached)
+                    surfaceController.setPresentationHidden(false)
                     return finalScript
                 }
             }
@@ -621,12 +673,16 @@ final class CalledGhostRuntime {
                 await player.playAndWait(script, balloon: balloon)
             }
         }
+        eventDelivery.finish()
+        weatherTask?.cancel()
+        weatherTask = nil
         periodicEventRunner.cancel()
         mouseEventCoordinator.cancel()
         await webSocketManager.cancelAll()
         cancelHTTP(url: nil)
         fileWatchManager.cancelAll()
         player.cancel()
+        player.discardSoundPlayback()
         surfaceController.resetContent()
         balloonController.resetContent()
         speechHistoryPresenter?.discard()
@@ -635,7 +691,7 @@ final class CalledGhostRuntime {
     }
 
     private func playAndWait(eventID: String) async {
-        guard let script = try? await session.handle(event: .shiori(id: eventID, references: [:])) else {
+        guard let script = try? await eventDelivery.handle(event: .shiori(id: eventID, references: [:])) else {
             return
         }
         await player.playAndWait(script, balloon: balloon)
@@ -811,7 +867,7 @@ final class CalledGhostRuntime {
     private func configureCallbacks() {
         player.onTranslate = { [weak self] script, context in
             guard let self, context.eventID != "OnTranslate",
-                  let translated = try? await session.handle(event: .shiori(
+                  let translated = try? await eventDelivery.handle(event: .shiori(
                       id: "OnTranslate",
                       references: context.translateReferences(script: script)
                   )), !translated.rawValue.isEmpty
@@ -973,7 +1029,7 @@ final class CalledGhostRuntime {
         }
         player.onEmbeddedEvent = { [weak self] id, arguments in
             guard let self else { return nil }
-            return try? await session.handle(event: .shiori(
+            return try? await eventDelivery.handle(event: .shiori(
                 id: id,
                 references: Dictionary(uniqueKeysWithValues: arguments.enumerated().map {
                     ($0.offset, $0.element)
@@ -996,7 +1052,7 @@ final class CalledGhostRuntime {
                 geometryProvider: presentationGeometry
             ))
             let values = await propertySystem.values(for: properties)
-            return try? await session.handle(event: .shiori(
+            return try? await eventDelivery.handle(event: .shiori(
                 id: eventID,
                 references: Dictionary(uniqueKeysWithValues: values.enumerated().map { ($0.offset, $0.element) })
             ))
@@ -1018,14 +1074,14 @@ final class CalledGhostRuntime {
             if let value = result.value {
                 references[2] = value
             }
-            return try? await session.handle(event: .shiori(id: eventID, references: references))
+            return try? await eventDelivery.handle(event: .shiori(id: eventID, references: references))
         }
         player.onCloseSystemDialog = { [weak self] id in
             self?.systemDialogController.close(id: id)
         }
         player.onInputBox = { [weak self] command in
             guard let self else { return nil }
-            let autocomplete = try? await session.handle(event: .shiori(
+            let autocomplete = try? await eventDelivery.handle(event: .shiori(
                 id: "inputbox.autocomplete",
                 references: [0: command.inputTypeName, 1: command.id]
             ))
@@ -1046,7 +1102,7 @@ final class CalledGhostRuntime {
                     onSubmit: { [weak self] value in
                         guard let self else { return }
                         Task {
-                            if let response = try? await session.handle(event: SHIORIEventFactory.userInput(
+                            if let response = try? await eventDelivery.handle(event: SHIORIEventFactory.userInput(
                                 id: command.id,
                                 value: value,
                                 supplementalValue: command.supplementalValue,
@@ -1059,14 +1115,14 @@ final class CalledGhostRuntime {
                     onCancel: { [weak self] timedOut in
                         guard let self else { return }
                         Task {
-                            let response = try? await session.handle(event: SHIORIEventFactory.userInputCancel(
+                            let response = try? await eventDelivery.handle(event: SHIORIEventFactory.userInputCancel(
                                 id: command.id,
                                 timedOut: timedOut
                             ))
                             if let response, !response.rawValue.isEmpty {
                                 player.play(response, balloon: balloon)
                             } else if timedOut,
-                                      let fallback = try? await session.handle(event: SHIORIEventFactory.userInput(
+                                      let fallback = try? await eventDelivery.handle(event: SHIORIEventFactory.userInput(
                                           id: command.id,
                                           value: "timeout",
                                           supplementalValue: command.supplementalValue,
@@ -1092,12 +1148,12 @@ final class CalledGhostRuntime {
             )
             guard case let .submitted(value) = result else {
                 let timedOut = result == .cancelled(timedOut: true)
-                let response = try? await session.handle(event: SHIORIEventFactory.userInputCancel(
+                let response = try? await eventDelivery.handle(event: SHIORIEventFactory.userInputCancel(
                     id: command.id,
                     timedOut: timedOut
                 ))
                 if timedOut, response?.rawValue.isEmpty != false {
-                    return try? await session.handle(event: SHIORIEventFactory.userInput(
+                    return try? await eventDelivery.handle(event: SHIORIEventFactory.userInput(
                         id: command.id,
                         value: "timeout",
                         supplementalValue: command.supplementalValue,
@@ -1106,7 +1162,7 @@ final class CalledGhostRuntime {
                 }
                 return response
             }
-            return try? await session.handle(event: SHIORIEventFactory.userInput(
+            return try? await eventDelivery.handle(event: SHIORIEventFactory.userInput(
                 id: command.id,
                 value: value,
                 supplementalValue: command.supplementalValue,
@@ -1136,7 +1192,7 @@ final class CalledGhostRuntime {
         player.onCancelHTTP = { [weak self] url in self?.cancelHTTP(url: url) }
         player.onSchedule = { [weak self] command in
             guard let self, let event = onSchedule?(command) else { return nil }
-            return try? await session.handle(event: event)
+            return try? await eventDelivery.handle(event: event)
         }
         player.onFileWatch = { [weak self] command in
             guard let self else { return nil }
@@ -1144,7 +1200,7 @@ final class CalledGhostRuntime {
             guard let event = fileWatchManager.handle(command, masterDirectory: master, notify: { [weak self] event in
                 self?.send(event)
             }) else { return nil }
-            return try? await session.handle(event: event)
+            return try? await eventDelivery.handle(event: event)
         }
         player.onNetworkDiagnostic = { [weak self] command in
             guard let self else { return nil }
@@ -1154,7 +1210,7 @@ final class CalledGhostRuntime {
             guard let self, let references = await onEmptyRecycleBin?(
                 ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name
             ) else { return nil }
-            return try? await session.handle(event: .shiori(
+            return try? await eventDelivery.handle(event: .shiori(
                 id: "OnRecycleBinEmpty",
                 references: references
             ))
@@ -1165,7 +1221,7 @@ final class CalledGhostRuntime {
         }
         player.onSelectRectangle = { [weak self] scope, enabled in
             guard let self, let event = await onSelectRectangle?(scope, enabled) else { return nil }
-            return try? await session.handle(event: event)
+            return try? await eventDelivery.handle(event: event)
         }
         player.onWebSocket = { [weak self] command in
             await self?.handleWebSocket(command)
@@ -1176,7 +1232,7 @@ final class CalledGhostRuntime {
         }
         player.onCommunicateBox = { [weak self] initialValue in
             guard let self else { return nil }
-            let autocomplete = try? await session.handle(event: .shiori(
+            let autocomplete = try? await eventDelivery.handle(event: .shiori(
                 id: "inputbox.autocomplete",
                 references: [0: "communicatebox"]
             ))
@@ -1189,17 +1245,17 @@ final class CalledGhostRuntime {
                 actionTitle: String(localized: "OK"),
                 appearance: textInputAppearance(style: .communicate)
             ) else {
-                return try? await session.handle(event: SHIORIEventFactory.communicateInputCancel)
+                return try? await eventDelivery.handle(event: SHIORIEventFactory.communicateInputCancel)
             }
-            return try? await session.handle(event: .shiori(
+            return try? await eventDelivery.handle(event: .shiori(
                 id: "OnCommunicate",
                 references: [0: "user", 1: value]
             ))
         }
         player.onTeachBox = { [weak self] initialValue in
             guard let self else { return nil }
-            _ = try? await session.handle(event: SHIORIEventFactory.teachStart)
-            let autocomplete = try? await session.handle(event: .shiori(
+            _ = try? await eventDelivery.handle(event: SHIORIEventFactory.teachStart)
+            let autocomplete = try? await eventDelivery.handle(event: .shiori(
                 id: "inputbox.autocomplete",
                 references: [0: "teachbox"]
             ))
@@ -1212,10 +1268,10 @@ final class CalledGhostRuntime {
                 actionTitle: String(localized: "OK"),
                 appearance: textInputAppearance(style: .teach)
             ) else {
-                return try? await session.handle(event: SHIORIEventFactory.teachInputCancel)
+                return try? await eventDelivery.handle(event: SHIORIEventFactory.teachInputCancel)
             }
             teachHistory.append(value)
-            return try? await session.handle(event: SHIORIEventFactory.teach(history: teachHistory))
+            return try? await eventDelivery.handle(event: SHIORIEventFactory.teach(history: teachHistory))
         }
         player.onOtherGhostTalk = { [weak self] target, script in
             self?.onOtherGhostTalk?(target, script)
@@ -1236,7 +1292,7 @@ final class CalledGhostRuntime {
             if sntpCoordinator == nil {
                 sntpCoordinator = SNTPEventCoordinator { [weak self] id, references in
                     guard let self else { return nil }
-                    return try? await session.handle(event: .shiori(id: id, references: references))
+                    return try? await eventDelivery.handle(event: .shiori(id: id, references: references))
                 }
             }
             return await sntpCoordinator?.start()
@@ -1285,7 +1341,7 @@ final class CalledGhostRuntime {
         Task {
             do {
                 guard let droppedEvent = FileDropEventRouter.dropped(scope: scope, urls: urls) else { return }
-                let response = try await session.response(for: droppedEvent)
+                let response = try await eventDelivery.response(for: droppedEvent)
                 if let script = response?.script {
                     player.play(script, balloon: balloon)
                     if let response {
@@ -1323,7 +1379,7 @@ final class CalledGhostRuntime {
         ]
         Task {
             do {
-                if let response = try await session.response(for: .shiori(
+                if let response = try await eventDelivery.response(for: .shiori(
                     id: "OnURLQuery",
                     references: queryReferences
                 )), let script = response.script {
@@ -1391,7 +1447,7 @@ final class CalledGhostRuntime {
                               masterDirectory: masterDirectory
                           )
                     else { return }
-                    _ = try? await session.handle(event: event)
+                    _ = try? await eventDelivery.handle(event: event)
                 }
             } else {
                 nil
@@ -1406,7 +1462,7 @@ final class CalledGhostRuntime {
                               masterDirectory: masterDirectory
                           )
                     else { return }
-                    _ = try? await session.handle(event: event)
+                    _ = try? await eventDelivery.handle(event: event)
                 }
             } else {
                 nil
@@ -1426,7 +1482,7 @@ final class CalledGhostRuntime {
                    info: tlsInfo
                )
             {
-                _ = try? await session.handle(event: event)
+                _ = try? await eventDelivery.handle(event: event)
             }
             let statusCode = httpResponse?.statusCode ?? 0
             let cookie = httpResponse?.value(forHTTPHeaderField: "Set-Cookie") ?? ""
@@ -1459,7 +1515,7 @@ final class CalledGhostRuntime {
                         headers: headers
                     )
                 }
-                return try? await session.handle(event: event)
+                return try? await eventDelivery.handle(event: event)
             }
 
             if command.isFeed {
@@ -1475,13 +1531,13 @@ final class CalledGhostRuntime {
                             item.summary
                         ].joined(separator: "\u{1}")
                     }
-                    return try await session.handle(event: SHIORIEventFactory.executeRSSComplete(
+                    return try await eventDelivery.handle(event: SHIORIEventFactory.executeRSSComplete(
                         eventID: eventID,
                         records: records
                     ))
                 } catch {
                     guard let eventID = command.eventID else { return nil }
-                    return try? await session.handle(event: SHIORIEventFactory.executeRSSFailure(
+                    return try? await eventDelivery.handle(event: SHIORIEventFactory.executeRSSFailure(
                         eventID: eventID,
                         method: command.method,
                         url: command.url,
@@ -1494,12 +1550,12 @@ final class CalledGhostRuntime {
 
             if command.isCalendar {
                 do {
-                    return try await session.handle(event: SakuraScriptCalendarSupport.completeEvent(
+                    return try await eventDelivery.handle(event: SakuraScriptCalendarSupport.completeEvent(
                         data: data,
                         command: command
                     ))
                 } catch {
-                    return try? await session.handle(event: SakuraScriptCalendarSupport.failureEvent(
+                    return try? await eventDelivery.handle(event: SakuraScriptCalendarSupport.failureEvent(
                         command: command,
                         reason: "parse",
                         cookie: cookie,
@@ -1525,7 +1581,7 @@ final class CalledGhostRuntime {
                     .replacingOccurrences(of: "\n", with: "\u{1}")
             }
             guard let eventID = command.eventID else { return nil }
-            return try await session.handle(event: SHIORIEventFactory.executeHTTPComplete(
+            return try await eventDelivery.handle(event: SHIORIEventFactory.executeHTTPComplete(
                 eventID: eventID,
                 method: command.method,
                 url: command.url,
@@ -1562,7 +1618,7 @@ final class CalledGhostRuntime {
                     reason: reason
                 )
             }
-            return try? await session.handle(event: event)
+            return try? await eventDelivery.handle(event: event)
         }
     }
 
@@ -1612,7 +1668,7 @@ final class CalledGhostRuntime {
             do {
                 let result = try runner.extract(archiveURL: archiveURL, destinationDirectoryURL: destURL, password: password)
                 guard let eventID else { return nil }
-                return try await session.handle(event: SHIORIEventFactory.extractArchiveComplete(
+                return try await eventDelivery.handle(event: SHIORIEventFactory.extractArchiveComplete(
                     eventID: eventID,
                     fileCount: result.fileCount,
                     compressedBytes: result.compressedBytes,
@@ -1620,13 +1676,13 @@ final class CalledGhostRuntime {
                 ))
             } catch let error as ArchiveOperationError {
                 guard let eventID else { return nil }
-                return try? await session.handle(event: SHIORIEventFactory.extractArchiveFailure(
+                return try? await eventDelivery.handle(event: SHIORIEventFactory.extractArchiveFailure(
                     eventID: eventID,
                     reason: error.errorCode
                 ))
             } catch {
                 guard let eventID else { return nil }
-                return try? await session.handle(event: SHIORIEventFactory.extractArchiveFailure(
+                return try? await eventDelivery.handle(event: SHIORIEventFactory.extractArchiveFailure(
                     eventID: eventID,
                     reason: "open failed"
                 ))
@@ -1637,7 +1693,7 @@ final class CalledGhostRuntime {
             do {
                 let result = try runner.compress(destinationArchiveURL: archiveURL, sourceDirectoryURL: sourceURL, password: password)
                 guard let eventID else { return nil }
-                return try await session.handle(event: SHIORIEventFactory.compressArchiveComplete(
+                return try await eventDelivery.handle(event: SHIORIEventFactory.compressArchiveComplete(
                     eventID: eventID,
                     fileCount: result.fileCount,
                     compressedBytes: result.compressedBytes,
@@ -1645,13 +1701,13 @@ final class CalledGhostRuntime {
                 ))
             } catch let error as ArchiveOperationError {
                 guard let eventID else { return nil }
-                return try? await session.handle(event: SHIORIEventFactory.compressArchiveFailure(
+                return try? await eventDelivery.handle(event: SHIORIEventFactory.compressArchiveFailure(
                     eventID: eventID,
                     reason: error.errorCode
                 ))
             } catch {
                 guard let eventID else { return nil }
-                return try? await session.handle(event: SHIORIEventFactory.compressArchiveFailure(
+                return try? await eventDelivery.handle(event: SHIORIEventFactory.compressArchiveFailure(
                     eventID: eventID,
                     reason: "open failed"
                 ))
@@ -1670,15 +1726,15 @@ final class CalledGhostRuntime {
             let sourceURL = sourceDirectoryPath.map(resolvePath) ?? ghost.rootDirectory
             do {
                 let references = narCreationEventReferences(sourceURL: sourceURL, archiveURL: archiveURL)
-                _ = try? await session.handle(event: .shiori(id: "OnNarCreating", references: references))
+                _ = try? await eventDelivery.handle(event: .shiori(id: "OnNarCreating", references: references))
                 let result = try runner.compress(destinationArchiveURL: archiveURL, sourceDirectoryURL: sourceURL)
-                let standardResponse = try? await session.handle(event: .shiori(
+                let standardResponse = try? await eventDelivery.handle(event: .shiori(
                     id: "OnNarCreated",
                     references: references
                 ))
                 guard let eventID else { return standardResponse }
                 let id = eventID.hasPrefix("On") ? eventID : "OnCreateNarComplete"
-                return try await session.handle(event: .shiori(id: id, references: [
+                return try await eventDelivery.handle(event: .shiori(id: id, references: [
                     0: eventID,
                     1: String(result.fileCount),
                     2: String(result.compressedBytes),
@@ -1687,14 +1743,14 @@ final class CalledGhostRuntime {
             } catch let error as ArchiveOperationError {
                 guard let eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateNarFailure"
-                return try? await session.handle(event: .shiori(id: id, references: [
+                return try? await eventDelivery.handle(event: .shiori(id: id, references: [
                     0: eventID,
                     1: error.errorCode
                 ]))
             } catch {
                 guard let eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateNarFailure"
-                return try? await session.handle(event: .shiori(id: id, references: [
+                return try? await eventDelivery.handle(event: .shiori(id: id, references: [
                     0: eventID,
                     1: "open failed"
                 ]))
@@ -1717,36 +1773,36 @@ final class CalledGhostRuntime {
                 )
                 guard let eventID = command.eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? eventID : "OnDumpSurfaceComplete"
-                return try await session.handle(event: .shiori(id: id, references: [
+                return try await eventDelivery.handle(event: .shiori(id: id, references: [
                     0: String(count)
                 ]))
             } catch {
                 guard let eventID = command.eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnDumpSurfaceFailure"
-                return try? await session.handle(event: .shiori(id: id, references: [
+                return try? await eventDelivery.handle(event: .shiori(id: id, references: [
                     0: destinationURL.path
                 ]))
             }
         case let .createUpdateData(directoryPath, eventID):
             let targetURL = directoryPath.map(resolvePath) ?? ghost.rootDirectory
             do {
-                _ = try? await session.handle(event: .shiori(id: "OnUpdatedataCreating", references: [:]))
+                _ = try? await eventDelivery.handle(event: .shiori(id: "OnUpdatedataCreating", references: [:]))
                 let generator = UpdateDataGenerator()
                 let result = try generator.generate(in: targetURL)
-                let standardResponse = try? await session.handle(event: .shiori(
+                let standardResponse = try? await eventDelivery.handle(event: .shiori(
                     id: "OnUpdatedataCreated",
                     references: [:]
                 ))
                 guard let eventID else { return standardResponse }
                 let id = eventID.hasPrefix("On") ? eventID : "OnCreateUpdateDataComplete"
-                return try await session.handle(event: .shiori(id: id, references: [
+                return try await eventDelivery.handle(event: .shiori(id: id, references: [
                     0: String(result.fileCount),
                     1: targetURL.path
                 ])) ?? standardResponse
             } catch {
                 guard let eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnCreateUpdateDataFailure"
-                return try? await session.handle(event: .shiori(id: id, references: [
+                return try? await eventDelivery.handle(event: .shiori(id: id, references: [
                     0: targetURL.path
                 ]))
             }
@@ -1787,7 +1843,7 @@ final class CalledGhostRuntime {
                 data: data
             ) { progress in
                 let id = eventID.hasPrefix("On") ? eventID : "OnPingProgress"
-                _ = try? await self.session.handle(event: .shiori(id: id, references: [
+                _ = try? await self.eventDelivery.handle(event: .shiori(id: id, references: [
                     0: eventID,
                     1: [progress.address, String(progress.sequence + 1),
                         String(progress.sequence + 1), "0"].joined(separator: "\u{1}"),
@@ -1799,7 +1855,7 @@ final class CalledGhostRuntime {
             let sent = numbers.first ?? count
             let received = numbers.dropFirst().first ?? (result.succeeded ? sent : 0)
             let id = eventID.hasPrefix("On") ? eventID : "OnPingComplete"
-            return try? await session.handle(event: .shiori(id: id, references: [
+            return try? await eventDelivery.handle(event: .shiori(id: id, references: [
                 0: eventID,
                 1: [host, String(sent), String(received), String(max(0, sent - received))].joined(separator: "\u{1}"),
                 2: result.output.replacingOccurrences(of: "\n", with: "\u{1}")
@@ -1815,7 +1871,7 @@ final class CalledGhostRuntime {
             }.joined(separator: "\u{1}")
             let defaultID = result.succeeded && !value.isEmpty ? "OnNSLookupComplete" : "OnNSLookupFailure"
             let id = eventID.hasPrefix("On") ? eventID : defaultID
-            return try? await session.handle(event: SHIORIEventFactory.nsLookup(
+            return try? await eventDelivery.handle(event: SHIORIEventFactory.nsLookup(
                 id: id,
                 eventLabel: eventID,
                 host: host,
@@ -1828,7 +1884,7 @@ final class CalledGhostRuntime {
     private func sendAnchorSelection(label: String, id: String, arguments: [String]) {
         Task {
             do {
-                let extended = try await session.response(for: SHIORIEventFactory.anchorSelectExtended(
+                let extended = try await eventDelivery.response(for: SHIORIEventFactory.anchorSelectExtended(
                     label: label,
                     id: id,
                     arguments: arguments
@@ -1841,7 +1897,7 @@ final class CalledGhostRuntime {
                     }
                 }
 
-                guard let legacy = try await session.response(for: SHIORIEventFactory.anchorSelect(id: id)) else {
+                guard let legacy = try await eventDelivery.response(for: SHIORIEventFactory.anchorSelect(id: id)) else {
                     return
                 }
                 if let script = legacy.script, !script.rawValue.isEmpty {
@@ -1867,7 +1923,7 @@ final class CalledGhostRuntime {
         }
         Task {
             do {
-                let extended = try await session.response(for: SHIORIEventFactory.choiceSelectExtended(
+                let extended = try await eventDelivery.response(for: SHIORIEventFactory.choiceSelectExtended(
                     label: label,
                     id: id,
                     arguments: arguments
@@ -1880,7 +1936,7 @@ final class CalledGhostRuntime {
                     }
                 }
 
-                guard let legacy = try await session.response(for: SHIORIEventFactory.choiceSelect(
+                guard let legacy = try await eventDelivery.response(for: SHIORIEventFactory.choiceSelect(
                     id: id,
                     arguments: arguments
                 )) else { return }
@@ -1933,7 +1989,7 @@ final class CalledGhostRuntime {
 
     private func handleWebSocketEvent(_ event: WebSocketSessionEvent) async {
         let payload = event.shioriEvent
-        guard let response = try? await session.handle(event: .shiori(id: payload.id, references: payload.references)),
+        guard let response = try? await eventDelivery.handle(event: .shiori(id: payload.id, references: payload.references)),
               !response.rawValue.isEmpty
         else { return }
         player.play(response, balloon: balloon)
@@ -1949,6 +2005,7 @@ final class CalledGhostRuntime {
 
     private func fetchWeatherAndPlay(eventID: String) async {
         let script = await handleWeatherGet(eventID: eventID)
+        guard !isStopping, !Task.isCancelled else { return }
         player.play(script, balloon: balloon)
     }
 
@@ -1977,7 +2034,7 @@ final class CalledGhostRuntime {
         references: [Int: String],
         fallback: String
     ) async -> SakuraScript {
-        if let response = try? await session.handle(event: .shiori(id: eventID, references: references)),
+        if let response = try? await eventDelivery.handle(event: .shiori(id: eventID, references: references)),
            !response.rawValue.isEmpty
         {
             return response

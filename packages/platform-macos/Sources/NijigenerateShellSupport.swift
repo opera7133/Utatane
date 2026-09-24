@@ -397,6 +397,11 @@ enum NijigenerateViewFactory {
         return view
     }
 
+    static func setSuspended(_ suspended: Bool, on view: NSView?) {
+        guard let view else { return }
+        UTSetNicxliveViewSuspended(view, suspended)
+    }
+
     static func setScale(_ scale: NSSize, on view: NSView?) {
         guard let view else { return }
         UTSetNicxliveViewScale(view, scale.width, scale.height)

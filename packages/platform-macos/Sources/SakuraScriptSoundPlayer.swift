@@ -17,6 +17,36 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
     private var audioPlayer: AVAudioPlayer?
     private var loadedFile: String?
     private var isLooping = false
+    private var isSuspended = false
+    private var resumesAfterSuspension = false
+    private var pendingCompletion: Bool?
+
+    func setSuspended(_ suspended: Bool) {
+        guard suspended != isSuspended else { return }
+        isSuspended = suspended
+        if suspended {
+            resumesAfterSuspension = audioPlayer?.isPlaying == true
+            audioPlayer?.pause()
+        } else if let completion = pendingCompletion {
+            pendingCompletion = nil
+            resumesAfterSuspension = false
+            handlePlaybackFinished(successfully: completion)
+        } else {
+            if resumesAfterSuspension {
+                audioPlayer?.play()
+            }
+            resumesAfterSuspension = false
+        }
+    }
+
+    func discard() {
+        audioPlayer?.stop()
+        audioPlayer = nil
+        loadedFile = nil
+        isLooping = false
+        resumesAfterSuspension = false
+        pendingCompletion = nil
+    }
 
     func execute(_ command: SakuraScriptSoundCommand) async throws {
         switch command {
@@ -75,10 +105,7 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
             audioPlayer?.play()
         case .stop:
             let stoppedFile = loadedFile
-            audioPlayer?.stop()
-            audioPlayer = nil
-            loadedFile = nil
-            isLooping = false
+            discard()
             if let stoppedFile {
                 onStop?(stoppedFile, "close")
             }
@@ -93,6 +120,10 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
 
     func handlePlaybackFinished(successfully flag: Bool) {
         guard let loadedFile else { return }
+        if isSuspended {
+            pendingCompletion = flag
+            return
+        }
         switch Self.completionAction(isLooping: isLooping, successfully: flag) {
         case .loop:
             guard let audioPlayer else { return }
