@@ -41,12 +41,26 @@ public final class WindowPositionStore {
         )
     }
 
+    func balloonDragOffset(scope: Int, coordinateSpace: PresentationCoordinateSpace) -> NSPoint? {
+        guard let value = defaults.dictionary(forKey: key(for: .balloon, scope: scope, coordinateSpace: coordinateSpace) + ".drag"),
+              let x = value["x"] as? Double, let y = value["y"] as? Double else { return nil }
+        return NSPoint(x: x, y: y)
+    }
+
+    func saveBalloonDragOffset(_ offset: NSPoint, scope: Int, coordinateSpace: PresentationCoordinateSpace) {
+        defaults.set(["x": Double(offset.x), "y": Double(offset.y)],
+                     forKey: key(for: .balloon, scope: scope, coordinateSpace: coordinateSpace) + ".drag")
+    }
+
     func remove(
         for kind: FloatingWindowKind,
         scope: Int,
         coordinateSpace: PresentationCoordinateSpace = .desktop
     ) {
         defaults.removeObject(forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace))
+        if kind == .balloon {
+            defaults.removeObject(forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace) + ".drag")
+        }
     }
 
     func restoredOrigin(

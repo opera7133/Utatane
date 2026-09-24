@@ -81,7 +81,7 @@ UKADOC分類行数: 147
 | `\_l[x,y]`／`\_l[x]` | ✅ | ピクセル・em・lh・%と`@`相対指定を解釈し、文字描画範囲左上を基準に配置。Xだけの旧来形、右タブとして使う同一行の左右分割、AppKit縦書きレイアウトにも同じ座標モデルを反映 |
 | `\C` | ✅ | スクリプト先頭では直前の表示内容・リンク・装飾を維持してscope 0から追記。途中では全scopeを消去。Playerテストで確認 |
 | `\![set,autoscroll,...]` | ✅ | `disable` / `enable` をスコープ単位で反映 |
-| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset、配置、下部marker、受信数表示を実装。`@`付きoffsetはShell／surface固有offsetへ加算し、`@`なしは置換。利用者がドラッグした座標との加算・終端復帰規則は未対応 |
+| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset、配置、下部marker、受信数表示を実装。`@`付きoffsetはShell／surface固有offsetへ加算し、`@`なしは置換。ドラッグ量を別に保存して加算し、終端のoffset解除後も保持。相対／絶対指定と復帰をテスト済み。実ゴーストでの操作・切り替え中の復帰確認待ち |
 | `\![set,balloontimeout,...]` | ✅ | 表示完了後のバルーン消去時間を指定。0以下で無効、選択肢タイムアウトとの競合は早い方を採用 |
 | `\![set,balloonwait,...]` | ✅ | 倍率・百分率・`ms` 絶対値に対応し、スクリプト終了時に復帰 |
 | `\![set,serikotalk,true/false]` | ✅ | 文字表示中に現在surfaceのSERIKO `talk` intervalを駆動。明示アニメーションとは競合させず、スクリプトごとにtrueへリセット |
@@ -212,7 +212,7 @@ UKADOC分類行数: 147
 | websocket execute/send/close/cancel | 🟡 | ws/wss接続、Open、header・subprotocol、テキスト／バイナリ送受信、close／cancel、最大5回の自動再接続とTLS情報通知に対応。証明書subject／issuerは空欄 |
 | `\![cancel,http/http-get/ical,...]` | ✅ | 特定URLまたは全実行中のHTTP・iCalendarリクエストをキャンセル |
 | `\![execute,extractarchive/compressarchive,...]` | 🟡 | ghost/master配下に限定してZIP展開・圧縮を実行し、結果またはエラーコードをイベント通知。パストラバーサル・シンボリックリンクを拒否。SSP管理下の他フォルダと暗号化方式の完全互換は未対応 |
-| dumpsurface | 🟡 | ゴースト配下へのPNG出力、scope、surface ID／範囲／除外指定、`__system_surface_all__`／`__system_surface_defined__`、prefix、イベント完了時の成功件数に対応。通常描画器が負座標を切り落とすため、ゼロ位置切り出しを無効にした時の負座標拡張は未対応 |
+| dumpsurface | 🟡 | ゴースト配下へのPNG出力、scope、surface ID／範囲／除外指定、`__system_surface_all__`／`__system_surface_defined__`、prefix、イベント完了時の成功件数に対応。element・初期bind合成の負座標領域を保持し、ゼロ位置切り出し指定時だけ0,0で切り抜く。入れ子の合成とPNG画素をテスト済み。合成範囲を拡張する時の上限は各辺16,384px・計16,777,216画素。実シェルでの各合成方式の照合待ち |
 | `\![execute,install,path/url,...]` | ✅ | ローカルファイルパスまたはURL指定のNARインストールコマンドを接続 |
 | ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl/df/data、応答単位progress、完了・失敗イベントに対応。macOS `ping`の制約によりdataは先頭16バイトのパターンを指定サイズまで繰り返します |
 | createnar / createupdatedata | 🟡 | `createupdatedata`は引数なしで実行元ゴーストの`updates2.dau`を生成（明示パス拡張も対応）。`createnar`は引数なしで保存先を選び、実行元ゴーストをNAR化する。スクリプトが任意の絶対パスへ直接書き出す動作は安全のため制限 |
