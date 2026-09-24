@@ -109,6 +109,7 @@ public final class SakuraScriptPlayer {
     private let geometryProvider: any PresentationGeometryProviding
     private var characterDelayMilliseconds = 50
     private var postDialogueDismissalMilliseconds: Int
+    private var playbackGeneration: UInt64 = 0
     private var playbackTask: Task<Void, Never>?
     private var queuedPlaybackTail: Task<Void, Never>?
     private var pendingInterrupts: [[SakuraScriptToken]] = []
@@ -166,6 +167,7 @@ public final class SakuraScriptPlayer {
     public var onTrayBalloon: (@MainActor (SakuraScriptTrayBalloon) -> Void)?
     public var onTranslate: (@MainActor (SakuraScript, SakuraScriptPlaybackContext) async -> SakuraScript?)?
     public var onTalkPlayback: (@MainActor (SakuraScriptTalkPhase, SakuraScript, SakuraScriptPlaybackContext) -> Void)?
+    public var onEmbeddedNotification: (@MainActor (String, [String]) async -> Void)?
     public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
     public var onInputBox: (@MainActor (SakuraScriptInputCommand) async -> SakuraScript?)?
     public var onSystemDialog: (@MainActor (SakuraScriptSystemDialogCommand) async -> SakuraScript?)?
@@ -530,6 +532,7 @@ public final class SakuraScriptPlayer {
     }
 
     private func cancel(hidesBalloon: Bool) {
+        playbackGeneration &+= 1
         queuedPlaybackTail?.cancel()
         queuedPlaybackTail = nil
         pendingInterrupts.removeAll()
@@ -1066,7 +1069,9 @@ public final class SakuraScriptPlayer {
                         enabled: enabled
                     )
                     if notifiesEvents {
-                        await notifyDressupChanges(changes)
+                        if let response = await notifyDressupChanges(changes) {
+                            pendingTokens.insert(contentsOf: parser.parse(response), at: 0)
+                        }
                     }
                 case let .balloonSurface(style):
                     balloonStyleByScope[scope] = style
@@ -1654,21 +1659,51 @@ public final class SakuraScriptPlayer {
         }
     }
 
-    public func notifyDressupChanges(_ changes: [DressupChange], source: String = "script") async {
-        guard !changes.isEmpty else { return }
-        for change in changes {
-            _ = await onEmbeddedEvent?(
-                "OnDressupChanged",
-                [
-                    String(change.scope),
-                    change.group.part,
-                    change.enabled ? "1" : "0",
-                    change.group.category,
-                    source
-                ]
-            )
+    public func notifyDressupChanges(_ changes: [DressupChange], source: String = "script") async -> SakuraScript? {
+        guard !changes.isEmpty else { return nil }
+        let generation = playbackGeneration
+        var response: SakuraScript?
+        // Large batches are represented by the complete state below.
+        if changes.count < 100 {
+            for (index, change) in changes.enumerated() {
+                guard generation == playbackGeneration, !Task.isCancelled else { return nil }
+                let arguments = [String(change.scope), change.group.part,
+                                 change.enabled ? "1" : "0", change.group.category, source]
+                if index == changes.count - 1 {
+                    response = await onEmbeddedEvent?("OnDressupChanged", arguments)
+                } else {
+                    await onEmbeddedNotification?("OnDressupChanged", arguments)
+                }
+            }
         }
-        let dressupReferences = surfaceWindowController.dressupInfo().map { info in
+        guard generation == playbackGeneration, !Task.isCancelled else { return nil }
+        let infoResponse = await onEmbeddedEvent?("OnNotifyDressupInfo", dressupInformationReferences)
+        guard generation == playbackGeneration, !Task.isCancelled else { return nil }
+        // As with a batch of ordinary events, the last nonempty reply takes precedence.
+        if let infoResponse, !infoResponse.rawValue.isEmpty {
+            return infoResponse
+        }
+        return response.flatMap { $0.rawValue.isEmpty ? nil : $0 }
+    }
+
+    public func notifyInitialDressupInfo() async {
+        await onEmbeddedNotification?("OnNotifyDressupInfo", dressupInformationReferences)
+    }
+
+    public func resetWindowPositionsFromMenu(balloon: BalloonDefinition) async {
+        let generation = playbackGeneration
+        let response = await onEmbeddedEvent?("OnResetWindowPos", [])
+        guard generation == playbackGeneration, !Task.isCancelled else { return }
+        if let response, !response.rawValue.isEmpty {
+            play(response, balloon: balloon, context: .init(eventID: "OnResetWindowPos"))
+        } else {
+            surfaceWindowController.resetWindowPositions()
+            balloonWindowController.resetWindowPositions()
+        }
+    }
+
+    private var dressupInformationReferences: [String] {
+        surfaceWindowController.dressupInfo().map { info in
             let options = [
                 info.options.mustSelect ? "mustselect" : nil,
                 info.options.multiple ? "multiple" : nil
@@ -1682,7 +1717,6 @@ public final class SakuraScriptPlayer {
                 info.group.thumbnail
             ].joined(separator: "\u{1}")
         }
-        _ = await onEmbeddedEvent?("OnNotifyDressupInfo", dressupReferences)
     }
 
     private func scheduleEventTimer(

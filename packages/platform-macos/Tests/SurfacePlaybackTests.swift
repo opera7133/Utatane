@@ -1145,12 +1145,24 @@ func `bind command switches exclusive dressup parts and sends events`() async th
         balloonWindowController: BalloonWindowController(positionStore: positionStore)
     )
     var events: [(String, [String])] = []
-    player.onEmbeddedEvent = { id, arguments in
+    var methods: [String] = []
+    player.onEmbeddedNotification = { id, arguments in
+        methods.append("NOTIFY")
         events.append((id, arguments))
-        return nil
+    }
+    player.onEmbeddedEvent = { id, arguments in
+        methods.append("GET")
+        events.append((id, arguments))
+        return id == "OnNotifyDressupInfo" ? SakuraScript(rawValue: #"\![embed,OnDressupReply]"#) : nil
     }
     let balloon = makeBalloon(directory: directory)
 
+    await player.notifyInitialDressupInfo()
+    #expect(methods == ["NOTIFY"])
+    #expect(events.first?.0 == "OnNotifyDressupInfo")
+    #expect(events.first?.1.first == "0\u{1}服\u{1}コート\u{1}mustselect\u{1}1\u{1}")
+    methods.removeAll()
+    events.removeAll()
     await player.playAndWait(
         SakuraScript(rawValue: #"\![bind,服,パーカー,1]\![bind-noevent,服,コート,1]\e"#),
         balloon: balloon,
@@ -1160,9 +1172,23 @@ func `bind command switches exclusive dressup parts and sends events`() async th
     let info = surfaceController.dressupInfo()
     #expect(info.first(where: { $0.group.id == 10 })?.enabled == true)
     #expect(info.first(where: { $0.group.id == 11 })?.enabled == false)
-    #expect(events.map(\.0) == ["OnDressupChanged", "OnDressupChanged", "OnNotifyDressupInfo"])
+    #expect(events.map(\.0) == ["OnDressupChanged", "OnDressupChanged", "OnNotifyDressupInfo", "OnDressupReply"])
+    #expect(methods == ["NOTIFY", "GET", "GET", "GET"])
     #expect(events[0].1 == ["0", "コート", "0", "服", "script"])
     #expect(events[1].1 == ["0", "パーカー", "1", "服", "script"])
+    methods.removeAll()
+    events.removeAll()
+    let changes = surfaceController.changeBind(scope: 0, category: "服", part: "パーカー", enabled: true)
+    let response = await player.notifyDressupChanges(changes, source: "user")
+    #expect(try #require(events.first).1.last == "user")
+    #expect(response?.rawValue == #"\![embed,OnDressupReply]"#)
+    methods.removeAll()
+    events.removeAll()
+    _ = try await player.notifyDressupChanges(Array(repeating: #require(changes.first), count: 100), source: "user")
+    #expect(methods == ["GET"])
+    #expect(events.map(\.0) == ["OnNotifyDressupInfo"])
+    player.onEmbeddedEvent = { _, _ in SakuraScript(rawValue: "") }
+    #expect(await player.notifyDressupChanges(changes, source: "user") == nil)
 }
 
 @Test

@@ -1218,9 +1218,8 @@ private struct UtataneRootView: View {
 
     private func broadcastWindowModeChange(references: [Int: String]) {
         sendEvents([
-            .shiori(id: "OnWindowModeChange", references: references),
-            .shiori(id: "OnDisplayChange", references: displayChangeReferences())
-        ])
+            .shiori(id: "OnWindowModeChange", references: references)
+        ] + presentationGeometry.displayChangeEvents())
         for runtime in calledGhosts.values {
             runtime.sendWindowModeChange(references: references)
         }
@@ -1290,12 +1289,10 @@ private struct UtataneRootView: View {
     }
 
     private func dispatchDisplayChangeEvents() {
-        broadcastEvent(.shiori(id: "OnDisplayChange", references: displayChangeReferences()))
-        var references = [0: "update"]
-        for (index, screen) in presentationGeometry.screens.enumerated() {
-            references[index + 1] = displayDescription(screen)
+        sendEvents(presentationGeometry.displayChangeEvents())
+        for runtime in calledGhosts.values {
+            runtime.sendDisplayChangeEvents()
         }
-        broadcastEvent(.shiori(id: "OnDisplayChangeEx", references: references))
     }
 
     private func dispatchDeviceEvent(id: String, notification: Notification) {
@@ -1362,23 +1359,6 @@ private struct UtataneRootView: View {
             ))
         }
         previousWindowLayoutSnapshot = current
-    }
-
-    private func displayDescription(_ screen: PresentationScreenGeometry) -> String {
-        let frame = screen.frame
-        return [
-            Int(frame.minX), Int(frame.minY), Int(frame.maxX), Int(frame.maxY),
-            screen.bitsPerPixel, screen.isPrimary ? 1 : 0
-        ].map(String.init).joined(separator: ",") + ",unknown,0"
-    }
-
-    private func displayChangeReferences() -> [Int: String] {
-        guard let screen = presentationGeometry.mainScreen else { return [:] }
-        return [
-            0: String(screen.bitsPerPixel),
-            1: String(Int(screen.frame.width)),
-            2: String(Int(screen.frame.height))
-        ]
     }
 
     private func sendFileDropEvents(scope: Int, urls: [URL]) {
@@ -1913,7 +1893,8 @@ private struct UtataneRootView: View {
     private func transition(to ghost: InstalledGhost, forceReload: Bool = false) async {
         guard forceReload || currentGhost?.id != ghost.id else { return }
         let previousGhost = currentGhost
-        let reloadPresentation = forceReload && previousGhost?.id == ghost.id
+        let isReload = forceReload && previousGhost?.id == ghost.id
+        let reloadPresentation = isReload
             ? surfaceWindowController.captureReloadPresentation() : nil
         let statusToken = statusWindowController.show("「\(ghost.name)」を起動中…")
         defer { statusWindowController.hide(token: statusToken) }
@@ -1931,14 +1912,14 @@ private struct UtataneRootView: View {
                 ghostName: ghost.name,
                 path: ghost.rootDirectory.path
             )
-            : .silent)
+            : .silent, isReload: isReload)
         guard !Task.isCancelled else { return }
         let startup: GhostStartup = if let previousGhost {
             .changed(from: previousGhost, script: changeScript)
         } else {
             .boot
         }
-        switch await activate(ghost, startup: startup, reloadPresentation: reloadPresentation) {
+        switch await activate(ghost, startup: startup, reloadPresentation: reloadPresentation, isReload: isReload) {
         case .success:
             recentContentStore.record(kind: .ghost, identifier: ghost.rootDirectory.path, name: ghost.name)
             if let balloon {
@@ -1989,7 +1970,7 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func closeCurrentGhost(reason: GhostStopReason) async -> String {
+    private func closeCurrentGhost(reason: GhostStopReason, isReload: Bool = false) async -> String {
         guard let activeSession = session else { return "" }
 
         do {
@@ -2026,7 +2007,7 @@ private struct UtataneRootView: View {
                 }
                 session = nil
                 configureContextMenu()
-                _ = try? await activeSession.handle(event: .shiori(id: "OnDestroy", references: [:]))
+                _ = try? await activeSession.handle(event: SHIORIEventFactory.destroy(isReload: isReload))
                 await activeSession.shutdown()
                 try? await Task.sleep(for: .seconds(1))
                 return finalScript
@@ -2047,7 +2028,7 @@ private struct UtataneRootView: View {
             }
             session = nil
             configureContextMenu()
-            _ = try? await activeSession.handle(event: .shiori(id: "OnDestroy", references: [:]))
+            _ = try? await activeSession.handle(event: SHIORIEventFactory.destroy(isReload: isReload))
             guard let closeScript = try await activeSession.stop(reason: reason) else { return "" }
             if let balloon {
                 await scriptPlayer.playAndWait(
@@ -2076,7 +2057,8 @@ private struct UtataneRootView: View {
     private func activate(
         _ ghost: InstalledGhost,
         startup: GhostStartup = .boot,
-        reloadPresentation: SurfaceWindowController.ReloadPresentation? = nil
+        reloadPresentation: SurfaceWindowController.ReloadPresentation? = nil,
+        isReload: Bool = false
     ) async -> Result<Void, any Error> {
         AppLogStore.shared.info("「\(ghost.name)」の起動を開始しました", category: "Ghost", ghostName: ghost.name)
         scriptPlayer.cancel()
@@ -2130,10 +2112,7 @@ private struct UtataneRootView: View {
                 sendEvent(.shiori(id: "OnMouseGesture", references: event.references))
             }
             surfaceWindowController.onSurfaceChange = { scope, previous, current in
-                sendEvent(.shiori(
-                    id: "OnSurfaceChange",
-                    references: currentSurfaceReferences(for: surfaceWindowController)
-                ))
+                sendEvent(surfaceWindowController.surfaceChangeEvent(scope: scope, surfaceID: current))
                 notifyOtherGhostsSurfaceChange(
                     ghost: ghost,
                     controller: surfaceWindowController,
@@ -2386,6 +2365,10 @@ private struct UtataneRootView: View {
             }
             scriptPlayer.onOtherSurfaceChange = { target, scope, surfaceID in
                 handleOtherSurfaceChange(target: target, scope: scope, surfaceID: surfaceID, excluding: ghost.id)
+            }
+            scriptPlayer.onEmbeddedNotification = { id, arguments in
+                _ = try? await session?.handle(event: .notification(id: id, references:
+                    Dictionary(uniqueKeysWithValues: arguments.enumerated().map { ($0.offset, $0.element) })))
             }
             scriptPlayer.onEmbeddedEvent = { id, arguments in
                 guard let embeddedSession = session else { return nil }
@@ -2648,7 +2631,7 @@ private struct UtataneRootView: View {
             )
             session = ghostSession
             configureContextMenu()
-            _ = try? await ghostSession.start(event: .shiori(id: "OnInitialize", references: [:]))
+            _ = try? await ghostSession.start(event: SHIORIEventFactory.initialize(isReload: isReload))
             siteMenuResources[ghost.id] = await loadSiteMenuResources(from: ghostSession)
             configureContextMenu()
             let shellDefinition = try shellLoader.load(from: shellChoice.directory)
@@ -2681,6 +2664,10 @@ private struct UtataneRootView: View {
                     references: event.references
                 ))
             }
+            for event in presentationGeometry.displayChangeEvents(isInitial: true) {
+                _ = try? await ghostSession.handle(event: event)
+            }
+            await scriptPlayer.notifyInitialDressupInfo()
             for event in surfaceWindowController.displayHandoverInitializationEvents() {
                 _ = try? await ghostSession.handle(event: .notification(
                     id: "OnDisplayHandover",
@@ -4228,6 +4215,7 @@ private struct UtataneRootView: View {
               await targetSession.isPersonalityEngineLoaded
         else { return }
 
+        _ = try? await targetSession.handle(event: SHIORIEventFactory.destroy(isReload: true))
         await targetSession.unloadPersonalityEngine()
         do {
             let engine = try personalityEngine(
@@ -4235,6 +4223,7 @@ private struct UtataneRootView: View {
                 includesMakoto: !makotoDisabledGhostIDs.contains(ghost.id)
             )
             await targetSession.loadPersonalityEngine(engine)
+            _ = try? await targetSession.handle(event: SHIORIEventFactory.initialize(isReload: true))
         } catch {
             showError(error.localizedDescription)
         }
@@ -5043,7 +5032,11 @@ private struct UtataneRootView: View {
     private func configureContextMenu() {
         refreshContentExplorer()
         surfaceWindowController.onUserDressupChange = { changes in
-            Task { await scriptPlayer.notifyDressupChanges(changes, source: "user") }
+            Task {
+                if let response = await scriptPlayer.notifyDressupChanges(changes, source: "user"), let balloon {
+                    scriptPlayer.play(response, balloon: balloon)
+                }
+            }
         }
         surfaceWindowController.contextMenuItems = { scope in
             contextMenuItems(for: .primary, scope: scope)
@@ -5388,9 +5381,8 @@ private struct UtataneRootView: View {
             .action(title: String(localized: "ウインドウ位置を初期化"), handler: {
                 switch target {
                 case .primary:
-                    sendEvent(.shiori(id: "OnResetWindowPos", references: [:]))
-                    surfaceWindowController.resetWindowPositions()
-                    balloonWindowController.resetWindowPositions()
+                    guard let balloon else { return }
+                    Task { await scriptPlayer.resetWindowPositionsFromMenu(balloon: balloon) }
                 case let .called(runtime): runtime.resetWindowPositions()
                 }
             })
@@ -8886,7 +8878,7 @@ func startupInformationEvents(
         ]),
         ("OnNotifyBalloonInfo", [
             0: balloon.name, 1: balloon.directory.path,
-            2: balloonSurfaceList(in: balloon.directory)
+            2: BalloonLoader().surfaceList(in: balloon.directory)
         ]),
         ("OnNotifyShellInfo", [0: shell.name, 1: shell.directory.path, 2: surfaceList]),
         ("OnNotifyUserInfo", [0: NSUserName(), 1: NSFullUserName(), 2: "", 3: "undef"]),
@@ -8913,27 +8905,6 @@ func startupInformationEvents(
 func darkThemeReferences() -> [Int: String] {
     let isDark = NSApp?.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     return [0: isDark ? "1" : "0", 1: isDark ? "1" : "0"]
-}
-
-private func balloonSurfaceList(in directory: URL) -> String {
-    let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
-    var surfaces: [Int: Set<Int>] = [:]
-    for name in names {
-        let stem = URL(fileURLWithPath: name).deletingPathExtension().lastPathComponent.lowercased()
-        let scopeAndStyle: (Int, Int)? = if stem.hasPrefix("balloons"), let style = Int(stem.dropFirst("balloons".count)) {
-            (0, style)
-        } else if stem.hasPrefix("balloonk"), let style = Int(stem.dropFirst("balloonk".count)) {
-            (1, style)
-        } else {
-            nil
-        }
-        if let (scope, style) = scopeAndStyle {
-            surfaces[scope, default: []].insert(style)
-        }
-    }
-    return surfaces.keys.sorted().map { scope in
-        "\(scope):" + surfaces[scope, default: []].sorted().map(String.init).joined(separator: ",")
-    }.joined(separator: " ")
 }
 
 enum URLDropDownloadError: Error {

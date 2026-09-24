@@ -212,8 +212,13 @@ final class CalledGhostRuntime {
         )
         configureCharacterEnvironment(for: selectedShell)
         configureCallbacks()
-        surfaceController.onUserDressupChange = { [weak player] changes in
-            Task { await player?.notifyDressupChanges(changes, source: "user") }
+        surfaceController.onUserDressupChange = { [weak self] changes in
+            Task { [weak self] in
+                guard let self else { return }
+                if let response = await player.notifyDressupChanges(changes, source: "user") {
+                    player.play(response, balloon: balloon)
+                }
+            }
         }
     }
 
@@ -258,7 +263,7 @@ final class CalledGhostRuntime {
     ) async throws -> String? {
         try show(shell: shell)
         surfaceController.setPresentationHidden(true)
-        _ = try? await session.start(event: .shiori(id: "OnInitialize", references: [:]))
+        _ = try? await session.start(event: SHIORIEventFactory.initialize())
         if let definition = try? shellLoader.load(from: shell.directory)
             .applyingPresentationDefaults(from: ghost)
         {
@@ -277,6 +282,10 @@ final class CalledGhostRuntime {
                     references: event.references
                 ))
             }
+            for event in presentationGeometry.displayChangeEvents(isInitial: true) {
+                _ = try? await eventDelivery.handle(event: event)
+            }
+            await player.notifyInitialDressupInfo()
             for event in surfaceController.displayHandoverInitializationEvents() {
                 _ = try? await eventDelivery.handle(event: .notification(
                     id: "OnDisplayHandover",
@@ -365,9 +374,8 @@ final class CalledGhostRuntime {
 
     func sendWindowModeChange(references: [Int: String]) {
         send([
-            .shiori(id: "OnWindowModeChange", references: references),
-            .shiori(id: "OnDisplayChange", references: displayChangeReferences())
-        ])
+            .shiori(id: "OnWindowModeChange", references: references)
+        ] + presentationGeometry.displayChangeEvents())
     }
 
     private func send(_ events: [GhostEvent]) {
@@ -664,10 +672,10 @@ final class CalledGhostRuntime {
                     return finalScript
                 }
             }
-            _ = try? await session.handle(event: .shiori(id: "OnDestroy", references: [:]))
+            _ = try? await session.handle(event: SHIORIEventFactory.destroy())
             await session.shutdown()
         } else {
-            _ = try? await session.handle(event: .shiori(id: "OnDestroy", references: [:]))
+            _ = try? await session.handle(event: SHIORIEventFactory.destroy())
             if let script = try? await session.stop(reason: reason) {
                 finalScript = script.rawValue
                 await player.playAndWait(script, balloon: balloon)
@@ -709,13 +717,8 @@ final class CalledGhostRuntime {
         await propertySystem.register(values: ["baseware.windowmode": mode.sspIdentifier])
     }
 
-    private func displayChangeReferences() -> [Int: String] {
-        guard let screen = presentationGeometry.mainScreen else { return [:] }
-        return [
-            0: String(screen.bitsPerPixel),
-            1: String(Int(screen.frame.width)),
-            2: String(Int(screen.frame.height))
-        ]
+    func sendDisplayChangeEvents() {
+        send(presentationGeometry.displayChangeEvents())
     }
 
     func showSpeechHistory() {
@@ -818,9 +821,7 @@ final class CalledGhostRuntime {
     }
 
     func resetWindowPositions() {
-        send(.shiori(id: "OnResetWindowPos", references: [:]))
-        surfaceController.resetWindowPositions()
-        balloonController.resetWindowPositions()
+        Task { await player.resetWindowPositionsFromMenu(balloon: balloon) }
     }
 
     private func show(shell newShell: InstalledShell) throws {
@@ -893,7 +894,7 @@ final class CalledGhostRuntime {
         }
         surfaceController.onSurfaceChange = { [weak self] scope, previous, current in
             guard let self else { return }
-            send(.shiori(id: "OnSurfaceChange", references: currentSurfaceReferences()))
+            send(surfaceController.surfaceChangeEvent(scope: scope, surfaceID: current))
             onSurfaceChanged?(scope, previous, current)
         }
         surfaceController.onDisplayHandover = { [weak self] event in
@@ -1026,6 +1027,10 @@ final class CalledGhostRuntime {
         player.onShioriDebugMode = { [weak self] enabled in self?.onShioriDebugMode?(enabled) }
         player.onOtherEvent = { [weak self] target, id, arguments, reflectsResponse in
             await self?.onOtherEvent?(target, id, arguments, reflectsResponse)
+        }
+        player.onEmbeddedNotification = { [weak self] id, arguments in
+            _ = try? await self?.eventDelivery.handle(event: .notification(id: id, references:
+                Dictionary(uniqueKeysWithValues: arguments.enumerated().map { ($0.offset, $0.element) })))
         }
         player.onEmbeddedEvent = { [weak self] id, arguments in
             guard let self else { return nil }

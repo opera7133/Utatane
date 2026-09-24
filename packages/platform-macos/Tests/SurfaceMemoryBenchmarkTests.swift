@@ -56,8 +56,18 @@ struct SurfaceMemoryBenchmarkTests {
         }
     }
 
+    @MainActor
+    private func drainScheduledWork() async {
+        for _ in 0 ..< 8 {
+            await Task.yield()
+        }
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+
     @Test @MainActor
-    func `repeated surface changes`() throws {
+    func `repeated surface changes`() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -116,7 +126,9 @@ struct SurfaceMemoryBenchmarkTests {
             try controller.show(shell: shell, scope: 1, surfaceID: firstSurfaceID)
         }
         try record("twoScopes")
-        for pass in 1 ... 3 {
+        let passes = min(20, max(1, Int(ProcessInfo.processInfo.environment["UTATANE_MEMORY_PASSES"] ?? "3") ?? 3))
+        let suspends = ProcessInfo.processInfo.environment["UTATANE_MEMORY_SUSPEND"] == "1"
+        for pass in 1 ... passes {
             for id in surfaceIDs {
                 try autoreleasepool {
                     try controller.changeSurface(scope: 0, to: id)
@@ -126,9 +138,23 @@ struct SurfaceMemoryBenchmarkTests {
                     _ = controller.renderedImage(for: 0)?.cgImage(forProposedRect: nil, context: nil, hints: nil)
                 }
             }
+            // Let cancelled animation tasks finish before measuring retained memory.
+            await drainScheduledWork()
             try record("pass\(pass)")
+            if suspends {
+                let displayed = controller.renderedImage(for: 0)
+                autoreleasepool { controller.setSuspended(true) }
+                #expect(controller.cachedImageCount(scope: 0) == 0)
+                #expect(controller.cachedImageCount(scope: 1) == 0)
+                #expect(controller.renderedImage(for: 0) === displayed)
+                await drainScheduledWork()
+                try record("suspend\(pass)")
+                controller.setSuspended(false)
+                #expect(controller.renderedImage(for: 0) === displayed)
+            }
         }
         autoreleasepool { controller.resetContent() }
+        await drainScheduledWork()
         try record("reset")
         let data = try JSONSerialization.data(withJSONObject: samples, options: [.sortedKeys, .prettyPrinted])
         print("SURFACE_MEMORY_BENCHMARK\n\(String(decoding: data, as: UTF8.self))")

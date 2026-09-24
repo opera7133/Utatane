@@ -112,7 +112,7 @@ private actor LifecycleRecordingEngine: PersonalityEngine {
 
     func handle(event: GhostEvent) async throws -> SakuraScript? {
         let eventID = switch event {
-        case let .shiori(id, _): id
+        case let .shiori(id, _), let .notification(id, _): id
         default: "other"
         }
         eventIDs.append(eventID)
@@ -217,4 +217,14 @@ func `decodes an older dialogue catalog without ghost changing scripts`() throws
 
     #expect(catalog.ghostChanging.isEmpty)
     #expect(catalog.scripts(for: .ghostChanging(name: nil)) == ["close"])
+}
+
+@Test func `notification replies never become dialogue`() async throws {
+    let engine = LifecycleRecordingEngine(scripts: ["OnInitialize": "ignored", "OnSurfaceChange": "ignored", "OnBoot": "hello"])
+    let session = GhostSession(personalityEngine: engine)
+    #expect(try await session.start(event: SHIORIEventFactory.initialize()) == nil)
+    #expect(try await session.response(for: .notification(id: "OnSurfaceChange", references: [:])) == nil)
+    #expect(try await session.handle(event: .notification(id: "OnSurfaceChange", references: [:])) == nil)
+    #expect(try await session.handle(event: SHIORIEventFactory.boot(shellName: "master"))?.rawValue == "hello")
+    #expect(await engine.eventIDs == ["OnInitialize", "OnSurfaceChange", "OnSurfaceChange", "OnBoot"])
 }

@@ -51,6 +51,9 @@ public actor GhostSession {
         do {
             let response = try await personalityEngine.response(for: event)
             logResponse(event: event, response: response)
+            if case .notification = event {
+                return nil
+            }
             return response
         } catch {
             logError(event: event, error: error)
@@ -154,6 +157,9 @@ public actor GhostSession {
         do {
             let script = try await personalityEngine.handle(event: event)
             logResponse(event: event, response: PersonalityResponse(script: script))
+            if case .notification = event {
+                return nil
+            }
             return script
         } catch {
             logError(event: event, error: error)

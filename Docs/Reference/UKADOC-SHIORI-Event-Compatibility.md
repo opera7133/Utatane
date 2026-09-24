@@ -6,7 +6,7 @@
 基準: [SHIORI Eventリスト](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html)
 
 UKADOC掲載イベント数: 304
-調査日: 2026-09-20
+調査日: 2026-09-24
 調査結果: ✅ 248 / 🟡 45 / ❌ 2 / ➖ 9
 
 ## 判定
@@ -41,7 +41,7 @@ UKADOC掲載イベント数: 304
 | [`OnOtherGhostClosed`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostClosed) | ✅ | 呼び出しゴーストの終了後、本体名・最終スクリプト・ゴースト名・シェル名をReference0〜2・7へ通知。イベント生成をテスト済み |
 | [`OnShellChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnShellChanged) | ✅ | 切替後に現シェル名・ゴースト名・シェルパスをReference0〜2へ通知。イベント生成テストで確認 |
 | [`OnShellChanging`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnShellChanging) | ✅ | 切替前に新旧シェル名と新シェルパスをReference0〜2へ通知。イベント生成テストで確認 |
-| [`OnDressupChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDressupChanged) | 🟡 | scriptによるbind変更とReference0〜4を実装。複数変更時のNOTIFY/最後だけGET規則は未対応 |
+| [`OnDressupChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDressupChanged) | 🟡 | script／userの着せ替え変更でReference0〜4を送信。複数変更は最後だけGET、それ以前はNOTIFY、100件以上はOnNotifyDressupInfoのみ。応答利用をテスト済み、実ゴーストでの操作確認待ち |
 | [`OnBalloonChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonChange) | ✅ | 切替後のバルーン名とフルパスをReference0〜1へ通知。メイン・呼び出しゴーストの共通イベント生成をテスト済み |
 | [`OnWindowStateRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWindowStateRestore) | 🟡 | macOSでアプリの非表示が解除された時にReference0=systemを通知。script・user理由の区別は未対応 |
 | [`OnWindowStateMinimize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWindowStateMinimize) | 🟡 | macOSでアプリが非表示になった時にReference0=systemを通知。script・user理由の区別は未対応 |
@@ -50,8 +50,8 @@ UKADOC掲載イベント数: 304
 | [`OnVirtualDesktopChanged`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnVirtualDesktopChanged) | ✅ | macOSのactiveSpaceDidChangeでReference0=currentを通知。公開APIでSpace IDを取得できないためReference1は空 |
 | [`OnCacheSuspend`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCacheSuspend) | ✅ | 呼び出しゴーストのメニュー休止時に発行。描画・監視を停止し、通常イベントと進行中の応答を復帰まで待機 |
 | [`OnCacheRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCacheRestore) | ✅ | 休止中の呼び出しゴーストの復帰時に発行。応答を受けて描画・イベント配送を再開（実機での長時間確認は未実施） |
-| [`OnInitialize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInitialize) | 🟡 | SHIORIセッション開始直後、OnBootまたはOnGhostCalledより前にNOTIFY。リロード時のReference0=reloadは未対応 |
-| [`OnDestroy`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDestroy) | 🟡 | ゴースト終了処理でOnCloseより前にNOTIFY。リロード時のReference0=reloadは未対応 |
+| [`OnInitialize`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInitialize) | 🟡 | セッション開始時にNOTIFY。ゴースト・SHIORI再読込時はReference0=reload。電文をテスト済み、実ゴーストの再読込確認待ち |
+| [`OnDestroy`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDestroy) | 🟡 | 終了・SHIORI再読込前にNOTIFY、再読込時はReference0=reload。電文をテスト済み、実ゴーストの再読込確認待ち |
 | [`OnSysResume`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSysResume) | 🟡 | macOSのスリープ復帰通知でReference0=normalを発行。自動復帰理由autoの判定は未対応 |
 | [`OnSysSuspend`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSysSuspend) | ✅ | macOSがスリープへ入る直前にNOTIFY。実機スリープでの実動未確認 |
 | [`OnBasewareUpdating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBasewareUpdating) | ✅ | Sparkleが更新をインストールする直前に旧バージョンとビルド番号を通知 |
@@ -117,7 +117,7 @@ UKADOC掲載イベント数: 304
 
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
-| [`OnSurfaceChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceChange) | 🟡 | SakuraScript等でsurfaceが変わった時に本体側・相方側の現在IDをReference0〜1へ通知。NOTIFYメソッドの区別は未対応 |
+| [`OnSurfaceChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceChange) | 🟡 | surface変更をNOTIFYで送り、本体・相方IDと変更キャラクターのID・サーフェス番号・画像幅・高さを通知。追加scope・倍率をテスト済み、実ゴーストでの通知確認待ち |
 | [`OnSurfaceRestore`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSurfaceRestore) | ✅ | SSP同様、バルーン消去15秒後に、その時点の現在surfaceをReference0〜1へ通知。待機中に次の会話が始まった場合は通知を取り消します。Playerテスト済み。Emily/Phase4.5は標準イベントを意図的に無効化し、YAYA SHIORI/3フレームワーク側の独自タイミングで復帰します |
 | [`OnOtherSurfaceChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherSurfaceChange) | ✅ | set,othersurfacechangeを有効にしたゴーストへ、他ゴーストの本体名・Sakura名・scope・新旧surface・矩形をReference0〜5で通知 |
 
@@ -367,9 +367,9 @@ UKADOC掲載イベント数: 304
 | [`OnCPULoadLow`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCPULoadLow) | ✅ | CPU High通知後に使用率が60%未満へ戻った時、現在率をReference0へ通知。状態遷移テストで確認 |
 | [`OnMemoryLoadHigh`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMemoryLoadHigh) | ✅ | VM統計のメモリ使用率が80%以上で5秒間隔3回続いた時に現在率をReference0へ通知。状態遷移テストで確認 |
 | [`OnMemoryLoadLow`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMemoryLoadLow) | ✅ | Memory High通知後に使用率が60%未満へ戻った時、現在率をReference0へ通知。状態遷移テストで確認 |
-| [`OnDisplayChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChange) | 🟡 | 画面構成変更時にプライマリ画面のbpp・幅・高さをReference0〜2へ通知。起動時NOTIFYは未対応 |
+| [`OnDisplayChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChange) | 🟡 | 起動時NOTIFY、画面構成・ウインドウモード変更時GETで、そのゴーストの表示領域のbpp・幅・高さを通知。生成処理をテスト済み、実機での画面変更確認待ち |
 | [`OnDisplayHandover`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayHandover) | ✅ | シェル位置の初期化時と別スクリーンへの移動時に、scopeと移動前後の画面座標・色深度・主画面フラグを通知 |
-| [`OnDisplayChangeEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChangeEx) | 🟡 | 画面構成変更時にupdateと全画面の矩形・色深度・プライマリ判定を通知。macOSにはタスクバーがないため末尾はunknown,0。起動時initは未対応 |
+| [`OnDisplayChangeEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayChangeEx) | 🟡 | 起動時init/NOTIFY、画面構成・ウインドウモード変更時update/GET。上原点の画面矩形・色深度・プライマリ判定を通知し、末尾はunknown,0。コンテナのサイズ変更通知は未接続、実機確認待ち |
 | [`OnDisplayPowerStatus`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDisplayPowerStatus) | ✅ | macOSのスリープ直前に0、復帰時に1を通知。単独ディスプレイの電源断は検出しません |
 | [`OnBatteryNotify`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryNotify) | ✅ | 起動時と30秒ごとの状態変化時に残量・残り分数・給電状態・状態フラグを通知。バッテリーなしもno_batteryとして通知 |
 | [`OnBatteryLow`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBatteryLow) | ✅ | 残量が33%以下へ遷移した時にOnBatteryNotifyと同じReferenceを通知 |
@@ -426,7 +426,7 @@ UKADOC掲載イベント数: 304
 | [`OnShellScaling`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnShellScaling) | ✅ | 設定でシェル倍率が変わった時に新旧の縦横パーセントをReference0〜3へ通知。Utataneの倍率設定は縦横同値 |
 | [`OnBalloonScaling`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnBalloonScaling) | ✅ | 設定でバルーン倍率が変わった時に新旧の縦横パーセントをReference0〜3へ通知。Utataneの倍率設定は縦横同値 |
 | [`OnLanguageChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnLanguageChange) | 🟡 | 起動時に現在の言語名とLocale IDをReference0〜1へ通知。実行中の言語変更監視とUtatane言語フォルダ・ヘルプURLは未対応 |
-| [`OnResetWindowPos`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnResetWindowPos) | 🟡 | コンテキストメニューのウインドウ位置初期化で通知してからシェル・バルーン位置を初期化。無応答時のみ実行する制御は未対応 |
+| [`OnResetWindowPos`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnResetWindowPos) | 🟡 | メニュー操作でGETを送り、空でない返答を再生。無応答・空文字列なら標準のシェル・バルーン位置初期化へ進む。分岐をテスト済み、メニュー実操作は確認待ち |
 | [`OnExtractArchiveComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExtractArchiveComplete) | ✅ | 実際のZIP展開成功後に書庫・出力先・形式・ユーザーIDをReference0〜3へ通知。展開処理とイベント生成をテスト済み |
 | [`OnExtractArchiveFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExtractArchiveFailure) | ✅ | ZIP展開失敗時に対象書庫とエラー内容をReference0〜1へ通知。失敗経路とイベント生成をテスト済み |
 | [`OnCompressArchiveComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnCompressArchiveComplete) | ✅ | 実際のZIP圧縮成功後にファイル・出力先・形式・ユーザーIDをReference0〜3へ通知。圧縮処理とイベント生成をテスト済み |
@@ -464,9 +464,9 @@ UKADOC掲載イベント数: 304
 | [`enable_log`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#enable_log) | ✅ | 起動時にUtataneのアプリ内ログが有効であることをReference0=1でNOTIFY。Utataneでは実行中の切替UIを提供しない |
 | [`enable_debug`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#enable_debug) | ✅ | 起動時にDebugビルドなら1、Releaseなら0をReference0へNOTIFY。Utataneでは実行中の切替UIを提供しない |
 | [`OnNotifySelfInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifySelfInfo) | ✅ | 起動時にゴースト・キャラクター・シェル・バルーンの名前と絶対パスをReference0〜6へNOTIFY |
-| [`OnNotifyBalloonInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyBalloonInfo) | 🟡 | 起動時にバルーン名・絶対パス・検出したsakura/kero画像番号を通知。追加キャラクター用画像番号は未対応 |
+| [`OnNotifyBalloonInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyBalloonInfo) | 🟡 | 起動時にバルーン名・絶対パス・sakura/kero/追加キャラクターの画像番号をNOTIFY。画像以外を除く列挙をテスト済み、実ゴーストへの通知確認待ち |
 | [`OnNotifyShellInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyShellInfo) | ✅ | 起動時にシェル名・絶対パス・定義済みsurface番号一覧をReference0〜2へNOTIFY |
-| [`OnNotifyDressupInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyDressupInfo) | 🟡 | bind変更後に全着せ替え情報をバイト値1区切りで通知。起動時NOTIFYとuser操作GETは未対応 |
+| [`OnNotifyDressupInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyDressupInfo) | 🟡 | 起動時NOTIFY、着せ替え操作後GETで全着せ替え情報をバイト値1区切りで通知し、返答を利用。生成・送信順・応答処理をテスト済み、実ゴーストでの操作確認待ち |
 | [`OnNotifyUserInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyUserInfo) | ✅ | 起動時にmacOSアカウント名とフルネームを通知。誕生日は空、性別はundef固定 |
 | [`OnNotifyOSInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyOSInfo) | ✅ | 起動時にmacOS・CPUコア数・物理メモリ・uptimeをReference0〜3へNOTIFY。CPUクロックと仮想メモリは概算値 |
 | [`OnNotifyFontInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyFontInfo) | 🟡 | 起動時にmacOSで利用可能なフォント名をReference列へNOTIFY。フォント変更の動的再通知は未対応 |

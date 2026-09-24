@@ -504,3 +504,16 @@ func `uses scope specific balloon image and falls back for additional characters
     try Data().write(to: scope2)
     #expect(try loader.imageURL(speaker: .character(scope: 2), in: balloon) == scope2)
 }
+
+@Test func `balloon information includes extra scopes and only real image files`() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    for name in ["balloons10.png", "balloons2.png", "balloonk0.png", "balloonp2def3.png", "balloonp10def0.png", "BALLOONP2DEF4.PNG",
+                 "balloons99.txt", "balloonp2def3s.txt", "balloons-1.png", "balloonp2def7.jpg", "balloonp0def5.png"]
+    {
+        try Data().write(to: directory.appending(path: name))
+    }
+    try FileManager.default.createDirectory(at: directory.appending(path: "balloons500.png"), withIntermediateDirectories: true)
+    #expect(BalloonLoader().surfaceList(in: directory) == "0:2,10 1:0 2:3,4 10:0")
+}

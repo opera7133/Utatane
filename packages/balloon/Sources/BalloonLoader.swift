@@ -379,6 +379,34 @@ public struct BalloonLoader: Sendable {
         )
     }
 
+    /// Lists actual balloon images, excluding per-style text files and thumbnails.
+    public func surfaceList(in directory: URL) -> String {
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory,
+                                                                  includingPropertiesForKeys: [.isRegularFileKey])) ?? []
+        let pattern = try! NSRegularExpression(pattern: "^balloon(?:s([0-9]+)|k([0-9]+)|p([0-9]+)def([0-9]+))\\.png$")
+        var surfaces: [Int: Set<Int>] = [:]
+        for file in files {
+            guard (try? file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            let name = file.lastPathComponent.lowercased()
+            let text = name as NSString
+            guard let match = pattern.firstMatch(in: name, range: NSRange(location: 0, length: text.length)) else { continue }
+            func number(_ group: Int) -> Int? {
+                let range = match.range(at: group)
+                return range.location == NSNotFound ? nil : Int(text.substring(with: range))
+            }
+            if let style = number(1) {
+                surfaces[0, default: []].insert(style)
+            } else if let style = number(2) {
+                surfaces[1, default: []].insert(style)
+            } else if let scope = number(3), let style = number(4), scope >= 2 {
+                surfaces[scope, default: []].insert(style)
+            }
+        }
+        return surfaces.keys.sorted().map { scope in
+            "\(scope):" + surfaces[scope, default: []].sorted().map(String.init).joined(separator: ",")
+        }.joined(separator: " ")
+    }
+
     private func integer(
         _ key: String,
         in values: [String: String],

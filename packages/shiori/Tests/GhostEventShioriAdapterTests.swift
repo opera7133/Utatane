@@ -8,6 +8,13 @@ import UtataneCore
     #expect(adapter.request(for: .boot).id == "OnBoot")
     #expect(adapter.request(for: .close).id == "OnClose")
     #expect(adapter.request(for: .randomTalk).id == "OnAITalk")
+    for isReload in [false, true] {
+        for event in [SHIORIEventFactory.initialize(isReload: isReload), SHIORIEventFactory.destroy(isReload: isReload)] {
+            let request = adapter.request(for: event)
+            #expect(request.method == "NOTIFY")
+            #expect(request.reference(0) == (isReload ? "reload" : nil))
+        }
+    }
 
     let changing = adapter.request(for: .ghostChanging(name: "Emily"))
     #expect(changing.id == "OnGhostChanging")

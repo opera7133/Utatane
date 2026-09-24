@@ -1,6 +1,14 @@
 import Foundation
 
 public enum SHIORIEventFactory {
+    public static func initialize(isReload: Bool = false) -> GhostEvent {
+        .notification(id: "OnInitialize", references: isReload ? [0: "reload"] : [:])
+    }
+
+    public static func destroy(isReload: Bool = false) -> GhostEvent {
+        .notification(id: "OnDestroy", references: isReload ? [0: "reload"] : [:])
+    }
+
     public static func firstBoot(vanishCount: Int) -> GhostEvent {
         .shiori(id: "OnFirstBoot", references: [0: String(vanishCount)])
     }
