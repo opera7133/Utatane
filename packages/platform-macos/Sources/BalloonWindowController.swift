@@ -154,6 +154,7 @@ public final class BalloonWindowController {
     private var onlineModeScopes: Set<Int> = []
     private var sstpMessageByScope: [Int: String] = [:]
     private var offsetByScope: [Int: RuntimeOffset] = [:]
+    private var placementOriginByScope: [Int: NSPoint] = [:]
     private var alignmentByScope: [Int: BalloonWindowAlignment] = [:]
     private var shellPresentationSettings: [Int: ShellScopePresentationSettings] = [:]
     private var displayScale: CGFloat = 1
@@ -229,6 +230,7 @@ public final class BalloonWindowController {
         sstpMessageByScope.removeAll()
         visitedAnchorIDs.removeAll()
         offsetByScope.removeAll()
+        placementOriginByScope.removeAll()
         alignmentByScope.removeAll()
         shellPresentationSettings.removeAll()
     }
@@ -273,12 +275,17 @@ public final class BalloonWindowController {
 
     public func restoreLayoutPresetPositions(_ positions: [Int: CGPoint]) {
         for (scope, origin) in positions where origin.x.isFinite && origin.y.isFinite {
+            positionStore.remove(for: .balloon, scope: scope, coordinateSpace: geometryProvider.coordinateSpace)
             positionStore.save(origin, for: .balloon, scope: scope, coordinateSpace: geometryProvider.coordinateSpace)
             if let item = presentations[scope]?.item {
                 let restored = positionStore.restoredOrigin(
                     for: .balloon, scope: scope, windowSize: item.frame.size,
                     visibleFrames: geometryProvider.visibleFrames, coordinateSpace: geometryProvider.coordinateSpace
                 ) ?? origin
+                if let base = placementOriginByScope[scope] {
+                    positionStore.saveBalloonDragOffset(NSPoint(x: restored.x - base.x, y: restored.y - base.y),
+                                                        scope: scope, coordinateSpace: geometryProvider.coordinateSpace)
+                }
                 item.setFrameOrigin(restored)
             }
         }
@@ -468,23 +475,20 @@ public final class BalloonWindowController {
         contentView.setPositionedImages(existingPositionedImages)
 
         let item = existingPresentation?.item ?? makePresentationItem(scope: scope)
-        let existingOrigin = existingPresentation?.item.frame.origin
         item.contentView = contentView
         item.setContentSize(scaledSize)
         configureDragging(contentView, item: item)
-        if offsetByScope[scope] != nil {
-            place(item, near: surfaceFrame, scope: scope, balloon: effectiveBalloon)
-        } else if let existingOrigin {
-            item.setFrameOrigin(existingOrigin)
-        } else if let restoredOrigin = positionStore.restoredOrigin(
-            for: .balloon,
-            scope: scope,
-            windowSize: scaledSize,
-            visibleFrames: geometryProvider.visibleFrames,
-            coordinateSpace: geometryProvider.coordinateSpace
-        ) {
-            item.setFrameOrigin(restoredOrigin)
-        } else {
+        place(item, near: surfaceFrame, scope: scope, balloon: effectiveBalloon)
+        // Migrate legacy absolute positions once. New drags are stored separately
+        // from the script/shell offset so subsequent layout changes preserve them.
+        if positionStore.balloonDragOffset(scope: scope, coordinateSpace: geometryProvider.coordinateSpace) == nil,
+           let restored = positionStore.restoredOrigin(
+               for: .balloon, scope: scope, windowSize: scaledSize,
+               visibleFrames: geometryProvider.visibleFrames, coordinateSpace: geometryProvider.coordinateSpace
+           ), let base = placementOriginByScope[scope]
+        {
+            positionStore.saveBalloonDragOffset(NSPoint(x: restored.x - base.x, y: restored.y - base.y),
+                                                scope: scope, coordinateSpace: geometryProvider.coordinateSpace)
             place(item, near: surfaceFrame, scope: scope, balloon: effectiveBalloon)
         }
         item.show(activating: true)
@@ -727,6 +731,9 @@ public final class BalloonWindowController {
         guard let presentation = presentations[scope] else { return }
         presentation.surfaceFrame.origin.x += delta.x
         presentation.surfaceFrame.origin.y += delta.y
+        if let base = placementOriginByScope[scope] {
+            placementOriginByScope[scope] = NSPoint(x: base.x + delta.x, y: base.y + delta.y)
+        }
         let origin = presentation.item.frame.origin
         presentation.item.setFrameOrigin(
             NSPoint(x: origin.x + delta.x, y: origin.y + delta.y),
@@ -769,8 +776,15 @@ public final class BalloonWindowController {
                     coordinateSpace: coordinateSpace
                 )
             },
-            onMove: { [positionStore, geometryProvider, scope] origin, reason in
+            onMove: { [weak self, positionStore, geometryProvider, scope] origin, reason in
+                if reason == .rehost {
+                    self?.placementOriginByScope.removeValue(forKey: scope)
+                }
                 if reason == .userInteraction {
+                    if let base = self?.placementOriginByScope[scope] {
+                        positionStore.saveBalloonDragOffset(NSPoint(x: origin.x - base.x, y: origin.y - base.y),
+                                                            scope: scope, coordinateSpace: geometryProvider.coordinateSpace)
+                    }
                     positionStore.save(
                         origin,
                         for: .balloon,
@@ -871,6 +885,10 @@ public final class BalloonWindowController {
         y -= (runtimeOffset?.point.y ?? 0)
             + (runtimeOffset?.isRelativeY == false ? 0 : shellOffset.y)
             + CGFloat(balloon.windowPositionY) * effectiveDisplayScale(scope: scope)
+        placementOriginByScope[scope] = NSPoint(x: x, y: y)
+        let userOffset = positionStore.balloonDragOffset(scope: scope, coordinateSpace: geometryProvider.coordinateSpace) ?? .zero
+        x += userOffset.x
+        y += userOffset.y
         if balloon.limitsWindowPosition {
             x = min(max(visibleFrame.minX, x), visibleFrame.maxX - item.frame.width)
             y = min(max(visibleFrame.minY, y), visibleFrame.maxY - item.frame.height)

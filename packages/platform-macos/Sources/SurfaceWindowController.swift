@@ -1144,11 +1144,22 @@ private final class CharacterSurfaceController {
     private(set) var isMovementLocked = false
     private var collisionMode = (enabled: false, showsNames: true)
 
-    func dumpImage(surfaceID: Int, cropsFromZero _: Bool) throws -> NSImage {
+    func dumpImage(surfaceID: Int, cropsFromZero: Bool) throws -> NSImage {
         guard let shell else {
             throw ShellError.missingSurface(id: surfaceID, directory: URL(fileURLWithPath: "/"))
         }
-        return try render(surfaceID: surfaceID, shell: shell).image
+        let definition = shell.surfaces[surfaceID]
+        let base: SurfaceImageCanvas = if let elements = definition?.elements, !elements.isEmpty {
+            try renderCanvas(elements: elements, shell: shell, expands: true)
+        } else {
+            try SurfaceImageCanvas(image: imageLoader.load(
+                shellLoader.loadSurface(id: surfaceID, from: shell.directory),
+                usesSelfAlpha: shell.usesSelfAlpha, usesFullSelfAlpha: shell.usesFullSelfAlpha
+            ))
+        }
+        let result = try applyInitialAnimationCanvas(to: base, definition: definition, shell: shell,
+                                                     visited: [surfaceID], expands: true)
+        return cropsFromZero ? result.croppedFromZero(loader: imageLoader) : result.image
     }
 
     func setStayOnTop(_ stayOnTop: Bool) {
@@ -2537,7 +2548,11 @@ private final class CharacterSurfaceController {
     }
 
     private func render(elements: [SurfaceElement], shell: ShellDefinition) throws -> NSImage {
-        var result: NSImage?
+        try renderCanvas(elements: elements, shell: shell, expands: false).image
+    }
+
+    private func renderCanvas(elements: [SurfaceElement], shell: ShellDefinition, expands: Bool) throws -> SurfaceImageCanvas {
+        var result: SurfaceImageCanvas?
         for element in elements {
             let ignoresTransparency = element.method.caseInsensitiveCompare("asis") == .orderedSame
             // SSP treats drawing methods that do not apply to element definitions
@@ -2556,16 +2571,16 @@ private final class CharacterSurfaceController {
                 continue
             }
             if let base = result {
-                result = imageLoader.composite(
-                    base: base,
-                    overlay: overlay,
+                result = try base.compositing(
+                    SurfaceImageCanvas(image: overlay),
                     x: element.x,
                     y: element.y,
                     operation: operation,
-                    clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(element.method)
+                    clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(element.method),
+                    expands: expands, loader: imageLoader
                 )
             } else {
-                result = overlay
+                result = SurfaceImageCanvas(image: overlay)
             }
         }
         guard let result else {
@@ -2581,6 +2596,19 @@ private final class CharacterSurfaceController {
         visited: Set<Int> = [],
         excludedAnimationIDs: Set<Int> = []
     ) throws -> NSImage {
+        try applyInitialAnimationCanvas(to: SurfaceImageCanvas(image: base), definition: definition,
+                                        shell: shell, visited: visited, excludedAnimationIDs: excludedAnimationIDs,
+                                        expands: false).image
+    }
+
+    private func applyInitialAnimationCanvas(
+        to base: SurfaceImageCanvas,
+        definition: SurfaceDefinition?,
+        shell: ShellDefinition,
+        visited: Set<Int> = [],
+        excludedAnimationIDs: Set<Int> = [],
+        expands: Bool
+    ) throws -> SurfaceImageCanvas {
         guard let definition else { return base }
         let enabled = shell.effectiveBindGroups(scope: scope, enabled: enabledBindGroups)
         let eligibleAnimations = definition.animations.filter { animation in
@@ -2605,9 +2633,9 @@ private final class CharacterSurfaceController {
 
         func composite(
             animation: SurfaceAnimation,
-            onto image: NSImage,
+            onto image: SurfaceImageCanvas,
             ancestry: Set<Int>
-        ) throws -> NSImage {
+        ) throws -> SurfaceImageCanvas {
             guard !ancestry.contains(animation.id) else { return image }
             var result = image
             let isBackground = animation.options.contains("background")
@@ -2634,23 +2662,23 @@ private final class CharacterSurfaceController {
                 } else {
                     continue
                 }
-                let overlay = try renderLayer(
+                let overlay = try renderLayerCanvas(
                     surfaceID: pattern.surfaceID,
                     shell: shell,
                     visited: visited,
-                    ignoresTransparency: method == "asis"
+                    ignoresTransparency: method == "asis", expands: expands
                 )
                 if method == "base", index == 0, !isBackground {
                     result = overlay
                     continue
                 }
-                result = imageLoader.composite(
-                    base: result,
-                    overlay: overlay,
+                result = try result.compositing(
+                    overlay,
                     x: pattern.x,
                     y: pattern.y,
                     operation: operation,
-                    clipsToBaseAlpha: isBackground ? false : surfaceCompositingClipsToBaseAlpha(method)
+                    clipsToBaseAlpha: isBackground ? false : surfaceCompositingClipsToBaseAlpha(method),
+                    expands: expands, loader: imageLoader
                 )
             }
             return result
@@ -2671,39 +2699,47 @@ private final class CharacterSurfaceController {
         visited: Set<Int>,
         ignoresTransparency: Bool = false
     ) throws -> NSImage {
+        try renderLayerCanvas(surfaceID: surfaceID, shell: shell, visited: visited,
+                              ignoresTransparency: ignoresTransparency, expands: false).image
+    }
+
+    private func renderLayerCanvas(
+        surfaceID: Int, shell: ShellDefinition, visited: Set<Int>,
+        ignoresTransparency: Bool = false, expands: Bool
+    ) throws -> SurfaceImageCanvas {
         guard !visited.contains(surfaceID) else {
             throw ShellError.missingSurface(id: surfaceID, directory: shell.directory)
         }
-        if let cached = renderedLayerCache[surfaceID, ignoresTransparency] {
-            return cached
+        if !expands, let cached = renderedLayerCache[surfaceID, ignoresTransparency] {
+            return SurfaceImageCanvas(image: cached)
         }
-        let image: NSImage
+        let result: SurfaceImageCanvas
         if let asset = try? shellLoader.loadSurface(id: surfaceID, from: shell.directory) {
-            image = try imageLoader.load(
+            result = try SurfaceImageCanvas(image: imageLoader.load(
                 asset,
                 usesSelfAlpha: shell.usesSelfAlpha,
                 usesFullSelfAlpha: shell.usesFullSelfAlpha,
                 ignoresTransparency: ignoresTransparency
-            )
+            ))
         } else {
             guard let definition = shell.surfaces[surfaceID], !definition.elements.isEmpty else {
                 throw ShellError.missingSurface(id: surfaceID, directory: shell.directory)
             }
-            let base = try render(elements: definition.elements, shell: shell)
-            let rendered = try applyInitialAnimations(
+            let base = try renderCanvas(elements: definition.elements, shell: shell, expands: expands)
+            let rendered = try applyInitialAnimationCanvas(
                 to: base,
                 definition: definition,
                 shell: shell,
-                visited: visited.union([surfaceID])
+                visited: visited.union([surfaceID]), expands: expands
             )
-            image = ignoresTransparency
-                ? try imageLoader.applyingOpaqueAlpha(to: rendered)
+            result = try ignoresTransparency
+                ? SurfaceImageCanvas(image: imageLoader.applyingOpaqueAlpha(to: rendered.image), origin: rendered.origin)
                 : rendered
         }
-        if !animationClock.isSuspended {
-            renderedLayerCache[surfaceID, ignoresTransparency] = image
+        if !expands, !animationClock.isSuspended {
+            renderedLayerCache[surfaceID, ignoresTransparency] = result.image
         }
-        return image
+        return result
     }
 
     private func makePresentationItem() -> any PresentationItem {

@@ -332,11 +332,16 @@ func `speech history thumbnail uses the surface icon rectangle`() throws {
     #expect(below.blueComponent > 0.9)
 }
 
-@Test
+@Test(arguments: [false, true])
 @MainActor
-func `combines shell surface and SakuraScript balloon offsets`() async throws {
+func `combines shell surface and SakuraScript balloon offsets`(hasUserOffset: Bool) async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let dragX: CGFloat = hasUserOffset ? 35 : 0
+    let dragY: CGFloat = hasUserOffset ? -20 : 0
+    if hasUserOffset {
+        positionStore.saveBalloonDragOffset(NSPoint(x: dragX, y: dragY), scope: 0, coordinateSpace: .desktop)
+    }
     let directory = FileManager.default.temporaryDirectory
         .appending(path: UUID().uuidString, directoryHint: .isDirectory)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -385,14 +390,14 @@ func `combines shell surface and SakuraScript balloon offsets`() async throws {
     }
 
     #expect(balloons.offset(scope: 0) == NSPoint(x: 5, y: 6))
-    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 417, y: 354))
+    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 417 + dragX, y: 354 + dragY))
 
     player.advance()
     try await requireEventually {
         balloons.offset(scope: 0) == nil
     }
 
-    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 412, y: 360))
+    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 412 + dragX, y: 360 + dragY))
 
     player.play(
         SakuraScript(rawValue: #"\0\![set,balloonoffset,5,6]hello\x\e"#),
@@ -405,14 +410,14 @@ func `combines shell surface and SakuraScript balloon offsets`() async throws {
     }
 
     #expect(balloons.offset(scope: 0) == NSPoint(x: 5, y: 6))
-    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 377, y: 414))
+    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 377 + dragX, y: 414 + dragY))
 
     player.advance()
     try await requireEventually {
         balloons.offset(scope: 0) == nil
     }
 
-    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 412, y: 360))
+    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 412 + dragX, y: 360 + dragY))
 
     player.play(
         SakuraScript(rawValue: #"\0hello\![set,balloonoffset,5,6]\x\e"#),
@@ -423,7 +428,7 @@ func `combines shell surface and SakuraScript balloon offsets`() async throws {
         balloons.offset(scope: 0) == NSPoint(x: 5, y: 6)
     }
 
-    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 377, y: 414))
+    #expect(balloons.windowFrame(for: 0)?.origin == NSPoint(x: 377 + dragX, y: 414 + dragY))
 
     player.advance()
     try await requireEventually {
