@@ -2,6 +2,11 @@ import Foundation
 
 public protocol PluginTransport: Sendable {
     func request(_ request: PluginRequest) async throws -> PluginResponse
+    func shutdown() async
+}
+
+public extension PluginTransport {
+    func shutdown() async {}
 }
 
 public struct PluginLoadFailure: Sendable, Equatable {
@@ -24,6 +29,8 @@ public actor PluginRuntime {
     }
 
     private var loaded: [String: LoadedPlugin] = [:]
+    private(set) var generation: UInt64 = 0
+    private var pendingShutdown: Task<Void, Never>?
 
     public init() {}
 
@@ -31,7 +38,11 @@ public actor PluginRuntime {
     public func reload(
         _ plugins: [InstalledPlugin],
         transportFactory: TransportFactory
-    ) -> [PluginLoadFailure] {
+    ) async -> [PluginLoadFailure] {
+        let transition = beginUnload()
+        await transition.task.value
+        guard generation == transition.generation else { return [] }
+        pendingShutdown = nil
         var next: [String: LoadedPlugin] = [:]
         var failures: [PluginLoadFailure] = []
         for plugin in plugins {
@@ -54,8 +65,27 @@ public actor PluginRuntime {
         return failures
     }
 
-    public func unloadAll() {
+    public func unloadAll() async {
+        let transition = beginUnload()
+        await transition.task.value
+        if generation == transition.generation {
+            pendingShutdown = nil
+        }
+    }
+
+    private func beginUnload() -> (generation: UInt64, task: Task<Void, Never>) {
+        generation &+= 1
+        let previous = pendingShutdown
+        let old = Array(loaded.values)
         loaded.removeAll()
+        let task = Task {
+            await previous?.value
+            for entry in old {
+                await entry.transport.shutdown()
+            }
+        }
+        pendingShutdown = task
+        return (generation, task)
     }
 
     public var loadedPluginIDs: [String] {
@@ -70,32 +100,40 @@ public actor PluginRuntime {
         references: [Int: String] = [:]
     ) async throws -> PluginResponse? {
         guard let entry = entry(matching: pluginIDOrName) else { return nil }
-        return try await entry.transport.request(PluginRequest(
+        let requestGeneration = generation
+        let response = try await entry.transport.request(PluginRequest(
             method: method,
             id: event,
             charset: entry.plugin.charset,
             sender: sender,
             references: references
         ))
+        return generation == requestGeneration ? response : nil
     }
 
     public func secondChangeResponses() async -> [(InstalledPlugin, PluginResponse)] {
+        let requestGeneration = generation
         var responses: [(InstalledPlugin, PluginResponse)] = []
         for key in loaded.keys.sorted() {
             guard var entry = loaded[key] else { continue }
             guard entry.plugin.secondChangeInterval > 0 else { continue }
             entry.secondsUntilTick -= 1
-            if entry.secondsUntilTick <= 0 {
+            let shouldTick = entry.secondsUntilTick <= 0
+            if shouldTick {
                 entry.secondsUntilTick = entry.plugin.secondChangeInterval
+            }
+            loaded[key] = entry
+            if shouldTick {
                 if let response = try? await entry.transport.request(PluginRequest(
                     method: "GET",
                     id: "OnSecondChange",
                     charset: entry.plugin.charset
                 )) {
+                    guard generation == requestGeneration else { return [] }
                     responses.append((entry.plugin, response))
                 }
             }
-            loaded[key] = entry
+            guard generation == requestGeneration else { return [] }
         }
         return responses
     }
@@ -106,18 +144,21 @@ public actor PluginRuntime {
         sender: String? = nil,
         references: [Int: String] = [:]
     ) async -> [(InstalledPlugin, PluginResponse)] {
+        let requestGeneration = generation
         var responses: [(InstalledPlugin, PluginResponse)] = []
         for key in loaded.keys.sorted() {
-            guard let entry = loaded[key],
-                  let response = try? await entry.transport.request(PluginRequest(
-                      method: method,
-                      id: event,
-                      charset: entry.plugin.charset,
-                      sender: sender,
-                      references: references
-                  ))
-            else { continue }
-            responses.append((entry.plugin, response))
+            guard let entry = loaded[key] else { continue }
+            let response = try? await entry.transport.request(PluginRequest(
+                method: method,
+                id: event,
+                charset: entry.plugin.charset,
+                sender: sender,
+                references: references
+            ))
+            guard generation == requestGeneration else { return [] }
+            if let response {
+                responses.append((entry.plugin, response))
+            }
         }
         return responses
     }

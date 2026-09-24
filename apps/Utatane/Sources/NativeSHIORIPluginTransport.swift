@@ -14,21 +14,21 @@ actor NativeSHIORIPluginTransport: PluginTransport {
     private enum Backend: Sendable {
         case akari(NativeAkariPersonalityEngine)
         case kawari(NativeKawariSession)
-        case misaka(NativeMisakaSession)
+        case misaka(MisakaPluginTransport)
         case satori(NativeSatoriSession)
         case yaya(NativeYayaSession)
     }
 
     private let backend: Backend
 
-    init(plugin: InstalledPlugin) throws {
+    init(plugin: InstalledPlugin, stateDirectoryURL: URL) throws {
         guard case let .nativeSHIORI(kind) = plugin.runtime else {
             throw NativeSHIORIPluginError.unsupportedRuntime
         }
         backend = switch kind {
         case .akari: try .akari(NativeAkariPersonalityEngine(masterDirectoryURL: plugin.directory))
         case .kawari: try .kawari(NativeKawariSession(masterDirectoryURL: plugin.directory))
-        case .misaka: try .misaka(NativeMisakaSession(masterDirectoryURL: plugin.directory))
+        case .misaka: try .misaka(MisakaPluginTransport(plugin: plugin, stateDirectoryURL: stateDirectoryURL))
         case .satori: try .satori(NativeSatoriSession(masterDirectoryURL: plugin.directory))
         case .yaya: try .yaya(NativeYayaSession(masterDirectoryURL: plugin.directory))
         }
@@ -41,11 +41,17 @@ actor NativeSHIORIPluginTransport: PluginTransport {
         case let .kawari(session):
             try PluginResponse.parse(session.request(request.serialized()))
         case let .misaka(session):
-            try PluginResponse(session.request(request.shioriRequest))
+            try await session.request(request)
         case let .satori(session):
             try PluginResponse.parse(session.request(request.serialized()))
         case let .yaya(session):
             try PluginResponse.parse(session.request(request.serialized()))
+        }
+    }
+
+    func shutdown() async {
+        if case let .misaka(session) = backend {
+            await session.shutdown()
         }
     }
 }

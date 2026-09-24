@@ -120,9 +120,10 @@ public final class NativeMisakaSession: @unchecked Sendable {
                 try saveUnlocked()
                 evaluator.backupRequested = false
             }
-            return value.isEmpty
+            let headers = responseHeaders()
+            return value.isEmpty && headers.isEmpty
                 ? ShioriResponse(statusCode: 204, reasonPhrase: "No Content")
-                : Self.response(value: value, extraHeaders: responseHeaders())
+                : Self.response(value: value, extraHeaders: headers)
         }
     }
 

@@ -7254,7 +7254,11 @@ private struct UtataneRootView: View {
         installedPlugins = (try? PluginCatalog().load(from: ContentRoot.pluginReadDirectories)) ?? []
         let failures = await pluginRuntime.reload(installedPlugins) { plugin in
             switch plugin.runtime {
-            case .nativeSHIORI: return try NativeSHIORIPluginTransport(plugin: plugin)
+            case .nativeSHIORI:
+                return try NativeSHIORIPluginTransport(
+                    plugin: plugin,
+                    stateDirectoryURL: ContentRoot.contentDirectory.appending(path: "State/Plugins")
+                )
             case .dynamicLibrary: return try DynamicLibraryPluginTransport(plugin: plugin)
             case .windowsDLL:
                 guard let configuration = ContentRoot.windowsPluginConfiguration(for: plugin) else {

@@ -1,23 +1,26 @@
 import Foundation
 import UtataneCore
+import UtataneModuleHost
 import UtataneNativeSaori
 import UtataneRuntime
 import UtataneSakuraScript
 import UtataneShiori
 
 public actor NativeMisakaPersonalityEngine: PersonalityEngine {
-    private let session: NativeMisakaSession
+    private let session: MisakaEngineSession
     private let adapter = GhostEventShioriAdapter()
 
     public init(
         masterDirectoryURL: URL,
         variableStoreURL: URL? = nil,
-        saoriCaller: (any NativeSaoriCalling)? = nil
+        saoriCaller: (any NativeSaoriCalling)? = nil,
+        moduleResolver: UtataneModuleResolver = .init()
     ) throws {
-        session = try NativeMisakaSession(
+        session = try MisakaEngineSession(
             masterDirectoryURL: masterDirectoryURL,
             variableStoreURL: variableStoreURL,
-            saoriCaller: saoriCaller ?? NativeSaoriRegistry(baseDirectoryURL: masterDirectoryURL)
+            saoriCaller: saoriCaller,
+            moduleResolver: moduleResolver
         )
     }
 
@@ -27,6 +30,11 @@ public actor NativeMisakaPersonalityEngine: PersonalityEngine {
 
     public func handle(event: GhostEvent) async throws -> SakuraScript? {
         try await response(for: event).script
+    }
+
+    public func shutdown() async {
+        do { try session.close() }
+        catch { NSLog("MISAKA save failed during shutdown: %@", error.localizedDescription) }
     }
 
     public func response(for event: GhostEvent) async throws -> PersonalityResponse {
@@ -40,7 +48,8 @@ public actor NativeMisakaPersonalityEngine: PersonalityEngine {
             context.mouseY = mouseEvent.y
             context.mouseButton = mouseEvent.button
         }
-        let result = try session.request(adapter.request(for: event, context: context))
+        let request = adapter.request(for: event, context: context)
+        let result = try session.request(request)
         let script = result.value.flatMap { $0.isEmpty ? nil : SakuraScript(rawValue: $0) }
         return PersonalityResponse(script: script, references: result.referenceValues)
     }

@@ -20,6 +20,7 @@ let package = Package(
         .library(name: "UtataneMakoto", targets: ["UtataneMakoto"]),
         .library(name: "UtataneWindowsShiori", targets: ["UtataneWindowsShiori"]),
         .library(name: "UtatanePOSIXShiori", targets: ["UtatanePOSIXShiori"]),
+        .library(name: "UtataneModuleHost", targets: ["UtataneModuleHost"]),
         .library(name: "UtatanePlugin", targets: ["UtatanePlugin"]),
         .library(name: "UtataneKawariNative", targets: ["UtataneKawariNative"]),
         .library(name: "UtataneYayaNative", targets: ["UtataneYayaNative"]),
@@ -364,12 +365,25 @@ let package = Package(
             name: "UtataneMisakaNative",
             dependencies: [
                 "UtataneCore",
+                "UtataneModuleHost",
                 "UtataneNativeSaori",
+                "UtatanePlugin",
                 "UtataneRuntime",
                 "UtataneSakuraScript",
                 "UtataneShiori"
             ],
             path: "shiori/native/misaka/Sources"
+        ),
+        .target(
+            name: "CUtataneModuleABI",
+            path: "shiori/external/module-sdk",
+            exclude: ["LICENSE"],
+            publicHeadersPath: "include"
+        ),
+        .target(
+            name: "UtataneModuleHost",
+            dependencies: ["CUtataneModuleABI", "UtataneNativeSaori", "UtataneShiori"],
+            path: "shiori/external/module/Sources"
         ),
         .target(
             name: "UtataneAkariNative",
@@ -521,8 +535,13 @@ let package = Package(
         ),
         .testTarget(
             name: "UtataneMisakaNativeTests",
-            dependencies: ["UtataneCore", "UtataneMisakaNative", "UtataneNativeSaori", "UtataneShiori"],
+            dependencies: ["UtataneCore", "UtataneMisakaNative", "UtataneModuleHost", "UtataneNativeSaori", "UtatanePlugin", "UtataneShiori"],
             path: "shiori/native/misaka/Tests"
+        ),
+        .testTarget(
+            name: "UtataneModuleHostTests",
+            dependencies: ["UtataneModuleHost", "UtataneNativeSaori", "UtataneShiori"],
+            path: "shiori/external/module/Tests"
         ),
         .testTarget(
             name: "UtataneAkariNativeTests",
