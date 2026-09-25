@@ -1,11 +1,12 @@
-#ifndef UTATANE_MODULE_H
-#define UTATANE_MODULE_H
+#ifndef MISAKA_HOST_BRIDGE_H
+#define MISAKA_HOST_BRIDGE_H
 #include <stdint.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Module ABI, version 1. All strings are length-delimited UTF-8, no NUL.
+/* Private connection between Utatane and its independent MISAKA implementation.
+ * Not required by SHIORI libraries. All strings are length-delimited UTF-8, no NUL.
  * Borrowed pointers must remain valid for the duration of the call.
  * Zero-initialize output buffers; release module outputs with um_release only.
  */

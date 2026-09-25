@@ -87,6 +87,15 @@ func `reads legacy SHIORI 2 sentence as script`() throws {
     #expect(response.serialized() == source)
 }
 
+@Test func `terminal only response does not start a new talk`() throws {
+    let empty = try ShioriMessageParser.parseResponse("SHIORI/3.0 200 OK\r\nValue: \\e\r\n\r\n")
+    #expect(empty.scriptValue == #"\e"#)
+    #expect(empty.playableScriptValue == nil)
+
+    let talk = try ShioriMessageParser.parseResponse("SHIORI/3.0 200 OK\r\nValue: \\0会話\\e\r\n\r\n")
+    #expect(talk.playableScriptValue == #"\0会話\e"#)
+}
+
 @Test func `references are case insensitive and keep wire order`() throws {
     let source = "GET SHIORI/3.0\nReference1: second\nReference0: first\nX-Test: a\nX-Test: b\n\n"
     let request = try ShioriMessageParser.parseRequest(source)

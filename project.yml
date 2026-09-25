@@ -24,11 +24,17 @@ targets:
     type: application
     platform: macOS
     preBuildScripts:
+      - name: Build and embed native SHIORI host
+        basedOnDependencyAnalysis: false
+        script: |
+          set -eu
+          sh "$SRCROOT/Scripts/build-native-shiori-host.sh" \
+            "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/utatane-shiori-host" $ARCHS
       - name: Build and embed kagari
         basedOnDependencyAnalysis: false
         script: |
           set -eu
-          python3 "$SRCROOT/tools/native-shiori/bundle-kagari.py" \
+          sh "$SRCROOT/Scripts/modules.sh" bundle-kagari \
             --output "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/NativeShiori/kagari" \
             --archs $ARCHS
       - name: Embed optional nicxlive runtime
@@ -76,6 +82,9 @@ targets:
         SUScheduledCheckInterval: 86400
         SURequireSignedFeed: true
         SUVerifyUpdateBeforeExtraction: true
+        ModuleCatalogPublicKey: /+xvmo02oaZzmnWR7T2jTwym5UM/OMT3vZd86ADLnKI=
+        ModuleCatalogIndexURL: https://dl.wmsci.com/utatane/modules/index.json
+        ModuleCatalogAllowStaging: false
         CFBundleDocumentTypes:
           - CFBundleTypeName: NAR Archive
             CFBundleTypeRole: Editor
@@ -119,6 +128,8 @@ targets:
       - package: UtataneKit
         product: UtataneNetwork
       - package: UtataneKit
+        product: UtataneModuleCatalog
+      - package: UtataneKit
         product: UtataneBalloon
       - package: UtataneKit
         product: UtataneGhostKit
@@ -132,6 +143,8 @@ targets:
         product: UtatanePlatformMacOS
       - package: UtataneKit
         product: UtatanePOSIXShiori
+      - package: UtataneKit
+        product: UtataneModuleHost
       - package: UtataneKit
         product: UtatanePlugin
       - package: UtataneKit

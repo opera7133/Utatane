@@ -58,7 +58,7 @@ run = "Scripts/build-nicxlive-runtime.sh References/Local/nicxlive .generated-ni
 
 [tasks.test-kagari]
 description = "Verify kagari embedded in the universal Release app"
-run = "python3 tools/native-shiori/test-bundle-kagari.py && sh tools/native-shiori/test-bundled-kagari.sh build/Build/Products/Release/Utatane.app arm64 x86_64"
+run = "sh Scripts/modules.sh check && sh Scripts/modules.sh test-kagari build/Build/Products/Release/Utatane.app arm64 x86_64"
 
 [tasks.build-release]
 description = "Build universal macOS app in Release configuration"

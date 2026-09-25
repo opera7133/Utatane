@@ -44,6 +44,16 @@ struct SurfaceImageCacheTests {
         #expect(countLimited[9] === small)
     }
 
+    @Test func `rendered surfaces do not replace source layers`() throws {
+        let layer = try #require(NSImage(data: makePNG(width: 1, height: 1)))
+        let rendered = try #require(NSImage(data: makePNG(width: 2, height: 1)))
+        let cache = SurfaceImageCache()
+        cache[0] = layer
+        cache[0, renderedSurface: true] = rendered
+        #expect(cache[0] === layer)
+        #expect(cache[0, renderedSurface: true] === rendered)
+    }
+
     @Test func `accounts for retina pixels and every animation frame`() throws {
         let data = try #require(Data(base64Encoded: animatedPNGBase64))
         let decoded = try #require(NSImage(data: data))

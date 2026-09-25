@@ -14,6 +14,8 @@ import UtataneHisuiNative
 import UtataneKawariNative
 import UtataneMakoto
 import UtataneMisakaNative
+import UtataneModuleCatalog
+import UtataneModuleHost
 import UtataneNativeSaori
 import UtataneNetwork
 import UtataneNiseShioriNative
@@ -166,6 +168,13 @@ struct UtataneApp: App {
                 appUpdater: updaterController.updater,
                 applicationDelegate: applicationDelegate
             )
+            .modifier(ModuleSetupOpening())
+        }
+        Window("モジュールカタログ", id: "module-catalog") {
+            ModuleCatalogView(mode: .catalog)
+        }
+        Window("SHIORIの初期設定", id: "module-setup") {
+            ModuleCatalogView(mode: .initialSelection, installedGhosts: model.ghosts)
         }
         Settings {
             UtataneSettingsView(
@@ -223,6 +232,7 @@ struct UtataneApp: App {
                     NotificationCenter.default.post(name: .showUtataneSHIORIDiagnostics, object: nil)
                 }
             }
+            ModuleCatalogCommands()
             CommandGroup(replacing: .help) {
                 Button("Utataneヘルプ") {
                     UtataneHelp.open()
@@ -322,6 +332,7 @@ private struct UtataneRootView: View {
     @State private var balloon: BalloonDefinition?
     @State private var session: GhostSession?
     @State private var selectedGhostID: URL?
+    @State private var winePreferredGhostIDs: Set<URL> = []
     @State private var currentGhost: InstalledGhost?
     @State private var selectedShell: InstalledShell?
     @State private var currentShellDefinition: ShellDefinition?
@@ -1042,17 +1053,35 @@ private struct UtataneRootView: View {
     }
 
     private func dispatchMouseEvent(_ event: GhostMouseEvent) {
+        let inputAt = ProcessInfo.processInfo.systemUptime
         mouseEventCoordinator.submit(
             event,
-            request: requestMouseEvent,
-            receive: receiveMouseResponse
+            request: { request in
+                await requestMouseEvent(request, inputAt: inputAt)
+            },
+            receive: { response in
+                if event.kind == .doubleClick {
+                    let elapsed = Int((ProcessInfo.processInfo.systemUptime - inputAt) * 1000)
+                    AppLogStore.shared.debug("ダブルクリックから再生開始まで \(elapsed) ms", category: "SHIORI",
+                                             ghostName: currentGhost?.name)
+                }
+                receiveMouseResponse(response, event: event, inputAt: inputAt)
+            }
         )
     }
 
-    private func requestMouseEvent(_ event: GhostEvent) async -> PersonalityResponse? {
+    private func requestMouseEvent(_ event: GhostEvent, inputAt: TimeInterval) async -> PersonalityResponse? {
         guard !isTransitioningGhost, let session else { return nil }
+        let requestedAt = ProcessInfo.processInfo.systemUptime
         do {
-            return try await session.response(for: event)
+            let response = try await session.response(for: event)
+            if case let .mouse(mouseEvent) = event, mouseEvent.kind == .doubleClick {
+                let queued = Int((requestedAt - inputAt) * 1000)
+                let processed = Int((ProcessInfo.processInfo.systemUptime - requestedAt) * 1000)
+                AppLogStore.shared.debug("ダブルクリック応答: 待機 \(queued) ms・SHIORI \(processed) ms",
+                                         category: "SHIORI", ghostName: currentGhost?.name)
+            }
+            return response
         } catch {
             AppLogStore.shared.error(
                 "マウスイベント処理エラー: \(error.localizedDescription)",
@@ -1065,9 +1094,19 @@ private struct UtataneRootView: View {
         }
     }
 
-    private func receiveMouseResponse(_ response: PersonalityResponse) {
+    private func receiveMouseResponse(_ response: PersonalityResponse, event: GhostMouseEvent, inputAt: TimeInterval) {
         if let script = response.script, !script.rawValue.isEmpty, let balloon {
-            scriptPlayer.play(script, balloon: balloon)
+            if event.kind == .doubleClick {
+                let ghostName = currentGhost?.name
+                scriptPlayer.play(script, balloon: balloon, context: GhostEvent.mouse(event).playbackContext,
+                                  onPresentationReady: {
+                                      let elapsed = Int((ProcessInfo.processInfo.systemUptime - inputAt) * 1000)
+                                      AppLogStore.shared.debug("ダブルクリックから台詞開始まで \(elapsed) ms",
+                                                               category: "SHIORI", ghostName: ghostName)
+                                  })
+            } else {
+                scriptPlayer.play(script, balloon: balloon, context: GhostEvent.mouse(event).playbackContext)
+            }
         }
         forwardCommunication(from: currentGhost, response: response)
     }
@@ -2299,12 +2338,18 @@ private struct UtataneRootView: View {
                 showMenuBarBalloon(command, session: session, player: scriptPlayer, balloon: balloon)
             }
             scriptPlayer.onTranslate = { script, context in
-                guard context.eventID != "OnTranslate",
-                      let translated = try? await session?.handle(event: .shiori(
-                          id: "OnTranslate",
-                          references: context.translateReferences(script: script)
-                      )), !translated.rawValue.isEmpty
-                else { return nil }
+                guard context.eventID != "OnTranslate" else { return nil }
+                let startedAt = ProcessInfo.processInfo.systemUptime
+                let translated = try? await session?.handle(event: .shiori(
+                    id: "OnTranslate",
+                    references: context.translateReferences(script: script)
+                ))
+                if context.eventID == "OnMouseDoubleClick" {
+                    let elapsed = Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000)
+                    AppLogStore.shared.debug("ダブルクリックのOnTranslate \(elapsed) ms",
+                                             category: "SHIORI", ghostName: ghost.name)
+                }
+                guard let translated, !translated.rawValue.isEmpty else { return nil }
                 return translated
             }
             scriptPlayer.onOtherGhostTalkModeChange = { mode in
@@ -2822,6 +2867,31 @@ private struct UtataneRootView: View {
             path: "ghost/master",
             directoryHint: .isDirectory
         )
+        let niseStateStoreURL = ContentRoot.variableStoreURL(for: ghost)
+            .deletingLastPathComponent()
+            .appending(path: "nise-shiori-state.json", directoryHint: .notDirectory)
+        let eseStateStoreURL = ContentRoot.variableStoreURL(for: ghost)
+            .deletingLastPathComponent()
+            .appending(path: "ese-shiori-state.json", directoryHint: .notDirectory)
+        let yuhnaStateStoreURL = ContentRoot.variableStoreURL(for: ghost)
+            .deletingLastPathComponent()
+            .appending(path: "yuhna-state.json", directoryHint: .notDirectory)
+        let hisuiStateStoreURL = ContentRoot.variableStoreURL(for: ghost)
+            .deletingLastPathComponent()
+            .appending(path: "hisui-state.json", directoryHint: .notDirectory)
+        let shinoStateStoreURL = ContentRoot.variableStoreURL(for: ghost)
+            .deletingLastPathComponent()
+            .appending(path: "shino-state.json", directoryHint: .notDirectory)
+        let shinoSaoriRootURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "Utatane/NativeSaori", directoryHint: .isDirectory)
+        if winePreferredGhostIDs.contains(ghost.id.standardizedFileURL),
+           let dll = ContentRoot.shioriModuleURL(for: ghost), dll.pathExtension.lowercased() == "dll",
+           let configuration = ContentRoot.windowsDLLConfiguration(for: dll, charset: ghost.charset ?? "Shift_JIS")
+        {
+            return try ExternalSHIORIPersonalityEngine(backend: .windowsDLL(
+                WindowsDLLModuleProcessSession(configuration: configuration)
+            ))
+        }
         // A creator's explicit platform choice must precede dictionary-based engine detection.
         if let filename = ghost.shioriMacOSFilename {
             if ShiolinkPersonalityEngine.supports(shioriFilename: filename) {
@@ -2833,8 +2903,44 @@ private struct UtataneRootView: View {
                 throw AppError.unsupportedShiori(filename)
             }
             return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
-                DynamicLibraryModuleSession(directoryURL: masterDirectory, moduleURL: moduleURL)
+                NativeShioriSession(
+                    directoryURL: masterDirectory, moduleURL: moduleURL,
+                    variableStoreURL: ContentRoot.misakaVariableStoreURL(for: ghost),
+                    saoriCaller: nativeSaoriRegistry(for: masterDirectory),
+                    moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback),
+                    niseStateStoreURL: moduleURL.lastPathComponent.lowercased() == "libniseshiori.dylib" ? niseStateStoreURL : nil,
+                    eseStateStoreURL: moduleURL.lastPathComponent.lowercased() == "libese-shiori.dylib" ? eseStateStoreURL : nil,
+                    yuhnaStateStoreURL: moduleURL.lastPathComponent.lowercased() == "libyuhna.dylib" ? yuhnaStateStoreURL : nil,
+                    hisuiStateStoreURL: moduleURL.lastPathComponent.lowercased() == "libhisui.dylib" ? hisuiStateStoreURL : nil,
+                    shinoStateStoreURL: moduleURL.lastPathComponent.lowercased() == "libshino.dylib" ? shinoStateStoreURL : nil,
+                    shinoSaoriRootURL: moduleURL.lastPathComponent.lowercased() == "libshino.dylib" ? shinoSaoriRootURL : nil,
+                    akariVariableStoreURL: moduleURL.lastPathComponent.lowercased() == "libakari.dylib" ? ContentRoot.akariVariableStoreURL(for: ghost) : nil,
+                    akariSaoriRootURL: moduleURL.lastPathComponent.lowercased() == "libakari.dylib" ? shinoSaoriRootURL : nil,
+                    kawariSaoriRootURL: moduleURL.lastPathComponent.lowercased() == "libkawari.dylib" ? shinoSaoriRootURL : nil
+                )
             ))
+        }
+        if let kind = ConventionalShioriKind(shioriFilename: ghost.shioriFilename) {
+            let resolver = UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback)
+            if let module = try resolver.moduleURL(for: kind, masterDirectoryURL: masterDirectory) {
+                return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
+                    NativeShioriSession(
+                        directoryURL: masterDirectory, moduleURL: module, moduleResolver: resolver,
+                        niseStateStoreURL: kind == .niseshiori ? niseStateStoreURL : nil,
+                        eseStateStoreURL: kind == .eseShiori ? eseStateStoreURL : nil,
+                        yuhnaStateStoreURL: kind == .yuhna ? yuhnaStateStoreURL : nil,
+                        hisuiStateStoreURL: kind == .hisui ? hisuiStateStoreURL : nil,
+                        shinoStateStoreURL: kind == .shino ? shinoStateStoreURL : nil,
+                        shinoSaoriRootURL: kind == .shino ? shinoSaoriRootURL : nil,
+                        akariVariableStoreURL: kind == .akari ? ContentRoot.akariVariableStoreURL(for: ghost) : nil,
+                        akariSaoriRootURL: kind == .akari ? shinoSaoriRootURL : nil,
+                        kawariSaoriRootURL: kind == .kawari ? shinoSaoriRootURL : nil
+                    )
+                ))
+            }
+            if kind != .niseshiori, kind != .eseShiori, kind != .yuhna, kind != .hisui, kind != .shino, kind != .akari, kind != .kawari {
+                throw AppError.unsupportedShiori(ghost.shioriFilename ?? kind.rawValue)
+            }
         }
         if AIGhostManifestLoader.supports(masterDirectoryURL: masterDirectory) {
             let baseURL = networkSettings.aiBaseURL.isEmpty
@@ -2875,13 +2981,23 @@ private struct UtataneRootView: View {
             )
         }
         if NativeKawariPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
+            let resolver = UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback)
+            if let module = try resolver.moduleURL(for: .kawari, masterDirectoryURL: masterDirectory) {
+                return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
+                    NativeShioriSession(
+                        directoryURL: masterDirectory, moduleURL: module, moduleResolver: resolver,
+                        kawariSaoriRootURL: shinoSaoriRootURL
+                    )
+                ))
+            }
             return try NativeKawariPersonalityEngine(
                 masterDirectoryURL: masterDirectory,
                 saoriRegistry: nativeSaoriRegistry(for: masterDirectory)
             )
         }
         if POSIXShioriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
-            return try POSIXShioriPersonalityEngine(masterDirectoryURL: masterDirectory)
+            return try POSIXShioriPersonalityEngine(masterDirectoryURL: masterDirectory,
+                                                    resolver: .init(allowsFallback: networkSettings.allowsShioriFallback))
         }
         if NativeFirstPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try NativeFirstPersonalityEngine(masterDirectoryURL: masterDirectory)
@@ -2890,7 +3006,8 @@ private struct UtataneRootView: View {
             return try NativeMisakaPersonalityEngine(
                 masterDirectoryURL: masterDirectory,
                 variableStoreURL: ContentRoot.misakaVariableStoreURL(for: ghost),
-                saoriCaller: nativeSaoriRegistry(for: masterDirectory)
+                saoriCaller: nativeSaoriRegistry(for: masterDirectory),
+                moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback)
             )
         }
         if NativeAkariPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
@@ -2993,7 +3110,12 @@ private struct UtataneRootView: View {
             switch moduleURL.pathExtension.lowercased() {
             case "dylib", "so", "bundle":
                 return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
-                    DynamicLibraryModuleSession(directoryURL: masterDirectory, moduleURL: moduleURL)
+                    NativeShioriSession(
+                        directoryURL: masterDirectory, moduleURL: moduleURL,
+                        variableStoreURL: ContentRoot.misakaVariableStoreURL(for: ghost),
+                        saoriCaller: nativeSaoriRegistry(for: masterDirectory),
+                        moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback)
+                    )
                 ))
             case "dll":
                 guard let configuration = ContentRoot.windowsDLLConfiguration(
@@ -3024,14 +3146,18 @@ private struct UtataneRootView: View {
                 controller: surfaceWindowController,
                 geometryProvider: presentationGeometry
             ),
-            externalModuleFactory: { moduleURL in
+            prefersExternalWindowsDLL: winePreferredGhostIDs.contains(
+                masterDirectory.deletingLastPathComponent().deletingLastPathComponent().standardizedFileURL
+            ),
+            externalModuleFactory: { moduleURL, resourceDirectory, windowController in
                 switch moduleURL.pathExtension.lowercased() {
                 case "dylib", "so", "bundle":
-                    guard let session = try? DynamicLibraryModuleSession(
-                        directoryURL: moduleURL.deletingLastPathComponent(),
-                        moduleURL: moduleURL
+                    guard let session = try? NativeShioriProcessSession(
+                        directoryURL: resourceDirectory,
+                        moduleURL: moduleURL,
+                        windowController: windowController
                     ) else { return nil }
-                    return ExternalSaoriModuleSession(backend: .dynamicLibrary(session))
+                    return ExternalSaoriModuleSession(backend: .nativeProcess(session))
                 case "dll":
                     guard let configuration = ContentRoot.windowsDLLConfiguration(for: moduleURL),
                           let session = try? WindowsDLLModuleProcessSession(configuration: configuration)
@@ -7252,14 +7378,20 @@ private struct UtataneRootView: View {
 
     private func reloadPlugins() async {
         installedPlugins = (try? PluginCatalog().load(from: ContentRoot.pluginReadDirectories)) ?? []
+        let allowsShioriFallback = networkSettings.allowsShioriFallback
         let failures = await pluginRuntime.reload(installedPlugins) { plugin in
             switch plugin.runtime {
             case .nativeSHIORI:
                 return try NativeSHIORIPluginTransport(
                     plugin: plugin,
-                    stateDirectoryURL: ContentRoot.contentDirectory.appending(path: "State/Plugins")
+                    stateDirectoryURL: ContentRoot.contentDirectory.appending(path: "State/Plugins"),
+                    allowsShioriFallback: allowsShioriFallback
                 )
-            case .dynamicLibrary: return try DynamicLibraryPluginTransport(plugin: plugin)
+            case .dynamicLibrary:
+                return try DynamicLibraryPluginTransport(
+                    plugin: plugin, stateDirectoryURL: ContentRoot.contentDirectory.appending(path: "State/Plugins"),
+                    moduleResolver: .init(allowsFallback: allowsShioriFallback)
+                )
             case .windowsDLL:
                 guard let configuration = ContentRoot.windowsPluginConfiguration(for: plugin) else {
                     throw NativeSHIORIPluginError.unsupportedRuntime
@@ -7726,14 +7858,20 @@ private struct UtataneRootView: View {
                     }
                 }
                 await model.load()
+                let newlyInstalledGhosts = model.ghosts.filter { ghost in
+                    installedItems.contains { item in
+                        item.type == .ghost && item.url.standardizedFileURL == ghost.rootDirectory.standardizedFileURL
+                    }
+                }
+                let shouldBootNewGhost = await offerMissingModules(for: newlyInstalledGhosts)
                 let activeGhostID = currentGhost?.id
-                if let bootGhostDirectory = bootGhostDirectories.last,
+                if shouldBootNewGhost, let bootGhostDirectory = bootGhostDirectories.last,
                    let bootGhost = model.ghosts.first(where: {
                        $0.rootDirectory.lastPathComponent.caseInsensitiveCompare(bootGhostDirectory) == .orderedSame
                    })
                 {
                     selectedGhostID = bootGhost.id
-                } else if selectedGhostID == nil {
+                } else if shouldBootNewGhost, selectedGhostID == nil {
                     selectedGhostID = model.ghosts.first?.id
                 }
                 showsOnboarding = model.ghosts.isEmpty
@@ -7808,6 +7946,59 @@ private struct UtataneRootView: View {
                 }
                 showError(error.localizedDescription)
             }
+        }
+    }
+
+    private func offerMissingModules(for ghosts: [InstalledGhost]) async -> Bool {
+        guard !ghosts.isEmpty, let client = ModuleCatalogConfiguration.client else { return true }
+        let catalog: SignedModuleCatalog
+        do {
+            catalog = try await client.fetch()
+        } catch {
+            AppLogStore.shared.warning("追加ゴーストのモジュール確認に失敗", category: "Install", details: error.localizedDescription)
+            return true
+        }
+        let supportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "Utatane")
+        let scanner = GhostModuleRequirements()
+        let requirementsByGhost = ghosts.map { ghost in
+            (ghost: ghost, missing: scanner.missing(for: ghost, in: catalog, applicationSupportURL: supportURL))
+        }
+        let missing = requirementsByGhost.flatMap(\.missing)
+            .reduce(into: [GhostModuleRequirement]()) { found, requirement in
+                if !found.contains(where: { $0.id == requirement.id }) {
+                    found.append(requirement)
+                }
+            }
+        guard !missing.isEmpty else { return true }
+        let canUseWine = requirementsByGhost.flatMap(\.missing).allSatisfy { requirement in
+            requirement.sourceDLLURL.flatMap { ContentRoot.windowsDLLConfiguration(for: $0) } != nil
+        }
+        let alert = NSAlert()
+        alert.messageText = String(localized: "追加したゴーストに必要なモジュールがありません")
+        alert.informativeText = missing.map { "\($0.kind): \($0.displayName)" }.joined(separator: "\n")
+        alert.addButton(withTitle: String(localized: "ダウンロードして起動"))
+        alert.addButton(withTitle: canUseWine ? String(localized: "Wineで起動") : String(localized: "起動しない"))
+        guard alert.runModal() == .alertFirstButtonReturn else {
+            if canUseWine {
+                winePreferredGhostIDs.formUnion(
+                    requirementsByGhost.filter { !$0.missing.isEmpty }.map(\.ghost.id.standardizedFileURL)
+                )
+            }
+            return canUseWine
+        }
+        let manager = ModuleCatalogManager(client: client)
+        do {
+            for requirement in missing {
+                _ = try await manager.install(moduleID: requirement.id)
+            }
+            winePreferredGhostIDs.subtract(
+                requirementsByGhost.filter { !$0.missing.isEmpty }.map(\.ghost.id.standardizedFileURL)
+            )
+            return true
+        } catch {
+            showError(String(format: String(localized: "モジュールを導入できなかった: %@"), error.localizedDescription))
+            return false
         }
     }
 

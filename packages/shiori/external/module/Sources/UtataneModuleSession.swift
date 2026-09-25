@@ -1,4 +1,4 @@
-import CUtataneModuleABI
+import CMisakaHostBridge
 import Darwin
 import Foundation
 import UtataneNativeSaori
@@ -13,6 +13,13 @@ public enum UtataneModuleError: LocalizedError, Equatable, Sendable {
     case invalidResponse
     case closed
     case busy
+
+    public var canRecoverByLoadingAnotherModule: Bool {
+        switch self {
+        case .loadFailed, .missingSymbol, .unsupportedVersion: true
+        default: false
+        }
+    }
 
     public var errorDescription: String? {
         switch self {
@@ -36,7 +43,7 @@ private final class ModuleLibrary {
     typealias Discard = @convention(c) (UInt64) -> Int32
     typealias Release = @convention(c) (UnsafeMutablePointer<UMBuffer>?) -> Void
 
-    let handle: UnsafeMutableRawPointer
+    let image: UtataneModuleImage
     let create: Create
     let request: Request
     let destroy: Destroy
@@ -44,29 +51,20 @@ private final class ModuleLibrary {
     let release: Release
 
     init(url: URL) throws {
-        guard let handle = dlopen(url.path, RTLD_NOW | RTLD_LOCAL) else {
-            throw UtataneModuleError.loadFailed(dlerror().map { String(cString: $0) } ?? url.path)
+        image = try UtataneModuleImage.open(url)
+        let handle = image.handle
+        func symbol<T>(_ name: String, as _: T.Type) throws -> T {
+            guard let pointer = dlsym(handle, name) else { throw UtataneModuleError.missingSymbol(name) }
+            return unsafeBitCast(pointer, to: T.self)
         }
-        do {
-            func symbol<T>(_ name: String, as _: T.Type) throws -> T {
-                guard let pointer = dlsym(handle, name) else { throw UtataneModuleError.missingSymbol(name) }
-                return unsafeBitCast(pointer, to: T.self)
-            }
-            let version = try symbol("um_api_version", as: Version.self)()
-            guard version == UM_ABI_VERSION else { throw UtataneModuleError.unsupportedVersion(version) }
-            create = try symbol("um_create", as: Create.self)
-            request = try symbol("um_request", as: Request.self)
-            destroy = try symbol("um_destroy", as: Destroy.self)
-            discard = try symbol("um_discard", as: Discard.self)
-            release = try symbol("um_release", as: Release.self)
-            self.handle = handle
-        } catch {
-            dlclose(handle)
-            throw error
-        }
+        let version = try symbol("um_api_version", as: Version.self)()
+        guard version == UM_ABI_VERSION else { throw UtataneModuleError.unsupportedVersion(version) }
+        create = try symbol("um_create", as: Create.self)
+        request = try symbol("um_request", as: Request.self)
+        destroy = try symbol("um_destroy", as: Destroy.self)
+        discard = try symbol("um_discard", as: Discard.self)
+        release = try symbol("um_release", as: Release.self)
     }
-
-    deinit { dlclose(handle) }
 
     func take(_ buffer: inout UMBuffer, status: Int32) throws -> String {
         defer { release(&buffer) }

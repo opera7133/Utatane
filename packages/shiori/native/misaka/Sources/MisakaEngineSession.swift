@@ -20,14 +20,20 @@ public final class MisakaEngineSession: @unchecked Sendable {
         moduleResolver: UtataneModuleResolver = .init()
     ) throws {
         let caller = saoriCaller ?? NativeSaoriRegistry(baseDirectoryURL: masterDirectoryURL)
-        if let moduleURL = try moduleResolver.misakaModuleURL() {
+        if let moduleURL = try moduleResolver.misakaModuleURL(masterDirectoryURL: masterDirectoryURL) {
             guard let variableStoreURL else {
                 throw UtataneModuleError.invalidConfiguration("An external MISAKA module requires a state path")
             }
-            backend = try .module(UtataneModuleSession(
-                moduleURL: moduleURL, masterDirectoryURL: masterDirectoryURL,
-                variableStoreURL: variableStoreURL, saoriCaller: caller
-            ))
+            backend = try .module(ShioriModuleRecovery.load(
+                preferred: moduleURL,
+                fallback: moduleResolver.misakaFallbackURL(for: moduleURL, masterDirectoryURL: masterDirectoryURL),
+                canRecover: { ($0 as? UtataneModuleError)?.canRecoverByLoadingAnotherModule == true }
+            ) { url in
+                try UtataneModuleSession(
+                    moduleURL: url, masterDirectoryURL: masterDirectoryURL,
+                    variableStoreURL: variableStoreURL, saoriCaller: caller
+                )
+            })
         } else {
             backend = try .builtin(NativeMisakaSession(
                 masterDirectoryURL: masterDirectoryURL,

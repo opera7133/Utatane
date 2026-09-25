@@ -21,7 +21,9 @@ mise run build
 
 `Utatane.xcodeproj`は生成物です。直接直しても次の生成で消えます。ターゲットやビルド設定は`project.yml`を変更して、`mise run generate`してください。
 
-kagariとLuaはXcodeのビルドフェーズで自動同梱します。依存ソースのバージョン・SHA-256は`tools/native-shiori/kagari-dependencies.json`で固定し、`.generated-native-shiori/`にキャッシュします。ソース・ビルドスクリプト・CPU・Xcode/SDKが変わると再ビルドします。独自のXcodeビルドスクリプトがネットワークとキャッシュを利用するため、ターゲットのUser Script Sandboxingは無効です（ゴースト実行のサンドボックス設定ではありません）。
+kagariとLuaのビルド処理は[utatane-modules](https://github.com/opera7133/utatane-modules)で管理します。Utataneと同じ親フォルダへチェックアウトし、`git submodule update --init --recursive`と`uv sync --locked`を実行してください。別の配置は`UTATANE_MODULES_ROOT`で指定します。Xcodeからuvが見つからない場合は`UTATANE_UV_EXECUTABLE`に絶対パスを指定します。
+
+Xcodeのビルドフェーズは`Scripts/modules.sh`からカタログ側の処理を呼び、対象CPUのkagariとLuaをアプリへ組み込みます。依存ソースとSHA-256はカタログ側の`recipes/kagari/dependencies.json`、キャッシュは`build/app-bundle/`です。User Script Sandboxingは、このビルド時のネットワーク・キャッシュ利用のため無効です。
 
 ## 検証
 
@@ -96,7 +98,6 @@ packages/shiori/native/kagari/ kagariの上流ソース（Xcodeビルド時にdy
 
 ```text
 Scripts/                   生成、検証、互換ホスト、リリース用スクリプト
-tools/native-shiori/       外部macOS SHIORIのローカルビルド補助
 tools/windows-dll-host/    汎用Windows DLLホストのソース
 tools/materia-shiori-host/ FIRST解析用ホストのソース
 Localizations/             文字列カタログの生成元JSON

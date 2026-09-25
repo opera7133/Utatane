@@ -44,18 +44,21 @@ public enum POSIXShioriError: LocalizedError, Equatable, Sendable {
 public struct POSIXShioriModuleResolver: Sendable {
     private let applicationSupportURL: URL
     private let bundledResourcesURL: URL?
+    private let allowsFallback: Bool
 
-    public init() {
+    public init(allowsFallback: Bool = true) {
         self.init(
             applicationSupportURL: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appending(path: "Utatane/NativeShiori", directoryHint: .isDirectory),
-            bundledResourcesURL: Bundle.main.resourceURL
+            bundledResourcesURL: Bundle.main.resourceURL,
+            allowsFallback: allowsFallback
         )
     }
 
-    init(applicationSupportURL: URL, bundledResourcesURL: URL?) {
+    init(applicationSupportURL: URL, bundledResourcesURL: URL?, allowsFallback: Bool = true) {
         self.applicationSupportURL = applicationSupportURL
         self.bundledResourcesURL = bundledResourcesURL
+        self.allowsFallback = allowsFallback
     }
 
     public func kind(for masterDirectoryURL: URL) -> POSIXShioriKind? {
@@ -84,10 +87,7 @@ public struct POSIXShioriModuleResolver: Sendable {
         environment: [String: String] = ProcessInfo.processInfo.environment
     ) -> URL? {
         if let path = environment["UTATANE_\(kind.rawValue.uppercased())_MODULE"], !path.isEmpty {
-            let url = URL(filePath: path, directoryHint: .notDirectory)
-            if FileManager.default.fileExists(atPath: url.path) {
-                return url
-            }
+            return URL(filePath: path, directoryHint: .notDirectory)
         }
 
         for url in candidateURLs(for: kind, masterDirectoryURL: masterDirectoryURL) {
@@ -98,10 +98,37 @@ public struct POSIXShioriModuleResolver: Sendable {
         return nil
     }
 
+    func loadSession(for kind: POSIXShioriKind, masterDirectoryURL: URL,
+                     environment: [String: String] = ProcessInfo.processInfo.environment) throws -> POSIXShioriSession
+    {
+        guard let selected = moduleURL(for: kind, masterDirectoryURL: masterDirectoryURL, environment: environment) else {
+            throw POSIXShioriError.moduleUnavailable(kind)
+        }
+        let masterPrefix = masterDirectoryURL.standardizedFileURL.path + "/"
+        let fallback = allowsFallback && environment["UTATANE_\(kind.rawValue.uppercased())_MODULE"] == nil
+            && selected.standardizedFileURL.path.hasPrefix(masterPrefix)
+            ? candidateURLs(for: kind, masterDirectoryURL: masterDirectoryURL).first {
+                !$0.standardizedFileURL.path.hasPrefix(masterPrefix) && FileManager.default.fileExists(atPath: $0.path)
+            } : nil
+        return try ShioriModuleRecovery.load(preferred: selected, fallback: fallback, canRecover: { error in
+            switch error {
+            case POSIXShioriError.moduleLoadFailed, POSIXShioriError.missingSymbol: true
+            default: false
+            }
+        }) { url in
+            try POSIXShioriSession(masterDirectoryURL: masterDirectoryURL, moduleURL: url, kind: kind)
+        }
+    }
+
     private func candidateURLs(for kind: POSIXShioriKind, masterDirectoryURL: URL) -> [URL] {
         let names = ["lib\(kind.rawValue).dylib", "lib\(kind.rawValue).so", "lib\(kind.rawValue).bundle"]
         let applicationSupport = applicationSupportURL.appending(path: kind.rawValue, directoryHint: .isDirectory)
-        var directories = [masterDirectoryURL, applicationSupport]
+        var directories = [
+            masterDirectoryURL,
+            masterDirectoryURL.appending(path: "\(kind.rawValue)/lib", directoryHint: .isDirectory),
+            applicationSupport.appending(path: "lib", directoryHint: .isDirectory),
+            applicationSupport
+        ]
         if let resources = bundledResourcesURL {
             directories.append(resources.appending(path: "NativeShiori/\(kind.rawValue)", directoryHint: .isDirectory))
         }

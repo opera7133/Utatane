@@ -3,6 +3,7 @@ import UtataneAkariNative
 import UtataneCore
 import UtataneKawariNative
 import UtataneMisakaNative
+import UtataneModuleHost
 import UtatanePlugin
 import UtataneRuntime
 import UtataneSatoriNative
@@ -21,14 +22,15 @@ actor NativeSHIORIPluginTransport: PluginTransport {
 
     private let backend: Backend
 
-    init(plugin: InstalledPlugin, stateDirectoryURL: URL) throws {
+    init(plugin: InstalledPlugin, stateDirectoryURL: URL, allowsShioriFallback: Bool = true) throws {
         guard case let .nativeSHIORI(kind) = plugin.runtime else {
             throw NativeSHIORIPluginError.unsupportedRuntime
         }
         backend = switch kind {
         case .akari: try .akari(NativeAkariPersonalityEngine(masterDirectoryURL: plugin.directory))
         case .kawari: try .kawari(NativeKawariSession(masterDirectoryURL: plugin.directory))
-        case .misaka: try .misaka(MisakaPluginTransport(plugin: plugin, stateDirectoryURL: stateDirectoryURL))
+        case .misaka: try .misaka(MisakaPluginTransport(plugin: plugin, stateDirectoryURL: stateDirectoryURL,
+                                                        moduleResolver: .init(allowsFallback: allowsShioriFallback)))
         case .satori: try .satori(NativeSatoriSession(masterDirectoryURL: plugin.directory))
         case .yaya: try .yaya(NativeYayaSession(masterDirectoryURL: plugin.directory))
         }

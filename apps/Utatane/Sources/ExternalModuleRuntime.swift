@@ -1,5 +1,6 @@
 import Foundation
 import UtataneCore
+import UtataneModuleHost
 import UtataneNativeSaori
 import UtatanePlugin
 import UtataneRuntime
@@ -47,12 +48,12 @@ actor FallbackPersonalityEngine: PersonalityEngine {
 
 actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
     enum Backend: Sendable {
-        case dynamicLibrary(DynamicLibraryModuleSession)
+        case dynamicLibrary(NativeShioriSession)
         case windowsDLL(WindowsDLLModuleProcessSession)
 
-        func request(_ message: String) throws -> String {
+        func request(_ message: String) async throws -> String {
             switch self {
-            case let .dynamicLibrary(session): try session.request(message)
+            case let .dynamicLibrary(session): try await session.requestAsync(message)
             case let .windowsDLL(session): try session.request(message)
             }
         }
@@ -72,6 +73,13 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
         self.backend = backend
     }
 
+    func shutdown() async {
+        if case let .dynamicLibrary(session) = backend {
+            do { try await session.closeAsync() }
+            catch { NSLog("SHIORI save failed: %@", error.localizedDescription) }
+        }
+    }
+
     func handle(event: GhostEvent) async throws -> SakuraScript? {
         try await response(for: event).script
     }
@@ -87,35 +95,35 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
             context.mouseButton = mouseEvent.button
         }
         let request = adapter.request(for: event, context: context)
-        var response = try ShioriMessageParser.parseResponse(backend.request(request.serialized()))
+        var response = try await ShioriMessageParser.parseResponse(backend.request(request.serialized()))
         if Shiori2Compatibility.shouldRetry(response),
            let legacyRequest = Shiori2Compatibility.eventRequest(from: request)
         {
-            response = try ShioriMessageParser.parseResponse(backend.request(legacyRequest.serialized()))
+            response = try await ShioriMessageParser.parseResponse(backend.request(legacyRequest.serialized()))
         }
         guard (200 ..< 300).contains(response.statusCode) else {
             throw ExternalModuleRuntimeError.requestFailed(response.statusCode)
         }
-        let script = response.scriptValue.flatMap { $0.isEmpty ? nil : SakuraScript(rawValue: $0) }
+        let script = response.playableScriptValue.map(SakuraScript.init(rawValue:))
         return PersonalityResponse(script: script, references: response.referenceValues)
     }
 }
 
 final class ExternalSaoriModuleSession: ExternalSaoriModule, @unchecked Sendable {
     enum Backend: Sendable {
-        case dynamicLibrary(DynamicLibraryModuleSession)
+        case nativeProcess(NativeShioriProcessSession)
         case windowsDLL(WindowsDLLModuleProcessSession)
 
         func request(_ message: String) throws -> String {
             switch self {
-            case let .dynamicLibrary(session): try session.request(message)
+            case let .nativeProcess(session): try session.request(message)
             case let .windowsDLL(session): try session.request(message)
             }
         }
 
         var charset: String {
             switch self {
-            case .dynamicLibrary: "UTF-8"
+            case .nativeProcess: "UTF-8"
             case .windowsDLL: "Shift_JIS"
             }
         }

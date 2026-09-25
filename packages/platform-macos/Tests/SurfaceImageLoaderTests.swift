@@ -143,6 +143,32 @@ func `preserves APNG frames and timing after applying a PNA mask`() throws {
 
 @Test
 @MainActor
+func `PNA uses top left alignment and multiplies embedded alpha`() throws {
+    let directory = FileManager.default.temporaryDirectory
+        .appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let imageURL = directory.appending(path: "surface0.png")
+    let maskURL = directory.appending(path: "surface0.pna")
+    let image = try makeTestImage(colors: [
+        NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 0.5),
+        NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1)
+    ])
+    let source = try #require(image.representations.first as? NSBitmapImageRep)
+    try #require(source.representation(using: .png, properties: [:])).write(to: imageURL)
+    let mask = try makeTestImage(colors: [NSColor(deviceRed: 0.5, green: 0.5, blue: 0.5, alpha: 1)])
+    let maskBitmap = try #require(mask.representations.first as? NSBitmapImageRep)
+    try #require(maskBitmap.representation(using: .png, properties: [:])).write(to: maskURL)
+
+    let masked = try SurfaceImageLoader().load(SurfaceAsset(id: 0, imageURL: imageURL, alphaMaskURL: maskURL))
+    let result = try #require(masked.representations.first as? NSBitmapImageRep)
+    #expect(abs((result.colorAt(x: 0, y: 0)?.alphaComponent ?? 0) - 0.25) < 0.02)
+    #expect((result.colorAt(x: 0, y: 0)?.redComponent ?? 0) > 0.98)
+    #expect((result.colorAt(x: 1, y: 0)?.alphaComponent ?? 1) < 0.01)
+}
+
+@Test
+@MainActor
 func `preserves APNG frames and timing while compositing a static element`() throws {
     let data = try #require(Data(base64Encoded: animatedPNGBase64))
     let animated = try #require(NSImage(data: data))

@@ -21,6 +21,28 @@ struct KagariResolverTests {
         }
     }
 
+    @Test func `packaged ghost module takes precedence over common installation`() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let master = root.appending(path: "ghost/master")
+        let support = root.appending(path: "support")
+        let resolver = POSIXShioriModuleResolver(applicationSupportURL: support, bundledResourcesURL: nil)
+        let installed = support.appending(path: "kagari/lib/libkagari.dylib")
+        let bundled = master.appending(path: "kagari/lib/libkagari.dylib")
+        let flat = master.appending(path: "libkagari.dylib")
+        for module in [installed, bundled, flat] {
+            try FileManager.default.createDirectory(at: module.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data("invalid-library".utf8).write(to: module)
+            #expect(resolver.moduleURL(for: .kagari, masterDirectoryURL: master, environment: [:]) == module)
+        }
+        // A selected broken local module must fail rather than trying the installed one.
+        #expect(throws: POSIXShioriError.self) {
+            try POSIXShioriSession(masterDirectoryURL: master, moduleURL: #require(resolver.moduleURL(
+                for: .kagari, masterDirectoryURL: master, environment: [:]
+            )), kind: .kagari)
+        }
+    }
+
     @Test func `kagari detection does not claim every Lua ghost`() throws {
         let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -74,11 +96,45 @@ struct KagariNativeTests {
     }
     """#
 
+    @Test func `broken bundled kagari uses common installation only when enabled`() throws {
+        let root = try fixture(script)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let support = root.appending(path: "../support-\(UUID())").standardizedFileURL
+        defer { try? FileManager.default.removeItem(at: support) }
+        let installed = support.appending(path: "kagari/lib/libkagari.dylib")
+        try FileManager.default.createDirectory(at: installed.deletingLastPathComponent(), withIntermediateDirectories: true)
+        for library in try FileManager.default.contentsOfDirectory(at: module.deletingLastPathComponent(), includingPropertiesForKeys: nil)
+            where library.pathExtension == "dylib"
+        {
+            try FileManager.default.copyItem(at: library, to: installed.deletingLastPathComponent().appending(path: library.lastPathComponent))
+        }
+        let bundled = root.appending(path: "libkagari.dylib")
+        try Data("broken".utf8).write(to: bundled)
+        let strict = POSIXShioriModuleResolver(applicationSupportURL: support, bundledResourcesURL: nil, allowsFallback: false)
+        #expect(throws: POSIXShioriError.self) {
+            try strict.loadSession(for: .kagari, masterDirectoryURL: root, environment: [:])
+        }
+        let resolver = POSIXShioriModuleResolver(applicationSupportURL: support, bundledResourcesURL: nil)
+        let recovered = try resolver.loadSession(for: .kagari, masterDirectoryURL: root, environment: [:])
+        #expect(try ShioriMessageParser.parseResponse(recovered.request("GET SHIORI/3.0\r\nID: OnBoot\r\n\r\n")).value == "こんにちは1")
+        recovered.close()
+        #expect(throws: POSIXShioriError.self) {
+            try resolver.loadSession(for: .kagari, masterDirectoryURL: root,
+                                     environment: ["UTATANE_KAGARI_MODULE": bundled.path])
+        }
+    }
+
     @Test func `real kagari loads isolates instances and unloads`() async throws {
         let root = try fixture(script)
         defer { try? FileManager.default.removeItem(at: root) }
-        let first = try POSIXShioriSession(masterDirectoryURL: root, moduleURL: module, kind: .kagari)
-        let second = try POSIXShioriSession(masterDirectoryURL: root, moduleURL: module, kind: .kagari)
+        for library in try FileManager.default.contentsOfDirectory(at: module.deletingLastPathComponent(), includingPropertiesForKeys: nil)
+            where library.pathExtension == "dylib"
+        {
+            try FileManager.default.copyItem(at: library, to: root.appending(path: library.lastPathComponent))
+        }
+        let resolver = POSIXShioriModuleResolver(applicationSupportURL: root.appending(path: "no-shared-modules"), bundledResourcesURL: nil)
+        let first = try resolver.loadSession(for: .kagari, masterDirectoryURL: root, environment: [:])
+        let second = try resolver.loadSession(for: .kagari, masterDirectoryURL: root, environment: [:])
         let request = "GET SHIORI/3.0\r\nID: OnBoot\r\n\r\n"
         for count in 1 ... 20 {
             let response = try ShioriMessageParser.parseResponse(first.request(request))

@@ -38,7 +38,9 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
     private let textCopyPasteboardName: String?
     private let textCopyHandler: (@Sendable (String) -> Void)?
     private let windowController: (any NativeSaoriWindowControlling)?
-    private let externalModuleFactory: (@Sendable (URL) -> (any ExternalSaoriModule)?)?
+    private let externalModuleFactory: (@Sendable (URL, URL, (any NativeSaoriWindowControlling)?) -> (any ExternalSaoriModule)?)?
+    private let managedModulesURL: URL
+    private let prefersExternalWindowsDLL: Bool
     private var modules: [String: any NativeSaoriModule] = [:]
     private var externalModules: [String: any ExternalSaoriModule] = [:]
 
@@ -47,12 +49,17 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
         textCopyPasteboardName: String? = nil,
         textCopyHandler: (@Sendable (String) -> Void)? = nil,
         windowController: (any NativeSaoriWindowControlling)? = nil,
-        externalModuleFactory: (@Sendable (URL) -> (any ExternalSaoriModule)?)? = nil
+        prefersExternalWindowsDLL: Bool = false,
+        managedModulesURL: URL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "Utatane/NativeSaori"),
+        externalModuleFactory: (@Sendable (URL, URL, (any NativeSaoriWindowControlling)?) -> (any ExternalSaoriModule)?)? = nil
     ) {
         self.baseDirectoryURL = baseDirectoryURL
         self.textCopyPasteboardName = textCopyPasteboardName
         self.textCopyHandler = textCopyHandler
         self.windowController = windowController
+        self.prefersExternalWindowsDLL = prefersExternalWindowsDLL
+        self.managedModulesURL = managedModulesURL
         self.externalModuleFactory = externalModuleFactory
     }
 
@@ -63,6 +70,22 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
     private func loadUnlocked(_ path: String) {
         let key = moduleKey(path)
         guard modules[key] == nil, externalModules[key] == nil else { return }
+        let declaredURL = safeExternalModuleURL(path)
+        if let declaredURL, let factory = externalModuleFactory {
+            for candidate in nativeCandidates(for: declaredURL) where FileManager.default.fileExists(atPath: candidate.path) {
+                if let module = factory(candidate, declaredURL.deletingLastPathComponent(), windowController) {
+                    externalModules[key] = module
+                    return
+                }
+            }
+        }
+        if prefersExternalWindowsDLL, let declaredURL,
+           declaredURL.pathExtension.lowercased() == "dll",
+           let module = externalModuleFactory?(declaredURL, declaredURL.deletingLastPathComponent(), windowController)
+        {
+            externalModules[key] = module
+            return
+        }
         switch key {
         case "saori_cpuid.dll": modules[key] = NativeSystemInfo()
         case "kenonoke.dll": modules[key] = NativeKeyword(moduleURL: resolvedModuleURL(path))
@@ -71,8 +94,8 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
         case "textcopy2.dll":
             modules[key] = NativeTextCopy(pasteboardName: textCopyPasteboardName, handler: textCopyHandler)
         default:
-            if let moduleURL = safeExternalModuleURL(path),
-               let module = externalModuleFactory?(moduleURL)
+            if let declaredURL,
+               let module = externalModuleFactory?(declaredURL, declaredURL.deletingLastPathComponent(), windowController)
             {
                 externalModules[key] = module
             }
@@ -135,7 +158,21 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
         let url = resolvedModuleURL(normalized)
         guard !normalized.hasPrefix("/") else { return url }
         let basePath = baseDirectoryURL.standardizedFileURL.path
-        return url.path == basePath || url.path.hasPrefix(basePath + "/") ? url : nil
+        return basePath == "/" || url.path == basePath || url.path.hasPrefix(basePath + "/") ? url : nil
+    }
+
+    private func nativeCandidates(for declaredURL: URL) -> [URL] {
+        guard declaredURL.pathExtension.lowercased() == "dll" else { return [] }
+        let stem = declaredURL.deletingPathExtension().lastPathComponent.lowercased()
+        let directory = declaredURL.deletingLastPathComponent()
+        let moduleID = stem == "saori_cpuid" ? "saori-cpuid" : stem
+        let managedRoot = ProcessInfo.processInfo.environment["UTATANE_SAORI_ROOT"]
+            .flatMap { $0.hasPrefix("/") && !$0.contains("\0") ? URL(filePath: $0) : nil } ?? managedModulesURL
+        return [
+            directory.appending(path: "\(stem).dylib"),
+            directory.appending(path: "lib\(stem).dylib"),
+            managedRoot.appending(path: "\(moduleID)/lib/lib\(stem).dylib")
+        ]
     }
 }
 

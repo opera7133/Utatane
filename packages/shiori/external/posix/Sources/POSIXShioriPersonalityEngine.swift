@@ -16,14 +16,7 @@ public actor POSIXShioriPersonalityEngine: PersonalityEngine {
         guard let kind = resolver.kind(for: masterDirectoryURL) else {
             throw POSIXShioriError.unsupportedGhost
         }
-        guard let moduleURL = resolver.moduleURL(for: kind, masterDirectoryURL: masterDirectoryURL) else {
-            throw POSIXShioriError.moduleUnavailable(kind)
-        }
-        session = try POSIXShioriSession(
-            masterDirectoryURL: masterDirectoryURL,
-            moduleURL: moduleURL,
-            kind: kind
-        )
+        session = try resolver.loadSession(for: kind, masterDirectoryURL: masterDirectoryURL)
         charset = kind.charset
     }
 

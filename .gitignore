@@ -31,3 +31,6 @@ Content/Bundled/Ghosts/*/shell/master/surface[3-9]*.png
 Content/Bundled/Ghosts/*/ghost/master/dic/*_local.dic
 Content/Bundled/Ghosts/*/ghost/master/dic/local.dic
 *.profraw
+
+# Companion module checkout used by CI
+/.modules-source/

@@ -12,6 +12,7 @@ let package = Package(
         .library(name: "UtataneGhostKit", targets: ["UtataneGhostKit"]),
         .library(name: "UtataneContent", targets: ["UtataneContent"]),
         .library(name: "UtataneNetwork", targets: ["UtataneNetwork"]),
+        .library(name: "UtataneModuleCatalog", targets: ["UtataneModuleCatalog"]),
         .library(name: "UtataneShell", targets: ["UtataneShell"]),
         .library(name: "UtataneRuntime", targets: ["UtataneRuntime"]),
         .library(name: "UtataneAI", targets: ["UtataneAI"]),
@@ -91,6 +92,11 @@ let package = Package(
         .target(
             name: "UtataneNetwork",
             path: "network/Sources"
+        ),
+        .target(
+            name: "UtataneModuleCatalog",
+            dependencies: ["UtataneCore", "UtataneNetwork", .product(name: "ZIPFoundation", package: "ZIPFoundation")],
+            path: "module-catalog/Sources"
         ),
         .executableTarget(
             name: "UtataneMCP",
@@ -177,7 +183,7 @@ let package = Package(
         ),
         .target(
             name: "UtatanePlugin",
-            dependencies: ["UtataneCore", "UtataneShiori"],
+            dependencies: ["UtataneCore", "UtataneShiori", "UtataneModuleHost", "UtataneNativeSaori"],
             path: "plugin/Sources"
         ),
         .target(
@@ -375,14 +381,14 @@ let package = Package(
             path: "shiori/native/misaka/Sources"
         ),
         .target(
-            name: "CUtataneModuleABI",
-            path: "shiori/external/module-sdk",
+            name: "CMisakaHostBridge",
+            path: "shiori/external/module/MisakaBridge",
             exclude: ["LICENSE"],
             publicHeadersPath: "include"
         ),
         .target(
             name: "UtataneModuleHost",
-            dependencies: ["CUtataneModuleABI", "UtataneNativeSaori", "UtataneShiori"],
+            dependencies: ["CMisakaHostBridge", "UtataneCore", "UtataneNativeSaori", "UtataneShiori"],
             path: "shiori/external/module/Sources"
         ),
         .target(
@@ -454,6 +460,11 @@ let package = Package(
             name: "UtataneNetworkTests",
             dependencies: ["UtataneNetwork"],
             path: "network/Tests"
+        ),
+        .testTarget(
+            name: "UtataneModuleCatalogTests",
+            dependencies: ["UtataneCore", "UtataneModuleCatalog", "UtataneNetwork", .product(name: "ZIPFoundation", package: "ZIPFoundation")],
+            path: "module-catalog/Tests"
         ),
         .testTarget(
             name: "UtataneMCPTests",
@@ -535,7 +546,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UtataneMisakaNativeTests",
-            dependencies: ["UtataneCore", "UtataneMisakaNative", "UtataneModuleHost", "UtataneNativeSaori", "UtatanePlugin", "UtataneShiori"],
+            dependencies: ["UtataneCore", "UtataneGhostKit", "UtataneMisakaNative", "UtataneModuleHost", "UtataneNativeSaori", "UtatanePlugin", "UtataneShiori"],
             path: "shiori/native/misaka/Tests"
         ),
         .testTarget(

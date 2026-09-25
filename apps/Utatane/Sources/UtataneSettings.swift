@@ -326,6 +326,7 @@ final class UtataneSettingsStore: ObservableObject {
         static let randomTalkIntervalMinutes = "talk.randomTalkIntervalMinutes"
         static let dialogueDismissalSeconds = "balloon.dialogueDismissalSeconds"
         static let speechSynthesisEnabled = "speech.synthesisEnabled"
+        static let allowsShioriFallback = "shiori.allowsFallback"
         static let speechRecognitionEnabled = "speech.recognitionEnabled"
         static let speechRecognitionLocaleIdentifier = "speech.recognitionLocaleIdentifier"
         static let prefersOnDeviceSpeechRecognition = "speech.prefersOnDeviceRecognition"
@@ -352,6 +353,10 @@ final class UtataneSettingsStore: ObservableObject {
 
     @Published var automaticHeadlineRefresh: Bool {
         didSet { defaults.set(automaticHeadlineRefresh, forKey: Key.automaticHeadlineRefresh) }
+    }
+
+    @Published var allowsShioriFallback: Bool {
+        didSet { defaults.set(allowsShioriFallback, forKey: Key.allowsShioriFallback) }
     }
 
     @Published var headlineRefreshIntervalMinutes: Int {
@@ -599,6 +604,7 @@ final class UtataneSettingsStore: ObservableObject {
 
     init(defaults: UserDefaults = .standard, arguments: [String] = CommandLine.arguments) {
         self.defaults = defaults
+        allowsShioriFallback = defaults.object(forKey: Key.allowsShioriFallback) as? Bool ?? true
         automaticHeadlineRefresh = defaults.bool(forKey: Key.automaticHeadlineRefresh)
         headlineRefreshIntervalMinutes = Self.positiveValue(
             defaults.integer(forKey: Key.headlineRefreshIntervalMinutes),
@@ -880,6 +886,7 @@ final class UtataneSettingsStore: ObservableObject {
 }
 
 struct UtataneSettingsView: View {
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var settings: UtataneSettingsStore
     @ObservedObject var contentSources: ContentSourceStore
     @ObservedObject private var relauncher = ApplicationRelauncher.shared
@@ -1153,7 +1160,18 @@ struct UtataneSettingsView: View {
                         title: "SHIORI対応状況",
                         description: "Utataneが認識するSHIORIの実行方式を確認する。"
                     ) {
+                        Toggle("同梱SHIORIを読み込めない場合は共通導入版を使う", isOn: $settings.allowsShioriFallback)
+                        Text("同じSHIORIの共通導入版がある場合に切り替える。変更は次回の読み込みから適用する。")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Section("SHIORI") {
+                            ModuleCatalogView(mode: .settings)
+                        }
+                        ModuleCatalogSourceSettingsView()
                         ShioriStatusView()
+                        Button("モジュールカタログを開く…") {
+                            openWindow(id: "module-catalog")
+                        }
                     }
                 case .network:
                     SettingsPage(

@@ -1339,7 +1339,7 @@ private final class CharacterSurfaceController {
         surfaceBaseImage = rendered.image
         baseImage = rendered.image
         if !animationClock.isSuspended {
-            renderedLayerCache[surfaceID] = rendered.image
+            renderedLayerCache[surfaceID, renderedSurface: true] = rendered.image
         }
         persistentAnimationLayers.removeAll()
         scheduleAutomaticAnimations()
@@ -1441,7 +1441,7 @@ private final class CharacterSurfaceController {
         surfaceBaseImage = rendered.image
         baseImage = rendered.image
         if !animationClock.isSuspended {
-            renderedLayerCache[baseSurfaceID] = rendered.image
+            renderedLayerCache[baseSurfaceID, renderedSurface: true] = rendered.image
         }
         restorePresentationAnchor(anchor)
         scheduleAutomaticAnimations()
@@ -1738,7 +1738,13 @@ private final class CharacterSurfaceController {
             return
         }
 
-        let rendered = try render(surfaceID: surfaceID, shell: shell)
+        let rendered: (image: NSImage, view: SurfaceImageView) = if let cached = renderedLayerCache[
+            surfaceID, renderedSurface: true
+        ] {
+            (cached, makeSurfaceImageView(image: cached, surfaceID: surfaceID, shell: shell))
+        } else {
+            try render(surfaceID: surfaceID, shell: shell)
+        }
         item.contentView = rendered.view
         item.setContentSize(displaySize(for: rendered.image))
         item.show(activating: false)
@@ -1747,7 +1753,7 @@ private final class CharacterSurfaceController {
         surfaceBaseImage = rendered.image
         baseImage = rendered.image
         if !animationClock.isSuspended {
-            renderedLayerCache[surfaceID] = rendered.image
+            renderedLayerCache[surfaceID, renderedSurface: true] = rendered.image
         }
         persistentAnimationLayers.removeAll()
         restorePresentationAnchor(anchor)
@@ -2437,14 +2443,18 @@ private final class CharacterSurfaceController {
             shell: shell,
             excludedAnimationIDs: excludedAnimationIDs
         )
-        let scaledSize = displaySize(for: boundImage)
+        return (boundImage, makeSurfaceImageView(image: boundImage, surfaceID: surfaceID, shell: shell))
+    }
+
+    private func makeSurfaceImageView(image: NSImage, surfaceID: Int, shell: ShellDefinition) -> SurfaceImageView {
+        let scaledSize = displaySize(for: image)
         let imageView = SurfaceImageView(frame: NSRect(origin: .zero, size: scaledSize))
-        imageView.image = boundImage
-        imageView.animates = !animationClock.isSuspended && imageLoader.frameCount(of: boundImage) > 1
+        imageView.image = image
+        imageView.animates = !animationClock.isSuspended && imageLoader.frameCount(of: image) > 1
         imageView.imageAlignment = .alignCenter
         imageView.imageScaling = .scaleAxesIndependently
-        configureInteractionView(imageView, definition: definition, shell: shell)
-        return (boundImage, imageView)
+        configureInteractionView(imageView, definition: shell.surfaces[surfaceID], shell: shell)
+        return imageView
     }
 
     private func configureInteractionView(
@@ -2712,6 +2722,14 @@ private final class CharacterSurfaceController {
         }
         if !expands, let cached = renderedLayerCache[surfaceID, ignoresTransparency] {
             return SurfaceImageCanvas(image: cached)
+        }
+        // A self-referencing animation can ask for the currently displayed
+        // surface after its source file has gone away. Keep using the rendered
+        // base, while storing it separately from ordinary source layers.
+        if !expands, !ignoresTransparency, surfaceID == baseSurfaceID,
+           let rendered = renderedLayerCache[surfaceID, renderedSurface: true]
+        {
+            return SurfaceImageCanvas(image: rendered)
         }
         let result: SurfaceImageCanvas
         if let asset = try? shellLoader.loadSurface(id: surfaceID, from: shell.directory) {

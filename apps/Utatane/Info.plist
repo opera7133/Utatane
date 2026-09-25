@@ -52,6 +52,12 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
+	<key>ModuleCatalogAllowStaging</key>
+	<false/>
+	<key>ModuleCatalogIndexURL</key>
+	<string>https://dl.wmsci.com/utatane/modules/index.json</string>
+	<key>ModuleCatalogPublicKey</key>
+	<string>/+xvmo02oaZzmnWR7T2jTwym5UM/OMT3vZd86ADLnKI=</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

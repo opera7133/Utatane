@@ -20,7 +20,7 @@ struct ShioriStatusView: View {
         }
 
         Section {
-            Text("実行方式と追加ランタイムの要否を表示する。SHIORIのダウンロードや更新は行わない。")
+            Text("実行方式と追加ランタイムの要否を表示する。配布版の導入はモジュールカタログから行う。")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

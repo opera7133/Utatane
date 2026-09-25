@@ -445,6 +445,13 @@ struct SurfaceImageLoader {
         }
         let width = sourceRepresentation.pixelsWide
         let height = sourceRepresentation.pixelsHigh
+        // Normalize both images once. colorAt/setColor in the pixel loop makes
+        // ordinary PNA-backed surface changes take hundreds of milliseconds.
+        guard let sourcePixels = rgbaBitmap(from: sourceRepresentation),
+              let maskPixels = rgbaBitmap(from: maskRepresentation)
+        else {
+            throw SurfaceImageError.compositionFailed(sourceURL)
+        }
         guard let output = NSBitmapImageRep(
             bitmapDataPlanes: nil,
             pixelsWide: width,
@@ -462,31 +469,63 @@ struct SurfaceImageLoader {
             throw SurfaceImageError.compositionFailed(sourceURL)
         }
 
+        guard let sourceData = sourcePixels.bitmapData,
+              let maskData = maskPixels.bitmapData,
+              let outputData = output.bitmapData
+        else { throw SurfaceImageError.compositionFailed(sourceURL) }
         for y in 0 ..< height {
             for x in 0 ..< width {
-                let sourceColor = sourceRepresentation.colorAt(x: x, y: y)?
-                    .usingColorSpace(.deviceRGB) ?? .clear
-                // PNA masks may use a larger canvas than their PNG. Both are
-                // aligned at the top-left; Core Image's bottom-left crop shifted
-                // such masks vertically (Juda-System's fringe mask is 100 px taller).
-                let maskColor = if x < maskRepresentation.pixelsWide, y < maskRepresentation.pixelsHigh {
-                    maskRepresentation.colorAt(x: x, y: y)?
-                        .usingColorSpace(.deviceRGB) ?? .black
-                } else {
-                    NSColor.black
+                let sourceOffset = y * sourcePixels.bytesPerRow + x * 4
+                let outputOffset = y * output.bytesPerRow + x * 4
+                // PNA masks can be larger or smaller. Align their top-left
+                // corners and treat pixels outside the mask as transparent.
+                var maskRed = 0
+                if x < maskPixels.pixelsWide, y < maskPixels.pixelsHigh {
+                    let offset = y * maskPixels.bytesPerRow + x * 4
+                    let alpha = Int(maskData[offset + 3])
+                    // Bitmap contexts hold premultiplied RGB. PNA uses the
+                    // original red channel independently of mask alpha.
+                    if alpha != 0 {
+                        maskRed = min(255, (Int(maskData[offset]) * 255 + alpha / 2) / alpha)
+                    }
                 }
-                output.setColor(NSColor(
-                    deviceRed: sourceColor.redComponent,
-                    green: sourceColor.greenComponent,
-                    blue: sourceColor.blueComponent,
-                    alpha: sourceColor.alphaComponent * maskColor.redComponent
-                ), atX: x, y: y)
+                for channel in 0 ..< 3 {
+                    outputData[outputOffset + channel] = UInt8(
+                        (Int(sourceData[sourceOffset + channel]) * maskRed + 127) / 255
+                    )
+                }
+                outputData[outputOffset + 3] = UInt8(
+                    (Int(sourceData[sourceOffset + 3]) * maskRed + 127) / 255
+                )
             }
         }
         output.size = NSSize(width: width, height: height)
         let result = NSImage(size: output.size)
         result.addRepresentation(output)
         return result
+    }
+
+    private func rgbaBitmap(from source: NSBitmapImageRep) -> NSBitmapImageRep? {
+        let size = NSSize(width: source.pixelsWide, height: source.pixelsHigh)
+        guard let bitmap = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: source.pixelsWide,
+            pixelsHigh: source.pixelsHigh,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bitmapFormat: [],
+            bytesPerRow: source.pixelsWide * 4,
+            bitsPerPixel: 32
+        ), let context = NSGraphicsContext(bitmapImageRep: bitmap) else { return nil }
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        source.draw(in: NSRect(origin: .zero, size: size))
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+        return bitmap
     }
 
     private func compositeAnimated(

@@ -12,12 +12,15 @@ struct UtataneModuleResolverTests {
         let bundle = root.appending(path: "resources")
         let resolver = UtataneModuleResolver(applicationSupportURL: support, bundledResourcesURL: bundle, environment: [:])
         #expect(try resolver.misakaModuleURL() == nil)
-        let bundled = bundle.appending(path: "NativeShiori/misaka-native/lib/libUtataneMisaka.dylib")
-        let installed = support.appending(path: "misaka-native/lib/libUtataneMisaka.dylib")
-        for file in [bundled, installed] {
+        let bundled = bundle.appending(path: "NativeShiori/misaka-native/lib/libmisaka.dylib")
+        let installed = support.appending(path: "misaka-native/lib/libmisaka.dylib")
+        let master = root.appending(path: "ghost/master")
+        let nested = master.appending(path: "misaka-native/lib/libmisaka.dylib")
+        let flat = master.appending(path: "libmisaka.dylib")
+        for file in [bundled, installed, nested, flat] {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try Data().write(to: file)
-            #expect(try resolver.misakaModuleURL() == file)
+            #expect(try resolver.misakaModuleURL(masterDirectoryURL: master) == file)
         }
         let explicit = root.appending(path: "missing.dylib")
         #expect(try UtataneModuleResolver(applicationSupportURL: support, bundledResourcesURL: bundle,
@@ -25,6 +28,49 @@ struct UtataneModuleResolverTests {
         #expect(throws: UtataneModuleError.self) {
             try UtataneModuleResolver(environment: ["UTATANE_MISAKA_MODULE": "relative.dylib"]).misakaModuleURL()
         }
+    }
+
+    @Test(arguments: [ConventionalShioriKind.minato, .pasta, .eseShiori])
+    func `flat conventional SHIORI overrides nested and shared installations`(kind: ConventionalShioriKind) throws {
+        #expect(ConventionalShioriKind(shioriFilename: "path\\\(kind.rawValue).dll") == kind)
+        #expect(ConventionalShioriKind(libraryFilename: kind.libraryFilename) == kind)
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let master = root.appending(path: "ghost/master")
+        let support = root.appending(path: "support")
+        let resolver = UtataneModuleResolver(applicationSupportURL: support, bundledResourcesURL: nil, environment: [:])
+        for file in [support.appending(path: "\(kind.rawValue)/lib/\(kind.libraryFilename)"),
+                     master.appending(path: "\(kind.rawValue)/lib/\(kind.libraryFilename)"),
+                     master.appending(path: kind.libraryFilename)]
+        {
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data().write(to: file)
+            #expect(try resolver.moduleURL(for: kind, masterDirectoryURL: master) == file)
+        }
+    }
+
+    @Test func `niseshiori library resolves from ghost then managed installation`() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let master = root.appending(path: "ghost/master")
+        let support = root.appending(path: "support")
+        let managed = support.appending(path: "nise-shiori/lib/libniseshiori.dylib")
+        let bundled = master.appending(path: "libniseshiori.dylib")
+        let resolver = UtataneModuleResolver(applicationSupportURL: support, bundledResourcesURL: nil, environment: [:])
+        #expect(ConventionalShioriKind(shioriFilename: "NISESHIORI.DLL") == .niseshiori)
+        #expect(ConventionalShioriKind(libraryFilename: bundled.lastPathComponent) == .niseshiori)
+        try FileManager.default.createDirectory(at: managed.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: managed)
+        #expect(try resolver.moduleURL(for: .niseshiori, masterDirectoryURL: master) == managed)
+        try FileManager.default.createDirectory(at: bundled.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: bundled)
+        #expect(try resolver.moduleURL(for: .niseshiori, masterDirectoryURL: master) == bundled)
+        #expect(try resolver.fallbackURL(for: .niseshiori, selected: bundled, masterDirectoryURL: master) == managed)
+    }
+
+    @Test func `ese shiori library resolves from ghost then managed installation`() {
+        #expect(ConventionalShioriKind(shioriFilename: "ESE-SHIORI.DLL") == .eseShiori)
+        #expect(ConventionalShioriKind(libraryFilename: "libese-shiori.dylib") == .eseShiori)
     }
 }
 
@@ -45,7 +91,7 @@ struct UtataneModuleLoaderTests {
         let library = root.appending(path: "module.dylib")
         try source.write(to: code, atomically: true, encoding: .utf8)
         let include = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent().appending(path: "module-sdk/include")
+            .deletingLastPathComponent().appending(path: "MisakaBridge/include")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
         process.arguments = ["clang", "-dynamiclib", "-I", include.path, code.path, "-o", library.path]
@@ -78,7 +124,7 @@ struct UtataneModuleLoaderTests {
         default: "memcpy(out->data, \"error\", 5); out->length = 5; return UM_ENGINE;"
         }
         let source = """
-        #include "utatane_module.h"
+        #include "misaka_host_bridge.h"
         #include <stdlib.h>
         #include <string.h>
         static int allocations = 0;

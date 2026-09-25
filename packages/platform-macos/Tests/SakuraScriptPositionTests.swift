@@ -26,6 +26,22 @@ private func withPositionPlayer(_ body: (SakuraScriptPlayer, BalloonWindowContro
 }
 
 @Test @MainActor
+func `terminal only translation keeps the original talk`() async throws {
+    try await withPositionPlayer { player, _, balloon in
+        let original = SakuraScript(rawValue: #"\0会話\e"#)
+        player.onTranslate = { _, _ in SakuraScript(rawValue: #"\e"#) }
+        var played: SakuraScript?
+        player.onTalkPlayback = { phase, script, _ in
+            if phase == .before {
+                played = script
+            }
+        }
+        await player.playAndWait(original, balloon: balloon, characterDelayMilliseconds: 0)
+        #expect(played == original)
+    }
+}
+
+@Test @MainActor
 func `balloon break reports translated source position within text`() async throws {
     try await withPositionPlayer { player, _, balloon in
         let prefix = #"\_q\0あ\\い\_q\1う"#

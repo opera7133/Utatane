@@ -83,6 +83,12 @@ public struct ShioriResponse: Equatable, Sendable {
         value ?? headers["Sentence"]
     }
 
+    /// A terminal marker by itself ends an empty response; it has no dialogue to play.
+    public var playableScriptValue: String? {
+        guard let scriptValue, !scriptValue.isEmpty, scriptValue != #"\e"# else { return nil }
+        return scriptValue
+    }
+
     public var referenceValues: [Int: String] {
         Dictionary(uniqueKeysWithValues: headers.entries.compactMap { header in
             guard header.name.count > 9,

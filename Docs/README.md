@@ -33,7 +33,7 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 - [Realtime音声会話](Guide/Realtime-Voice.md): OpenAI Realtime APIまたは互換APIを使った音声会話の設定
 - [音声合成・音声認識](Guide/Speech.md): macOS標準、ローカル音声合成ソフト、クラウド音声合成と音声認識の設定
 - [IP Messenger](Guide/IP-Messenger.md): 同じLAN上のSSP・IP Messengerとのメッセージ送受信
-- [Native SHIORI / SAORI](Support/Native-SHIORI.md): Wineなしで動く人格エンジンと、外部モジュール・Wineフォールバックの対応範囲
+- [Native SHIORI / SAORI](Support/Native-SHIORI.md): モジュールの選択、診断と詳細資料への案内
 
 基本的なインストール、ゴーストの追加、Materia付属FIRSTの配置方法は[プロジェクトREADME](../README.md)にあります。
 
@@ -55,7 +55,7 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 
 - [ローカル開発ガイド](Development/Development.md): 必要な環境、ビルド、テスト、コンテンツ検証CLI、ディレクトリ構成
 - [ドキュメントへの貢献](Development/Documentation.md): Web・同梱ヘルプの編集、ローカル確認、ページや画像の追加
-- [Native SHIORI / SAORI](Support/Native-SHIORI.md): 内蔵人格エンジンとモジュール実行経路
+- [Native SHIORI / SAORI](Support/Native-SHIORI.md): モジュールの選択と詳細資料への案内
 
 ## 目的から探す
 

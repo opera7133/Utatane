@@ -39,10 +39,22 @@ private struct MisakaPluginFixture {
     }
 }
 
-private func exercisePluginReload(moduleURL: URL?) async throws {
+private func exercisePluginReload(moduleURL: URL?, bundled: Bool = false) async throws {
     let fixture = try MisakaPluginFixture()
     defer { fixture.remove() }
-    let plugin = fixture.plugin
+    var plugin = fixture.plugin
+    if bundled, let moduleURL {
+        let relative = "libmisaka.dylib"
+        let local = plugin.directory.appending(path: relative)
+        try FileManager.default.createDirectory(at: local.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: moduleURL, to: local)
+        let descriptor = plugin.directory.appending(path: "descript.txt")
+        let text = try String(contentsOf: descriptor, encoding: .utf8)
+        try (text + "filename.macos,\(relative)\n").write(to: descriptor, atomically: true, encoding: .utf8)
+        try FileManager.default.removeItem(at: plugin.directory.appending(path: "misaka.dll"))
+        plugin = try #require(PluginCatalog().load(from: [plugin.directory.deletingLastPathComponent()]).first)
+        #expect(plugin.runtime == .dynamicLibrary(local))
+    }
     let state = fixture.stateDirectory
     let resolver = UtataneModuleResolver(
         applicationSupportURL: fixture.root.appending(path: "modules"), bundledResourcesURL: nil,
@@ -52,7 +64,10 @@ private func exercisePluginReload(moduleURL: URL?) async throws {
     let legacyData = try JSONEncoder().encode(["count": ["7"]])
     try legacyData.write(to: legacy)
     let factory: PluginRuntime.TransportFactory = { plugin in
-        try MisakaPluginTransport(plugin: plugin, stateDirectoryURL: state, moduleResolver: resolver)
+        if bundled {
+            return try DynamicLibraryPluginTransport(plugin: plugin, stateDirectoryURL: state)
+        }
+        return try MisakaPluginTransport(plugin: plugin, stateDirectoryURL: state, moduleResolver: resolver)
     }
     let runtime = PluginRuntime()
     #expect(await runtime.reload([plugin], transportFactory: factory).isEmpty)
@@ -81,8 +96,8 @@ struct MisakaPluginBuiltinTests {
 
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_MISAKA_MODULE"] != nil))
 struct MisakaPluginModuleTests {
-    @Test func reloadAndStateMigration() async throws {
+    @Test(arguments: [false, true]) func reloadAndStateMigration(bundled: Bool) async throws {
         let library = try URL(fileURLWithPath: #require(ProcessInfo.processInfo.environment["UTATANE_MISAKA_MODULE"]))
-        try await exercisePluginReload(moduleURL: library)
+        try await exercisePluginReload(moduleURL: library, bundled: bundled)
     }
 }

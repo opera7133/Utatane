@@ -59,7 +59,15 @@ def read_translations() -> dict[str, dict[str, str]]:
         language = path.stem
         if not LANGUAGE_CODE.fullmatch(language):
             raise ValueError(f"{path}: filename must be a language code such as en or zh-Hans")
-        data = json.loads(path.read_text(encoding="utf-8"))
+        def unique_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+            values: dict[str, object] = {}
+            for key, value in pairs:
+                if key in values:
+                    raise ValueError(f"{path}: duplicate translation key {key!r}")
+                values[key] = value
+            return values
+
+        data = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_keys)
         if not isinstance(data, dict) or not all(
             isinstance(key, str) and isinstance(value, str) for key, value in data.items()
         ):

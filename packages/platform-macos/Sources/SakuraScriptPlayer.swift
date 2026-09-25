@@ -448,10 +448,16 @@ public final class SakuraScriptPlayer {
         playbackTask = Task { [weak self] in
             guard let self, await suspensionClock.waitUntilActive() else { return }
             let expanded = SakuraScript(rawValue: expandEnvironmentVariables(in: script.rawValue))
-            let effectiveScript = await onTranslate?(expanded, context) ?? expanded
+            let translation = await onTranslate?(expanded, context)
+            let effectiveScript = translation?.rawValue == #"\e"# ? expanded : translation ?? expanded
             guard await suspensionClock.waitUntilActive(), !Task.isCancelled else { return }
             currentScriptRawValue = effectiveScript.rawValue
+            let parseStartedAt = ProcessInfo.processInfo.systemUptime
             var tokens = playbackTokens(effectiveScript, policy: policy)
+            if context.eventID == "OnMouseDoubleClick" {
+                let elapsed = Int((ProcessInfo.processInfo.systemUptime - parseStartedAt) * 1000)
+                AppLogStore.shared.debug("ダブルクリックの台詞解析 \(elapsed) ms", category: "SHIORI")
+            }
             let continuesPreviousDialogue = tokens.first?.token == .clearAll
             if continuesPreviousDialogue {
                 tokens.removeFirst()
@@ -976,7 +982,12 @@ public final class SakuraScriptPlayer {
                     scope = newScope
                     currentPlaybackScope = newScope
                 case let .surface(surfaceID):
+                    let surfaceStartedAt = ProcessInfo.processInfo.systemUptime
                     try surfaceWindowController.changeSurface(scope: scope, to: surfaceID)
+                    if currentPlaybackContext.eventID == "OnMouseDoubleClick" {
+                        let elapsed = Int((ProcessInfo.processInfo.systemUptime - surfaceStartedAt) * 1000)
+                        AppLogStore.shared.debug("ダブルクリックのサーフェス切替 \(elapsed) ms", category: "SHIORI")
+                    }
                 case let .namedSurface(identifier):
                     try surfaceWindowController.changeSurface(scope: scope, named: identifier)
                 case let .animation(identifier, waitsForCompletion):

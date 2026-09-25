@@ -101,6 +101,8 @@ public enum ShioriCatalog {
         .init(id: "satori", displayName: "里々", aliases: ["SATORI"], moduleFilenames: ["satori.dll"], execution: .builtIn, provisioning: .included),
         .init(id: "kawari", displayName: "華和梨", aliases: ["KAWARI"], moduleFilenames: ["kawari.dll"], execution: .builtIn, provisioning: .included),
         .init(id: "kagari", displayName: "kagari", moduleFilenames: ["kagari.dll"], execution: .bundledNativeModule, provisioning: .included),
+        .init(id: "minato", displayName: "minato", aliases: ["湊"], moduleFilenames: ["minato.dll", "libminato.dylib"], execution: .externalProcess, provisioning: .user),
+        .init(id: "pasta", displayName: "pasta", aliases: [], moduleFilenames: ["pasta.dll", "libpasta.dylib"], execution: .externalProcess, provisioning: .user),
         .init(id: "aosora", displayName: "蒼空", aliases: ["Aosora"], moduleFilenames: ["aosora.dll"], execution: .bundledNativeModule, provisioning: .user, support: .experimental),
         .init(id: "first", displayName: "FIRST", moduleFilenames: ["first.dll"], execution: .builtIn, provisioning: .included),
         .init(id: "misaka", displayName: "美坂", aliases: ["MISAKA"], moduleFilenames: ["misaka.dll"], execution: .builtIn, provisioning: .included),

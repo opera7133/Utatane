@@ -45,18 +45,32 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Checkout SHIORI build tools
+        uses: actions/checkout@v7
+        with:
+          repository: opera7133/utatane-modules
+          ref: main
+          path: .modules-source
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: '0.6.14'
+
       - name: Test release note generation
         run: python3 Scripts/test-release-notes.py
 
       - name: Test bundled kagari inputs
-        run: python3 tools/native-shiori/test-bundle-kagari.py
+        run: sh Scripts/modules.sh check
 
       - name: Build kagari runtime for release tests
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         run: |
           runtime="$RUNNER_TEMP/kagari-runtime"
-          python3 tools/native-shiori/bundle-kagari.py \
+          sh Scripts/modules.sh bundle-kagari \
             --output "$runtime" \
             --archs "$(uname -m)"
           echo "UTATANE_KAGARI_MODULE=$runtime/libkagari.dylib" >> "$GITHUB_ENV"
@@ -71,6 +85,20 @@ jobs:
         uses: actions/checkout@v7
         with:
           submodules: recursive
+
+      - name: Checkout SHIORI build tools
+        uses: actions/checkout@v7
+        with:
+          repository: opera7133/utatane-modules
+          ref: main
+          path: .modules-source
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@94527f2e458b27549849d47d273a16bec83a01e9 # v7
+        with:
+          version: '0.6.14'
 
       - name: Install Xcode project generator
         run: brew install xcodegen
@@ -131,8 +159,16 @@ jobs:
       - name: Verify bundled kagari files
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          sh tools/native-shiori/verify-bundled-kagari.sh \
+          sh Scripts/modules.sh verify-kagari \
             build/Build/Products/Release/Utatane.app arm64 x86_64
+
+      - name: Verify native SHIORI host
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          host=build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-shiori-host
+          test -x "$host"
+          lipo "$host" -verify_arch arm64 x86_64
+          codesign --verify --strict "$host"
 
       - name: Build Windows DLL host
         if: startsWith(github.ref, 'refs/tags/v')
@@ -188,7 +224,7 @@ jobs:
 
       - name: Upload release build inputs
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Utatane-release-build-inputs
           path: dist/release-inputs
@@ -226,7 +262,7 @@ jobs:
             build/nicxlive-runtime
 
       - name: Upload nicxlive runtime
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Utatane-nicxlive-runtime
           path: build/nicxlive-runtime
@@ -241,13 +277,13 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Download release build inputs
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: Utatane-release-build-inputs
           path: dist/release-inputs
 
       - name: Download nicxlive runtime
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: Utatane-nicxlive-runtime
           path: build/nicxlive-runtime
@@ -275,7 +311,7 @@ jobs:
             dist/Utatane-macOS.zip
 
       - name: Upload build artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Utatane-macOS
           path: dist/Utatane-macOS.zip
@@ -300,7 +336,7 @@ jobs:
             dist/update-feed
 
       - name: Upload update feed artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Utatane-update-feed
           path: dist/update-feed/appcast.xml
@@ -328,7 +364,7 @@ jobs:
             dist/content/balloon-ria/updates2.dau
 
       - name: Upload content update artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Utatane-bundled-content-updates
           path: dist/content
@@ -351,19 +387,19 @@ jobs:
         run: brew install lftp
 
       - name: Download app artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: Utatane-macOS
           path: dist
 
       - name: Download update feed artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: Utatane-update-feed
           path: dist/update-feed
 
       - name: Download content update artifact
-        uses: actions/download-artifact@v5
+        uses: actions/download-artifact@v8
         with:
           name: Utatane-bundled-content-updates
           path: dist/content

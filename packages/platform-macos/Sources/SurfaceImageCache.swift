@@ -7,6 +7,7 @@ final class SurfaceImageCache {
     private struct Key: Hashable {
         let surfaceID: Int
         let opaque: Bool
+        let renderedSurface: Bool
     }
 
     private struct Entry {
@@ -15,7 +16,7 @@ final class SurfaceImageCache {
         var lastAccess: UInt64
     }
 
-    // Combined budget for normal and opaque layers, per character. Small
+    // Combined budget for rendered surfaces and normal/opaque layers, per character. Small
     // images also have an entry limit to bound dictionary/NSImage overhead.
     let byteLimit: Int
     private let countLimit: Int
@@ -31,16 +32,16 @@ final class SurfaceImageCache {
         self.countLimit = max(0, countLimit)
     }
 
-    subscript(surfaceID: Int, opaque: Bool = false) -> NSImage? {
+    subscript(_ surfaceID: Int, _ opaque: Bool = false, renderedSurface renderedSurface: Bool = false) -> NSImage? {
         get {
-            let key = Key(surfaceID: surfaceID, opaque: opaque)
+            let key = Key(surfaceID: surfaceID, opaque: opaque, renderedSurface: renderedSurface)
             guard entries[key] != nil else { return nil }
             clock &+= 1
             entries[key]?.lastAccess = clock
             return entries[key]?.image
         }
         set {
-            let key = Key(surfaceID: surfaceID, opaque: opaque)
+            let key = Key(surfaceID: surfaceID, opaque: opaque, renderedSurface: renderedSurface)
             remove(key)
             guard let image = newValue, let cost = Self.estimatedDecodedBytes(of: image),
                   cost <= byteLimit, countLimit > 0
