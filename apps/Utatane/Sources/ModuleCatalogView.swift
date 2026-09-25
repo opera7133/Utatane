@@ -27,10 +27,25 @@ struct ModuleSetupOpening: ViewModifier {
     }
 }
 
+struct ModuleSetupCompletionListener: View {
+    let onComplete: () -> Void
+
+    var body: some View {
+        Color.clear.frame(width: 0, height: 0)
+            .onReceive(NotificationCenter.default.publisher(for: .moduleCatalogSetupCompleted)) { _ in
+                onComplete()
+            }
+    }
+}
+
 enum ModuleCatalogConfiguration {
     static let setupCompletedKey = "moduleCatalog.initialSelectionCompleted"
     static let customIndexURLKey = "moduleCatalog.customIndexURL"
     static let customPublicKeyKey = "moduleCatalog.customPublicKey"
+
+    static var requiresInitialSetup: Bool {
+        client != nil && !UserDefaults.standard.bool(forKey: setupCompletedKey)
+    }
 
     static var client: SignedModuleCatalogClient? {
         let defaults = UserDefaults.standard
@@ -76,9 +91,9 @@ struct ModuleCatalogView: View {
 
     private var modules: [SignedModuleCatalog.Module] {
         (catalog?.modules ?? []).filter { module in
-            let kindMatches = mode != .catalog
+            let kindMatches = mode == .settings
                 ? module.kinds.contains("shiori")
-                : kind == "all" || module.kinds.contains(kind)
+                : mode == .initialSelection || kind == "all" || module.kinds.contains(kind)
             return kindMatches && (search.isEmpty || module.displayName.localizedStandardContains(search)
                 || module.id.localizedStandardContains(search))
         }
@@ -94,10 +109,10 @@ struct ModuleCatalogView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if mode != .settings {
-                Text(mode == .initialSelection ? "はじめに使うSHIORI" : "モジュールカタログ")
+                Text(mode == .initialSelection ? "はじめに使うモジュール" : "モジュールカタログ")
                     .font(.title2.bold())
                 Text(mode == .initialSelection
-                    ? "既存ゴーストは変更せず、使っているSHIORIを選んである。不要なものは外せる。導入済みの最新版は再ダウンロードしない。YAYAと里々は必須。"
+                    ? "既存ゴーストは変更せず、使っているSHIORI・SAORIを選んである。不要なものは外せる。導入済みの最新版は再ダウンロードしない。YAYAと里々は必須。"
                     : "macOS向けのSHIORI・SAORIをダウンロードする。ゴーストに同梱されたライブラリが優先される。")
                     .foregroundStyle(.secondary)
             }
@@ -143,7 +158,7 @@ struct ModuleCatalogView: View {
                     .disabled(isLoading || ModuleCatalogConfiguration.client == nil)
                 Spacer()
                 if mode == .initialSelection {
-                    Button("選択したSHIORIを導入") { Task { await installInitialSelection() } }
+                    Button("選択したモジュールを導入") { Task { await installInitialSelection() } }
                         .buttonStyle(.borderedProminent)
                         .disabled(!canInstallInitialSelection)
                 }
@@ -153,6 +168,7 @@ struct ModuleCatalogView: View {
         .frame(minWidth: mode == .settings ? 0 : 650,
                minHeight: mode == .settings ? 300 : (mode == .initialSelection ? 480 : 540))
         .task(id: customIndexURL + customPublicKey) { await reload() }
+        .onChange(of: installedGhosts.map(\.id)) { _, _ in selectInstalledGhostModules() }
         .onChange(of: installedGhosts, initial: true) { _, _ in
             selectInstalledGhostModules()
         }
@@ -240,7 +256,13 @@ struct ModuleCatalogView: View {
     private func selectInstalledGhostModules() {
         guard mode == .initialSelection, let catalog else { return }
         let candidates = Set(catalog.modules.filter { $0.availability == "candidate" }.map(\.id))
-        let used = installedGhosts.compactMap { ghost -> String? in
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "Utatane", directoryHint: .isDirectory)
+        let used = installedGhosts.flatMap {
+            GhostModuleRequirements().missing(for: $0, in: catalog, applicationSupportURL: support)
+        }.map(\.id)
+        selectedIDs.formUnion(used.filter(candidates.contains))
+        let shioriIDs = installedGhosts.compactMap { ghost -> String? in
             let master = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
             guard let identifier = ShioriCatalog.identify(
                 masterDirectory: master,
@@ -249,7 +271,7 @@ struct ModuleCatalogView: View {
             )?.id.rawValue else { return nil }
             return identifier == "misaka" ? "misaka-native" : identifier
         }
-        selectedIDs.formUnion(used.filter(candidates.contains))
+        selectedIDs.formUnion(shioriIDs.filter(candidates.contains))
     }
 
     private func install(_ id: String) async {
@@ -282,8 +304,13 @@ struct ModuleCatalogView: View {
             }
         }
         UserDefaults.standard.set(true, forKey: ModuleCatalogConfiguration.setupCompletedKey)
+        NotificationCenter.default.post(name: .moduleCatalogSetupCompleted, object: nil)
         dismissWindow(id: "module-setup")
     }
+}
+
+extension Notification.Name {
+    static let moduleCatalogSetupCompleted = Notification.Name("Utatane.ModuleCatalogSetupCompleted")
 }
 
 private struct InstalledModuleVersion: Decodable {

@@ -47,7 +47,7 @@ Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/d
 - [テキストファイル互換状況](Reference/UKADOC-Text-File-Compatibility.md): descript、install、surfaces、更新定義など
 - [SSTP互換状況](Reference/UKADOC-SSTP-Compatibility.md): SSTPリクエストとEXECUTE命令
 - [nijigenerateシェル拡張](Creators/nijigenerate-shell.md): 通常シェルと併用するパペット、表情、視線・ドラッグ反応の設定
-- [ネイティブプラグイン](Creators/Native-Plugins.md): macOS用モジュールのABIと、内蔵SHIORI・Wineを使うプラグインの実行方式
+- [ネイティブプラグイン](Creators/Native-Plugins.md): macOS用モジュールのABIと、dylib・Wineを使うプラグインの実行方式
 
 互換表の「対応」は、SSPの全挙動との完全一致を意味しません。配布前には、対象ゴーストで起動、会話、入力、シェル、更新、外部モジュールを実際に確認してください。
 

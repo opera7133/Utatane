@@ -52,6 +52,9 @@ public struct UtataneModuleResolver: Sendable {
     }
 
     public func moduleURL(for kind: ConventionalShioriKind, masterDirectoryURL: URL? = nil) throws -> URL? {
+        if kind == .misaka {
+            return try misakaModuleURL(masterDirectoryURL: masterDirectoryURL)
+        }
         let key = "UTATANE_\(kind.rawValue.uppercased().replacingOccurrences(of: "-", with: "_"))_MODULE"
         if let path = environment[key] {
             guard path.hasPrefix("/"), !path.contains("\0") else {
@@ -73,6 +76,9 @@ public struct UtataneModuleResolver: Sendable {
     }
 
     public func fallbackURL(for kind: ConventionalShioriKind, selected: URL, masterDirectoryURL: URL) throws -> URL? {
+        if kind == .misaka {
+            return try misakaFallbackURL(for: selected, masterDirectoryURL: masterDirectoryURL)
+        }
         guard allowsFallback, environment["UTATANE_\(kind.rawValue.uppercased().replacingOccurrences(of: "-", with: "_"))_MODULE"] == nil,
               selected.standardizedFileURL.path.hasPrefix(masterDirectoryURL.standardizedFileURL.path + "/")
         else { return nil }

@@ -38,7 +38,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 
 - YAYA(文) / KAGARI / SHIOLINK(MiyoJS等) / 里珠(Proxy) / 里々 / 華和梨 / 美坂 / 灯 / ese-shiori / 偽栞 / 忍 / 翡翠 / 結奈をSHIORIとして使うゴーストのネイティブ実行 (蒼空・里珠・結奈については"実験的な機能"を参照)
 - 韓国語助詞トランスレータ`ParticleMakoto`と`Makoto Basic with Select and Repeat`のネイティブ実行
-- SSU、`saori_cpuid`、`kenonoke`、`textcopy2`、`mciaudior`、`wmove`のネイティブSAORI互換
+- カタログから導入できる`saori_cpuid`、`kenonoke`、`textcopy2`、`mciaudior`、`wmove`のネイティブSAORI互換
 - コンテンツエクスプローラから行うゴースト、シェル、バルーン、ヘッドライン、プラグインの個別・一括ネットワーク更新。ゴーストとバルーンは設定した日数ごとの自動更新にも対応
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
 - 同じLAN上のSSP・IP Messengerとのメンバー発見、平文メッセージ送受信、受信SakuraScriptの安全な表示再生
@@ -145,16 +145,6 @@ Content/Local/
 
 Utatane本体は[MIT License](LICENSE)で公開しています。
 
-submoduleのYAYAはBSD 3-Clause License、SATORIはBSD 2-Clause License、KAWARIは修正BSD Licenseです。ゴースト、シェル、バルーンは各配布元のルールに従ってください。
-
-kagariはアプリのビルド時にLuaとともにコンパイル・同梱します。使用するソースと著作権表示は次のとおりです。
-
-| ソフトウェア | 著作権表示 | ライセンス |
-| --- | --- | --- |
-| kagari（macOSフォーク） | Copyright (c) 2019 Tatakinov | [MIT](packages/shiori/native/kagari/Vendor/kagari/LICENSE) |
-| Lua 5.4.9 | Copyright (C) 1994-2026 Lua.org, PUC-Rio | [MIT](https://www.lua.org/license.html) |
-| sol2 3.5.0 | Copyright (c) 2013-2022 Rapptz, ThePhD, and contributors | [MIT](https://github.com/ThePhD/sol2/blob/v3.5.0/LICENSE.txt) |
-
-著作権表示とライセンス本文は、配布アプリの`Contents/Resources/NativeShiori/kagari/licenses/`にも収録します。Luaの表示・本文は配布ソースの`lua.h`をそのまま収録しています。ソースの取得先とSHA-256は[依存バージョン定義](https://github.com/opera7133/utatane-modules/blob/main/recipes/kagari/dependencies.json)を参照してください。
+SHIORI・SAORIの配布物とライセンスは[Utatane Modules](https://github.com/opera7133/utatane-modules)で確認できます。アプリ本体には移植済みのSHIORI・SAORIを同梱していません。
 
 同梱ゴースト「りあ」のシェルには、ボトル猫さんの「p016（寝不足）」を使用しています。専用バルーン「Ria」は、ろすえんさんの「[something like Template](https://github.com/lost-nd-xxx/something_like_balloon)」を元に制作しています。詳しい規約とクレジットは、それぞれの同梱READMEを参照してください。

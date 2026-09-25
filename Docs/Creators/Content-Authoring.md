@@ -8,11 +8,11 @@ Utataneは開発中で、SSPの全機能を再現しているわけではあり�
 
 | 作るもの | 新規に作る場合 | SSP向けの既存資産がある場合 |
 | --- | --- | --- |
-| ゴースト | Utatane内蔵のYAYA、里々、華和梨、美坂などを使うと、Windows DLLを同梱したままでも辞書をmacOS上で実行できます | 構成を変えずにNARまたはSSPフォルダから取り込み、内蔵SHIORIで動く範囲を先に確認します |
+| ゴースト | カタログから導入できるYAYA、里々、華和梨、美坂などを使うと、Windows DLLを同梱したままでも辞書をmacOS上で実行できます | 構成を変えずにNARまたはSSPフォルダから取り込み、導入したSHIORIで動く範囲を先に確認します |
 | SHIORI | 辞書型の既知SHIORIを使うか、標準SHIORI ABIのmacOS用dylib、またはSHIOLINK外部プロセスとして作ります | Windows固有コードを分離してmacOS用dylibを追加します。未移植DLLは設定済みWineでの互換確認に限られます |
-| SAORI | 既存の内蔵SAORIを使うか、標準SAORI ABIのmacOS用dylibとして作ります | SHIORIから送るSAORI/1.0電文を維持し、Windows API部分だけをmacOS向けに移植します |
+| SAORI | カタログの対応SAORIを使うか、標準SAORI ABIのmacOS用dylibとして作ります | SHIORIから送るSAORI/1.0電文を維持し、Windows API部分だけをmacOS向けに移植します |
 
-「Windows版を残しつつUtataneにも対応する」なら、OSごとに配布物を完全分離する前に、同じ辞書・設定を両方で使えるか試すのが近道です。Utataneの内蔵SHIORIは、代表的なWindows DLL名と辞書構成を見てネイティブ実装を選びます。
+「Windows版を残しつつUtataneにも対応する」なら、OSごとに配布物を完全分離する前に、同じ辞書・設定を両方で使えるか試すのが近道です。Utataneは、代表的なWindows DLL名と辞書構成を見て導入済みのmacOS用dylibを選びます。
 
 ## ゴーストを新しく作る
 
@@ -25,7 +25,7 @@ example-ghost/
 │   └── master/
 │       ├── descript.txt
 │       ├── 使用するSHIORIの設定・辞書
-│       └── SHIORI名.dll（内蔵SHIORIでは識別用。実行はしない場合がある）
+│       └── SHIORI名.dll（対応dylibが導入済みなら識別用）
 └── shell/
     └── master/
         ├── descript.txt
@@ -60,7 +60,7 @@ SakuraScriptやイベントごとの差は、[SakuraScript互換表](../Referenc
 
 Windows DLL、EXE、COM、レジストリ、Windowsのウィンドウハンドルに依存する機能は、そのままでは動きません。問題がある機能ごとに、次の順で検討してください。
 
-1. 同じ機能を持つ内蔵SAORIへ置き換えます。
+1. 同じ機能を持つ対応SAORIへ置き換えます。
 2. その機能を使わずに済む代替動作を用意します。
 3. 必要ならmacOS版モジュールを追加します。
 
@@ -72,7 +72,7 @@ SSPとUtataneで応答を変える必要がある場合でも、まず実際に�
 
 ### 既知の辞書型SHIORI
 
-YAYA / AYA、里々、華和梨、美坂などはUtataneの内蔵実装を優先します。既存ゴーストはWindows用DLLを識別名として残したまま動かせる場合があります。対応する辞書形式、制約、実験的機能は[Native SHIORI / SAORI](../Support/Native-SHIORI.md)を参照してください。
+YAYA / AYA、里々、華和梨、美坂などは、ゴーストに同梱されたdylib、共通導入版の順に探します。既存ゴーストはWindows用DLLを識別名として残したまま動かせる場合があります。対応する辞書形式、制約、実験的機能は[Native SHIORI / SAORI](../Support/Native-SHIORI.md)を参照してください。
 
 新規ゴーストでは、SSPでも同じ辞書を使える既知SHIORIを選ぶと一つの配布物にまとめやすくなります。ただし、内蔵実装が元のSHIORIの全機能を再現しているとは限りません。使う関数や構文は実際に両方で確認してください。
 
@@ -84,7 +84,7 @@ macOS用モジュールは`ghost/master`へ配置します。両OS向けに配�
 
 ## SAORIを対応させる
 
-まず[内蔵SAORIの一覧](../Support/Native-SHIORI.md#共通saoriブリッジ)に同じ機能がないか確認します。内蔵SHIORIが対応するSAORI構文から呼び出す場合、`mciaudior.dll`などの既知名はUtataneの実装へ接続されます。
+まず[対応SAORIの一覧](../Support/Native-SHIORI.md#共通saoriブリッジ)に同じ機能がないか確認します。対応SHIORIがSAORI構文から呼び出す場合、`mciaudior.dll`などの既知名は導入済みのdylibへ接続されます。
 
 独自SAORIは標準SAORI/1.0の電文と、SHIORIと同じ`loadu`（または`load`）、`request`、`unload`を持つmacOS用モジュールとして移植します。既存版と要求・応答の意味を揃え、ファイル、音声、クリップボードなどOS依存部分だけを差し替えると、呼び出す辞書を共通化できます。
 

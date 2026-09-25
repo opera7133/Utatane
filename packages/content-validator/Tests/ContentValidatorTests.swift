@@ -60,7 +60,7 @@ func `reports missing surfaces elements and unknown SakuraScript`() throws {
     #expect(report.shiori == "YAYA")
     #expect(report.shioriAssessment?.identifier == "yaya")
     #expect(report.shioriAssessment?.supportStatus == .supported)
-    #expect(report.shioriAssessment?.provisioning == .included)
+    #expect(report.shioriAssessment?.provisioning == .user)
     #expect(report.shioriAssessment?.runtimeRequirement?.rawValue == "none")
     #expect(report.diagnostics.contains { $0.code == "shell.missing-default-surface" })
     #expect(report.diagnostics.contains { $0.code == "shell.missing-element" })

@@ -97,34 +97,34 @@ public enum ShioriCatalog {
             provisioning: .ghost,
             support: .experimental
         ),
-        .init(id: "yaya", displayName: "YAYA", aliases: ["AYA", "文"], moduleFilenames: ["yaya.dll", "aya.dll", "aya5.dll"], execution: .builtIn, provisioning: .included),
-        .init(id: "satori", displayName: "里々", aliases: ["SATORI"], moduleFilenames: ["satori.dll"], execution: .builtIn, provisioning: .included),
-        .init(id: "kawari", displayName: "華和梨", aliases: ["KAWARI"], moduleFilenames: ["kawari.dll"], execution: .builtIn, provisioning: .included),
-        .init(id: "kagari", displayName: "kagari", moduleFilenames: ["kagari.dll"], execution: .bundledNativeModule, provisioning: .included),
-        .init(id: "minato", displayName: "minato", aliases: ["湊"], moduleFilenames: ["minato.dll", "libminato.dylib"], execution: .externalProcess, provisioning: .user),
-        .init(id: "pasta", displayName: "pasta", aliases: [], moduleFilenames: ["pasta.dll", "libpasta.dylib"], execution: .externalProcess, provisioning: .user),
+        .init(id: "yaya", displayName: "YAYA", aliases: ["AYA", "文"], moduleFilenames: ["yaya.dll", "aya.dll", "aya5.dll"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "satori", displayName: "里々", aliases: ["SATORI"], moduleFilenames: ["satori.dll"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "kawari", displayName: "華和梨", aliases: ["KAWARI"], moduleFilenames: ["kawari.dll"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "kagari", displayName: "kagari", moduleFilenames: ["kagari.dll"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "minato", displayName: "minato", aliases: ["湊"], moduleFilenames: ["minato.dll", "libminato.dylib"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "pasta", displayName: "pasta", aliases: [], moduleFilenames: ["pasta.dll", "libpasta.dylib"], execution: .dynamicLibrary, provisioning: .user),
         .init(id: "aosora", displayName: "蒼空", aliases: ["Aosora"], moduleFilenames: ["aosora.dll"], execution: .bundledNativeModule, provisioning: .user, support: .experimental),
         .init(id: "first", displayName: "FIRST", moduleFilenames: ["first.dll"], execution: .builtIn, provisioning: .included),
-        .init(id: "misaka", displayName: "美坂", aliases: ["MISAKA"], moduleFilenames: ["misaka.dll"], execution: .builtIn, provisioning: .included),
-        .init(id: "akari", displayName: "灯", aliases: ["AKARI"], moduleFilenames: ["akari.dll"], execution: .builtIn, provisioning: .included),
+        .init(id: "misaka", displayName: "美坂", aliases: ["MISAKA"], moduleFilenames: ["misaka.dll"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "akari", displayName: "灯", aliases: ["AKARI"], moduleFilenames: ["akari.dll"], execution: .dynamicLibrary, provisioning: .user),
         .init(
             id: "ese-shiori",
             displayName: "ese-shiori",
             aliases: ["似非shiori"],
             moduleFilenames: ["ese-shiori.dll"],
-            execution: .builtIn,
-            provisioning: .included
+            execution: .dynamicLibrary,
+            provisioning: .user
         ),
         .init(
             id: "nise-shiori",
             displayName: "偽栞",
             aliases: ["Nise Shiori"],
             moduleFilenames: ["niseshiori.dll"],
-            execution: .builtIn,
-            provisioning: .included
+            execution: .dynamicLibrary,
+            provisioning: .user
         ),
-        .init(id: "shino", displayName: "忍", aliases: ["Shino"], moduleFilenames: ["shino.dll"], execution: .builtIn, provisioning: .included),
-        .init(id: "hisui", displayName: "翡翠", aliases: ["Hisui"], moduleFilenames: ["hisui.dll"], execution: .builtIn, provisioning: .included, support: .experimental),
+        .init(id: "shino", displayName: "忍", aliases: ["Shino"], moduleFilenames: ["shino.dll"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "hisui", displayName: "翡翠", aliases: ["Hisui"], moduleFilenames: ["hisui.dll"], execution: .dynamicLibrary, provisioning: .user, support: .experimental),
         .init(
             id: "yuhna",
             displayName: "結奈",

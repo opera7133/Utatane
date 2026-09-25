@@ -26,7 +26,7 @@ struct EseShioriNativeTests {
         #expect(try resolver.moduleURL(for: .eseShiori, masterDirectoryURL: master) == module)
         let state = root.appending(path: "state/ese-shiori-state.json")
         let session = try NativeShioriSession(directoryURL: master, moduleURL: module,
-                                              moduleResolver: resolver, eseStateStoreURL: state)
+                                              stateDirectoryURL: state.deletingLastPathComponent(), moduleResolver: resolver)
         let response = try await ShioriMessageParser.parseResponse(session.requestAsync(
             "GET SHIORI/3.0\r\nCharset: UTF-8\r\nID: OnBoot\r\n\r\n"
         ))
@@ -38,7 +38,7 @@ struct EseShioriNativeTests {
         try Data("broken".utf8).write(to: broken)
         #expect(try resolver.moduleURL(for: .eseShiori, masterDirectoryURL: master) == broken)
         let recovered = try NativeShioriSession(directoryURL: master, moduleURL: broken,
-                                                moduleResolver: resolver, eseStateStoreURL: state)
+                                                stateDirectoryURL: state.deletingLastPathComponent(), moduleResolver: resolver)
         let recoveredResponse = try await ShioriMessageParser.parseResponse(recovered.requestAsync(
             "GET SHIORI/3.0\r\nCharset: UTF-8\r\nID: OnBoot\r\n\r\n"
         ))

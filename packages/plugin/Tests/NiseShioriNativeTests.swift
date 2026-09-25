@@ -34,9 +34,9 @@ struct NiseShioriNativeTests {
         try #"{"username":"","variables":{"count":"1"},"learnedWords":{},"talkInterval":180,"newsIndex":0}"#
             .write(to: stateA, atomically: true, encoding: .utf8)
         let a = try NativeShioriSession(directoryURL: directories[0], moduleURL: module,
-                                        moduleResolver: resolver, niseStateStoreURL: stateA)
+                                        stateDirectoryURL: stateA.deletingLastPathComponent(), moduleResolver: resolver)
         let b = try NativeShioriSession(directoryURL: directories[1], moduleURL: module,
-                                        moduleResolver: resolver, niseStateStoreURL: stateB)
+                                        stateDirectoryURL: stateB.deletingLastPathComponent(), moduleResolver: resolver)
         #expect(try await ShioriMessageParser.parseResponse(a.requestAsync(click)).value == "\\0クリック\\e")
         #expect(try await ShioriMessageParser.parseResponse(a.requestAsync(request)).value == "\\0起動\\e")
         #expect(try await ShioriMessageParser.parseResponse(b.requestAsync(click)).statusCode == 204)
@@ -48,7 +48,7 @@ struct NiseShioriNativeTests {
         let bundled = directories[0].appending(path: "libniseshiori.dylib")
         try Data("broken".utf8).write(to: bundled)
         let recovered = try NativeShioriSession(directoryURL: directories[0], moduleURL: bundled,
-                                                moduleResolver: resolver, niseStateStoreURL: stateA)
+                                                stateDirectoryURL: stateA.deletingLastPathComponent(), moduleResolver: resolver)
         #expect(try await ShioriMessageParser.parseResponse(recovered.requestAsync(click)).value == "\\0クリック\\e")
         try await recovered.closeAsync()
     }

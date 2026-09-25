@@ -12,66 +12,40 @@ public final class NativeShioriSession: Sendable {
     private let backend: Backend
     private let queue = DispatchQueue(label: "dev.utatane.native-shiori")
 
-    public init(directoryURL: URL, moduleURL: URL, variableStoreURL: URL? = nil,
+    public init(directoryURL: URL, moduleURL: URL,
+                stateDirectoryURL: URL? = nil,
                 saoriCaller: (any NativeSaoriCalling)? = nil,
+                saoriRootURL: URL? = nil,
                 moduleResolver: UtataneModuleResolver = .init(),
-                hostURL: URL = NativeShioriProcessSession.defaultHostURL,
-                niseStateStoreURL: URL? = nil,
-                eseStateStoreURL: URL? = nil,
-                yuhnaStateStoreURL: URL? = nil,
-                hisuiStateStoreURL: URL? = nil,
-                shinoStateStoreURL: URL? = nil,
-                shinoSaoriRootURL: URL? = nil,
-                akariVariableStoreURL: URL? = nil,
-                akariSaoriRootURL: URL? = nil,
-                kawariSaoriRootURL: URL? = nil) throws
+                hostURL: URL = NativeShioriProcessSession.defaultHostURL) throws
     {
-        // Independent Swift sessions need the in-process host services bridge.
-        if variableStoreURL != nil,
-           moduleURL.lastPathComponent == "libmisaka.dylib" || UtataneModuleImage.isMisakaLibrary(moduleURL)
-        {
+        if let stateDirectoryURL, UtataneModuleImage.usesModuleBridge(moduleURL) {
             backend = try .bridge(DynamicLibraryModuleSession.open(
-                directoryURL: directoryURL, moduleURL: moduleURL, variableStoreURL: variableStoreURL,
-                saoriCaller: saoriCaller, moduleResolver: moduleResolver
+                directoryURL: directoryURL,
+                moduleURL: moduleURL,
+                variableStoreURL: stateDirectoryURL.appending(path: "module-state.json"),
+                saoriCaller: saoriCaller,
+                moduleResolver: moduleResolver
             ))
         } else {
             let kind = ConventionalShioriKind(libraryFilename: moduleURL.lastPathComponent)
-            var stateEnvironment: [String: String] = [:]
-            if let niseStateStoreURL {
-                stateEnvironment["NISESHIORI_STATE_PATH"] = niseStateStoreURL.path
+            var environment: [String: String] = [:]
+            if let stateDirectoryURL {
+                environment["UTATANE_GHOST_STATE_DIR"] = stateDirectoryURL.path
             }
-            if let eseStateStoreURL {
-                stateEnvironment["ESE_SHIORI_STATE_PATH"] = eseStateStoreURL.path
-            }
-            if let yuhnaStateStoreURL {
-                stateEnvironment["YUHNA_STATE_PATH"] = yuhnaStateStoreURL.path
-            }
-            if let hisuiStateStoreURL {
-                stateEnvironment["HISUI_STATE_PATH"] = hisuiStateStoreURL.path
-            }
-            if let shinoStateStoreURL {
-                stateEnvironment["SHINO_STATE_PATH"] = shinoStateStoreURL.path
-            }
-            if let shinoSaoriRootURL {
-                stateEnvironment["SHINO_SAORI_ROOT"] = shinoSaoriRootURL.path
-            }
-            if let akariVariableStoreURL {
-                stateEnvironment["AKARI_VARIABLE_STORE_PATH"] = akariVariableStoreURL.path
-            }
-            if let akariSaoriRootURL {
-                stateEnvironment["AKARI_SAORI_ROOT"] = akariSaoriRootURL.path
-            }
-            if let kawariSaoriRootURL {
-                stateEnvironment["KAWARI_SAORI_ROOT"] = kawariSaoriRootURL.path
+            if let saoriRootURL {
+                environment["UTATANE_SAORI_ROOT"] = saoriRootURL.path
             }
             backend = try .process(ShioriModuleRecovery.load(
                 preferred: moduleURL,
-                fallback: kind.flatMap { try moduleResolver.fallbackURL(for: $0, selected: moduleURL, masterDirectoryURL: directoryURL) },
+                fallback: kind.flatMap {
+                    try moduleResolver.fallbackURL(for: $0, selected: moduleURL, masterDirectoryURL: directoryURL)
+                },
                 canRecover: { ($0 as? NativeShioriProcessError)?.canRecoverByLoadingAnotherModule == true }
             ) { url in
                 try NativeShioriProcessSession(
                     directoryURL: directoryURL, moduleURL: url, hostURL: hostURL,
-                    additionalEnvironment: stateEnvironment
+                    additionalEnvironment: environment
                 )
             })
         }

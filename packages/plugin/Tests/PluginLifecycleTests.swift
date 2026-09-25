@@ -125,31 +125,14 @@ struct PluginLifecycleTests {
 }
 
 struct PluginStateStoreTests {
-    @Test func `migration preserves original and existing state`() throws {
-        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
-        defer { try? FileManager.default.removeItem(at: root) }
-        let source = root.appending(path: "plugin")
-        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
-        let legacy = source.appending(path: "misaka_vars.json")
-        try Data("legacy".utf8).write(to: legacy)
-        let plugin = lifecyclePlugin(directory: source)
-        let store = PluginStateStore(directoryURL: root.appending(path: "state"))
-        let state = try store.prepareMisakaState(for: plugin)
-        #expect(try Data(contentsOf: state) == Data("legacy".utf8))
-        try Data("newer".utf8).write(to: state)
-        #expect(try store.prepareMisakaState(for: plugin) == state)
-        #expect(try Data(contentsOf: state) == Data("newer".utf8))
-        #expect(try Data(contentsOf: legacy) == Data("legacy".utf8))
-    }
-
     @Test func `plugin IDs stay within state directory`() {
         let root = URL(fileURLWithPath: "/tmp/plugin-state")
         let store = PluginStateStore(directoryURL: root)
-        let first = store.misakaVariableStoreURL(for: lifecyclePlugin(id: "../Example/../../"))
-        let second = store.misakaVariableStoreURL(for: lifecyclePlugin(id: "../EXAMPLE/../../"))
+        let first = store.stateDirectoryURL(for: lifecyclePlugin(id: "../Example/../../"))
+        let second = store.stateDirectoryURL(for: lifecyclePlugin(id: "../EXAMPLE/../../"))
         #expect(first == second)
         #expect(first.standardizedFileURL.path.hasPrefix(root.path + "/"))
-        #expect(first.deletingLastPathComponent().deletingLastPathComponent().path == root.path)
-        #expect(first != store.misakaVariableStoreURL(for: lifecyclePlugin(id: "different")))
+        #expect(first.deletingLastPathComponent().path == root.path)
+        #expect(first != store.stateDirectoryURL(for: lifecyclePlugin(id: "different")))
     }
 }

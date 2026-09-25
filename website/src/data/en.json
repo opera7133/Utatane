@@ -122,7 +122,7 @@
       [
         "05",
         "How compatibility works on macOS",
-        "<p>Utatane identifies the dialogue engine (SHIORI) from files such as <code>descript.txt</code>, then connects YAYA, SATORI, KAWARI, MISAKA, and other known engines to Swift or macOS-native implementations. Known SAORI modules also have shared native implementations. Unsupported Windows DLLs run only when Wine and the helper host are configured.</p><p>State is kept outside the distributed ghost in Application Support. Even a supported engine does not guarantee every branch or Windows-specific dependency. Read <a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Native-SHIORI.md\">Native SHIORI / SAORI</a> for the technical details.</p>"
+        "<p>Utatane identifies the dialogue engine (SHIORI) from files such as <code>descript.txt</code>, then connects YAYA, SATORI, KAWARI, MISAKA, and other known engines to separately installed macOS libraries. Supported SAORI libraries can be installed from the module catalog. Unsupported Windows DLLs run only when Wine and the helper host are configured.</p><p>State is kept outside the distributed ghost in Application Support. Even a supported engine does not guarantee every branch or Windows-specific dependency. Read <a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Native-SHIORI.md\">Native SHIORI / SAORI</a> for the technical details.</p>"
       ]
     ],
     "trouble": "If something does not work, report the ghost name, your Utatane version, and what happened on GitHub Issues. Compatibility is still in development, so not every ghost or feature is guaranteed to work.",

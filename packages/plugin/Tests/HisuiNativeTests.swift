@@ -27,7 +27,7 @@ struct HisuiNativeTests {
         #expect(try resolver.moduleURL(for: .hisui, masterDirectoryURL: master) == module)
         let state = root.appending(path: "state/hisui-state.json")
         let session = try NativeShioriSession(directoryURL: master, moduleURL: module,
-                                              moduleResolver: resolver, hisuiStateStoreURL: state)
+                                              stateDirectoryURL: state.deletingLastPathComponent(), moduleResolver: resolver)
         let response = try await ShioriMessageParser.parseResponse(session.requestAsync(
             "GET SHIORI/3.0\r\nCharset: UTF-8\r\nID: OnBoot\r\n\r\n"
         ))

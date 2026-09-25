@@ -16009,31 +16009,31 @@
         }
       }
     },
-    "選択したSHIORIを導入" : {
+    "選択したモジュールを導入" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Install Selected SHIORI"
+            "value" : "Install Selected Modules"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "선택한 SHIORI 설치"
+            "value" : "선택한 모듈 설치"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安装所选 SHIORI"
+            "value" : "安装所选模块"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "安裝所選 SHIORI"
+            "value" : "安裝所選模組"
           }
         }
       }

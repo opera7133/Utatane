@@ -1,6 +1,6 @@
 # ネイティブプラグイン
 
-Utataneは`Plugins/<plugin>/descript.txt`を読み、`filename`の実体と同じフォルダにあるSHIORI設定から実行方式を選びます。YAYA、AKARI、里々、華和梨、MISAKAで作られたプラグインは、対応する内蔵SHIORIを優先します。Windows用DLLをmacOSへ直接ロードすることはありません。
+Utataneは`Plugins/<plugin>/descript.txt`を読み、`filename`の実体と同じフォルダにあるSHIORI設定から実行方式を選びます。YAYA、AKARI、里々、華和梨、MISAKAで作られたプラグインは、対応する同梱または導入済みのdylibを使用します。Windows用DLLをmacOSへ直接ロードすることはありません。
 
 Windows版とmacOS版を同梱する場合は、SSP向けの`filename`を残して、Utatane向けの`filename.macos`を追加できます。
 
@@ -9,7 +9,7 @@ filename,plugin.dll
 filename.macos,libplugin.dylib
 ```
 
-空でない`filename.macos`は、辞書からの内蔵SHIORI自動判定より優先されます。指定したファイルがない、または読み込めない場合も`filename`へ黙って戻らないため、配布前にmacOS版の同梱を確認してください。`filename.macos`はUtatane独自の項目です。
+空でない`filename.macos`は、辞書からのSHIORI自動判定より優先されます。指定したファイルがない、または読み込めない場合も`filename`へ黙って戻らないため、配布前にmacOS版の同梱を確認してください。`filename.macos`はUtatane独自の項目です。
 
 ## macOS dylib ABI
 
@@ -27,6 +27,6 @@ void *request(void *request_message, int32_t *message_length);
 
 ## Windows DLL
 
-内蔵SHIORIとして認識できず、選択された`filename`または`filename.macos`が`.dll`の場合だけ、汎用Windows DLLホストへ接続します。実行に必要なのはWine、`utatane-dll-host.exe`、対象プラグインDLLです。場所は`UTATANE_WINE_EXECUTABLE`、`UTATANE_WINE_PREFIX`、`UTATANE_WINDOWS_DLL_HOST`で指定できます。Debugビルドではホストの既定位置として`Content/Local/WindowsDLLBridge/utatane-dll-host.exe`も参照します。
+対応するdylibを見つけられず、選択された`filename`または`filename.macos`が`.dll`の場合だけ、汎用Windows DLLホストへ接続します。実行に必要なのはWine、`utatane-dll-host.exe`、対象プラグインDLLです。場所は`UTATANE_WINE_EXECUTABLE`、`UTATANE_WINE_PREFIX`、`UTATANE_WINDOWS_DLL_HOST`で指定できます。Debugビルドではホストの既定位置として`Content/Local/WindowsDLLBridge/utatane-dll-host.exe`も参照します。
 
 この経路はWindowsプラグイン一般の互換性を保証しません。外部EXE、COM、独自UIなどへ依存するプラグインは動作しない場合があります。また、Wineの初回設定が完了するまで起動に時間がかかることがあります。

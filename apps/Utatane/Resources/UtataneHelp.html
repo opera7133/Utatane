@@ -874,8 +874,8 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 </section>
 <section class="chapter" id="support-engines"><h2>SHIORI・SAORIの利用</h2><p>SHIORIごとの実行方式・制約とビルド手順は、<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md">Utatane Modulesの資料</a>を参照してください。</p>
 <h3 id="support-engines-shioriの選択">SHIORIの選択</h3>
-<p>ゴーストの<code>shiori.macos</code>に指定されたモジュールを優先します。対応する同梱ライブラリの破損や必要な関数の欠落を検出すると、同じSHIORIの共通導入版へ切り替えます。設定の「SHIORI対応状況」でオフにできます。辞書・保存データのエラーでは切り替えません。各SHIORIの配布版は、ゴースト内、共通導入先、アプリ内の順に探します。<code>ese-shiori.dll</code>など、対応済みのDLL名が<code>shiori</code>にある場合、同じフォルダにdylibを置くだけでUtataneが検出します。</p>
-<p>Windows DLLだけを持つゴーストは、辞書や設定を判別して対応する実装へ接続します。設定の「SHIORI対応状況」で判定を確認できます。動かない場合は「情報」→「SHIORI読み込み診断…」と<a href="#support-troubleshooting-%E8%A8%BA%E6%96%AD%E3%81%A8%E5%A0%B1%E5%91%8A">診断・報告の手順</a>を使ってください。</p>
+<p>ゴーストの<code>shiori.macos</code>に指定されたモジュールを優先します。対応する同梱ライブラリの破損や必要な関数の欠落を検出すると、同じSHIORIの共通導入版へ切り替えます。設定の「SHIORI対応状況」でオフにできます。辞書・保存データのエラーでは切り替えません。各SHIORIの配布版は、ゴースト内、共通導入先の順に探します。<code>ese-shiori.dll</code>など、対応済みのDLL名が<code>shiori</code>にある場合、同じフォルダにdylibを置くだけでUtataneが検出します。</p>
+<p>Windows DLLだけを持つゴーストは、辞書や設定を判別し、対応するモジュールを導入済みなら接続します。設定の「SHIORI対応状況」で判定を確認できます。動かない場合は「情報」→「SHIORI読み込み診断…」と<a href="#support-troubleshooting-%E8%A8%BA%E6%96%AD%E3%81%A8%E5%A0%B1%E5%91%8A">診断・報告の手順</a>を使ってください。</p>
 <p>同梱する側の配置・指定方法は<a href="https://dl.wmsci.com/utatane/docs/create/shiori/">SHIORI開発ガイド</a>、各配布物の導入手順は<a href="https://github.com/opera7133/utatane-modules">Utatane Modules</a>にあります。</p>
 <p>通常のmacOS用SHIORIは、ゴースト・プラグインごとに別プロセスで実行します。応答停止や異常終了を検出した場合、実行済みの処理を重複させないため、自動で要求を再送しません。</p>
 <h3 id="support-engines-共通saoriブリッジ">共通SAORIブリッジ</h3>

@@ -26,7 +26,7 @@ struct AkariNativeTests {
         #expect(try resolver.moduleURL(for: .akari, masterDirectoryURL: master) == module)
         let state = root.appending(path: "state/akari-vars.json")
         let session = try NativeShioriSession(directoryURL: master, moduleURL: module,
-                                              moduleResolver: resolver, akariVariableStoreURL: state)
+                                              stateDirectoryURL: state.deletingLastPathComponent(), moduleResolver: resolver)
         let response = try await ShioriMessageParser.parseResponse(session.requestAsync(
             "GET SHIORI/3.0\r\nCharset: UTF-8\r\nID: OnBoot\r\n\r\n"
         ))

@@ -23,18 +23,8 @@ let package = Package(
         .library(name: "UtatanePOSIXShiori", targets: ["UtatanePOSIXShiori"]),
         .library(name: "UtataneModuleHost", targets: ["UtataneModuleHost"]),
         .library(name: "UtatanePlugin", targets: ["UtatanePlugin"]),
-        .library(name: "UtataneKawariNative", targets: ["UtataneKawariNative"]),
-        .library(name: "UtataneYayaNative", targets: ["UtataneYayaNative"]),
-        .library(name: "UtataneSatoriNative", targets: ["UtataneSatoriNative"]),
         .library(name: "UtataneFirstNative", targets: ["UtataneFirstNative"]),
         .library(name: "UtataneNativeSaori", targets: ["UtataneNativeSaori"]),
-        .library(name: "UtataneMisakaNative", targets: ["UtataneMisakaNative"]),
-        .library(name: "UtataneAkariNative", targets: ["UtataneAkariNative"]),
-        .library(name: "UtataneEseShioriNative", targets: ["UtataneEseShioriNative"]),
-        .library(name: "UtataneNiseShioriNative", targets: ["UtataneNiseShioriNative"]),
-        .library(name: "UtataneShinoNative", targets: ["UtataneShinoNative"]),
-        .library(name: "UtataneHisuiNative", targets: ["UtataneHisuiNative"]),
-        .library(name: "UtataneYuhnaNative", targets: ["UtataneYuhnaNative"]),
         .library(name: "UtatanePlatformMacOS", targets: ["UtatanePlatformMacOS"]),
         .executable(name: "utatane-mcp", targets: ["UtataneMCP"]),
         .executable(name: "utatane-validate", targets: ["UtataneValidate"])
@@ -187,198 +177,13 @@ let package = Package(
             path: "plugin/Sources"
         ),
         .target(
-            name: "CKawariNative",
-            path: "shiori/native/kawari/Sources/CKawariNative",
-            sources: [
-                "KawariBridge.cpp",
-                "Vendor/KAWARI/build/src/shiori/kawari_shiori.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_engine.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_ns.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_dict.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_code.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_codeset.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_codeexpr.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_codekis.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_vm.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_lexer.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_compiler.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_log.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_rc.cpp",
-                "Vendor/KAWARI/build/src/misc/misc.cpp",
-                "Vendor/KAWARI/build/src/misc/mt19937ar.cpp",
-                "Vendor/KAWARI/build/src/misc/l10n.cpp",
-                "Vendor/KAWARI/build/src/misc/phttp.cpp",
-                "Vendor/KAWARI/build/src/saori/saori.cpp",
-                "Vendor/KAWARI/build/src/saori/saori_module.cpp",
-                "Vendor/KAWARI/build/src/saori/saori_unique.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_echo.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_dict.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_date.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_counter.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_file.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_escape.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_urllist.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_substitute.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_split.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_communicate.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_xargs.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_string.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_help.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_saori.cpp",
-                "Vendor/KAWARI/build/src/kis/kis_system.cpp",
-                "Vendor/KAWARI/build/src/libkawari/kawari_crypt.cpp",
-                "Vendor/KAWARI/build/src/misc/base64.cpp"
-            ],
-            publicHeadersPath: "Include",
-            cxxSettings: [
-                .headerSearchPath("Vendor/KAWARI/build/src"),
-                .unsafeFlags(["-Wno-writable-strings", "-Wno-reserved-user-defined-literal"])
-            ]
-        ),
-        .target(
-            name: "UtataneKawariNative",
-            dependencies: [
-                "CKawariNative",
-                "UtataneCore",
-                "UtataneNativeSaori",
-                "UtataneRuntime",
-                "UtataneSakuraScript",
-                "UtataneShiori"
-            ],
-            path: "shiori/native/kawari/Sources/UtataneKawariNative"
-        ),
-        .target(
-            name: "CYayaNative",
-            path: "shiori/native/yaya/Sources/CYayaNative",
-            sources: [
-                "YayaBridge.cpp",
-                "Vendor/YAYA/aya5.cpp",
-                "Vendor/YAYA/ayavm.cpp",
-                "Vendor/YAYA/basis.cpp",
-                "Vendor/YAYA/ccct.cpp",
-                "Vendor/YAYA/comment.cpp",
-                "Vendor/YAYA/crc32.c",
-                "Vendor/YAYA/dir_enum.cpp",
-                "Vendor/YAYA/duplevinfo.cpp",
-                "Vendor/YAYA/file.cpp",
-                "Vendor/YAYA/file1.cpp",
-                "Vendor/YAYA/function.cpp",
-                "Vendor/YAYA/globalvariable.cpp",
-                "Vendor/YAYA/lib.cpp",
-                "Vendor/YAYA/lib1.cpp",
-                "Vendor/YAYA/localvariable.cpp",
-                "Vendor/YAYA/log.cpp",
-                "Vendor/YAYA/logexcode.cpp",
-                "Vendor/YAYA/manifest.cpp",
-                "Vendor/YAYA/md5c.c",
-                "Vendor/YAYA/messages.cpp",
-                "Vendor/YAYA/misc.cpp",
-                "Vendor/YAYA/mt19937ar.cpp",
-                "Vendor/YAYA/parser0.cpp",
-                "Vendor/YAYA/parser1.cpp",
-                "Vendor/YAYA/posix_utils.cpp",
-                "Vendor/YAYA/selecter.cpp",
-                "Vendor/YAYA/sha1.c",
-                "Vendor/YAYA/sysfunc.cpp",
-                "Vendor/YAYA/value.cpp",
-                "Vendor/YAYA/valuesub.cpp",
-                "Vendor/YAYA/variable.cpp",
-                "Vendor/YAYA/wsex.cpp"
-            ],
-            publicHeadersPath: "Include",
-            cSettings: [.define("POSIX")],
-            cxxSettings: [
-                .define("POSIX"),
-                .headerSearchPath("Vendor/YAYA")
-            ]
-        ),
-        .target(
-            name: "UtataneYayaNative",
-            dependencies: [
-                "CYayaNative",
-                "UtataneCore",
-                "UtataneNativeSaori",
-                "UtataneRuntime",
-                "UtataneSakuraScript",
-                "UtataneShiori"
-            ],
-            path: "shiori/native/yaya/Sources/UtataneYayaNative"
-        ),
-        .target(
-            name: "CSatoriNative",
-            path: "shiori/native/satori/Sources/CSatoriNative",
-            sources: [
-                "SatoriBridge.cpp",
-                "CharsetPOSIX.cpp",
-                "NativeSwiftSaori.cpp",
-                "Vendor/_/Sender.cpp",
-                "Vendor/_/Utilities.cpp",
-                "Vendor/_/calc.cpp",
-                "Vendor/_/calc_float.cpp",
-                "Vendor/_/stltool.cpp",
-                "Vendor/_/random.cpp",
-                "Vendor/_/mt19937ar.cpp",
-                "Vendor/satori/SakuraCS.cpp",
-                "Vendor/satori/SakuraClient.cpp",
-                "Vendor/satori/SakuraDLLClient.cpp",
-                "Vendor/satori/SakuraDLLHost.cpp",
-                "Vendor/satori/SaoriClient.cpp",
-                "Vendor/satori/satori.cpp",
-                "Vendor/satori/satoriTranslate.cpp",
-                "Vendor/satori/satori_AnalyzeRequest.cpp",
-                "Vendor/satori/satori_CreateResponce.cpp",
-                "Vendor/satori/satori_EventOperation.cpp",
-                "Vendor/satori/satori_Kakko.cpp",
-                "Vendor/satori/satori_load_dict.cpp",
-                "Vendor/satori/satori_load_unload.cpp",
-                "Vendor/satori/satori_sentence.cpp",
-                "Vendor/satori/satori_tool.cpp",
-                "Vendor/satori/shiori_plugin.cpp",
-                "Vendor/satori/ssu.cpp"
-            ],
-            publicHeadersPath: "Include",
-            cxxSettings: [
-                .define("POSIX"),
-                .define("SATORI_DLL"),
-                .headerSearchPath("Vendor/satori"),
-                .headerSearchPath("Vendor/_")
-            ],
-            linkerSettings: [.linkedLibrary("iconv")]
-        ),
-        .target(
-            name: "UtataneSatoriNative",
-            dependencies: [
-                "CSatoriNative",
-                "UtataneCore",
-                "UtataneNativeSaori",
-                "UtataneRuntime",
-                "UtataneSakuraScript",
-                "UtataneShiori"
-            ],
-            path: "shiori/native/satori/Sources/UtataneSatoriNative"
-        ),
-        .target(
             name: "UtataneFirstNative",
             dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript"],
             path: "shiori/native/first/Sources"
         ),
         .target(
             name: "UtataneNativeSaori",
-            path: "native-saori/Sources",
-            linkerSettings: [.linkedFramework("AVFoundation")]
-        ),
-        .target(
-            name: "UtataneMisakaNative",
-            dependencies: [
-                "UtataneCore",
-                "UtataneModuleHost",
-                "UtataneNativeSaori",
-                "UtatanePlugin",
-                "UtataneRuntime",
-                "UtataneSakuraScript",
-                "UtataneShiori"
-            ],
-            path: "shiori/native/misaka/Sources"
+            path: "native-saori/Sources"
         ),
         .target(
             name: "CMisakaHostBridge",
@@ -390,36 +195,6 @@ let package = Package(
             name: "UtataneModuleHost",
             dependencies: ["CMisakaHostBridge", "UtataneCore", "UtataneNativeSaori", "UtataneShiori"],
             path: "shiori/external/module/Sources"
-        ),
-        .target(
-            name: "UtataneAkariNative",
-            dependencies: ["UtataneCore", "UtataneNativeSaori", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "shiori/native/akari/Sources"
-        ),
-        .target(
-            name: "UtataneEseShioriNative",
-            dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "shiori/native/ese-shiori/Sources"
-        ),
-        .target(
-            name: "UtataneNiseShioriNative",
-            dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "shiori/native/nise-shiori/Sources"
-        ),
-        .target(
-            name: "UtataneShinoNative",
-            dependencies: ["UtataneCore", "UtataneNativeSaori", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "shiori/native/shino/Sources"
-        ),
-        .target(
-            name: "UtataneHisuiNative",
-            dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "shiori/native/hisui/Sources"
-        ),
-        .target(
-            name: "UtataneYuhnaNative",
-            dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneShiori"],
-            path: "shiori/native/yuhna/Sources"
         ),
         .testTarget(
             name: "UtataneBalloonTests",
@@ -520,21 +295,6 @@ let package = Package(
             path: "plugin/Tests"
         ),
         .testTarget(
-            name: "UtataneKawariNativeTests",
-            dependencies: ["UtataneCore", "UtataneKawariNative", "UtataneShiori"],
-            path: "shiori/native/kawari/Tests"
-        ),
-        .testTarget(
-            name: "UtataneYayaNativeTests",
-            dependencies: ["UtataneCore", "UtataneShiori", "UtataneYayaNative"],
-            path: "shiori/native/yaya/Tests"
-        ),
-        .testTarget(
-            name: "UtataneSatoriNativeTests",
-            dependencies: ["UtataneCore", "UtataneShiori", "UtataneSatoriNative"],
-            path: "shiori/native/satori/Tests"
-        ),
-        .testTarget(
             name: "UtataneFirstNativeTests",
             dependencies: ["UtataneFirstNative"],
             path: "shiori/native/first/Tests"
@@ -545,44 +305,9 @@ let package = Package(
             path: "native-saori/Tests"
         ),
         .testTarget(
-            name: "UtataneMisakaNativeTests",
-            dependencies: ["UtataneCore", "UtataneGhostKit", "UtataneMisakaNative", "UtataneModuleHost", "UtataneNativeSaori", "UtatanePlugin", "UtataneShiori"],
-            path: "shiori/native/misaka/Tests"
-        ),
-        .testTarget(
             name: "UtataneModuleHostTests",
             dependencies: ["UtataneModuleHost", "UtataneNativeSaori", "UtataneShiori"],
             path: "shiori/external/module/Tests"
-        ),
-        .testTarget(
-            name: "UtataneAkariNativeTests",
-            dependencies: ["UtataneAkariNative", "UtataneCore", "UtataneNativeSaori"],
-            path: "shiori/native/akari/Tests"
-        ),
-        .testTarget(
-            name: "UtataneEseShioriNativeTests",
-            dependencies: ["UtataneCore", "UtataneEseShioriNative", "UtataneShiori"],
-            path: "shiori/native/ese-shiori/Tests"
-        ),
-        .testTarget(
-            name: "UtataneNiseShioriNativeTests",
-            dependencies: ["UtataneCore", "UtataneNiseShioriNative"],
-            path: "shiori/native/nise-shiori/Tests"
-        ),
-        .testTarget(
-            name: "UtataneShinoNativeTests",
-            dependencies: ["UtataneCore", "UtataneGhostKit", "UtataneShinoNative"],
-            path: "shiori/native/shino/Tests"
-        ),
-        .testTarget(
-            name: "UtataneHisuiNativeTests",
-            dependencies: ["UtataneCore", "UtataneHisuiNative"],
-            path: "shiori/native/hisui/Tests"
-        ),
-        .testTarget(
-            name: "UtataneYuhnaNativeTests",
-            dependencies: ["UtataneCore", "UtataneYuhnaNative"],
-            path: "shiori/native/yuhna/Tests"
         )
     ],
     swiftLanguageModes: [.v6],

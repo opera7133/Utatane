@@ -3,34 +3,24 @@ import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import UtataneAI
-import UtataneAkariNative
 import UtataneBalloon
 import UtataneContent
 import UtataneCore
-import UtataneEseShioriNative
 import UtataneFirstNative
 import UtataneGhostKit
-import UtataneHisuiNative
-import UtataneKawariNative
 import UtataneMakoto
-import UtataneMisakaNative
 import UtataneModuleCatalog
 import UtataneModuleHost
 import UtataneNativeSaori
 import UtataneNetwork
-import UtataneNiseShioriNative
 import UtatanePlatformMacOS
 import UtatanePlugin
 import UtatanePOSIXShiori
 import UtataneRealtime
 import UtataneRuntime
 import UtataneSakuraScript
-import UtataneSatoriNative
 import UtataneShell
-import UtataneShinoNative
 import UtataneWindowsShiori
-import UtataneYayaNative
-import UtataneYuhnaNative
 
 extension Notification.Name {
     static let showUtataneGhostPicker = Notification.Name("dev.utatane.showGhostPicker")
@@ -421,6 +411,10 @@ private struct UtataneRootView: View {
     var body: some View {
         // Only the presentation depends on visibility; runtime work belongs to the app.
         ZStack {
+            ModuleSetupCompletionListener {
+                guard selectedGhostID == nil else { return }
+                selectStartupGhost()
+            }
             if showsOnboarding {
                 WelcomeView(
                     installNar: selectAndInstallNar,
@@ -543,19 +537,8 @@ private struct UtataneRootView: View {
             showsOnboarding = model.ghosts.isEmpty
             reloadHeadlines()
             await reloadPlugins()
-            switch networkSettings.startupBehavior {
-            case .restore:
-                let restoredGhost = model.ghosts.first {
-                    $0.rootDirectory.lastPathComponent == selectionStore.ghostDirectoryName
-                }
-                selectedGhostID = selectedGhostID ?? restoredGhost?.id ?? model.ghosts.first?.id
-            case .choose:
-                if !model.ghosts.isEmpty {
-                    showGhostPicker(requiresSelection: true)
-                }
-            case .random:
-                selectedGhostID = ghostsAllowedForAutomaticSwitching(in: model.ghosts).randomElement()?.id
-                    ?? model.ghosts.first?.id
+            if !ModuleCatalogConfiguration.requiresInitialSetup {
+                selectStartupGhost()
             }
             configurePlayback()
             calendarWindowController.onRead = { schedule, eventID in
@@ -2862,27 +2845,30 @@ private struct UtataneRootView: View {
         return translators.isEmpty ? base : TranslatingPersonalityEngine(base: base, translators: translators)
     }
 
+    private func selectStartupGhost() {
+        switch networkSettings.startupBehavior {
+        case .restore:
+            let restoredGhost = model.ghosts.first {
+                $0.rootDirectory.lastPathComponent == selectionStore.ghostDirectoryName
+            }
+            selectedGhostID = selectedGhostID ?? restoredGhost?.id ?? model.ghosts.first?.id
+        case .choose:
+            if !model.ghosts.isEmpty {
+                showGhostPicker(requiresSelection: true)
+            }
+        case .random:
+            selectedGhostID = ghostsAllowedForAutomaticSwitching(in: model.ghosts).randomElement()?.id
+                ?? model.ghosts.first?.id
+        }
+    }
+
     private func basePersonalityEngine(for ghost: InstalledGhost) throws -> any PersonalityEngine {
         let masterDirectory = ghost.rootDirectory.appending(
             path: "ghost/master",
             directoryHint: .isDirectory
         )
-        let niseStateStoreURL = ContentRoot.variableStoreURL(for: ghost)
-            .deletingLastPathComponent()
-            .appending(path: "nise-shiori-state.json", directoryHint: .notDirectory)
-        let eseStateStoreURL = ContentRoot.variableStoreURL(for: ghost)
-            .deletingLastPathComponent()
-            .appending(path: "ese-shiori-state.json", directoryHint: .notDirectory)
-        let yuhnaStateStoreURL = ContentRoot.variableStoreURL(for: ghost)
-            .deletingLastPathComponent()
-            .appending(path: "yuhna-state.json", directoryHint: .notDirectory)
-        let hisuiStateStoreURL = ContentRoot.variableStoreURL(for: ghost)
-            .deletingLastPathComponent()
-            .appending(path: "hisui-state.json", directoryHint: .notDirectory)
-        let shinoStateStoreURL = ContentRoot.variableStoreURL(for: ghost)
-            .deletingLastPathComponent()
-            .appending(path: "shino-state.json", directoryHint: .notDirectory)
-        let shinoSaoriRootURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let stateDirectory = ContentRoot.variableStoreURL(for: ghost).deletingLastPathComponent()
+        let saoriRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appending(path: "Utatane/NativeSaori", directoryHint: .isDirectory)
         if winePreferredGhostIDs.contains(ghost.id.standardizedFileURL),
            let dll = ContentRoot.shioriModuleURL(for: ghost), dll.pathExtension.lowercased() == "dll",
@@ -2905,42 +2891,33 @@ private struct UtataneRootView: View {
             return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
                 NativeShioriSession(
                     directoryURL: masterDirectory, moduleURL: moduleURL,
-                    variableStoreURL: ContentRoot.misakaVariableStoreURL(for: ghost),
+                    stateDirectoryURL: stateDirectory,
                     saoriCaller: nativeSaoriRegistry(for: masterDirectory),
-                    moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback),
-                    niseStateStoreURL: moduleURL.lastPathComponent.lowercased() == "libniseshiori.dylib" ? niseStateStoreURL : nil,
-                    eseStateStoreURL: moduleURL.lastPathComponent.lowercased() == "libese-shiori.dylib" ? eseStateStoreURL : nil,
-                    yuhnaStateStoreURL: moduleURL.lastPathComponent.lowercased() == "libyuhna.dylib" ? yuhnaStateStoreURL : nil,
-                    hisuiStateStoreURL: moduleURL.lastPathComponent.lowercased() == "libhisui.dylib" ? hisuiStateStoreURL : nil,
-                    shinoStateStoreURL: moduleURL.lastPathComponent.lowercased() == "libshino.dylib" ? shinoStateStoreURL : nil,
-                    shinoSaoriRootURL: moduleURL.lastPathComponent.lowercased() == "libshino.dylib" ? shinoSaoriRootURL : nil,
-                    akariVariableStoreURL: moduleURL.lastPathComponent.lowercased() == "libakari.dylib" ? ContentRoot.akariVariableStoreURL(for: ghost) : nil,
-                    akariSaoriRootURL: moduleURL.lastPathComponent.lowercased() == "libakari.dylib" ? shinoSaoriRootURL : nil,
-                    kawariSaoriRootURL: moduleURL.lastPathComponent.lowercased() == "libkawari.dylib" ? shinoSaoriRootURL : nil
+                    saoriRootURL: saoriRoot,
+                    moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback)
                 )
             ))
         }
-        if let kind = ConventionalShioriKind(shioriFilename: ghost.shioriFilename) {
+        let detectedShiori = ShioriCatalog.identify(
+            masterDirectory: masterDirectory,
+            declaredModuleFilename: ghost.shioriFilename
+        )
+        let kind = detectedShiori.flatMap { ConventionalShioriKind(shioriFilename: "\($0.id.rawValue).dll") }
+            ?? ConventionalShioriKind(shioriFilename: ghost.shioriFilename)
+        if let kind {
             let resolver = UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback)
             if let module = try resolver.moduleURL(for: kind, masterDirectoryURL: masterDirectory) {
                 return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
                     NativeShioriSession(
-                        directoryURL: masterDirectory, moduleURL: module, moduleResolver: resolver,
-                        niseStateStoreURL: kind == .niseshiori ? niseStateStoreURL : nil,
-                        eseStateStoreURL: kind == .eseShiori ? eseStateStoreURL : nil,
-                        yuhnaStateStoreURL: kind == .yuhna ? yuhnaStateStoreURL : nil,
-                        hisuiStateStoreURL: kind == .hisui ? hisuiStateStoreURL : nil,
-                        shinoStateStoreURL: kind == .shino ? shinoStateStoreURL : nil,
-                        shinoSaoriRootURL: kind == .shino ? shinoSaoriRootURL : nil,
-                        akariVariableStoreURL: kind == .akari ? ContentRoot.akariVariableStoreURL(for: ghost) : nil,
-                        akariSaoriRootURL: kind == .akari ? shinoSaoriRootURL : nil,
-                        kawariSaoriRootURL: kind == .kawari ? shinoSaoriRootURL : nil
+                        directoryURL: masterDirectory, moduleURL: module,
+                        stateDirectoryURL: stateDirectory,
+                        saoriCaller: nativeSaoriRegistry(for: masterDirectory),
+                        saoriRootURL: saoriRoot,
+                        moduleResolver: resolver
                     )
                 ))
             }
-            if kind != .niseshiori, kind != .eseShiori, kind != .yuhna, kind != .hisui, kind != .shino, kind != .akari, kind != .kawari {
-                throw AppError.unsupportedShiori(ghost.shioriFilename ?? kind.rawValue)
-            }
+            throw AppError.unsupportedShiori(ghost.shioriFilename ?? kind.rawValue)
         }
         if AIGhostManifestLoader.supports(masterDirectoryURL: masterDirectory) {
             let baseURL = networkSettings.aiBaseURL.isEmpty
@@ -2965,139 +2942,12 @@ private struct UtataneRootView: View {
         ) {
             return try RishuPersonalityEngine(masterDirectoryURL: masterDirectory)
         }
-        if NativeYayaPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
-            return try NativeYayaPersonalityEngine(
-                masterDirectoryURL: ContentRoot.writableYayaMasterDirectory(
-                    for: ghost,
-                    source: masterDirectory
-                ),
-                saoriRegistry: nativeSaoriRegistry(for: masterDirectory)
-            )
-        }
-        if NativeSatoriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
-            return try NativeSatoriPersonalityEngine(
-                masterDirectoryURL: masterDirectory,
-                saoriRegistry: nativeSaoriRegistry(for: masterDirectory)
-            )
-        }
-        if NativeKawariPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
-            let resolver = UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback)
-            if let module = try resolver.moduleURL(for: .kawari, masterDirectoryURL: masterDirectory) {
-                return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
-                    NativeShioriSession(
-                        directoryURL: masterDirectory, moduleURL: module, moduleResolver: resolver,
-                        kawariSaoriRootURL: shinoSaoriRootURL
-                    )
-                ))
-            }
-            return try NativeKawariPersonalityEngine(
-                masterDirectoryURL: masterDirectory,
-                saoriRegistry: nativeSaoriRegistry(for: masterDirectory)
-            )
-        }
         if POSIXShioriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try POSIXShioriPersonalityEngine(masterDirectoryURL: masterDirectory,
                                                     resolver: .init(allowsFallback: networkSettings.allowsShioriFallback))
         }
         if NativeFirstPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
             return try NativeFirstPersonalityEngine(masterDirectoryURL: masterDirectory)
-        }
-        if NativeMisakaPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
-            return try NativeMisakaPersonalityEngine(
-                masterDirectoryURL: masterDirectory,
-                variableStoreURL: ContentRoot.misakaVariableStoreURL(for: ghost),
-                saoriCaller: nativeSaoriRegistry(for: masterDirectory),
-                moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback)
-            )
-        }
-        if NativeAkariPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
-            return try NativeAkariPersonalityEngine(
-                masterDirectoryURL: masterDirectory,
-                variableStoreURL: ContentRoot.akariVariableStoreURL(for: ghost),
-                saoriCaller: nativeSaoriRegistry(for: masterDirectory)
-            )
-        }
-        if NativeEseShioriPersonalityEngine.supports(masterDirectoryURL: masterDirectory) {
-            return try NativeEseShioriPersonalityEngine(
-                masterDirectoryURL: masterDirectory,
-                stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
-                    .deletingLastPathComponent()
-                    .appending(path: "ese-shiori-state.json", directoryHint: .notDirectory)
-            )
-        }
-        if NativeNiseShioriPersonalityEngine.supports(
-            masterDirectoryURL: masterDirectory,
-            shioriFilename: ghost.shioriFilename
-        ) {
-            return try NativeNiseShioriPersonalityEngine(
-                masterDirectoryURL: masterDirectory,
-                stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
-                    .deletingLastPathComponent()
-                    .appending(path: "nise-shiori-state.json", directoryHint: .notDirectory)
-            )
-        }
-        if NativeShinoPersonalityEngine.supports(shioriFilename: ghost.shioriFilename) {
-            let engine = try NativeShinoPersonalityEngine(
-                masterDirectoryURL: masterDirectory,
-                stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
-                    .deletingLastPathComponent().appending(path: "shino-state.json"),
-                saoriCaller: nativeSaoriRegistry(for: masterDirectory)
-            )
-            AppLogStore.shared.info(
-                "忍ネイティブエンジンを選択しました",
-                category: "SHIORI",
-                details: [
-                    "Master: \(masterDirectory.path)",
-                    "辞書ファイル: \(engine.loadedDictionaryFileCount)",
-                    "イベント定義: \(engine.loadedEventEntryCount)",
-                    "ジャンプ定義: \(engine.loadedJumpEntryCount)"
-                ].joined(separator: "\n"),
-                ghostName: ghost.name
-            )
-            return engine
-        }
-        if NativeHisuiPersonalityEngine.supports(shioriFilename: ghost.shioriFilename) {
-            return try NativeHisuiPersonalityEngine(
-                masterDirectoryURL: masterDirectory,
-                stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
-                    .deletingLastPathComponent().appending(path: "hisui-state.json")
-            )
-        }
-        if NativeYuhnaPersonalityEngine.supports(
-            masterDirectoryURL: masterDirectory,
-            shioriFilename: ghost.shioriFilename
-        ) {
-            let engine = try NativeYuhnaPersonalityEngine(
-                masterDirectoryURL: masterDirectory,
-                stateStoreURL: ContentRoot.variableStoreURL(for: ghost)
-                    .deletingLastPathComponent().appending(path: "yuhna-state.json")
-            )
-            AppLogStore.shared.info(
-                "結奈ネイティブエンジンを選択しました",
-                category: "SHIORI",
-                details: [
-                    "Master: \(masterDirectory.path)",
-                    "イベント定義: \(engine.loadedEventCount)",
-                    "ルール定義: \(engine.loadedRuleCount)",
-                    "条件付きルール: \(engine.conditionalRuleCount)",
-                    "未解析レコード: \(engine.skippedEventCount)"
-                ].joined(separator: "\n"),
-                ghostName: ghost.name
-            )
-            if let moduleURL = ContentRoot.shioriModuleURL(for: ghost),
-               let configuration = ContentRoot.windowsDLLConfiguration(
-                   for: moduleURL,
-                   charset: ghost.charset ?? "Shift_JIS"
-               )
-            {
-                return try FallbackPersonalityEngine(
-                    primary: engine,
-                    fallback: ExternalSHIORIPersonalityEngine(backend: .windowsDLL(
-                        WindowsDLLModuleProcessSession(configuration: configuration)
-                    ))
-                )
-            }
-            return engine
         }
         if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename),
            let configuration = ContentRoot.materiaFirstConfiguration(for: ghost)
@@ -3112,8 +2962,9 @@ private struct UtataneRootView: View {
                 return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
                     NativeShioriSession(
                         directoryURL: masterDirectory, moduleURL: moduleURL,
-                        variableStoreURL: ContentRoot.misakaVariableStoreURL(for: ghost),
+                        stateDirectoryURL: stateDirectory,
                         saoriCaller: nativeSaoriRegistry(for: masterDirectory),
+                        saoriRootURL: saoriRoot,
                         moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback)
                     )
                 ))
@@ -7381,15 +7232,25 @@ private struct UtataneRootView: View {
         let allowsShioriFallback = networkSettings.allowsShioriFallback
         let failures = await pluginRuntime.reload(installedPlugins) { plugin in
             switch plugin.runtime {
-            case .nativeSHIORI:
-                return try NativeSHIORIPluginTransport(
-                    plugin: plugin,
-                    stateDirectoryURL: ContentRoot.contentDirectory.appending(path: "State/Plugins"),
-                    allowsShioriFallback: allowsShioriFallback
+            case let .nativeSHIORI(nativeKind):
+                guard let kind = ConventionalShioriKind(shioriFilename: "\(nativeKind.rawValue).dll"),
+                      let module = try UtataneModuleResolver(allowsFallback: allowsShioriFallback)
+                      .moduleURL(for: kind, masterDirectoryURL: plugin.directory)
+                else { throw NativeSHIORIPluginError.unsupportedRuntime }
+                return try DynamicLibraryPluginTransport(
+                    plugin: plugin, stateDirectoryURL: ContentRoot.contentDirectory.appending(path: "State/Plugins"),
+                    moduleURLOverride: module,
+                    saoriCaller: nativeSaoriRegistry(for: plugin.directory),
+                    saoriRootURL: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                        .appending(path: "Utatane/NativeSaori"),
+                    moduleResolver: .init(allowsFallback: allowsShioriFallback)
                 )
             case .dynamicLibrary:
                 return try DynamicLibraryPluginTransport(
                     plugin: plugin, stateDirectoryURL: ContentRoot.contentDirectory.appending(path: "State/Plugins"),
+                    saoriCaller: nativeSaoriRegistry(for: plugin.directory),
+                    saoriRootURL: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                        .appending(path: "Utatane/NativeSaori"),
                     moduleResolver: .init(allowsFallback: allowsShioriFallback)
                 )
             case .windowsDLL:
@@ -9422,67 +9283,6 @@ enum ContentRoot {
             .appending(path: "State", directoryHint: .isDirectory)
             .appending(path: ghost.rootDirectory.lastPathComponent, directoryHint: .isDirectory)
             .appending(path: "variables.json", directoryHint: .notDirectory)
-    }
-
-    static func misakaVariableStoreURL(for ghost: InstalledGhost) -> URL {
-        variableStoreURL(for: ghost)
-            .deletingLastPathComponent()
-            .appending(path: "misaka-vars.json", directoryHint: .notDirectory)
-    }
-
-    static func akariVariableStoreURL(for ghost: InstalledGhost) -> URL {
-        variableStoreURL(for: ghost)
-            .deletingLastPathComponent()
-            .appending(path: "akari-vars.json", directoryHint: .notDirectory)
-    }
-
-    static func writableYayaMasterDirectory(for ghost: InstalledGhost, source: URL) throws -> URL {
-        #if DEBUG
-            let bundledGhosts = repositoryRoot
-                .appending(path: "Content/Bundled/Ghosts", directoryHint: .isDirectory)
-                .standardizedFileURL
-            let sourcePath = source.standardizedFileURL.path
-            guard sourcePath.hasPrefix(bundledGhosts.path + "/") else { return source }
-
-            let destination = contentDirectory
-                .appending(path: "Debug/YAYA", directoryHint: .isDirectory)
-                .appending(path: ghost.rootDirectory.lastPathComponent, directoryHint: .isDirectory)
-                .appending(path: "master", directoryHint: .isDirectory)
-            try synchronizeYayaMaster(from: source, to: destination)
-            return destination
-        #else
-            return source
-        #endif
-    }
-
-    private static func synchronizeYayaMaster(from source: URL, to destination: URL) throws {
-        let fileManager = FileManager.default
-        try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
-        guard let enumerator = fileManager.enumerator(
-            at: source,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        ) else { return }
-
-        for case let sourceItem as URL in enumerator {
-            let relativePath = String(sourceItem.path.dropFirst(source.path.count + 1))
-            let destinationItem = destination.appending(path: relativePath)
-            let isDirectory = try sourceItem.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true
-            if isDirectory {
-                try fileManager.createDirectory(at: destinationItem, withIntermediateDirectories: true)
-            } else if !sourceItem.lastPathComponent.hasSuffix("_variable.cfg") {
-                try fileManager.createDirectory(
-                    at: destinationItem.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                if fileManager.fileExists(atPath: destinationItem.path) {
-                    try fileManager.removeItem(at: destinationItem)
-                }
-                try fileManager.copyItem(at: sourceItem, to: destinationItem)
-            } else if !fileManager.fileExists(atPath: destinationItem.path) {
-                try fileManager.copyItem(at: sourceItem, to: destinationItem)
-            }
-        }
     }
 
     static func dialogueURL(for ghost: InstalledGhost) -> URL? {

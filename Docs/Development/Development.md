@@ -23,7 +23,7 @@ mise run build
 
 kagariとLuaのビルド処理は[utatane-modules](https://github.com/opera7133/utatane-modules)で管理します。Utataneと同じ親フォルダへチェックアウトし、`git submodule update --init --recursive`と`uv sync --locked`を実行してください。別の配置は`UTATANE_MODULES_ROOT`で指定します。Xcodeからuvが見つからない場合は`UTATANE_UV_EXECUTABLE`に絶対パスを指定します。
 
-Xcodeのビルドフェーズは`Scripts/modules.sh`からカタログ側の処理を呼び、対象CPUのkagariとLuaをアプリへ組み込みます。依存ソースとSHA-256はカタログ側の`recipes/kagari/dependencies.json`、キャッシュは`build/app-bundle/`です。User Script Sandboxingは、このビルド時のネットワーク・キャッシュ利用のため無効です。
+移植済みのSHIORI・SAORIは[Utatane Modules](https://github.com/opera7133/utatane-modules)でビルド・配布します。アプリのビルドには含めません。
 
 ## 検証
 
@@ -64,7 +64,7 @@ mise run package
 
 生成物は `dist/Utatane-macOS.zip` に出力されます。
 
-Releaseビルド後に`mise run test-kagari`で、同梱されたkagariとLuaの構成・ライセンスと、移動後の実ロードを検証できます。
+kagariとLuaのビルド・配布検証はUtatane Modules側で行います。
 
 ## コード構成
 
@@ -82,17 +82,16 @@ packages/platform-macos/   サーフェス・バルーン描画、SakuraScript�
 packages/network/          更新、RSS、HEADLINE、SSTP、WebSocket、時刻取得・ネットワーク診断
 packages/ai/               プロバイダー非依存のAI人格エンジン
 packages/realtime/         Realtime APIのSDP接続要求、会話イベント・トランスクリプト処理
-packages/shiori/           SHIORIメッセージ、外部ローダー、各ネイティブ実装
+packages/shiori/           SHIORIメッセージ、外部ローダー、FIRST専用実装
 packages/makoto/           MAKOTOトランスレータと人格応答への変換処理
 packages/plugin/           プラグイン検出、要求・イベント配送、dylib接続
-packages/native-saori/     ネイティブSHIORI共通のSAORIレジストリ
-packages/shiori/native/    YAYA、SATORI、KAWARIなどのネイティブ人格実装
+packages/native-saori/     SHIORIから外部SAORIへ接続するレジストリ
+packages/shiori/native/    FIRST専用の人格実装
 packages/shiori/external/  macOS外部SHIORIとWine上のWindows DLLへの接続
 packages/mcp-server/       Utatane操作用のstdio MCPサーバー
-packages/shiori/native/kagari/ kagariの上流ソース（Xcodeビルド時にdylibを同梱、SwiftPMターゲットではない）
 ```
 
-`packages/`は[Package.swift](../../packages/Package.swift)を持つ単一のSwift Packageです。機能ごとのディレクトリをTargetとして登録し、依存方向と公開Productをこのファイルで管理します。パーサーや本体処理は各モジュールへ置き、SwiftUIアプリ固有の結線は`apps/Utatane`、再利用するmacOS表示・再生処理は`platform-macos`へ分けます。SHIORIの共通電文、ネイティブ実装、外部モジュール接続は`packages/shiori`内で管理します。
+`packages/`は[Package.swift](../../packages/Package.swift)を持つ単一のSwift Packageです。機能ごとのディレクトリをTargetとして登録し、依存方向と公開Productをこのファイルで管理します。パーサーや本体処理は各モジュールへ置き、SwiftUIアプリ固有の結線は`apps/Utatane`、再利用するmacOS表示・再生処理は`platform-macos`へ分けます。SHIORIの共通電文、FIRST専用実装、外部モジュール接続は`packages/shiori`内で管理します。
 
 周辺のビルド・調査用コードは次の場所にあります。
 

@@ -30,13 +30,6 @@ targets:
           set -eu
           sh "$SRCROOT/Scripts/build-native-shiori-host.sh" \
             "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Helpers/utatane-shiori-host" $ARCHS
-      - name: Build and embed kagari
-        basedOnDependencyAnalysis: false
-        script: |
-          set -eu
-          sh "$SRCROOT/Scripts/modules.sh" bundle-kagari \
-            --output "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/NativeShiori/kagari" \
-            --archs $ARCHS
       - name: Embed optional nicxlive runtime
         basedOnDependencyAnalysis: false
         script: |
@@ -112,7 +105,7 @@ targets:
         GENERATE_INFOPLIST_FILE: NO
         CODE_SIGN_STYLE: Automatic
         CURRENT_PROJECT_VERSION: 1
-        MARKETING_VERSION: 0.2.9
+        MARKETING_VERSION: 0.2.10
         ENABLE_USER_SCRIPT_SANDBOXING: NO
     dependencies:
       - package: Sparkle
@@ -148,29 +141,9 @@ targets:
       - package: UtataneKit
         product: UtatanePlugin
       - package: UtataneKit
-        product: UtataneKawariNative
-      - package: UtataneKit
         product: UtataneMakoto
       - package: UtataneKit
-        product: UtataneYayaNative
-      - package: UtataneKit
-        product: UtataneSatoriNative
-      - package: UtataneKit
         product: UtataneFirstNative
-      - package: UtataneKit
-        product: UtataneMisakaNative
-      - package: UtataneKit
-        product: UtataneAkariNative
-      - package: UtataneKit
-        product: UtataneEseShioriNative
-      - package: UtataneKit
-        product: UtataneNiseShioriNative
-      - package: UtataneKit
-        product: UtataneShinoNative
-      - package: UtataneKit
-        product: UtataneHisuiNative
-      - package: UtataneKit
-        product: UtataneYuhnaNative
       - package: UtataneKit
         product: UtataneNativeSaori
       - package: UtataneKit
