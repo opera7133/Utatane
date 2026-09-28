@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.2.11] - 2026-09-28
 
 ### モジュールの導入・更新
 
@@ -756,7 +756,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.10...HEAD
+[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.11...HEAD
+[0.2.11]: https://github.com/opera7133/Utatane/compare/v0.2.10...v0.2.11
 [0.2.10]: https://github.com/opera7133/Utatane/compare/v0.2.9...v0.2.10
 [0.2.9]: https://github.com/opera7133/Utatane/compare/v0.2.8...v0.2.9
 [0.2.8]: https://github.com/opera7133/Utatane/compare/v0.2.7...v0.2.8
