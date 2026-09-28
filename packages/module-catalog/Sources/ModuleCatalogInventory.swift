@@ -104,7 +104,19 @@ public struct ModuleCatalogInventory: Sendable {
     }
 
     private func versionKey(_ version: String, revision: Int) -> [Int] {
-        let parts = version.split(separator: ".").map { Int($0) ?? 0 }
+        let parts: [Int]
+        if version.hasPrefix("Tc") {
+            let fields = version.dropFirst(2).split(separator: "-")
+            if fields.count == 2, fields[0].count == 3,
+               let code = Int(fields[0]), let patch = Int(fields[1])
+            {
+                parts = [code / 100, code % 100, patch]
+            } else {
+                parts = [0]
+            }
+        } else {
+            parts = version.split(separator: ".").map { Int($0) ?? 0 }
+        }
         return parts + Array(repeating: 0, count: max(0, 3 - parts.count)) + [revision]
     }
 }
