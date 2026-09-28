@@ -117,12 +117,12 @@
       [
         "04",
         "比较不同本体",
-        "<div class=\"guide-table\"><table><thead><tr><th>项目</th><th>SSP</th><th>ninix-kagari</th><th>Utatane</th></tr></thead><tbody><tr><th>主要系统</th><td>Windows</td><td>Linux、Windows</td><td>macOS 14 或更高版本</td></tr><tr><th>定位</th><td>目前事实上的基准</td><td>ninix-aya 的分支，可一并构建主要 SHIORI</td><td>面向 macOS；主要功能仍在实现，并非完全兼容</td></tr><tr><th>外部模块</th><td>直接加载 Windows DLL</td><td>Linux 需要构建兼容 SHIORI；SAORI 主要为 ninix-saori</td><td>优先使用原生实现；一部分可通过已配置的 Wine 运行</td></tr><tr><th>安装</th><td>Windows 发布版</td><td>在 Linux 构建或使用 Debian 软件包</td><td>Mac 应用；可从解压后的 SSP 文件夹导入</td></tr></tbody></table></div><p>不同环境的支持范围有所不同，请参阅 <a href=\"https://github.com/Tatakinov/ninix-kagari\">ninix-kagari 项目</a>。Utatane 的<a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Compatibility.md\">已测试人格与剩余问题</a>记录了实际确认范围。</p>"
+        "<div class=\"guide-table\"><table><thead><tr><th>项目</th><th>SSP</th><th>ninix-kagari</th><th>Utatane</th></tr></thead><tbody><tr><th>主要系统</th><td>Windows</td><td>Linux、Windows</td><td>macOS 14 或更高版本</td></tr><tr><th>定位</th><td>目前事实上的基准</td><td>ninix-aya 的分支，可一并构建主要 SHIORI</td><td>面向 macOS；主要功能仍在实现，并非完全兼容</td></tr><tr><th>外部模块</th><td>直接加载 Windows DLL</td><td>Linux 需要构建兼容 SHIORI；SAORI 主要为 ninix-saori</td><td>从签名目录安装兼容的 macOS SHIORI 与 SAORI；部分 DLL 可通过已配置的 Wine 运行</td></tr><tr><th>安装</th><td>Windows 发布版</td><td>在 Linux 构建或使用 Debian 软件包</td><td>Mac 应用；可从解压后的 SSP 文件夹导入</td></tr></tbody></table></div><p>不同环境的支持范围有所不同，请参阅 <a href=\"https://github.com/Tatakinov/ninix-kagari\">ninix-kagari 项目</a>。Utatane 的<a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Compatibility.md\">已测试人格与剩余问题</a>记录了实际确认范围。</p>"
       ],
       [
         "05",
         "如何在 macOS 上实现兼容",
-        "<p>Utatane 从 <code>descript.txt</code> 等文件识别对话引擎（SHIORI），再将 YAYA、里々、華和梨、MISAKA 等已知引擎连接到 Swift 或 macOS 原生实现。常见 SAORI 也有共享的原生实现；不支持的 Windows DLL 只有在配置 Wine 与辅助宿主后才会运行。</p><p>状态数据与发布文件分离，保存在 Application Support。即使引擎受支持，也不保证所有分支或 Windows 专用依赖都能工作。技术细节请看 <a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Native-SHIORI.md\">Native SHIORI / SAORI</a>。</p>"
+        "<p>Utatane 从 <code>descript.txt</code> 等文件识别对话引擎（SHIORI），再将 YAYA、里々、華和梨、MISAKA 等已知引擎连接到单独安装的 macOS 模块。支持的 SAORI 也可从签名模块目录安装；不支持的 Windows DLL 只有在配置 Wine 与辅助宿主后才会运行。</p><p>状态数据与发布文件分离，保存在 Application Support。即使引擎受支持，也不保证所有分支或 Windows 专用依赖都能工作。技术细节请看 <a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Native-SHIORI.md\">Native SHIORI / SAORI</a>。</p>"
       ]
     ],
     "trouble": "如果遇到问题，请在 GitHub Issues 中提供人格名称、Utatane 版本和问题描述。兼容性仍在开发中，并不保证所有人格和功能都能运行。",

@@ -50,6 +50,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
     public let canActivate: Bool
     public let canUpdate: Bool
     public let resolvesUpdateURLDynamically: Bool
+    public let missingModuleNames: [String]
 
     public var id: String {
         "\(kind.rawValue):\(directory.standardizedFileURL.path)"
@@ -69,7 +70,8 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         isActive: Bool = false,
         canActivate: Bool = true,
         canUpdate: Bool = true,
-        resolvesUpdateURLDynamically: Bool = false
+        resolvesUpdateURLDynamically: Bool = false,
+        missingModuleNames: [String] = []
     ) {
         self.kind = kind
         self.name = name
@@ -85,6 +87,7 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
         self.canActivate = canActivate
         self.canUpdate = canUpdate
         self.resolvesUpdateURLDynamically = resolvesUpdateURLDynamically
+        self.missingModuleNames = missingModuleNames
     }
 
     var activationTitle: String {
@@ -112,6 +115,7 @@ final class ContentExplorerModel {
     var validatingEntryIDs: Set<String> = []
     var validationReports: [String: ContentValidationReport] = [:]
     var onActivate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
+    var onInstallModules: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onCheckUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onCheckUpdates: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)?
@@ -207,6 +211,7 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         entries: [ContentExplorerEntry],
         preferredKind: ContentExplorerKind? = nil,
         onActivate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
+        onInstallModules: (@MainActor @Sendable (ContentExplorerEntry) -> Void)? = nil,
         onCheckUpdate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
         onUpdate: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void,
         onCheckUpdates: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)? = nil,
@@ -216,6 +221,7 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         onRemove: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void
     ) {
         model.onActivate = onActivate
+        model.onInstallModules = onInstallModules
         model.onCheckUpdate = onCheckUpdate
         model.onUpdate = onUpdate
         model.onCheckUpdates = onCheckUpdates
@@ -368,6 +374,11 @@ private struct ContentExplorerView: View {
                                             .font(.caption2)
                                             .foregroundStyle(.tertiary)
                                     }
+                                    if !entry.missingModuleNames.isEmpty {
+                                        Label("モジュール未導入", systemImage: "exclamationmark.triangle")
+                                            .font(.caption2)
+                                            .foregroundStyle(.orange)
+                                    }
                                 }
                                 Spacer()
                                 if entry.isActive {
@@ -413,6 +424,17 @@ private struct ContentExplorerView: View {
                 LabeledContent("フォルダ", value: entry.directory.path)
 
                 if entry.kind == .ghost {
+                    if !entry.missingModuleNames.isEmpty {
+                        GroupBox("必要なモジュール") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(entry.missingModuleNames.joined(separator: "、"))
+                                Text("起動前に導入するか、利用できる場合はWineで起動できる。")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                Button("導入方法を確認…") { model.onInstallModules?(entry) }
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                    }
                     validationView(entry)
                 }
 

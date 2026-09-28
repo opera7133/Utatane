@@ -1911,6 +1911,12 @@ private struct UtataneRootView: View {
 
     private func transition(to ghost: InstalledGhost, forceReload: Bool = false) async {
         guard forceReload || currentGhost?.id != ghost.id else { return }
+        if !winePreferredGhostIDs.contains(ghost.id.standardizedFileURL),
+           await !offerMissingModules(for: [ghost])
+        {
+            selectedGhostID = currentGhost?.id
+            return
+        }
         let previousGhost = currentGhost
         let isReload = forceReload && previousGhost?.id == ghost.id
         let reloadPresentation = isReload
@@ -7811,56 +7817,166 @@ private struct UtataneRootView: View {
     }
 
     private func offerMissingModules(for ghosts: [InstalledGhost]) async -> Bool {
-        guard !ghosts.isEmpty, let client = ModuleCatalogConfiguration.client else { return true }
-        let catalog: SignedModuleCatalog
-        do {
-            catalog = try await client.fetch()
-        } catch {
-            AppLogStore.shared.warning("追加ゴーストのモジュール確認に失敗", category: "Install", details: error.localizedDescription)
-            return true
-        }
+        guard !ghosts.isEmpty else { return true }
         let supportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appending(path: "Utatane")
         let scanner = GhostModuleRequirements()
-        let requirementsByGhost = ghosts.map { ghost in
-            (ghost: ghost, missing: scanner.missing(for: ghost, in: catalog, applicationSupportURL: supportURL))
+        let unresolvedByGhost = ghosts.map { ghost in
+            (ghost: ghost, missing: scanner.unresolved(for: ghost, applicationSupportURL: supportURL))
         }
-        let missing = requirementsByGhost.flatMap(\.missing)
-            .reduce(into: [GhostModuleRequirement]()) { found, requirement in
-                if !found.contains(where: { $0.id == requirement.id }) {
-                    found.append(requirement)
-                }
-            }
-        guard !missing.isEmpty else { return true }
-        let canUseWine = requirementsByGhost.flatMap(\.missing).allSatisfy { requirement in
+        let unresolved = unresolvedByGhost.flatMap(\.missing)
+        guard !unresolved.isEmpty else { return true }
+        let canUseWine = unresolved.allSatisfy { requirement in
             requirement.sourceDLLURL.flatMap { ContentRoot.windowsDLLConfiguration(for: $0) } != nil
         }
-        let alert = NSAlert()
-        alert.messageText = String(localized: "追加したゴーストに必要なモジュールがありません")
-        alert.informativeText = missing.map { "\($0.kind): \($0.displayName)" }.joined(separator: "\n")
-        alert.addButton(withTitle: String(localized: "ダウンロードして起動"))
-        alert.addButton(withTitle: canUseWine ? String(localized: "Wineで起動") : String(localized: "起動しない"))
-        guard alert.runModal() == .alertFirstButtonReturn else {
+        let affectedGhostIDs = unresolvedByGhost.filter { !$0.missing.isEmpty }.map(\.ghost.id.standardizedFileURL)
+        let names = unresolved.map { "\($0.kind): \($0.displayName)" }.joined(separator: "\n")
+        guard let client = ModuleCatalogConfiguration.client else {
+            guard !unresolved.isEmpty else { return true }
+            AppLogStore.shared.warning("モジュールカタログの接続先が無効", category: "Install", details: names)
+            let alert = NSAlert()
+            alert.messageText = String(localized: "モジュールカタログを利用できない")
+            alert.informativeText = names + "\n" + String(localized: "設定の接続先を確認するか、手動導入の手順を確認して。")
+            alert.addButton(withTitle: String(localized: "手動導入の手順"))
             if canUseWine {
-                winePreferredGhostIDs.formUnion(
-                    requirementsByGhost.filter { !$0.missing.isEmpty }.map(\.ghost.id.standardizedFileURL)
-                )
+                alert.addButton(withTitle: String(localized: "Wineで起動"))
             }
-            return canUseWine
-        }
-        let manager = ModuleCatalogManager(client: client)
-        do {
-            for requirement in missing {
-                _ = try await manager.install(moduleID: requirement.id)
+            alert.addButton(withTitle: String(localized: "起動しない"))
+            let answer = alert.runModal()
+            if answer == .alertFirstButtonReturn {
+                openModuleInstallationInstructions()
+            } else if canUseWine, answer == .alertSecondButtonReturn {
+                winePreferredGhostIDs.formUnion(affectedGhostIDs)
+                return true
             }
-            winePreferredGhostIDs.subtract(
-                requirementsByGhost.filter { !$0.missing.isEmpty }.map(\.ghost.id.standardizedFileURL)
-            )
-            return true
-        } catch {
-            showError(String(format: String(localized: "モジュールを導入できなかった: %@"), error.localizedDescription))
             return false
         }
+
+        while true {
+            let catalog: SignedModuleCatalog
+            do {
+                catalog = try await client.fetch()
+            } catch {
+                AppLogStore.shared.warning("追加ゴーストのモジュール確認に失敗", category: "Install",
+                                           details: "\(names)\n\(error)")
+                guard !unresolved.isEmpty else { return true }
+                let alert = NSAlert()
+                alert.messageText = String(localized: "モジュールカタログを取得できない")
+                alert.informativeText = names + "\n" + ModuleCatalogFailureMessage.describe(error)
+                alert.addButton(withTitle: String(localized: "再試行"))
+                if canUseWine {
+                    alert.addButton(withTitle: String(localized: "Wineで起動"))
+                }
+                alert.addButton(withTitle: String(localized: "起動しない"))
+                let answer = alert.runModal()
+                if answer == .alertFirstButtonReturn {
+                    continue
+                }
+                if canUseWine, answer == .alertSecondButtonReturn {
+                    winePreferredGhostIDs.formUnion(affectedGhostIDs)
+                    return true
+                }
+                return false
+            }
+
+            let activeByGhost = ghosts.map { ghost in
+                (ghost: ghost, missing: scanner.unresolved(
+                    for: ghost, applicationSupportURL: supportURL, catalog: catalog
+                ))
+            }
+            let activeUnresolved = activeByGhost.flatMap(\.missing)
+            if activeUnresolved.isEmpty {
+                return true
+            }
+            let canUseWine = activeUnresolved.allSatisfy { requirement in
+                requirement.sourceDLLURL.flatMap { ContentRoot.windowsDLLConfiguration(for: $0) } != nil
+            }
+            let affectedGhostIDs = activeByGhost.filter { !$0.missing.isEmpty }.map(\.ghost.id.standardizedFileURL)
+            let names = activeUnresolved.map { "\($0.kind): \($0.displayName)" }.joined(separator: "\n")
+
+            let missing = ghosts.flatMap { scanner.missing(for: $0, in: catalog, applicationSupportURL: supportURL) }
+                .reduce(into: [GhostModuleRequirement]()) { found, requirement in
+                    if !found.contains(where: { $0.id == requirement.id }) {
+                        found.append(requirement)
+                    }
+                }
+            let unavailable = activeUnresolved.filter { requirement in
+                !missing.contains(where: {
+                    $0.kind == requirement.kind && ($0.id == requirement.id
+                        || $0.sourceDLLURL?.standardizedFileURL == requirement.sourceDLLURL?.standardizedFileURL)
+                })
+            }
+            if !unavailable.isEmpty {
+                let unavailableNames = unavailable.map { "\($0.kind): \($0.displayName)" }.joined(separator: "\n")
+                AppLogStore.shared.warning("追加ゴーストに配布候補がない", category: "Install", details: unavailableNames)
+                let alert = NSAlert()
+                alert.messageText = String(localized: "自動導入できるモジュールがない")
+                alert.informativeText = unavailableNames + "\n" + String(localized: "手動導入の手順を確認して。")
+                alert.addButton(withTitle: String(localized: "手動導入の手順"))
+                if canUseWine {
+                    alert.addButton(withTitle: String(localized: "Wineで起動"))
+                }
+                alert.addButton(withTitle: String(localized: "起動しない"))
+                let answer = alert.runModal()
+                if answer == .alertFirstButtonReturn {
+                    openModuleInstallationInstructions()
+                }
+                if canUseWine, answer == .alertSecondButtonReturn {
+                    winePreferredGhostIDs.formUnion(affectedGhostIDs)
+                    return true
+                }
+                return false
+            }
+
+            let alert = NSAlert()
+            alert.messageText = String(localized: "このゴーストに必要なモジュールがありません")
+            alert.informativeText = missing.map { "\($0.kind): \($0.displayName)" }.joined(separator: "\n")
+            alert.addButton(withTitle: String(localized: "ダウンロードして起動"))
+            if canUseWine {
+                alert.addButton(withTitle: String(localized: "Wineで起動"))
+            }
+            alert.addButton(withTitle: String(localized: "起動しない"))
+            let answer = alert.runModal()
+            if canUseWine, answer == .alertSecondButtonReturn {
+                winePreferredGhostIDs.formUnion(affectedGhostIDs)
+                return true
+            }
+            guard answer == .alertFirstButtonReturn else { return false }
+
+            do {
+                let manager = ModuleCatalogManager(client: client)
+                for requirement in missing {
+                    _ = try await manager.install(moduleID: requirement.id)
+                }
+                winePreferredGhostIDs.subtract(affectedGhostIDs)
+                return true
+            } catch {
+                AppLogStore.shared.error("追加ゴーストのモジュール導入に失敗", category: "Install",
+                                         details: "\(names)\n\(error)")
+                let failure = NSAlert()
+                failure.messageText = String(localized: "モジュールを導入できなかった")
+                failure.informativeText = ModuleCatalogFailureMessage.describe(error)
+                failure.addButton(withTitle: String(localized: "再試行"))
+                if canUseWine {
+                    failure.addButton(withTitle: String(localized: "Wineで起動"))
+                }
+                failure.addButton(withTitle: String(localized: "起動しない"))
+                let recovery = failure.runModal()
+                if recovery == .alertFirstButtonReturn {
+                    continue
+                }
+                if canUseWine, recovery == .alertSecondButtonReturn {
+                    winePreferredGhostIDs.formUnion(affectedGhostIDs)
+                    return true
+                }
+                return false
+            }
+        }
+    }
+
+    private func openModuleInstallationInstructions() {
+        guard let url = URL(string: "https://github.com/opera7133/utatane-modules") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func reloadCurrentGhost() {
@@ -7887,7 +8003,7 @@ private struct UtataneRootView: View {
                 }
             }
             do {
-                _ = try await Task.detached {
+                let result = try await Task.detached {
                     try SSPContentImporter().importContents(
                         from: url,
                         ghostsDirectory: ContentRoot.ghostInstallationDirectory,
@@ -7895,9 +8011,13 @@ private struct UtataneRootView: View {
                     )
                 }.value
                 await model.load()
+                let importedGhosts = model.ghosts.filter { ghost in
+                    result.ghostDirectories.contains { $0.standardizedFileURL == ghost.rootDirectory.standardizedFileURL }
+                }
+                let shouldBootImportedGhost = await offerMissingModules(for: importedGhosts)
                 installedBalloons = try balloonLoader.loadInstalled(from: ContentRoot.balloonReadDirectories)
-                if selectedGhostID == nil {
-                    selectedGhostID = model.ghosts.first?.id
+                if shouldBootImportedGhost, selectedGhostID == nil {
+                    selectedGhostID = importedGhosts.first?.id ?? model.ghosts.first?.id
                 }
                 showsOnboarding = model.ghosts.isEmpty
                 updateDebugWindowVisibility()
@@ -7912,6 +8032,7 @@ private struct UtataneRootView: View {
             entries: contentExplorerEntries(),
             preferredKind: preferredKind,
             onActivate: activateContentExplorerEntry,
+            onInstallModules: requestContentExplorerModuleInstallation,
             onCheckUpdate: requestContentExplorerUpdateCheck,
             onUpdate: requestContentExplorerUpdate,
             onCheckUpdates: requestContentExplorerUpdateChecks,
@@ -7930,8 +8051,12 @@ private struct UtataneRootView: View {
     private func contentExplorerEntries() -> [ContentExplorerEntry] {
         var entries: [ContentExplorerEntry] = []
         let contentSources = ContentRoot.contentSourceStore.sources
+        let supportURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "Utatane")
+        let moduleScanner = GhostModuleRequirements()
 
         for ghost in model.ghosts {
+            let missingModules = moduleScanner.unresolved(for: ghost, applicationSupportURL: supportURL)
             let isActive = currentGhost?.id == ghost.id || calledGhosts[ghost.id] != nil
             let updateURL = ContentNetworkUpdater.homeURL(in: ghost.rootDirectory)
             entries.append(ContentExplorerEntry(
@@ -7945,7 +8070,8 @@ private struct UtataneRootView: View {
                 removalContainer: removableContentContainer(for: ghost.rootDirectory, kind: .ghost),
                 isActive: isActive,
                 canUpdate: !isActive || currentGhost?.id == ghost.id,
-                resolvesUpdateURLDynamically: currentGhost?.id == ghost.id
+                resolvesUpdateURLDynamically: currentGhost?.id == ghost.id,
+                missingModuleNames: missingModules.map { "\($0.kind): \($0.displayName)" }
             ))
             for shell in ghost.shells {
                 let readme = ReadmeResolver().resolve(
@@ -8089,6 +8215,16 @@ private struct UtataneRootView: View {
         case .plugin:
             guard let plugin = installedPlugins.first(where: { $0.directory == entry.directory }) else { return }
             activate(plugin)
+        }
+    }
+
+    private func requestContentExplorerModuleInstallation(_ entry: ContentExplorerEntry) {
+        guard let ghost = model.ghosts.first(where: { $0.id == entry.directory }) else { return }
+        Task {
+            if await offerMissingModules(for: [ghost]) {
+                selectedGhostID = ghost.id
+            }
+            refreshContentExplorer()
         }
     }
 

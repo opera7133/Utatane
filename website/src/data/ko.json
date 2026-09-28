@@ -117,12 +117,12 @@
       [
         "04",
         "베이스웨어 비교",
-        "<div class=\"guide-table\"><table><thead><tr><th>항목</th><th>SSP</th><th>ninix-kagari</th><th>Utatane</th></tr></thead><tbody><tr><th>주요 환경</th><td>Windows</td><td>Linux, Windows</td><td>macOS 14 이상</td></tr><tr><th>위치</th><td>현재 사실상의 기준</td><td>ninix-aya 포크이며 주요 SHIORI를 함께 빌드 가능</td><td>macOS용이며 주요 기능 구현 중, 완전 호환은 아님</td></tr><tr><th>외부 모듈</th><td>Windows DLL 직접 로드</td><td>Linux에서는 호환 SHIORI 빌드가 필요하며 SAORI는 주로 ninix-saori</td><td>네이티브 구현 우선, 일부는 설정한 Wine으로 실행</td></tr><tr><th>설치</th><td>Windows 배포판</td><td>Linux에서 빌드하거나 Debian 패키지 사용</td><td>Mac 앱이며 압축을 푼 SSP 폴더에서 가져오기 가능</td></tr></tbody></table></div><p>환경별 지원 범위는 <a href=\"https://github.com/Tatakinov/ninix-kagari\">ninix-kagari 프로젝트</a>를 확인하세요. Utatane의 <a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Compatibility.md\">확인한 고스트와 남은 문제</a>에는 실제 확인 범위가 정리되어 있어요.</p>"
+        "<div class=\"guide-table\"><table><thead><tr><th>항목</th><th>SSP</th><th>ninix-kagari</th><th>Utatane</th></tr></thead><tbody><tr><th>주요 환경</th><td>Windows</td><td>Linux, Windows</td><td>macOS 14 이상</td></tr><tr><th>위치</th><td>현재 사실상의 기준</td><td>ninix-aya 포크이며 주요 SHIORI를 함께 빌드 가능</td><td>macOS용이며 주요 기능 구현 중, 완전 호환은 아님</td></tr><tr><th>외부 모듈</th><td>Windows DLL 직접 로드</td><td>Linux에서는 호환 SHIORI 빌드가 필요하며 SAORI는 주로 ninix-saori</td><td>호환 macOS SHIORI와 SAORI를 서명된 카탈로그에서 설치하며 일부 DLL은 설정한 Wine으로 실행</td></tr><tr><th>설치</th><td>Windows 배포판</td><td>Linux에서 빌드하거나 Debian 패키지 사용</td><td>Mac 앱이며 압축을 푼 SSP 폴더에서 가져오기 가능</td></tr></tbody></table></div><p>환경별 지원 범위는 <a href=\"https://github.com/Tatakinov/ninix-kagari\">ninix-kagari 프로젝트</a>를 확인하세요. Utatane의 <a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Compatibility.md\">확인한 고스트와 남은 문제</a>에는 실제 확인 범위가 정리되어 있어요.</p>"
       ],
       [
         "05",
         "macOS 호환 방식",
-        "<p>Utatane는 <code>descript.txt</code> 같은 파일에서 대화 엔진(SHIORI)을 판별하고 YAYA, SATORI, KAWARI, MISAKA 등 알려진 엔진을 Swift 또는 macOS 네이티브 구현에 연결해요. 알려진 SAORI에도 공통 네이티브 구현이 있고, 지원하지 않는 Windows DLL은 Wine과 보조 호스트를 설정한 경우에만 실행해요.</p><p>상태 데이터는 배포 파일과 분리해 Application Support에 저장해요. 엔진을 지원하더라도 모든 분기나 Windows 전용 의존성이 작동한다고 보장하지는 않아요. 자세한 내용은 <a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Native-SHIORI.md\">Native SHIORI / SAORI</a>를 확인하세요.</p>"
+        "<p>Utatane는 <code>descript.txt</code> 같은 파일에서 대화 엔진(SHIORI)을 판별하고 YAYA, SATORI, KAWARI, MISAKA 등 알려진 엔진을 별도로 설치한 macOS 모듈에 연결해요. 지원하는 SAORI도 서명된 모듈 카탈로그에서 설치할 수 있고, 지원하지 않는 Windows DLL은 Wine과 보조 호스트를 설정한 경우에만 실행해요.</p><p>상태 데이터는 배포 파일과 분리해 Application Support에 저장해요. 엔진을 지원하더라도 모든 분기나 Windows 전용 의존성이 작동한다고 보장하지는 않아요. 자세한 내용은 <a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Native-SHIORI.md\">Native SHIORI / SAORI</a>를 확인하세요.</p>"
       ]
     ],
     "trouble": "문제가 생기면 고스트 이름, Utatane 버전, 발생한 일을 GitHub Issues에 알려 주세요. 호환성은 개발 중이며 모든 고스트와 기능의 작동을 보장하지 않아요.",

@@ -117,17 +117,17 @@
       [
         "04",
         "ほかのベースウェアと比べる",
-        "<div class=\"guide-table\"><table><thead><tr><th>観点</th><th>SSP</th><th>ninix-kagari</th><th>Utatane</th></tr></thead><tbody><tr><th>主な環境</th><td>Windows</td><td>Linux、Windows</td><td>macOS 14以降</td></tr><tr><th>位置付け</th><td>現在の事実上の基準</td><td>ninix-ayaのフォーク。主要SHIORIを同時にビルド可能</td><td>macOS向け。主要機能を実装中で完全互換ではない</td></tr><tr><th>外部モジュール</th><td>Windows DLLを直接利用</td><td>Linuxでは対応SHIORIのビルドが必要。SAORIは主にninix-saori</td><td>内蔵のネイティブ実装を優先。一部は設定済みWine経由</td></tr><tr><th>導入・移行</th><td>Windows向け配布</td><td>LinuxではビルドまたはDebianパッケージ</td><td>Macアプリ。展開したSSPフォルダから取り込み可能</td></tr></tbody></table></div><p><a href=\"https://github.com/Tatakinov/ninix-kagari\">ninix-kagari</a>の対応範囲は環境によって異なります。Utataneについては<a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Compatibility.md\">確認済みゴーストと残っている機能</a>に、実際に確認した範囲を記録しています。</p>"
+        "<div class=\"guide-table\"><table><thead><tr><th>観点</th><th>SSP</th><th>ninix-kagari</th><th>Utatane</th></tr></thead><tbody><tr><th>主な環境</th><td>Windows</td><td>Linux、Windows</td><td>macOS 14以降</td></tr><tr><th>位置付け</th><td>現在の事実上の基準</td><td>ninix-ayaのフォーク。主要SHIORIを同時にビルド可能</td><td>macOS向け。主要機能を実装中で完全互換ではない</td></tr><tr><th>外部モジュール</th><td>Windows DLLを直接利用</td><td>Linuxでは対応SHIORIのビルドが必要。SAORIは主にninix-saori</td><td>対応するmacOS用SHIORI・SAORIを署名付きカタログから導入。一部は設定済みWine経由</td></tr><tr><th>導入・移行</th><td>Windows向け配布</td><td>LinuxではビルドまたはDebianパッケージ</td><td>Macアプリ。展開したSSPフォルダから取り込み可能</td></tr></tbody></table></div><p><a href=\"https://github.com/Tatakinov/ninix-kagari\">ninix-kagari</a>の対応範囲は環境によって異なります。Utataneについては<a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Compatibility.md\">確認済みゴーストと残っている機能</a>に、実際に確認した範囲を記録しています。</p>"
       ],
       [
         "05",
         "辞書をどう読んでいるか",
-        "<p>最初に<code>descript.txt</code>を読み、指定がなければ<code>alias.txt</code>や特徴的な辞書ファイルも手掛かりにSHIORIを選びます。テキストは宣言された文字コードを優先し、UTF-8、Shift_JIS、EUC-KR、EUC-JP、GB18030、Big5などの候補から復号します。ファイルの途中で文字コードが混ざった古いデータにも行単位の復号で対処します。</p><p>辞書は一種類の共通形式へ雑に変換しているわけではありません。里々、MISAKA、灯、ese-shiori、偽栞などに個別の字句・構文解析と評価器があり、条件分岐、変数、単語群、ジャンプなどを元の実行モデルに合わせて処理します。YAYAと華和梨は移植した本体をmacOS用の薄い接続層から呼び出します。</p>"
+        "<p>最初に<code>descript.txt</code>を読み、指定がなければ<code>alias.txt</code>や特徴的な辞書ファイルも手掛かりにSHIORIを選びます。テキストは宣言された文字コードを優先し、UTF-8、Shift_JIS、EUC-KR、EUC-JP、GB18030、Big5などの候補から復号します。ファイルの途中で文字コードが混ざった古いデータにも行単位の復号で対処します。</p><p>辞書は一種類の共通形式へ変換せず、対応するSHIORIごとのmacOS用モジュールで処理します。YAYAや華和梨などの移植版と、里々、MISAKA、灯、ese-shiori、偽栞などの対応版は、署名付きモジュールカタログから導入します。</p>"
       ],
       [
         "06",
         "Windows DLLなしで動かす境界",
-        "<p>画面、イベント配送、SakuraScript解析はSwift側に置き、SHIORIとは<code>PersonalityEngine</code>という共通境界で接続します。既知のSAORIはmacOS APIによる共通実装を優先し、未知のmacOS用モジュールは標準ABIで読み込みます。Windows DLLは直接ロードできないので、必要な場合だけWine上の補助ホストへSHIORI/SAORI電文を渡します。</p><p>配布物は読み取り元として扱い、変数や学習データはApplication Supportのゴースト別領域へ保存します。対応エンジンでも未実装命令、Windows固有API、外部DLL、全分岐の一致までは保証しません。詳しくは<a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Native-SHIORI.md\">Native SHIORI / SAORI</a>を見てください。</p>"
+        "<p>画面、イベント配送、SakuraScript解析はSwift側に置き、SHIORIとは<code>PersonalityEngine</code>という共通境界で接続します。対応するSHIORI・SAORIの共通導入版は署名付きカタログから取得し、ゴースト同梱版を優先します。未知のmacOS用モジュールは標準ABIで読み込みます。Windows DLLは直接ロードできないので、必要な場合だけWine上の補助ホストへSHIORI/SAORI電文を渡します。</p><p>配布物は読み取り元として扱い、変数や学習データはApplication Supportのゴースト別領域へ保存します。対応エンジンでも未実装命令、Windows固有API、外部DLL、全分岐の一致までは保証しません。詳しくは<a href=\"https://github.com/opera7133/Utatane/blob/main/Docs/Support/Native-SHIORI.md\">Native SHIORI / SAORI</a>を見てください。</p>"
       ]
     ],
     "trouble": "うまく動かないときは、ゴースト名、Utataneのバージョン、起きたことを添えてGitHub Issuesへ報告してください。互換性は開発中で、すべてのゴーストや機能の動作を保証するものではありません。",

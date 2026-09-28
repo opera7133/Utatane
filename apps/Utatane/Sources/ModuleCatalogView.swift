@@ -19,9 +19,7 @@ struct ModuleSetupOpening: ViewModifier {
 
     func body(content: Content) -> some View {
         content.task {
-            guard ModuleCatalogConfiguration.client != nil,
-                  !UserDefaults.standard.bool(forKey: ModuleCatalogConfiguration.setupCompletedKey)
-            else { return }
+            guard ModuleCatalogConfiguration.requiresInitialSetup else { return }
             openWindow(id: "module-setup")
         }
     }
@@ -39,12 +37,11 @@ struct ModuleSetupCompletionListener: View {
 }
 
 enum ModuleCatalogConfiguration {
-    static let setupCompletedKey = "moduleCatalog.initialSelectionCompleted"
     static let customIndexURLKey = "moduleCatalog.customIndexURL"
     static let customPublicKeyKey = "moduleCatalog.customPublicKey"
 
     static var requiresInitialSetup: Bool {
-        client != nil && !UserDefaults.standard.bool(forKey: setupCompletedKey)
+        !ModuleCatalogInventory().hasRequiredInitialModules
     }
 
     static var client: SignedModuleCatalogClient? {
@@ -81,10 +78,12 @@ struct ModuleCatalogView: View {
     @State private var catalog: SignedModuleCatalog?
     @State private var search = ""
     @State private var kind = "all"
+    @State private var stateFilter = "all"
     @State private var selectedIDs: Set<String> = ["yaya", "satori"]
     @State private var installingIDs: Set<String> = []
     @State private var isLoading = false
     @State private var errorMessage: String?
+    @State private var successMessage: String?
     @State private var detailModule: SignedModuleCatalog.Module?
     @AppStorage(ModuleCatalogConfiguration.customIndexURLKey) private var customIndexURL = ""
     @AppStorage(ModuleCatalogConfiguration.customPublicKeyKey) private var customPublicKey = ""
@@ -94,16 +93,46 @@ struct ModuleCatalogView: View {
             let kindMatches = mode == .settings
                 ? module.kinds.contains("shiori")
                 : mode == .initialSelection || kind == "all" || module.kinds.contains(kind)
-            return kindMatches && (search.isEmpty || module.displayName.localizedStandardContains(search)
-                || module.id.localizedStandardContains(search))
+            let state = ModuleCatalogInventory().state(for: module)
+            let stateMatches = mode != .catalog || stateFilter == "all"
+                || (stateFilter == "installed" && state == .current)
+                || (stateFilter == "available" && state == .notInstalled)
+                || (stateFilter == "updates" && state == .updateAvailable)
+            return kindMatches && stateMatches && (search.isEmpty || module.displayName.localizedStandardContains(search)
+                || module.id.localizedStandardContains(search)
+                || module.windowsFilenames.contains(where: { $0.localizedStandardContains(search) }))
+        }.sorted { lhs, rhs in
+            let inventory = ModuleCatalogInventory()
+            func rank(_ state: ModuleCatalogState) -> Int {
+                switch state {
+                case .updateAvailable: 0
+                case .notInstalled: 1
+                case .current: 2
+                case .unsupportedPlatform: 3
+                case .unavailable: 4
+                }
+            }
+            let left = rank(inventory.state(for: lhs))
+            let right = rank(inventory.state(for: rhs))
+            return left == right ? lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+                : left < right
         }
     }
 
     private var canInstallInitialSelection: Bool {
-        guard let catalog else { return false }
-        return ["yaya", "satori"].allSatisfy { id in
-            catalog.modules.contains { $0.id == id && $0.availability == "candidate" }
-        } && installingIDs.isEmpty
+        guard installingIDs.isEmpty else { return false }
+        let inventory = ModuleCatalogInventory()
+        guard let catalog else {
+            return inventory.hasRequiredInitialModules
+        }
+        return selectedIDs.allSatisfy { id in
+            guard let module = catalog.modules.first(where: { $0.id == id }) else {
+                return inventory.isInstalled(moduleID: id, kind: "shiori")
+            }
+            return inventory.state(for: module) == .current
+                || inventory.state(for: module) == .notInstalled
+                || inventory.state(for: module) == .updateAvailable
+        }
     }
 
     var body: some View {
@@ -127,6 +156,13 @@ struct ModuleCatalogView: View {
                         Text("SAORI").tag("saori")
                     }
                     .frame(width: 180)
+                    Picker("状態", selection: $stateFilter) {
+                        Text("すべて").tag("all")
+                        Text("未導入").tag("available")
+                        Text("更新あり").tag("updates")
+                        Text("導入済み").tag("installed")
+                    }
+                    .frame(width: 180)
                 }
             }
 
@@ -148,19 +184,41 @@ struct ModuleCatalogView: View {
                 }
             }
 
+            if mode == .catalog, let catalog {
+                let inventory = ModuleCatalogInventory()
+                let updates = catalog.modules.filter { inventory.state(for: $0) == .updateAvailable }.count
+                Text("\(modules.count)件を表示 · \(updates)件の更新あり")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
                     .foregroundStyle(.red)
+            }
+            if let successMessage {
+                Text(successMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if mode == .initialSelection, catalog == nil {
+                if let url = URL(string: "https://github.com/opera7133/utatane-modules") {
+                    Link("手動導入の手順", destination: url)
+                }
+                Text("手動導入後はUtataneを再起動して。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             HStack {
                 Button("再読み込み") { Task { await reload() } }
                     .disabled(isLoading || ModuleCatalogConfiguration.client == nil)
                 Spacer()
                 if mode == .initialSelection {
-                    Button("選択したモジュールを導入") { Task { await installInitialSelection() } }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(!canInstallInitialSelection)
+                    Button(catalog == nil ? "導入済みのモジュールで続ける" : "選択したモジュールを導入") {
+                        Task { await installInitialSelection() }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!canInstallInitialSelection)
                 }
             }
         }
@@ -194,62 +252,75 @@ struct ModuleCatalogView: View {
                     }
                 )) { EmptyView() }
                     .labelsHidden()
-                    .disabled(module.id == "yaya" || module.id == "satori" || module.availability != "candidate")
+                    .disabled(module.id == "yaya" || module.id == "satori")
             }
             VStack(alignment: .leading, spacing: 3) {
                 Button(module.displayName) { detailModule = module }
                     .buttonStyle(.plain)
                     .font(.headline)
-                Text(module.kinds.map { $0.uppercased() }.joined(separator: " / "))
+                Text(([module.kinds.map { $0.uppercased() }.joined(separator: " / "),
+                       module.windowsFilenames.first].compactMap(\.self)).joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary)
-                if let license = module.license {
-                    Text(license).font(.caption).foregroundStyle(.secondary)
+                if let artifact = ModuleCatalogInventory().artifact(for: module)?.value {
+                    Text("\(artifact.version) · macOS \(artifact.minimumOS)以降")
+                        .font(.caption2).foregroundStyle(.secondary)
                 }
             }
             Spacer()
+            Text(stateTitle(ModuleCatalogInventory().state(for: module)))
+                .font(.caption.weight(.medium))
+                .foregroundStyle(ModuleCatalogInventory().state(for: module) == .updateAvailable
+                    ? Color.orange : Color.secondary)
             Button { detailModule = module } label: {
                 Image(systemName: "info.circle")
             }
             .buttonStyle(.borderless)
             .help("詳細を表示")
             if mode != .initialSelection {
-                if module.availability == "candidate" {
-                    Button(installingIDs.contains(module.id) ? "導入中…" : installedLabel(module)) {
+                let state = ModuleCatalogInventory().state(for: module)
+                if state == .notInstalled || state == .updateAvailable {
+                    Button(installingIDs.contains(module.id) ? "導入中…" : installedLabel(state)) {
                         Task { await install(module.id) }
                     }
                     .disabled(installingIDs.contains(module.id))
-                } else {
-                    Text("手動導入").foregroundStyle(.secondary)
                 }
             }
         }
         .padding(.vertical, 5)
     }
 
-    private func installedLabel(_ module: SignedModuleCatalog.Module) -> String {
-        let directory = module.kinds.contains("shiori") ? "NativeShiori" : "NativeSaori"
-        let root = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appending(path: "Utatane/\(directory)/\(module.id)/module.json")
-        guard let data = try? Data(contentsOf: root),
-              let installed = try? JSONDecoder().decode(InstalledModuleVersion.self, from: data)
-        else { return "ダウンロード" }
-        if module.artifacts.contains(where: { $0.version == installed.version && $0.revision == installed.revision }) {
-            return "導入済み"
+    private func installedLabel(_ state: ModuleCatalogState) -> String {
+        switch state {
+        case .notInstalled: String(localized: "ダウンロード")
+        case .current: String(localized: "導入済み")
+        case .updateAvailable: String(localized: "更新")
+        case .unsupportedPlatform: String(localized: "このMacでは利用不可")
+        case .unavailable: String(localized: "手動導入")
         }
-        return "更新"
+    }
+
+    private func stateTitle(_ state: ModuleCatalogState) -> String {
+        switch state {
+        case .notInstalled: String(localized: "未導入")
+        case .current: String(localized: "導入済み")
+        case .updateAvailable: String(localized: "更新あり")
+        case .unsupportedPlatform: String(localized: "このMacでは利用不可")
+        case .unavailable: String(localized: "手動導入")
+        }
     }
 
     private func reload() async {
         guard let client = ModuleCatalogConfiguration.client else { return }
         isLoading = true
         catalog = nil
+        successMessage = nil
         defer { isLoading = false }
         do {
             catalog = try await client.fetch()
             selectInstalledGhostModules()
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            errorMessage = ModuleCatalogFailureMessage.describe(error)
         }
     }
 
@@ -281,16 +352,29 @@ struct ModuleCatalogView: View {
         do {
             _ = try await ModuleCatalogManager(client: client).install(moduleID: id)
             errorMessage = nil
+            successMessage = String(localized: "導入した。共通版を使用中のゴーストは再読み込みすると反映される。ゴースト同梱版は優先される。")
         } catch {
-            errorMessage = "\(id): \(error.localizedDescription)"
+            errorMessage = "\(id): \(ModuleCatalogFailureMessage.describe(error))"
         }
     }
 
     private func installInitialSelection() async {
-        guard canInstallInitialSelection, let client = ModuleCatalogConfiguration.client else { return }
+        guard canInstallInitialSelection else { return }
+        if catalog == nil {
+            finishInitialSelection()
+            return
+        }
+        guard let client = ModuleCatalogConfiguration.client else { return }
         let ids = ["yaya", "satori"] + selectedIDs.subtracting(["yaya", "satori"]).sorted()
         for id in ids {
-            if let module = catalog?.modules.first(where: { $0.id == id }), installedLabel(module) == "導入済み" {
+            if catalog?.modules.contains(where: { $0.id == id }) != true,
+               ModuleCatalogInventory().isInstalled(moduleID: id, kind: "shiori")
+            {
+                continue
+            }
+            if let module = catalog?.modules.first(where: { $0.id == id }),
+               ModuleCatalogInventory().state(for: module) == .current
+            {
                 continue
             }
             installingIDs.insert(id)
@@ -299,11 +383,14 @@ struct ModuleCatalogView: View {
                 installingIDs.remove(id)
             } catch {
                 installingIDs.remove(id)
-                errorMessage = "\(id): \(error.localizedDescription)"
+                errorMessage = "\(id): \(ModuleCatalogFailureMessage.describe(error))"
                 return
             }
         }
-        UserDefaults.standard.set(true, forKey: ModuleCatalogConfiguration.setupCompletedKey)
+        finishInitialSelection()
+    }
+
+    private func finishInitialSelection() {
         NotificationCenter.default.post(name: .moduleCatalogSetupCompleted, object: nil)
         dismissWindow(id: "module-setup")
     }
@@ -313,9 +400,33 @@ extension Notification.Name {
     static let moduleCatalogSetupCompleted = Notification.Name("Utatane.ModuleCatalogSetupCompleted")
 }
 
-private struct InstalledModuleVersion: Decodable {
-    let version: String
-    let revision: Int
+enum ModuleCatalogFailureMessage {
+    static func describe(_ error: Error) -> String {
+        if let catalogError = error as? ModuleCatalogError {
+            switch catalogError {
+            case .invalidSignature:
+                return String(localized: "カタログの署名が一致しない。配布元と公開鍵を確認してから再試行して。")
+            case .artifactMismatch:
+                return String(localized: "ダウンロードしたモジュールがカタログの検証値と一致しない。再試行して。")
+            case .missingArtifact:
+                return String(localized: "このモジュールの配布ファイルが見つからない。手動導入の手順を確認して。")
+            default:
+                return String(localized: "カタログを読み込めなかった。接続先を確認して再試行して。")
+            }
+        }
+        if let installError = error as? ModuleCatalogInstallError {
+            switch installError {
+            case .unsupportedPlatform:
+                return String(localized: "このMacに対応するモジュールがない。手動導入の手順を確認して。")
+            case .unavailable, .unsupportedKind:
+                return String(localized: "自動導入できるモジュールがない。手動導入の手順を確認して。")
+            }
+        }
+        if error is ModulePackageInstallError {
+            return String(localized: "モジュールの検証または導入に失敗した。導入済みの状態を確認して再試行して。")
+        }
+        return String(localized: "カタログまたはモジュールの取得に失敗した。ネットワークを確認して再試行して。")
+    }
 }
 
 struct ModuleCatalogSourceSettingsView: View {
@@ -380,7 +491,7 @@ private struct ModuleCatalogDetailView: View {
     @State private var documentError: String?
 
     private var artifact: SignedModuleCatalog.Module.Artifact? {
-        module.artifacts.first(where: { Set($0.architectures) == ["arm64", "x86_64"] }) ?? module.artifacts.first
+        ModuleCatalogInventory().artifact(for: module)?.value
     }
 
     private var documentSourceURL: URL? {
@@ -403,9 +514,14 @@ private struct ModuleCatalogDetailView: View {
                 }
                 Spacer()
                 Button("閉じる") { dismiss() }
-                if module.availability == "candidate" {
-                    Button("ダウンロード") { onInstall() }
-                        .buttonStyle(.borderedProminent)
+                let state = ModuleCatalogInventory().state(for: module)
+                if [.notInstalled, .updateAvailable].contains(state) {
+                    Button(state == .updateAvailable ? String(localized: "更新") : String(localized: "ダウンロード")) {
+                        onInstall()
+                    }
+                    .buttonStyle(.borderedProminent)
+                } else if state == .unsupportedPlatform {
+                    Text("このMacでは利用不可").foregroundStyle(.secondary)
                 }
             }
             Picker("情報", selection: $selection) {
@@ -465,8 +581,8 @@ private struct ModuleCatalogDetailView: View {
     @ViewBuilder
     private func documentBody(_ value: String?, fallback: String, markdown: Bool) -> some View {
         if let value {
-            if markdown, let rendered = try? AttributedString(markdown: value) {
-                Text(rendered)
+            if markdown {
+                ModuleCatalogMarkdownView(source: value, baseURL: documentSourceURL?.deletingLastPathComponent())
             } else {
                 Text(value).font(.system(.body, design: .monospaced))
             }
@@ -521,5 +637,185 @@ private struct ModuleCatalogDetailView: View {
               components.allSatisfy({ $0.range(of: "^[A-Za-z0-9._-]+$", options: .regularExpression) != nil })
         else { return nil }
         return URL(string: "https://raw.githubusercontent.com/\(components[0])/\(components[1])/\(components.dropFirst(3).joined(separator: "/"))")
+    }
+}
+
+private struct ModuleCatalogMarkdownView: View {
+    let source: String
+    let baseURL: URL?
+
+    var body: some View {
+        let blocks = ModuleCatalogMarkdownBlock.parse(source)
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                blockView(block)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: ModuleCatalogMarkdownBlock) -> some View {
+        switch block {
+        case let .heading(level, title):
+            VStack(alignment: .leading, spacing: 6) {
+                inlineText(title)
+                    .font(level == 1 ? .title2.bold() : level == 2 ? .title3.bold() : .headline)
+                if level <= 2 {
+                    Divider()
+                }
+            }
+            .padding(.top, level == 1 ? 4 : 8)
+        case let .paragraph(text):
+            inlineText(text)
+                .lineSpacing(4)
+        case let .list(items):
+            VStack(alignment: .leading, spacing: 7) {
+                ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                    HStack(alignment: .firstTextBaseline, spacing: 9) {
+                        Text(item.marker)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.secondary)
+                            .frame(minWidth: 18, alignment: .trailing)
+                        inlineText(item.text)
+                            .lineSpacing(3)
+                    }
+                }
+            }
+            .padding(.leading, 6)
+        case let .code(language, code):
+            VStack(alignment: .leading, spacing: 6) {
+                if !language.isEmpty {
+                    Text(language)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+                ScrollView(.horizontal) {
+                    Text(code)
+                        .font(.system(.body, design: .monospaced))
+                        .fixedSize(horizontal: true, vertical: false)
+                        .padding(10)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(8)
+            .background(.quaternary.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+        case let .quote(text):
+            HStack(alignment: .top, spacing: 10) {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(.tint)
+                    .frame(width: 3)
+                inlineText(text)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.leading, 4)
+        case .rule:
+            Divider()
+        }
+    }
+
+    private func inlineText(_ source: String) -> Text {
+        let options = AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        return Text((try? AttributedString(markdown: source, options: options, baseURL: baseURL))
+            ?? AttributedString(source))
+    }
+}
+
+private enum ModuleCatalogMarkdownBlock {
+    struct ListItem {
+        let marker: String
+        let text: String
+    }
+
+    case heading(Int, String)
+    case paragraph(String)
+    case list([ListItem])
+    case code(String, String)
+    case quote(String)
+    case rule
+
+    static func parse(_ source: String) -> [Self] {
+        let lines = source.replacingOccurrences(of: "\r\n", with: "\n")
+            .split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        var blocks: [Self] = []
+        var index = 0
+        while index < lines.count {
+            let line = lines[index].trimmingCharacters(in: .whitespaces)
+            if line.isEmpty {
+                index += 1
+                continue
+            }
+            if line.hasPrefix("```") || line.hasPrefix("~~~") {
+                let fence = String(line.prefix(3))
+                let language = String(line.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+                index += 1
+                var code: [String] = []
+                while index < lines.count, !lines[index].trimmingCharacters(in: .whitespaces).hasPrefix(fence) {
+                    code.append(lines[index])
+                    index += 1
+                }
+                blocks.append(.code(language, code.joined(separator: "\n")))
+                index += 1
+                continue
+            }
+            let level = line.prefix(while: { $0 == "#" }).count
+            if (1 ... 6).contains(level), line.dropFirst(level).hasPrefix(" ") {
+                blocks.append(.heading(level, String(line.dropFirst(level + 1))))
+                index += 1
+                continue
+            }
+            if line.count >= 3, Set(line).count == 1, line.first == "-" || line.first == "*" {
+                blocks.append(.rule)
+                index += 1
+                continue
+            }
+            if line.hasPrefix(">") {
+                var quote: [String] = []
+                while index < lines.count {
+                    let current = lines[index].trimmingCharacters(in: .whitespaces)
+                    guard current.hasPrefix(">") else { break }
+                    quote.append(String(current.dropFirst()).trimmingCharacters(in: .whitespaces))
+                    index += 1
+                }
+                blocks.append(.quote(quote.joined(separator: " ")))
+                continue
+            }
+            if listItem(line) != nil {
+                var items: [ListItem] = []
+                while index < lines.count,
+                      let item = listItem(lines[index].trimmingCharacters(in: .whitespaces))
+                {
+                    items.append(item)
+                    index += 1
+                }
+                blocks.append(.list(items))
+                continue
+            }
+            var paragraph = [line]
+            index += 1
+            while index < lines.count {
+                let next = lines[index].trimmingCharacters(in: .whitespaces)
+                guard !next.isEmpty, !next.hasPrefix("#"), !next.hasPrefix("```"), !next.hasPrefix("~~~"),
+                      !next.hasPrefix(">"), listItem(next) == nil
+                else { break }
+                paragraph.append(next)
+                index += 1
+            }
+            blocks.append(.paragraph(paragraph.joined(separator: " ")))
+        }
+        return blocks
+    }
+
+    private static func listItem(_ line: String) -> ListItem? {
+        for marker in ["- ", "* ", "+ "] where line.hasPrefix(marker) {
+            return ListItem(marker: "•", text: String(line.dropFirst(marker.count)))
+        }
+        guard let separator = line.firstIndex(where: { $0 == "." || $0 == ")" }),
+              line[..<separator].allSatisfy(\.isNumber),
+              !line[..<separator].isEmpty,
+              line[line.index(after: separator)...].hasPrefix(" ")
+        else { return nil }
+        return ListItem(marker: String(line[...separator]),
+                        text: String(line[line.index(separator, offsetBy: 2)...]))
     }
 }

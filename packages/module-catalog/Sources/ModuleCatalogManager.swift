@@ -47,12 +47,10 @@ public struct ModuleCatalogManager: Sendable {
         } else {
             throw ModuleCatalogInstallError.unsupportedKind
         }
-        let candidates = module.artifacts.enumerated().filter { _, artifact in
-            artifact.architectures.contains(architecture) && supported(artifact.minimumOS)
-        }
-        guard let selected = candidates.max(by: { lhs, rhs in
-            versionKey(lhs.element).lexicographicallyPrecedes(versionKey(rhs.element))
-        }) else { throw ModuleCatalogInstallError.unsupportedPlatform }
+        let inventory = ModuleCatalogInventory(
+            applicationSupportURL: applicationSupportURL, architecture: architecture, macOSVersion: macOSVersion
+        )
+        guard let selected = inventory.artifact(for: module) else { throw ModuleCatalogInstallError.unsupportedPlatform }
 
         let manager = FileManager.default
         let temporary = manager.temporaryDirectory.appending(path: "utatane-module-\(UUID().uuidString)")
@@ -61,7 +59,7 @@ public struct ModuleCatalogManager: Sendable {
         let archive = temporary.appending(path: "module.zip")
         try await client.downloadArtifact(
             moduleID: moduleID,
-            artifactIndex: selected.offset,
+            artifactIndex: selected.index,
             catalog: catalog,
             to: archive,
             session: session
@@ -70,19 +68,8 @@ public struct ModuleCatalogManager: Sendable {
         return try ModulePackageInstaller().install(
             archiveURL: archive,
             module: module,
-            artifact: selected.element,
+            artifact: selected.value,
             managedRootURL: root
         )
-    }
-
-    private func supported(_ minimum: String) -> Bool {
-        let parts = minimum.split(separator: ".")
-        guard parts.count == 2, let major = Int(parts[0]), let minor = Int(parts[1]) else { return false }
-        return (macOSVersion.majorVersion, macOSVersion.minorVersion) >= (major, minor)
-    }
-
-    private func versionKey(_ artifact: SignedModuleCatalog.Module.Artifact) -> [Int] {
-        let parts = artifact.version.split(separator: ".").map { Int($0) ?? 0 }
-        return parts + Array(repeating: 0, count: max(0, 3 - parts.count)) + [artifact.revision]
     }
 }

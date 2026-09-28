@@ -13,61 +13,89 @@ public struct GhostModuleRequirement: Sendable, Identifiable {
 public struct GhostModuleRequirements: Sendable {
     public init() {}
 
-    public func missing(
-        for ghost: InstalledGhost,
-        in catalog: SignedModuleCatalog,
-        applicationSupportURL: URL
+    /// Finds DLLs that still need a native module or an explicitly configured Windows host.
+    /// This works without a network catalog, so a failed fetch cannot silently start a new ghost.
+    public func unresolved(
+        for ghost: InstalledGhost, applicationSupportURL: URL, catalog: SignedModuleCatalog? = nil
     ) -> [GhostModuleRequirement] {
         let master = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
-        var result: [GhostModuleRequirement] = []
         let declaredURL = safeDeclaredURL(ghost.effectiveShioriFilename, in: master)
-        if let module = shioriModule(for: ghost, master: master, catalog: catalog),
-           !hasMacOSOverride(ghost, master: master),
-           !(declaredURL.map { localLibraryExists(beside: $0, moduleID: module.id) } ?? false),
-           !managedLibraryExists(moduleID: module.id, kind: "shiori", root: applicationSupportURL)
+        let descriptor = ShioriCatalog.identify(
+            masterDirectory: master,
+            declaredModuleFilename: ghost.shioriFilename,
+            macOSModuleFilename: ghost.shioriMacOSFilename
+        )
+        var result: [GhostModuleRequirement] = []
+        if !hasMacOSOverride(ghost, master: master), descriptor?.provisioning != .included,
+           descriptor?.execution != .externalProcess,
+           let declaredURL, declaredURL.pathExtension.lowercased() == "dll"
         {
-            result.append(GhostModuleRequirement(
-                id: module.id, displayName: module.displayName, kind: "SHIORI",
-                sourceDLLURL: declaredURL.flatMap {
-                    FileManager.default.fileExists(atPath: $0.path) ? $0 : nil
-                }
-            ))
+            let catalogModule = catalog?.modules.first(where: { module in
+                module.kinds.contains("shiori")
+                    && (windowsFilenames(for: module).contains(declaredURL.lastPathComponent.lowercased())
+                        || module.id == descriptor?.id.rawValue)
+            })
+            let id = catalogModule?.id ?? (descriptor?.id.rawValue == "misaka" ? "misaka-native"
+                : (descriptor?.id.rawValue ?? declaredURL.deletingPathExtension().lastPathComponent.lowercased()))
+            if !localLibraryExists(beside: declaredURL, moduleID: id),
+               !managedLibraryExists(moduleID: id, kind: "shiori", root: applicationSupportURL)
+            {
+                result.append(GhostModuleRequirement(
+                    id: id, displayName: catalogModule?.displayName ?? descriptor?.displayName ?? declaredURL.lastPathComponent,
+                    kind: "SHIORI", sourceDLLURL: FileManager.default.fileExists(atPath: declaredURL.path) ? declaredURL : nil
+                ))
+            }
         }
 
         guard let enumerator = FileManager.default.enumerator(
             at: master, includingPropertiesForKeys: [.isRegularFileKey],
             options: [.skipsHiddenFiles, .skipsPackageDescendants]
         ) else { return result }
-        var seen = Set(result.map(\.id))
+        var seen = Set<String>()
         for case let dll as URL in enumerator where dll.pathExtension.lowercased() == "dll" {
-            guard (try? dll.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
-                  let module = catalog.modules.first(where: {
-                      $0.availability == "candidate" && $0.kinds.contains("saori")
-                          && windowsFilenames(for: $0).contains(dll.lastPathComponent.lowercased())
-                  }), seen.insert(module.id).inserted,
-                  !localLibraryExists(beside: dll, moduleID: module.id),
-                  !managedLibraryExists(moduleID: module.id, kind: "saori", root: applicationSupportURL)
+            let stem = dll.deletingPathExtension().lastPathComponent.lowercased()
+            let catalogModule = catalog?.modules.first(where: { module in
+                module.kinds.contains("saori") && windowsFilenames(for: module).contains(dll.lastPathComponent.lowercased())
+            })
+            let moduleID = catalogModule?.id ?? (stem == "saori_cpuid" ? "saori-cpuid" : stem)
+            let knownSAORI = ["saori_cpuid", "kenonoke", "textcopy2", "mciaudior", "wmove"].contains(stem)
+            guard dll.standardizedFileURL != declaredURL?.standardizedFileURL,
+                  (try? dll.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
+                  knownSAORI || catalogModule != nil,
+                  seen.insert(dll.lastPathComponent.lowercased()).inserted,
+                  !localLibraryExists(beside: dll, moduleID: moduleID),
+                  !managedLibraryExists(moduleID: moduleID, kind: "saori", root: applicationSupportURL)
             else { continue }
             result.append(GhostModuleRequirement(
-                id: module.id, displayName: module.displayName, kind: "SAORI", sourceDLLURL: dll
+                id: moduleID,
+                displayName: dll.lastPathComponent, kind: "SAORI", sourceDLLURL: dll
             ))
         }
         return result
     }
 
-    private func shioriModule(
-        for ghost: InstalledGhost, master: URL, catalog: SignedModuleCatalog
-    ) -> SignedModuleCatalog.Module? {
-        let declared = URL(filePath: ghost.effectiveShioriFilename).lastPathComponent.lowercased()
-        let detected = ShioriCatalog.identify(
-            masterDirectory: master,
-            declaredModuleFilename: ghost.shioriFilename,
-            macOSModuleFilename: ghost.shioriMacOSFilename
-        )?.id.rawValue
-        let detectedModuleID = detected == "misaka" ? "misaka-native" : detected
-        return catalog.modules.first {
-            $0.availability == "candidate" && $0.kinds.contains("shiori")
-                && (windowsFilenames(for: $0).contains(declared) || $0.id == detectedModuleID)
+    public func missing(
+        for ghost: InstalledGhost,
+        in catalog: SignedModuleCatalog,
+        applicationSupportURL: URL
+    ) -> [GhostModuleRequirement] {
+        let inventory = ModuleCatalogInventory(applicationSupportURL: applicationSupportURL)
+        var seen = Set<String>()
+        return unresolved(for: ghost, applicationSupportURL: applicationSupportURL, catalog: catalog).compactMap { requirement in
+            guard let module = catalog.modules.first(where: { module in
+                module.availability == "candidate" && module.kinds.contains(requirement.kind.lowercased())
+                    && (module.id == requirement.id || requirement.sourceDLLURL.map { dll in
+                        windowsFilenames(for: module).contains(dll.lastPathComponent.lowercased())
+                    } == true)
+            }), seen.insert(module.id).inserted,
+            inventory.artifact(for: module) != nil,
+            !inventory.isInstalled(moduleID: module.id, kind: requirement.kind.lowercased()),
+            requirement.sourceDLLURL.map({ !localLibraryExists(beside: $0, moduleID: module.id) }) ?? true
+            else { return nil }
+            return GhostModuleRequirement(
+                id: module.id, displayName: module.displayName, kind: requirement.kind,
+                sourceDLLURL: requirement.sourceDLLURL
+            )
         }
     }
 
@@ -94,14 +122,7 @@ public struct GhostModuleRequirements: Sendable {
     }
 
     private func managedLibraryExists(moduleID: String, kind: String, root: URL) -> Bool {
-        let directory = root.appending(path: kind == "shiori" ? "NativeShiori" : "NativeSaori")
-            .appending(path: moduleID)
-        guard FileManager.default.fileExists(atPath: directory.appending(path: "module.json").path),
-              let files = try? FileManager.default.contentsOfDirectory(
-                  at: directory.appending(path: "lib"), includingPropertiesForKeys: nil
-              )
-        else { return false }
-        return files.contains { $0.pathExtension.lowercased() == "dylib" }
+        ModuleCatalogInventory(applicationSupportURL: root).isInstalled(moduleID: moduleID, kind: kind)
     }
 
     private func windowsFilenames(for module: SignedModuleCatalog.Module) -> Set<String> {

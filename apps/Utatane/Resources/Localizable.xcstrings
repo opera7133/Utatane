@@ -4003,6 +4003,64 @@
         }
       }
     },
+    "このMacでは利用不可" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not Available for This Mac"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac에서 사용할 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不适用于此 Mac"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不適用於此 Mac"
+          }
+        }
+      }
+    },
+    "このMacに対応するモジュールがない。手動導入の手順を確認して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No module is available for this Mac. Check the manual installation instructions."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 Mac에 맞는 모듈이 없습니다. 수동 설치 안내를 확인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有适用于此 Mac 的模块。请查看手动安装说明。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有適用於此 Mac 的模組。請查看手動安裝說明。"
+          }
+        }
+      }
+    },
     "このReferenceを削除" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4090,6 +4148,35 @@
         }
       }
     },
+    "このゴーストに必要なモジュールがありません" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modules Required by This Ghost Are Missing"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 고스트에 필요한 모듈이 없습니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少此幽灵所需的模块"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "缺少此幽靈所需的模組"
+          }
+        }
+      }
+    },
     "このゴーストのSHIORIにはまだ対応していない: %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -4173,6 +4260,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "此對話框適用於其他 Ghost"
+          }
+        }
+      }
+    },
+    "このモジュールの配布ファイルが見つからない。手動導入の手順を確認して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This module's package was not found. Check the manual installation instructions."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "이 모듈의 배포 파일을 찾을 수 없습니다. 수동 설치 안내를 확인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到此模块的发布文件。请查看手动安装说明。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找不到此模組的發佈檔案。請查看手動安裝說明。"
           }
         }
       }
@@ -4463,6 +4579,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "選擇要使用的 SHIORI"
+          }
+        }
+      }
+    },
+    "はじめに使うモジュール" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Initial Modules"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "처음 사용할 모듈"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择初始模块"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇初始模組"
           }
         }
       }
@@ -5192,6 +5337,64 @@
         }
       }
     },
+    "カタログの署名が一致しない。配布元と公開鍵を確認してから再試行して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The catalog signature does not match. Check the source and public key, then retry."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카탈로그 서명이 일치하지 않습니다. 배포처와 공개 키를 확인한 뒤 다시 시도하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目录签名不匹配。请检查发布来源和公钥后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目錄簽章不符。請檢查發佈來源和公開金鑰後重試。"
+          }
+        }
+      }
+    },
+    "カタログまたはモジュールの取得に失敗した。ネットワークを確認して再試行して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not download the catalog or module. Check the network and retry."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카탈로그 또는 모듈을 다운로드하지 못했습니다. 네트워크를 확인하고 다시 시도하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法下载目录或模块。请检查网络后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法下載目錄或模組。請檢查網路後重試。"
+          }
+        }
+      }
+    },
     "カタログを利用できない" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5246,6 +5449,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "正在載入目錄"
+          }
+        }
+      }
+    },
+    "カタログを読み込めなかった。接続先を確認して再試行して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could not load the catalog. Check the source and retry."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카탈로그를 불러올 수 없습니다. 연결 주소를 확인하고 다시 시도하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法加载目录。请检查来源后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法載入目錄。請檢查來源後重試。"
           }
         }
       }
@@ -6700,6 +6932,35 @@
         }
       }
     },
+    "ダウンロードしたモジュールがカタログの検証値と一致しない。再試行して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The downloaded module does not match the catalog checksum. Retry."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다운로드한 모듈이 카탈로그의 검증 값과 일치하지 않습니다. 다시 시도하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下载的模块与目录中的校验值不符。请重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "下載的模組與目錄中的校驗值不符。請重試。"
+          }
+        }
+      }
+    },
     "ダウンロードして起動" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7860,6 +8121,64 @@
         }
       }
     },
+    "モジュールの検証または導入に失敗した。導入済みの状態を確認して再試行して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Module verification or installation failed. Check the installed state and retry."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모듈 검증 또는 설치에 실패했습니다. 설치 상태를 확인하고 다시 시도하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模块验证或安装失败。请检查已安装状态后重试。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模組驗證或安裝失敗。請檢查已安裝狀態後重試。"
+          }
+        }
+      }
+    },
+    "モジュールを導入できなかった" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could Not Install Module"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모듈을 설치하지 못함"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法安装模块"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法安裝模組"
+          }
+        }
+      }
+    },
     "モジュールを導入できなかった: %@" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7947,6 +8266,64 @@
         }
       }
     },
+    "モジュールカタログを利用できない" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Module Catalog Unavailable"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모듈 카탈로그를 사용할 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模块目录不可用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模組目錄無法使用"
+          }
+        }
+      }
+    },
+    "モジュールカタログを取得できない" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Could Not Download Module Catalog"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모듈 카탈로그를 다운로드할 수 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法下载模块目录"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法下載模組目錄"
+          }
+        }
+      }
+    },
     "モジュールカタログを開く…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7972,6 +8349,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "開啟模組目錄…"
+          }
+        }
+      }
+    },
+    "モジュール未導入" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Module Missing"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모듈 미설치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模块未安装"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "模組未安裝"
           }
         }
       }
@@ -9745,6 +10151,35 @@
         }
       }
     },
+    "再試行" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Retry"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다시 시도"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重试"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重試"
+          }
+        }
+      }
+    },
     "再読み込み" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10992,6 +11427,35 @@
         }
       }
     },
+    "導入した。共通版を使用中のゴーストは再読み込みすると反映される。ゴースト同梱版は優先される。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installed. Reload ghosts using the shared module to apply it. A module bundled with a ghost takes priority."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치했습니다. 공용 모듈을 사용하는 고스트는 다시 불러오면 적용됩니다. 고스트에 포함된 모듈이 우선됩니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安装。重新加载使用共享模块的 Ghost 后生效。Ghost 附带的模块优先。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已安裝。重新載入使用共用模組的 Ghost 後生效。Ghost 隨附的模組優先。"
+          }
+        }
+      }
+    },
     "導入中…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11108,6 +11572,35 @@
         }
       }
     },
+    "導入方法を確認…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Review Installation Options…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치 방법 확인…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看安装选项…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看安裝選項…"
+          }
+        }
+      }
+    },
     "導入済み" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11133,6 +11626,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已安裝"
+          }
+        }
+      }
+    },
+    "導入済みのモジュールで続ける" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Continue with Installed Modules"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설치된 모듈로 계속"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用已安装模块继续"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用已安裝模組繼續"
           }
         }
       }
@@ -11456,6 +11978,35 @@
         }
       }
     },
+    "必要なモジュール" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Required Modules"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "필요한 모듈"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所需模块"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所需模組"
+          }
+        }
+      }
+    },
     "応答" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -11655,6 +12206,93 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "手動安裝"
+          }
+        }
+      }
+    },
+    "手動導入の手順" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manual Installation Instructions"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "수동 설치 안내"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手动安装说明"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手動安裝說明"
+          }
+        }
+      }
+    },
+    "手動導入の手順を確認して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check the manual installation instructions."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "수동 설치 안내를 확인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请查看手动安装说明。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請查看手動安裝說明。"
+          }
+        }
+      }
+    },
+    "手動導入後はUtataneを再起動して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restart Utatane after installing the modules manually."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모듈을 수동으로 설치한 뒤 Utatane를 다시 시작하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手动安装模块后请重启 Utatane。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "手動安裝模組後請重新啟動 Utatane。"
           }
         }
       }
@@ -12036,6 +12674,35 @@
         }
       }
     },
+    "既存ゴーストは変更せず、使っているSHIORI・SAORIを選んである。不要なものは外せる。導入済みの最新版は再ダウンロードしない。YAYAと里々は必須。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modules used by existing ghosts are preselected without changing those ghosts. Optional modules can be deselected. Current modules are not downloaded again. YAYA and Satori are required."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "기존 고스트를 변경하지 않고 사용 중인 SHIORI와 SAORI를 미리 선택했습니다. 선택 항목은 해제할 수 있고 최신 모듈은 다시 다운로드하지 않습니다. YAYA와 사토리는 필수입니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已预选现有 Ghost 使用的 SHIORI 和 SAORI，且不会修改 Ghost。可取消非必选项，已安装的最新版不会重复下载。YAYA 和里里为必选。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已預選現有 Ghost 使用的 SHIORI 和 SAORI，且不會修改 Ghost。可取消非必選項，已安裝的最新版不會重複下載。YAYA 和里里為必選。"
+          }
+        }
+      }
+    },
     "既定のバルーン" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12239,6 +12906,35 @@
         }
       }
     },
+    "更新あり" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Update Available"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "업데이트 있음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有可用更新"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有可用更新"
+          }
+        }
+      }
+    },
     "更新を実行" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -12409,6 +13105,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "不支援"
+          }
+        }
+      }
+    },
+    "未導入" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not Installed"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "미설치"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未安装"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "未安裝"
           }
         }
       }
@@ -13105,6 +13830,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "灰色"
+          }
+        }
+      }
+    },
+    "状態" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "상태"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "状态"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "狀態"
           }
         }
       }
@@ -14182,6 +14936,64 @@
         }
       }
     },
+    "自動導入できるモジュールがない" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No Module Available for Automatic Installation"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동 설치 가능한 모듈이 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可自动安装的模块"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有可自動安裝的模組"
+          }
+        }
+      }
+    },
+    "自動導入できるモジュールがない。手動導入の手順を確認して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No module is available for automatic installation. Check the manual installation instructions."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동으로 설치할 수 있는 모듈이 없습니다. 수동 설치 안내를 확인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有可自动安装的模块。请查看手动安装说明。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "沒有可自動安裝的模組。請查看手動安裝說明。"
+          }
+        }
+      }
+    },
     "自動巡回する" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -14816,6 +15628,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "設定…"
+          }
+        }
+      }
+    },
+    "設定の接続先を確認するか、手動導入の手順を確認して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check the catalog source in Settings or the manual installation instructions."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정의 연결 주소나 수동 설치 안내를 확인하세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请检查设置中的目录来源或手动安装说明。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請檢查設定中的目錄來源或手動安裝說明。"
           }
         }
       }
@@ -15541,6 +16382,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "沒有正在執行的 Ghost。"
+          }
+        }
+      }
+    },
+    "起動前に導入するか、利用できる場合はWineで起動できる。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install the module before starting, or use Wine when available."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시작 전에 모듈을 설치하거나 가능한 경우 Wine으로 시작할 수 있습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请在启动前安装模块，或在可用时使用 Wine 启动。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請在啟動前安裝模組，或在可用時使用 Wine 啟動。"
           }
         }
       }

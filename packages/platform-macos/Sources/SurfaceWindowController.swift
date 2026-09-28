@@ -1151,6 +1151,10 @@ private final class CharacterSurfaceController {
         let definition = shell.surfaces[surfaceID]
         let base: SurfaceImageCanvas = if let elements = definition?.elements, !elements.isEmpty {
             try renderCanvas(elements: elements, shell: shell, expands: true)
+        } else if let definition, !definition.animations.isEmpty,
+                  (try? shellLoader.loadSurface(id: surfaceID, from: shell.directory)) == nil
+        {
+            SurfaceImageCanvas(image: NSImage(size: NSSize(width: 1, height: 1)))
         } else {
             try SurfaceImageCanvas(image: imageLoader.load(
                 shellLoader.loadSurface(id: surfaceID, from: shell.directory),
@@ -2419,9 +2423,14 @@ private final class CharacterSurfaceController {
     ) throws -> (image: NSImage, view: SurfaceImageView) {
         let definition = shell.surfaces[surfaceID]
         let image: NSImage
+        let isAnimationOnly = definition?.elements.isEmpty == true
+            && definition?.animations.isEmpty == false
+            && (try? shellLoader.loadSurface(id: surfaceID, from: shell.directory)) == nil
         do {
             if let elements = definition?.elements, !elements.isEmpty {
                 image = try render(elements: elements, shell: shell)
+            } else if isAnimationOnly {
+                image = NSImage(size: NSSize(width: 1, height: 1))
             } else {
                 let surface = try shellLoader.loadSurface(id: surfaceID, from: shell.directory)
                 image = try imageLoader.load(
@@ -2437,12 +2446,17 @@ private final class CharacterSurfaceController {
             else { throw error }
             image = try render(elements: elements, shell: shell)
         }
-        let boundImage = try applyInitialAnimations(
-            to: image,
-            definition: definition,
-            shell: shell,
-            excludedAnimationIDs: excludedAnimationIDs
-        )
+        let boundImage = if isAnimationOnly {
+            try applyInitialAnimationCanvas(
+                to: SurfaceImageCanvas(image: image), definition: definition, shell: shell,
+                excludedAnimationIDs: excludedAnimationIDs, expands: true
+            ).croppedFromZero(loader: imageLoader)
+        } else {
+            try applyInitialAnimations(
+                to: image, definition: definition, shell: shell,
+                excludedAnimationIDs: excludedAnimationIDs
+            )
+        }
         return (boundImage, makeSurfaceImageView(image: boundImage, surfaceID: surfaceID, shell: shell))
     }
 
@@ -2740,19 +2754,25 @@ private final class CharacterSurfaceController {
                 ignoresTransparency: ignoresTransparency
             ))
         } else {
-            guard let definition = shell.surfaces[surfaceID], !definition.elements.isEmpty else {
+            guard let definition = shell.surfaces[surfaceID],
+                  !definition.elements.isEmpty || !definition.animations.isEmpty
+            else {
                 throw ShellError.missingSurface(id: surfaceID, directory: shell.directory)
             }
-            let base = try renderCanvas(elements: definition.elements, shell: shell, expands: expands)
+            let base = try definition.elements.isEmpty
+                ? SurfaceImageCanvas(image: NSImage(size: NSSize(width: 1, height: 1)))
+                : renderCanvas(elements: definition.elements, shell: shell, expands: expands)
             let rendered = try applyInitialAnimationCanvas(
                 to: base,
                 definition: definition,
                 shell: shell,
-                visited: visited.union([surfaceID]), expands: expands
+                visited: visited.union([surfaceID]), expands: expands || definition.elements.isEmpty
             )
+            let cropped = definition.elements.isEmpty
+                ? SurfaceImageCanvas(image: rendered.croppedFromZero(loader: imageLoader)) : rendered
             result = try ignoresTransparency
-                ? SurfaceImageCanvas(image: imageLoader.applyingOpaqueAlpha(to: rendered.image), origin: rendered.origin)
-                : rendered
+                ? SurfaceImageCanvas(image: imageLoader.applyingOpaqueAlpha(to: cropped.image), origin: cropped.origin)
+                : cropped
         }
         if !expands, !animationClock.isSuspended {
             renderedLayerCache[surfaceID, ignoresTransparency] = result.image

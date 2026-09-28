@@ -5,6 +5,33 @@ import UtataneCore
 import UtataneShell
 
 @Test @MainActor
+func `renders a surface made only of bound animation parts`() throws {
+    let (defaults, positions) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try makePNG(width: 12, height: 12, color: .red).write(to: directory.appending(path: "part.png"))
+    let definitions = SurfacesParser().parse("""
+    surface1000
+    {
+    animation1100.interval,bind
+    animation1100.pattern0,overlay,1100,0,0,0
+    }
+    surface1100
+    {
+    element0,overlay,part.png,0,0
+    }
+    """)
+    let shell = ShellDefinition(directory: directory, surfaces: definitions,
+                                defaultBindGroups: [0: [1100]])
+    let controller = SurfaceWindowController(positionStore: positions)
+    defer { controller.resetContent() }
+    try controller.show(shell: shell, surfaceID: 1000)
+    #expect(controller.renderedImage()?.size == NSSize(width: 12, height: 12))
+}
+
+@Test @MainActor
 func `dump preserves negative nested layers and crops only when requested`() throws {
     let (defaults, positions) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
