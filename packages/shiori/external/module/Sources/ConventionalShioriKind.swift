@@ -2,6 +2,7 @@ import Foundation
 
 public enum ConventionalShioriKind: String, Sendable {
     case yaya
+    case yaya6 = "yaya-6"
     case satori
     case misaka
     case minato
@@ -21,6 +22,7 @@ public enum ConventionalShioriKind: String, Sendable {
     public init?(libraryFilename: String) {
         switch libraryFilename.lowercased() {
         case "libyaya.dylib": self = .yaya
+        case "libyaya-6.dylib": self = .yaya6
         case "libsatori.dylib": self = .satori
         case "libmisaka.dylib": self = .misaka
         case "libminato.dylib": self = .minato
@@ -40,6 +42,7 @@ public enum ConventionalShioriKind: String, Sendable {
         let filename = shioriFilename?.replacingOccurrences(of: "\\", with: "/").split(separator: "/").last?.lowercased()
         switch filename {
         case "yaya.dll", "aya.dll", "aya5.dll", "libyaya.dylib": self = .yaya
+        case "libyaya-6.dylib": self = .yaya6
         case "satori.dll", "libsatori.dylib": self = .satori
         case "misaka.dll", "libmisaka.dylib": self = .misaka
         case "minato.dll", "libminato.dylib": self = .minato

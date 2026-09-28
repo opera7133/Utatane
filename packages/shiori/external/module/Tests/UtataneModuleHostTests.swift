@@ -68,6 +68,23 @@ struct UtataneModuleResolverTests {
         #expect(try resolver.fallbackURL(for: .niseshiori, selected: bundled, masterDirectoryURL: master) == managed)
     }
 
+    @Test func `YAYA 6 resolves independently of YAYA 5`() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let master = root.appending(path: "ghost/master")
+        let support = root.appending(path: "support")
+        let resolver = UtataneModuleResolver(applicationSupportURL: support, bundledResourcesURL: nil, environment: [:])
+        let five = master.appending(path: "libyaya.dylib")
+        let six = support.appending(path: "yaya-6/lib/libyaya-6.dylib")
+        try FileManager.default.createDirectory(at: five.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: five)
+        #expect(try resolver.moduleURL(for: .yaya6, masterDirectoryURL: master) == nil)
+        try FileManager.default.createDirectory(at: six.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: six)
+        #expect(try resolver.moduleURL(for: .yaya6, masterDirectoryURL: master) == six)
+        #expect(ConventionalShioriKind(libraryFilename: six.lastPathComponent) == .yaya6)
+    }
+
     @Test func `ese shiori library resolves from ghost then managed installation`() {
         #expect(ConventionalShioriKind(shioriFilename: "ESE-SHIORI.DLL") == .eseShiori)
         #expect(ConventionalShioriKind(libraryFilename: "libese-shiori.dylib") == .eseShiori)

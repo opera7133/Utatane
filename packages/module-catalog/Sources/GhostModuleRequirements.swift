@@ -30,12 +30,18 @@ public struct GhostModuleRequirements: Sendable {
            descriptor?.execution != .externalProcess,
            let declaredURL, declaredURL.pathExtension.lowercased() == "dll"
         {
+            let yayaID: String? = if descriptor?.id.rawValue == "yaya" {
+                YayaDLLVersionDetector.detect(at: declaredURL) == .six ? "yaya-6" : "yaya"
+            } else {
+                nil
+            }
             let catalogModule = catalog?.modules.first(where: { module in
                 module.kinds.contains("shiori")
-                    && (windowsFilenames(for: module).contains(declaredURL.lastPathComponent.lowercased())
-                        || module.id == descriptor?.id.rawValue)
+                    && (yayaID.map { module.id == $0 }
+                        ?? (windowsFilenames(for: module).contains(declaredURL.lastPathComponent.lowercased())
+                            || module.id == descriptor?.id.rawValue))
             })
-            let id = catalogModule?.id ?? (descriptor?.id.rawValue == "misaka" ? "misaka-native"
+            let id = yayaID ?? catalogModule?.id ?? (descriptor?.id.rawValue == "misaka" ? "misaka-native"
                 : (descriptor?.id.rawValue ?? declaredURL.deletingPathExtension().lastPathComponent.lowercased()))
             if !localLibraryExists(beside: declaredURL, moduleID: id),
                !managedLibraryExists(moduleID: id, kind: "shiori", root: applicationSupportURL)
@@ -84,9 +90,11 @@ public struct GhostModuleRequirements: Sendable {
         return unresolved(for: ghost, applicationSupportURL: applicationSupportURL, catalog: catalog).compactMap { requirement in
             guard let module = catalog.modules.first(where: { module in
                 module.availability == "candidate" && module.kinds.contains(requirement.kind.lowercased())
-                    && (module.id == requirement.id || requirement.sourceDLLURL.map { dll in
-                        windowsFilenames(for: module).contains(dll.lastPathComponent.lowercased())
-                    } == true)
+                    && (requirement.kind == "SHIORI" && ["yaya", "yaya-6"].contains(requirement.id)
+                        ? module.id == requirement.id
+                        : (module.id == requirement.id || requirement.sourceDLLURL.map { dll in
+                            windowsFilenames(for: module).contains(dll.lastPathComponent.lowercased())
+                        } == true))
             }), seen.insert(module.id).inserted,
             inventory.artifact(for: module) != nil,
             !inventory.isInstalled(moduleID: module.id, kind: requirement.kind.lowercased()),
@@ -117,7 +125,8 @@ public struct GhostModuleRequirements: Sendable {
     private func localLibraryExists(beside declared: URL, moduleID: String) -> Bool {
         let stem = declared.deletingPathExtension().lastPathComponent
         let directory = declared.deletingLastPathComponent()
-        let names = ["\(stem).dylib", "lib\(stem).dylib", "lib\(moduleID).dylib"]
+        let names = moduleID == "yaya-6" ? ["libyaya-6.dylib"]
+            : ["\(stem).dylib", "lib\(stem).dylib", "lib\(moduleID).dylib"]
         return names.contains { FileManager.default.fileExists(atPath: directory.appending(path: $0).path) }
     }
 
