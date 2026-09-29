@@ -11,6 +11,7 @@ const walk = directory => readdirSync(directory).flatMap(name => {
   return statSync(file).isDirectory() ? walk(file) : [file];
 });
 const htmlFiles = walk(path.join(output, base)).filter(file => file.endsWith('.html'));
+const modulesPath = new URL(siteURL('modules/')).pathname;
 const ids = html => new Set([...html.matchAll(/\bid="([^"]+)"/g)].map(match => match[1]));
 let checked = 0;
 for (const file of htmlFiles) {
@@ -21,6 +22,8 @@ for (const file of htmlFiles) {
     if (/^(?:mailto:|data:|javascript:|tel:)/.test(raw)) continue;
     const url = new URL(raw.replaceAll('&amp;', '&'), pageURL);
     if (url.origin !== origin) continue;
+    // The module catalog is published separately under the same domain.
+    if (url.pathname.startsWith(modulesPath)) continue;
     // The download-center root is deployed separately from this product site.
     if (base && !url.pathname.startsWith(`/${base}/`)) continue;
     // Starlight's default 404 metadata uses /404/ while the host serves 404.html.
@@ -76,6 +79,9 @@ for (const code of localeCodes) {
       for (const [, heading] of guideCopy.sections) assert.ok(html.includes(escapeText(heading)), `${code}: missing guide section ${heading}`);
       for (const id of ['tab-beginner', 'tab-veteran', 'panel-beginner', 'panel-veteran']) assert.ok(ids(html).has(id), `${code}: missing guide tab ${id}`);
     } else {
+      for (const target of ['https://utatane-validate.wmsci.com/', siteURL('modules/')]) {
+        assert.ok(html.includes(`href="${target}"`), `${code}: missing related-site link ${target}`);
+      }
       // Translations are rendered into HTML even when JavaScript is unavailable.
       for (const [key, text] of Object.entries(copy)) {
         if (['experience', 'guide', 'docs', 'download'].includes(key) || key.includes('ria-the-bundled-ghost')) continue;

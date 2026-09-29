@@ -4,6 +4,8 @@ Utataneを使う人、ゴーストや拡張を作る人、Utatane本体を開発
 
 Web版の公開先は [Utataneドキュメント](https://dl.wmsci.com/utatane/docs/) です。アプリの「Utataneヘルプ」では、同じ原稿から生成した利用者向けの説明をオフラインで読めます。
 
+[公式サイト](https://dl.wmsci.com/utatane/) · [NAR検査](https://utatane-validate.wmsci.com/) · [SHIORI・SAORIカタログ](https://dl.wmsci.com/utatane/modules/)
+
 原稿は用途別のフォルダにまとめています。WebのURLやアプリへの同梱対象は、フォルダとは独立して `navigation.json` で管理します。
 
 | フォルダ | 読みたいこと |

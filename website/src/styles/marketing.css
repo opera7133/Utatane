@@ -69,6 +69,13 @@ h3{margin:0;font-size:20px;font-weight:500;line-height:1.6}
 dt{font-weight:500}dd{margin:0;color:var(--muted)}
 .status-row:last-child dt{color:var(--accent)}
 .compat-links{display:flex;flex-wrap:wrap;gap:14px 26px;margin:25px 0 0;font-size:12px}
+.project-tools{padding-bottom:54px}
+.project-tools .section-head{margin-bottom:22px}
+.tool-links{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+.tool-links a{display:flex;flex-direction:column;gap:7px;padding:20px 22px;border:1px solid var(--line);text-decoration:none}
+.tool-links a:hover{border-color:var(--accent)}
+.tool-links strong{font-size:17px;font-weight:500}
+.tool-links span{font-size:13px;color:var(--muted)}
 .install{margin-top:74px;background:var(--ink);color:#f8f8f3;padding:50px}
 .install .eyebrow{color:#c9cebd}
 .install .section-head{grid-template-columns:1.25fr 1fr;align-items:start}
@@ -142,6 +149,7 @@ code{font-size:.95em;overflow-wrap:anywhere}
 .install{margin-top:42px;padding:28px 24px}.install .section-head{grid-template-columns:1fr;gap:26px}.steps{grid-template-columns:1fr;gap:25px;margin-top:24px}.steps li{position:relative;padding-left:35px}.steps li::before{position:absolute;left:0;top:2px}.steps h3{margin-bottom:5px}
 .faq{grid-template-columns:1fr;gap:28px}.experiments{flex-direction:column;gap:12px}
 .footer-top{align-items:start;flex-direction:column;gap:15px}.footer-top nav{gap:16px}
+.tool-links{grid-template-columns:1fr}
 .guide-hero{padding:48px 0 36px}.guide-hero h1{font-size:48px}.guide-tabs{overflow-x:auto}.guide-tabs button{white-space:nowrap;padding:12px 16px}.guide-section{grid-template-columns:36px 1fr;gap:14px;padding:32px 0}.guide-section h2{font-size:23px}.guide-help{margin-top:38px;padding:22px}
 }
 @media(max-width:380px){.wrap{padding:0 18px}.topbar nav{gap:12px}.brand{font-size:14px}.languages{padding-left:10px;gap:7px}h1{font-size:72px}.factline{grid-template-columns:1fr}.factline strong{display:inline;margin-right:10px}.compatibility{padding:20px}}

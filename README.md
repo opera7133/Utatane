@@ -2,6 +2,8 @@
 
 Utataneは、伺かをmacOSで動かすための本体アプリです。
 
+[公式サイト](https://dl.wmsci.com/utatane/) · [NAR検査](https://utatane-validate.wmsci.com/) · [SHIORI・SAORIカタログ](https://dl.wmsci.com/utatane/modules/)
+
 ![Utatane スクリーンショット](Design/SampleScreenShot.png)
 
 まだ開発中です。既存ゴーストとの互換性を地道に増やしています。SSP全部入りではありません。

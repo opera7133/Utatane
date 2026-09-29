@@ -28,6 +28,7 @@ a { color: var(--primary-dark); }
 .navbar-content, .footer-content { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 24px; }
 .navbar a { font-size: 14px; text-decoration: none; }
 .navbar-brand { color: var(--text) !important; font-size: 16px !important; font-weight: 650; }
+.related-links { display: flex; flex-wrap: wrap; gap: 12px 20px; }
 
 main { padding-block: 48px 56px; }
 .intro { margin-bottom: 24px; }
@@ -100,7 +101,7 @@ h1 { margin: 0 0 8px; font-size: clamp(26px, 5vw, 34px); line-height: 1.25; }
 .api-docs pre { margin: 12px 0; padding: 16px; overflow-x: auto; color: #eeeaf5; background: #29262f; border-radius: 6px; font-size: 12px; line-height: 1.6; }
 
 .site-footer { background: var(--surface); border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
-.footer-content nav { display: flex; gap: 18px; }
+.footer-content nav { display: flex; flex-wrap: wrap; gap: 12px 18px; }
 .license-page h1 { font-size: 28px; }
 .license-page h2 { margin: 32px 0 10px; font-size: 18px; }
 .license-page pre { padding: 16px; overflow: auto; white-space: pre-wrap; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; font: 11px/1.55 ui-monospace, monospace; }
@@ -115,6 +116,7 @@ h1 { margin: 0 0 8px; font-size: clamp(26px, 5vw, 34px); line-height: 1.25; }
     .button-secondary { width: 100%; }
     .result-summary > div, .shiori-details { grid-template-columns: 90px 1fr; }
     .api-docs { margin-top: 40px; }
+    .navbar-content { align-items: flex-start; flex-direction: column; justify-content: center; gap: 8px; padding-block: 14px; }
     .footer-content { align-items: flex-start; flex-direction: column; justify-content: center; gap: 8px; padding-block: 16px; }
 }
 

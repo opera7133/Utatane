@@ -38,7 +38,10 @@ $maximumMegabytes = (int) floor($config->maximumUploadBytes / 1024 / 1024);
 <header class="navbar">
     <div class="container navbar-content">
         <a class="navbar-brand" href="/">Utatane NAR検査</a>
-        <a href="https://dl.wmsci.com/utatane/" rel="external">by Utatane</a>
+        <nav class="related-links" aria-label="関連サイト">
+            <a href="https://dl.wmsci.com/utatane/" rel="external">Utatane公式サイト</a>
+            <a href="https://dl.wmsci.com/utatane/modules/" rel="external">SHIORI・SAORIカタログ</a>
+        </nav>
     </div>
 </header>
 
@@ -138,6 +141,8 @@ $maximumMegabytes = (int) floor($config->maximumUploadBytes / 1024 / 1024);
     <div class="container footer-content">
         <span>wmsci.com</span>
         <nav aria-label="関連リンク">
+            <a href="https://dl.wmsci.com/utatane/" rel="external">Utatane公式サイト</a>
+            <a href="https://dl.wmsci.com/utatane/modules/" rel="external">SHIORI・SAORIカタログ</a>
             <a href="/licenses">ライセンス</a>
             <a href="https://github.com/opera7133/Utatane" rel="external">ソースコード</a>
         </nav>
