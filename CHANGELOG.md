@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.2.13] - 2026-10-04
+
+### ゴーストの導入
+
+- Windowsの一部のZIP作成ツールが追加するルート項目（`\`）を受け付けるようにし、該当するNAR・ZIPを導入できない問題を修正した。アーカイブの検証にも反映した
+
 ## [0.2.12] - 2026-09-28
 
 ### YAYA 6
@@ -765,6 +771,7 @@
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
 [Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.12...HEAD
+[0.2.13]: https://github.com/opera7133/Utatane/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/opera7133/Utatane/compare/v0.2.11...v0.2.12
 [0.2.11]: https://github.com/opera7133/Utatane/compare/v0.2.10...v0.2.11
 [0.2.10]: https://github.com/opera7133/Utatane/compare/v0.2.9...v0.2.10
