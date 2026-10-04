@@ -88,7 +88,9 @@ public struct ContentArchiveValidator: Sendable {
                 guard entry.type != .symlink else {
                     throw ArchiveValidationError.unsupported("シンボリックリンクは展開できません: \(entry.path)")
                 }
-                if entry.path.replacingOccurrences(of: "\\", with: "/") == "/" { continue }
+                if entry.path.replacingOccurrences(of: "\\", with: "/") == "/" {
+                    continue
+                }
                 let path = try normalizedPath(for: entry)
                 let key = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
                     .precomposedStringWithCanonicalMapping.lowercased()

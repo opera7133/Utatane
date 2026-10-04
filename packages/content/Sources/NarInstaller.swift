@@ -319,7 +319,9 @@ public struct NarInstaller: Sendable {
         var normalizedEntries = Set<String>()
         for entry in entries {
             let normalizedEntry = entry.replacingOccurrences(of: "\\", with: "/")
-            if normalizedEntry == "/" { continue }
+            if normalizedEntry == "/" {
+                continue
+            }
             guard !entry.isEmpty,
                   entry.utf8.count <= 1024,
                   !normalizedEntry.hasPrefix("/"),
