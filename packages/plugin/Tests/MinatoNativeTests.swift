@@ -27,12 +27,12 @@ struct MinatoNativeTests {
             }
             """#.write(to: directory.appending(path: "talks/main.mnt"), atomically: true, encoding: .utf8)
             directories.append(directory)
-            #expect(try resolver.moduleURL(for: .minato, masterDirectoryURL: directory) == module)
+            #expect(try resolver.moduleURL(for: .minato, masterDirectoryURL: directory)?.path == module.path)
         }
         let request = "GET SHIORI/3.0\r\nCharset: UTF-8\r\nID: OnBoot\r\n\r\n"
         let bundledB = directories[1].appending(path: "libminato.dylib")
         try FileManager.default.copyItem(at: module, to: bundledB)
-        #expect(try resolver.moduleURL(for: .minato, masterDirectoryURL: directories[1]) == bundledB)
+        #expect(try resolver.moduleURL(for: .minato, masterDirectoryURL: directories[1])?.path == bundledB.path)
         let a = try NativeShioriSession(directoryURL: directories[0], moduleURL: module, moduleResolver: resolver)
         let b = try NativeShioriSession(directoryURL: directories[1], moduleURL: bundledB, moduleResolver: resolver)
         #expect(try await ShioriMessageParser.parseResponse(a.requestAsync(request)).value?.contains("count=1") == true)
@@ -42,7 +42,7 @@ struct MinatoNativeTests {
         try await b.closeAsync()
         let bundled = directories[0].appending(path: "libminato.dylib")
         try Data("broken".utf8).write(to: bundled)
-        #expect(try resolver.moduleURL(for: .minato, masterDirectoryURL: directories[0]) == bundled)
+        #expect(try resolver.moduleURL(for: .minato, masterDirectoryURL: directories[0])?.path == bundled.path)
         let strict = UtataneModuleResolver(applicationSupportURL: support, bundledResourcesURL: nil, environment: [:], allowsFallback: false)
         #expect(throws: NativeShioriProcessError.self) {
             try NativeShioriSession(directoryURL: directories[0], moduleURL: bundled, moduleResolver: strict)

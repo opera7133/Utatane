@@ -87,5 +87,5 @@ import UtataneNetwork
       ]}
     ]}
     """.utf8))
-    #expect(inventory.state(for: try #require(matchingCatalog.modules.first)) == .current)
+    #expect(try inventory.state(for: #require(matchingCatalog.modules.first)) == .current)
 }
