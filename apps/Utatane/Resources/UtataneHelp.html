@@ -105,7 +105,7 @@ pre code { padding: 0; }
 </tr>
 </tbody></table>
 <p>ゴースト「りあ」とバルーン「Ria」は同梱しています。SHIORIモジュールの初回導入が終われば、ゴーストやバルーンを別に追加せず遊べます。</p>
-<p>初回起動時にSHIORIモジュールの導入画面が開いたら、YAYAと里々を導入してください。ゴーストやバルーンのファイルは変更しません。両方が既に導入済みなら、カタログに接続できない時もそのまま起動できます。未導入の場合はネット接続を確認して「再読み込み」を試すか、<a href="https://github.com/opera7133/utatane-modules">手動導入の手順</a>を確認してください。手動導入後はUtataneを再起動します。</p>
+<p>初回起動時にSHIORIモジュールの導入画面が開いたら、YAYA 6と里々を導入してください。ゴーストやバルーンのファイルは変更しません。両方が既に導入済みなら、カタログに接続できない時もそのまま起動できます。未導入の場合はネット接続を確認して「再読み込み」を試すか、<a href="https://github.com/opera7133/utatane-modules">手動導入の手順</a>を確認してください。手動導入後はUtataneを再起動します。</p>
 <p>別のゴーストも追加できます。ただし、Windows向けのすべての機能が動くわけではありません。</p>
 <h3 id="start-インストールする">インストールする</h3>
 <ol>
@@ -886,8 +886,9 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 <h3 id="support-engines-shioriの選択">SHIORIの選択</h3>
 <p>ゴーストの<code>shiori.macos</code>に指定されたモジュールを優先します。対応する同梱ライブラリの破損や必要な関数の欠落を検出すると、同じSHIORIの共通導入版へ切り替えます。設定の「SHIORI対応状況」でオフにできます。辞書・保存データのエラーでは切り替えません。各SHIORIの配布版は、ゴースト内、共通導入先の順に探します。<code>ese-shiori.dll</code>など、対応済みのDLL名が<code>shiori</code>にある場合、同じフォルダにdylibを置くだけでUtataneが検出します。</p>
 <p>Windows DLLだけを持つゴーストは、辞書や設定を判別し、対応するモジュールを導入済みなら接続します。設定の「SHIORI対応状況」で判定を確認できます。動かない場合は「情報」→「SHIORI読み込み診断…」と<a href="#support-troubleshooting-%E8%A8%BA%E6%96%AD%E3%81%A8%E5%A0%B1%E5%91%8A">診断・報告の手順</a>を使ってください。</p>
-<p>YAYA は 5 系と 6 系を別々に導入できます。ゴーストに <code>yaya.dll</code> がある場合は、その Windows バージョン情報の <code>FileVersion</code> を読み、6 系なら YAYA 6、5 系または判定不能なら YAYA 5 を選びます。<code>ProductVersion</code> は 6 系でも 5 と記録されるため、判定には使いません。ゴーストが <code>shiori.macos</code> で <code>libyaya-6.dylib</code> を指定している場合は、その明示指定を優先します。</p>
-<p>YAYA 6 でハッシュや入れ子の変数を保存した後に 5 系へ戻すと、その変数の保存内容が崩れることがあります。切り替える前にゴーストの保存データをバックアップしてください。</p>
+<p>YAYAは6系を既定で使います。<code>yaya.dll</code>・<code>aya.dll</code>・<code>aya5.dll</code>のバージョン情報に関係なく、YAYA 6を選びます。6系が未導入なら導入を案内し、5系へ自動では切り替えません。<code>shiori.macos</code>の明示指定は引き続き優先します。</p>
+<p>この版で初めてYAYA 6を読み込む前に、<code>ghost/master/</code>直下の<code>*_variable.cfg</code>を<code>Utatane-YAYA-backup/</code>へコピーします。既存のバックアップは上書きしません。ゴースト独自の保存ファイルは別途バックアップしてください。</p>
+<p>5系は互換用として導入できます。使う場合は5系の<code>libyaya.dylib</code>を<code>ghost/master/</code>へ置き、<code>descript.txt</code>に<code>shiori.macos,libyaya.dylib</code>を指定してください。6系でハッシュや入れ子の変数を保存した後に5系へ戻すと、保存内容が崩れることがあります。Utataneを終了して、切り替え前の<code>*_variable.cfg</code>をバックアップから戻してから5系を使ってください。復元するとバックアップ後の進行状況は失われます。</p>
 <p>同梱する側の配置・指定方法は<a href="https://dl.wmsci.com/utatane/docs/create/shiori/">SHIORI開発ガイド</a>、各配布物の導入手順は<a href="https://github.com/opera7133/utatane-modules">Utatane Modules</a>にあります。</p>
 <p>通常のmacOS用SHIORIは、ゴースト・プラグインごとに別プロセスで実行します。応答停止や異常終了を検出した場合、実行済みの処理を重複させないため、自動で要求を再送しません。</p>
 <h3 id="support-engines-共通saoriブリッジ">共通SAORIブリッジ</h3>

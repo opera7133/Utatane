@@ -4,8 +4,8 @@ import UtataneCore
 @testable import UtataneModuleCatalog
 import UtataneNetwork
 
-@Test(arguments: [(5, "yaya"), (6, "yaya-6")])
-func `YAYA DLL FileVersion selects matching catalog module`(major: Int, expected: String) throws {
+@Test(arguments: [(5, "yaya-6"), (6, "yaya-6"), (0, "yaya-6")])
+func `YAYA defaults to six regardless of DLL FileVersion`(major: Int, expected: String) throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let master = root.appending(path: "ghost/master")

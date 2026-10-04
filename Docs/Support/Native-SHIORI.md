@@ -10,9 +10,11 @@ SHIORIごとの実行方式・制約とビルド手順は、[Utatane Modulesの�
 
 Windows DLLだけを持つゴーストは、辞書や設定を判別し、対応するモジュールを導入済みなら接続します。設定の「SHIORI対応状況」で判定を確認できます。動かない場合は「情報」→「SHIORI読み込み診断…」と[診断・報告の手順](Troubleshooting.md#診断と報告)を使ってください。
 
-YAYA は 5 系と 6 系を別々に導入できます。ゴーストに `yaya.dll` がある場合は、その Windows バージョン情報の `FileVersion` を読み、6 系なら YAYA 6、5 系または判定不能なら YAYA 5 を選びます。`ProductVersion` は 6 系でも 5 と記録されるため、判定には使いません。ゴーストが `shiori.macos` で `libyaya-6.dylib` を指定している場合は、その明示指定を優先します。
+YAYAは6系を既定で使います。`yaya.dll`・`aya.dll`・`aya5.dll`のバージョン情報に関係なく、YAYA 6を選びます。6系が未導入なら導入を案内し、5系へ自動では切り替えません。`shiori.macos`の明示指定は引き続き優先します。
 
-YAYA 6 でハッシュや入れ子の変数を保存した後に 5 系へ戻すと、その変数の保存内容が崩れることがあります。切り替える前にゴーストの保存データをバックアップしてください。
+この版で初めてYAYA 6を読み込む前に、`ghost/master/`直下の`*_variable.cfg`を`Utatane-YAYA-backup/`へコピーします。既存のバックアップは上書きしません。ゴースト独自の保存ファイルは別途バックアップしてください。
+
+5系は互換用として導入できます。使う場合は5系の`libyaya.dylib`を`ghost/master/`へ置き、`descript.txt`に`shiori.macos,libyaya.dylib`を指定してください。6系でハッシュや入れ子の変数を保存した後に5系へ戻すと、保存内容が崩れることがあります。Utataneを終了して、切り替え前の`*_variable.cfg`をバックアップから戻してから5系を使ってください。復元するとバックアップ後の進行状況は失われます。
 
 同梱する側の配置・指定方法は[SHIORI開発ガイド](../Creators/SHIORI-Development.md)、各配布物の導入手順は[Utatane Modules](https://github.com/opera7133/utatane-modules)にあります。
 

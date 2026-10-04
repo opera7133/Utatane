@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+## [0.2.14] - 2026-10-04
+
+- YAYAをDLLの版判別に関係なく6系で起動するようにし、初回設定でも6系を導入する。5系は明示指定で使う互換用として残し、6系から5系へ自動では切り戻さない
+- YAYA 6の初回読み込み前に標準の変数保存ファイルをバックアップし、既存のバックアップは上書きしない
+- 里々の本流版名`Mc203-3`などをモジュールカタログの更新判定に対応させた。従来の数値表記からの更新も判定する
+
 ## [0.2.13] - 2026-10-04
 
 ### ゴーストの導入
@@ -770,7 +778,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.12...HEAD
+[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.14...HEAD
+[0.2.14]: https://github.com/opera7133/Utatane/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/opera7133/Utatane/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/opera7133/Utatane/compare/v0.2.11...v0.2.12
 [0.2.11]: https://github.com/opera7133/Utatane/compare/v0.2.10...v0.2.11

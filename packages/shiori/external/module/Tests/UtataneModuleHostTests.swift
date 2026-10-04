@@ -81,8 +81,14 @@ struct UtataneModuleResolverTests {
         #expect(try resolver.moduleURL(for: .yaya6, masterDirectoryURL: master) == nil)
         try FileManager.default.createDirectory(at: six.deletingLastPathComponent(), withIntermediateDirectories: true)
         try Data().write(to: six)
-        #expect(try resolver.moduleURL(for: .yaya6, masterDirectoryURL: master) == six)
+        #expect(try resolver.moduleURL(for: .yaya6, masterDirectoryURL: master)?.path == six.path)
         #expect(ConventionalShioriKind(libraryFilename: six.lastPathComponent) == .yaya6)
+        for name in ["yaya.dll", "aya.dll", "aya5.dll"] {
+            #expect(ConventionalShioriKind(shioriFilename: name) == .yaya6)
+        }
+        #expect(ConventionalShioriKind(shioriFilename: "libyaya.dylib") == .yaya)
+        #expect(try resolver.moduleURL(for: .yaya6, masterDirectoryURL: master)?.path == six.path)
+        #expect(try resolver.moduleURL(for: .yaya, masterDirectoryURL: master)?.path == five.path)
     }
 
     @Test func `ese shiori library resolves from ghost then managed installation`() {

@@ -2908,13 +2908,8 @@ private struct UtataneRootView: View {
             masterDirectory: masterDirectory,
             declaredModuleFilename: ghost.shioriFilename
         )
-        var kind = detectedShiori.flatMap { ConventionalShioriKind(shioriFilename: "\($0.id.rawValue).dll") }
+        let kind = detectedShiori.flatMap { ConventionalShioriKind(shioriFilename: "\($0.id.rawValue).dll") }
             ?? ConventionalShioriKind(shioriFilename: ghost.shioriFilename)
-        if kind == .yaya, let dll = ContentRoot.shioriModuleURL(for: ghost), dll.pathExtension.lowercased() == "dll" {
-            if YayaDLLVersionDetector.detect(at: dll) == .six {
-                kind = .yaya6
-            }
-        }
         if let kind {
             let resolver = UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback)
             if let module = try resolver.moduleURL(for: kind, masterDirectoryURL: masterDirectory) {

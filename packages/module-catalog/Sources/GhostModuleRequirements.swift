@@ -31,7 +31,7 @@ public struct GhostModuleRequirements: Sendable {
            let declaredURL, declaredURL.pathExtension.lowercased() == "dll"
         {
             let yayaID: String? = if descriptor?.id.rawValue == "yaya" {
-                YayaDLLVersionDetector.detect(at: declaredURL) == .six ? "yaya-6" : "yaya"
+                "yaya-6"
             } else {
                 nil
             }

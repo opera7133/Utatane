@@ -29,6 +29,9 @@ public final class NativeShioriSession: Sendable {
             ))
         } else {
             let kind = ConventionalShioriKind(libraryFilename: moduleURL.lastPathComponent)
+            if kind == .yaya6 {
+                try YayaSaveBackup.prepare(in: directoryURL)
+            }
             var environment: [String: String] = [:]
             if let stateDirectoryURL {
                 environment["UTATANE_GHOST_STATE_DIR"] = stateDirectoryURL.path

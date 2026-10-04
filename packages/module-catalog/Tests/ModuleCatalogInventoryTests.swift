@@ -48,6 +48,13 @@ import UtataneNetwork
     try Data("""
     {"schemaVersion":1,"id":"satori","version":"1.0.0","revision":1,"abi":"shiori","minimumOS":"14.0","architectures":["arm64"],"files":{"lib/libsatori.dylib":"test"}}
     """.utf8).write(to: satori.appending(path: "module.json"))
+    #expect(!arm.hasRequiredInitialModules)
+    let six = root.appending(path: "NativeShiori/yaya-6")
+    try FileManager.default.createDirectory(at: six.appending(path: "lib"), withIntermediateDirectories: true)
+    try Data().write(to: six.appending(path: "lib/libyaya-6.dylib"))
+    try Data("""
+    {"schemaVersion":1,"id":"yaya-6","version":"Tc603-2","revision":1,"abi":"shiori","minimumOS":"14.0","architectures":["arm64"],"files":{"lib/libyaya-6.dylib":"test"}}
+    """.utf8).write(to: six.appending(path: "module.json"))
     #expect(arm.hasRequiredInitialModules)
     #expect(!intel.hasRequiredInitialModules)
     try writeManifest(version: "3.0.0")
@@ -56,14 +63,15 @@ import UtataneNetwork
     #expect(arm.state(for: module) == .notInstalled)
 }
 
-@Test func `YAYA Tc versions sort and match the previous numeric label`() throws {
+@Test(arguments: [("yaya-6", "Tc", "6.3.2", "603"), ("satori", "Mc", "2.3.2", "203")])
+func `upstream versions sort and match previous numeric labels`(id: String, prefix: String, previous: String, code: String) throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let catalog = try JSONDecoder().decode(SignedModuleCatalog.self, from: Data("""
     {"schemaVersion":1,"channel":"stable","signed":true,"modules":[
-      {"id":"yaya-6","displayName":"YAYA 6","kinds":["shiori"],"availability":"candidate","artifacts":[
-        {"path":"artifacts/old.zip","sha256":"\(String(repeating: "0", count: 64))","size":1,"architectures":["arm64"],"minimumOS":"14.0","abi":"shiori","version":"Tc603-2","revision":1},
-        {"path":"artifacts/new.zip","sha256":"\(String(repeating: "0", count: 64))","size":1,"architectures":["arm64"],"minimumOS":"14.0","abi":"shiori","version":"Tc603-3","revision":1}
+      {"id":"\(id)","displayName":"YAYA 6","kinds":["shiori"],"availability":"candidate","artifacts":[
+        {"path":"artifacts/old.zip","sha256":"\(String(repeating: "0", count: 64))","size":1,"architectures":["arm64"],"minimumOS":"14.0","abi":"shiori","version":"\(prefix)\(code)-2","revision":1},
+        {"path":"artifacts/new.zip","sha256":"\(String(repeating: "0", count: 64))","size":1,"architectures":["arm64"],"minimumOS":"14.0","abi":"shiori","version":"\(prefix)\(code)-3","revision":1}
       ]}
     ]}
     """.utf8))
@@ -73,17 +81,17 @@ import UtataneNetwork
         macOSVersion: OperatingSystemVersion(majorVersion: 14, minorVersion: 0, patchVersion: 0)
     )
     #expect(inventory.artifact(for: module)?.index == 1)
-    let directory = root.appending(path: "NativeShiori/yaya-6")
+    let directory = root.appending(path: "NativeShiori/\(id)")
     try FileManager.default.createDirectory(at: directory.appending(path: "lib"), withIntermediateDirectories: true)
-    try Data().write(to: directory.appending(path: "lib/libyaya-6.dylib"))
+    try Data().write(to: directory.appending(path: "lib/lib\(id).dylib"))
     try Data("""
-    {"schemaVersion":1,"id":"yaya-6","version":"6.3.2","revision":1,"abi":"shiori","minimumOS":"14.0","architectures":["arm64"],"files":{"lib/libyaya-6.dylib":"test"}}
+    {"schemaVersion":1,"id":"\(id)","version":"\(previous)","revision":1,"abi":"shiori","minimumOS":"14.0","architectures":["arm64"],"files":{"lib/lib\(id).dylib":"test"}}
     """.utf8).write(to: directory.appending(path: "module.json"))
     #expect(inventory.state(for: module) == .updateAvailable)
     let matchingCatalog = try JSONDecoder().decode(SignedModuleCatalog.self, from: Data("""
     {"schemaVersion":1,"channel":"stable","signed":true,"modules":[
-      {"id":"yaya-6","displayName":"YAYA 6","kinds":["shiori"],"availability":"candidate","artifacts":[
-        {"path":"artifacts/old.zip","sha256":"\(String(repeating: "0", count: 64))","size":1,"architectures":["arm64"],"minimumOS":"14.0","abi":"shiori","version":"Tc603-2","revision":1}
+      {"id":"\(id)","displayName":"YAYA 6","kinds":["shiori"],"availability":"candidate","artifacts":[
+        {"path":"artifacts/old.zip","sha256":"\(String(repeating: "0", count: 64))","size":1,"architectures":["arm64"],"minimumOS":"14.0","abi":"shiori","version":"\(prefix)\(code)-2","revision":1}
       ]}
     ]}
     """.utf8))

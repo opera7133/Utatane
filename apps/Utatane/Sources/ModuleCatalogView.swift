@@ -79,7 +79,7 @@ struct ModuleCatalogView: View {
     @State private var search = ""
     @State private var kind = "all"
     @State private var stateFilter = "all"
-    @State private var selectedIDs: Set<String> = ["yaya", "satori"]
+    @State private var selectedIDs: Set<String> = ["yaya-6", "satori"]
     @State private var installingIDs: Set<String> = []
     @State private var isLoading = false
     @State private var errorMessage: String?
@@ -252,7 +252,7 @@ struct ModuleCatalogView: View {
                     }
                 )) { EmptyView() }
                     .labelsHidden()
-                    .disabled(module.id == "yaya" || module.id == "satori")
+                    .disabled(module.id == "yaya-6" || module.id == "satori")
             }
             VStack(alignment: .leading, spacing: 3) {
                 Button(module.displayName) { detailModule = module }
@@ -365,7 +365,7 @@ struct ModuleCatalogView: View {
             return
         }
         guard let client = ModuleCatalogConfiguration.client else { return }
-        let ids = ["yaya", "satori"] + selectedIDs.subtracting(["yaya", "satori"]).sorted()
+        let ids = ["yaya-6", "satori"] + selectedIDs.subtracting(["yaya-6", "satori"]).sorted()
         for id in ids {
             if catalog?.modules.contains(where: { $0.id == id }) != true,
                ModuleCatalogInventory().isInstalled(moduleID: id, kind: "shiori")

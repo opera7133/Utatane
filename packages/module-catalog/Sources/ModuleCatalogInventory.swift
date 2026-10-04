@@ -73,7 +73,7 @@ public struct ModuleCatalogInventory: Sendable {
     }
 
     public var hasRequiredInitialModules: Bool {
-        isInstalled(moduleID: "yaya", kind: "shiori") && isInstalled(moduleID: "satori", kind: "shiori")
+        isInstalled(moduleID: "yaya-6", kind: "shiori") && isInstalled(moduleID: "satori", kind: "shiori")
     }
 
     private func installedManifest(moduleID: String, kind: String) -> InstalledModuleManifest? {
@@ -105,7 +105,7 @@ public struct ModuleCatalogInventory: Sendable {
 
     private func versionKey(_ version: String, revision: Int) -> [Int] {
         let parts: [Int]
-        if version.hasPrefix("Tc") {
+        if version.hasPrefix("Tc") || version.hasPrefix("Mc") {
             let fields = version.dropFirst(2).split(separator: "-")
             if fields.count == 2, fields[0].count == 3,
                let code = Int(fields[0]), let patch = Int(fields[1])
