@@ -12,7 +12,7 @@ func `accepts Windows separators while rejecting unsafe archive entries`() throw
             try installer.validate(entries: [entry])
         }
     }
-    try installer.validate(entries: ["ghost\\master\\descript.txt", "shell/master/"])
+    try installer.validate(entries: ["\\", "ghost\\master\\descript.txt", "shell/master/"])
     #expect(throws: NarInstallError.self) {
         try installer.validate(entries: ["ghost/master/descript.txt", "ghost\\master\\descript.txt"])
     }
