@@ -82,7 +82,7 @@
 		</dict>
 	</dict>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Spotifyやミュージックで再生中の曲情報をゴーストに通知するために使用します。</string>
+	<string>再生中の曲情報の取得と、ゴーストで選択したMacの終了・再起動を実行するために使用します。</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2026 opera7133.</string>
 	<key>NSLocalNetworkUsageDescription</key>

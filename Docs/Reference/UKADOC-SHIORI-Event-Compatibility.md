@@ -199,8 +199,8 @@ UKADOC掲載イベント数: 304
 | [`OnOtherObjectDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherObjectDropped) | ➖ | Windows Shellの仮想オブジェクトを表すイベント。macOSのファイル・URL・テキストDnDは各専用イベントで処理 |
 | [`OnDirectoryDrop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnDirectoryDrop) | ✅ | ドロップされた各ディレクトリについてパスとscopeをReference0〜1へ個別通知。混在する複数項目をテスト済み |
 | [`OnWallpaperChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnWallpaperChange) | ✅ | 画像をサーフェスへドロップして全macOS画面の壁紙変更に成功した時に画像パスを通知 |
-| [`OnUpdatedataCreating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdatedataCreating) | 🟡 | `createupdatedata`による`updates2.dau`生成の直前にReferenceなしで通知。フォルダD&Dからの作成UIは未実装 |
-| [`OnUpdatedataCreated`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdatedataCreated) | ✅ | `updates2.dau`生成成功後にReferenceなしで通知。実機応答は未確認 |
+| [`OnUpdatedataCreating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdatedataCreating) | 🟡 | `createupdatedata`による更新定義生成の直前にReferenceなしで通知。フォルダD&Dからの作成UIは未実装 |
+| [`OnUpdatedataCreated`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnUpdatedataCreated) | ✅ | 更新定義生成成功後にReferenceなしで通知。実機応答は未確認 |
 | [`OnNarCreating`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNarCreating) | 🟡 | `createnar`実行直前にinstall.txt由来の名前、出力絶対パス、識別子をReference0〜2へ通知。フォルダD&Dからの作成UIは未実装 |
 | [`OnNarCreated`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNarCreated) | ✅ | NAR作成成功後に同じReference0〜2を通知。実機応答は未確認 |
 
@@ -305,7 +305,7 @@ UKADOC掲載イベント数: 304
 | [`OnExecuteHTTPProgress`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPProgress) | ✅ | progress-notify指定時に受信済みバイト数と期待総量をデータ受信ごとに通知 |
 | [`OnExecuteHTTPStreaming`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPStreaming) | ✅ | streaming指定時に改行単位の受信データを通知 |
 | [`OnExecuteHTTPSSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteHTTPSSLInfo) | 🟡 | HTTPS通信のTLSバージョン・暗号スイート・証明書概要をURLSession metricsから通知。証明書日時は空欄 |
-| [`OnExecuteICalComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICalComplete) | ✅ | ical-get／ical-postで取得したiCalendarを解析し、カレンダー情報とVEVENTをReference列へ通知。主要フィールドと件数制限に対応 |
+| [`OnExecuteICalComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICalComplete) | ✅ | ical-get／ical-postで取得したiCalendarを解析し、カレンダー情報とVEVENTをReference列へ通知。主要フィールド、期間指定・繰り返し展開・件数制限に対応。RRULEの対応範囲はSakuraScript表を参照 |
 | [`OnExecuteICalFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICalFailure) | ✅ | iCalendarの通信・HTTP・解析失敗をHTTP系と同じReference形式で通知 |
 | [`OnExecuteICalProgress`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICalProgress) | ✅ | --progress-notify指定時にiCalendar取得の進捗を通知 |
 | [`OnExecuteICal_SSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteICal_SSLInfo) | ✅ | HTTPSでiCalendarを取得した時にTLS情報を通知 |
@@ -314,7 +314,7 @@ UKADOC掲載イベント数: 304
 | [`OnExecuteRSS_SSLInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteRSS_SSLInfo) | 🟡 | HTTPSのRSS取得時にHTTPと同じTLS情報を通知。証明書日時は空欄 |
 | [`OnExecuteScheduleComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteScheduleComplete) | ✅ | schedule-add／schedule-deleteで共有予定表への登録・削除が完了した時に操作種別とUIDを通知 |
 | [`OnExecuteScheduleFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteScheduleFailure) | ✅ | schedule-add／schedule-deleteの入力不正・対象なしを理由とUID付きで通知 |
-| [`OnExecuteScheduleGetComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteScheduleGetComplete) | ✅ | schedule-getで共有予定表をiCalendarと同じReference形式で通知 |
+| [`OnExecuteScheduleGetComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteScheduleGetComplete) | ✅ | schedule-getで共有予定表をiCalendarと同じReference形式で通知。期間指定と繰り返し展開、複数日予定の発生日を返す |
 | [`OnExecuteFileWatchChange`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteFileWatchChange) | ✅ | filewatchで指定したファイルまたはディレクトリの作成・更新・削除をdebounce後に通知 |
 | [`OnExecuteFileWatchFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteFileWatchFailure) | ✅ | filewatchの監視先ディレクトリがない場合や監視を継続できない場合に理由を通知 |
 | [`OnExecuteWebSocketOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnExecuteWebSocketOpen) | ✅ | HTTP 101成立後にReference0〜2を発行 |
@@ -460,7 +460,7 @@ UKADOC掲載イベント数: 304
 | [`pluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#pluginpathlist) | ✅ | 起動時に有効な全プラグインフォルダの絶対パスを優先順でNOTIFY。DebugではLocalも含みます |
 | [`calendarskinpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#calendarskinpathlist) | ✅ | 起動時にカレンダースキン格納パスをNOTIFY |
 | [`calendarpluginpathlist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#calendarpluginpathlist) | ✅ | 起動時にカレンダープラグイン格納パスをNOTIFY |
-| [`rateofusegraph`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#rateofusegraph) | 🟡 | 起動中ゴーストをboot状態の1レコードとしてNOTIFY。起動回数・時間・割合は0固定で履歴集計は未実装 |
+| [`rateofusegraph`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#rateofusegraph) | 🟡 | 起動回数・利用時間を永続保存し、全期間・7日・30日の集計を13フィールドで起動時と毎分NOTIFY。boot／install／vanishを区別する。導入前の履歴は復元しない。グラフの実機表示は確認待ち |
 | [`enable_log`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#enable_log) | ✅ | 起動時にUtataneのアプリ内ログが有効であることをReference0=1でNOTIFY。Utataneでは実行中の切替UIを提供しない |
 | [`enable_debug`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#enable_debug) | ✅ | 起動時にDebugビルドなら1、Releaseなら0をReference0へNOTIFY。Utataneでは実行中の切替UIを提供しない |
 | [`OnNotifySelfInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifySelfInfo) | ✅ | 起動時にゴースト・キャラクター・シェル・バルーンの名前と絶対パスをReference0〜6へNOTIFY |

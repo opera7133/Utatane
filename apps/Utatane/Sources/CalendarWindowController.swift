@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 import UtataneCore
+import UtataneNetwork
 import UtatanePlatformMacOS
 import UtataneSakuraScript
 
@@ -38,6 +39,33 @@ struct UtataneSchedule: Codable, Identifiable, Equatable {
     var url: String?
     var status: String?
     var recurrenceRule: String?
+    var excludedDates: [Date]?
+    var additionalDates: [Date]?
+    var timeZoneIdentifier: String?
+    var subscriptionURL: String?
+}
+
+extension UtataneSchedule {
+    func occurrences(in range: DateInterval, calendar: Calendar = .current) -> [Self] {
+        var calendar = calendar
+        if let zone = timeZoneIdentifier.flatMap(TimeZone.init(identifier:)) {
+            calendar.timeZone = zone
+        }
+        let rule = recurrenceRule ?? (repetition == .none ? nil : "FREQ=" + repetition.rawValue.uppercased())
+        guard let starts = try? CalendarRecurrence.starts(start: start, end: end, rule: rule,
+                                                          excluded: excludedDates ?? [], additional: additionalDates ?? [], in: range, calendar: calendar) else { return [] }
+        return starts.map { date in
+            var occurrence = self
+            occurrence.start = date
+            if isAllDay {
+                let days = calendar.dateComponents([.day], from: start, to: end).day ?? 1
+                occurrence.end = calendar.date(byAdding: .day, value: days, to: date) ?? date
+            } else {
+                occurrence.end = date.addingTimeInterval(end.timeIntervalSince(start))
+            }
+            return occurrence
+        }
+    }
 }
 
 @MainActor
@@ -90,7 +118,9 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
     }
 
     func schedules(on date: Date, calendar: Calendar = .current) -> [UtataneSchedule] {
-        schedules.filter { occurs($0, on: date, calendar: calendar) }.sorted { $0.start < $1.start }
+        let lower = calendar.startOfDay(for: date)
+        let upper = calendar.date(byAdding: .day, value: 1, to: lower)!
+        return expandedSchedules(in: DateInterval(start: lower, end: upper), calendar: calendar).sorted { $0.start < $1.start }
     }
 
     var selectedSkin: CalendarSkin? {
@@ -126,23 +156,16 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
     }
 
     func deleteSchedules(on date: Date, calendar: Calendar = .current) {
-        schedules.removeAll { occurs($0, on: date, calendar: calendar) }
+        let start = calendar.startOfDay(for: date)
+        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return }
+        let interval = DateInterval(start: start, end: end)
+        schedules.removeAll { !$0.occurrences(in: interval, calendar: calendar).isEmpty }
         save()
     }
 
     func deleteSchedules(inMonthContaining date: Date, calendar: Calendar = .current) {
         guard let interval = calendar.dateInterval(of: .month, for: date) else { return }
-        schedules.removeAll { schedule in
-            switch schedule.repetition {
-            case .none:
-                interval.contains(schedule.start)
-            case .weekly, .monthly:
-                schedule.start < interval.end
-            case .yearly:
-                schedule.start < interval.end
-                    && calendar.component(.month, from: schedule.start) == calendar.component(.month, from: date)
-            }
-        }
+        schedules.removeAll { !$0.occurrences(in: interval, calendar: calendar).isEmpty }
         save()
     }
 
@@ -241,6 +264,35 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
         return UtataneSchedule.Repetition(rawValue: frequency.lowercased()) ?? .none
     }
 
+    var subscriptionsDirectory: URL {
+        storeURL.deletingLastPathComponent().appending(path: "Subscriptions")
+    }
+
+    func subscribe(url: URL, data: Data) throws {
+        guard let source = String(data: data, encoding: .utf8) else { throw CocoaError(.fileReadCorruptFile) }
+        var imported = try ICalendarCodec().decode(source)
+        for index in imported.indices {
+            imported[index].subscriptionURL = url.absoluteString
+        }
+        try NetworkSensorStore().register(url: url, name: url.host ?? url.absoluteString, type: .ical, root: subscriptionsDirectory)
+        schedules.removeAll { $0.subscriptionURL == url.absoluteString }
+        schedules.append(contentsOf: imported)
+        guard save() else { throw CocoaError(.fileWriteUnknown) }
+        onCalendarEvent?("OnSchedulesenseComplete", [0: url.host ?? "", 1: String(imported.count)])
+    }
+
+    func refreshSubscriptions() async {
+        let directories = (try? FileManager.default.contentsOfDirectory(at: subscriptionsDirectory, includingPropertiesForKeys: nil)) ?? []
+        for directory in directories {
+            guard !Task.isCancelled, let source = try? String(contentsOf: directory.appending(path: "descript.txt"), encoding: .utf8),
+                  let line = source.components(separatedBy: .newlines).first(where: { $0.hasPrefix("url,") }),
+                  let url = URL(string: String(line.dropFirst(4))) else { continue }
+            onCalendarEvent?("OnSchedulesenseBegin", [0: url.host ?? "", 1: url.absoluteString])
+            do { try await subscribe(url: url, data: NetworkFetchClient(maximumBytes: 4 * 1024 * 1024).fetch(url)) }
+            catch { onCalendarEvent?("OnSchedulesenseFailure", [0: error.localizedDescription, 1: url.host ?? ""]) }
+        }
+    }
+
     func importICalendar(from url: URL) {
         let sensorName = url.deletingPathExtension().lastPathComponent
         onCalendarEvent?("OnSchedulesenseBegin", [0: sensorName, 1: url.absoluteString])
@@ -293,23 +345,14 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
         onTodaySchedulesChange?(references)
     }
 
-    private func occurs(_ schedule: UtataneSchedule, on date: Date, calendar: Calendar) -> Bool {
-        let candidate = calendar.dateComponents([.year, .month, .day, .weekday], from: date)
-        let origin = calendar.dateComponents([.year, .month, .day, .weekday], from: schedule.start)
-        guard calendar.startOfDay(for: date) >= calendar.startOfDay(for: schedule.start) else { return false }
-        return switch schedule.repetition {
-        case .none:
-            candidate.year == origin.year && candidate.month == origin.month && candidate.day == origin.day
-        case .weekly: candidate.weekday == origin.weekday
-        case .monthly: candidate.day == origin.day
-        case .yearly: candidate.month == origin.month && candidate.day == origin.day
-        }
+    func expandedSchedules(in range: DateInterval, calendar: Calendar = .current) -> [UtataneSchedule] {
+        schedules.flatMap { schedule in schedule.occurrences(in: range, calendar: calendar) }
     }
 
     private func occurrenceStart(for schedule: UtataneSchedule, around date: Date, calendar: Calendar) -> Date? {
-        guard occurs(schedule, on: date, calendar: calendar) else { return nil }
-        let time = calendar.dateComponents([.hour, .minute, .second], from: schedule.start)
-        return calendar.date(bySettingHour: time.hour ?? 0, minute: time.minute ?? 0, second: time.second ?? 0, of: date)
+        let lower = calendar.startOfDay(for: date)
+        let upper = calendar.date(byAdding: .day, value: 1, to: lower)!
+        return schedule.occurrences(in: DateInterval(start: lower, end: upper), calendar: calendar).first?.start
     }
 
     private func todayScheduleReferences(at date: Date, calendar: Calendar = .current) -> [Int: String] {
@@ -513,6 +556,7 @@ struct ICalendarDocument: FileDocument {
 struct ICalendarCodec {
     func decode(_ source: String) throws -> [UtataneSchedule] {
         let lines = unfoldedLines(source)
+        guard lines.contains("BEGIN:VCALENDAR"), lines.contains("END:VCALENDAR") else { throw CocoaError(.fileReadCorruptFile) }
         var schedules: [UtataneSchedule] = []
         var fields: [String: String] = [:]
         var isEvent = false
@@ -521,11 +565,20 @@ struct ICalendarCodec {
                 fields = [:]
                 isEvent = true
             } else if line == "END:VEVENT", isEvent {
-                guard let startSource = fields["DTSTART"], let start = parseDate(startSource) else {
+                guard let startSource = fields["DTSTART"], let start = ICalendarDateParser.parse(startSource, timeZoneIdentifier: fields["DTSTART.TZID"]) else {
                     throw CocoaError(.fileReadCorruptFile)
                 }
                 let allDay = startSource.count == 8
-                let end = fields["DTEND"].flatMap(parseDate) ?? start.addingTimeInterval(allDay ? 86400 : 3600)
+                var calendar = Calendar.current
+                if let zone = fields["DTSTART.TZID"].flatMap(TimeZone.init(identifier:)) {
+                    calendar.timeZone = zone
+                }
+                let durationEnd = fields["DURATION"].flatMap { ICalendarDateParser.durationEnd(start: start, source: $0, calendar: calendar) }
+                if fields["DURATION"] != nil, durationEnd == nil {
+                    throw CocoaError(.fileReadCorruptFile)
+                }
+                let end = fields["DTEND"].flatMap { ICalendarDateParser.parse($0, timeZoneIdentifier: fields["DTEND.TZID"] ?? fields["DTSTART.TZID"]) }
+                    ?? durationEnd ?? (allDay ? calendar.date(byAdding: .day, value: 1, to: start)! : start.addingTimeInterval(3600))
                 schedules.append(UtataneSchedule(
                     uid: fields["UID"],
                     type: fields["CATEGORIES"]?.lowercased() ?? "event",
@@ -538,13 +591,21 @@ struct ICalendarCodec {
                     location: unescape(fields["LOCATION"] ?? ""),
                     url: fields["URL"],
                     status: fields["STATUS"],
-                    recurrenceRule: fields["RRULE"]
+                    recurrenceRule: fields["RRULE"],
+                    excludedDates: fields["EXDATE"]?.split(separator: ",").compactMap { ICalendarDateParser.parse(String($0), timeZoneIdentifier: fields["EXDATE.TZID"] ?? fields["DTSTART.TZID"]) },
+                    additionalDates: fields["RDATE"]?.split(separator: ",").compactMap { ICalendarDateParser.parse(String($0), timeZoneIdentifier: fields["RDATE.TZID"] ?? fields["DTSTART.TZID"]) },
+                    timeZoneIdentifier: fields["DTSTART.TZID"]
                 ))
                 isEvent = false
             } else if isEvent, let separator = line.firstIndex(of: ":") {
                 let rawKey = String(line[..<separator])
                 let key = rawKey.split(separator: ";", maxSplits: 1).first.map(String.init) ?? rawKey
-                fields[key.uppercased()] = String(line[line.index(after: separator)...])
+                let normalized = key.uppercased()
+                let value = String(line[line.index(after: separator)...])
+                fields[normalized] = ["EXDATE", "RDATE"].contains(normalized) && fields[normalized] != nil ? fields[normalized]! + "," + value : value
+                for parameter in rawKey.split(separator: ";").dropFirst() where parameter.hasPrefix("TZID=") {
+                    fields[normalized + ".TZID"] = String(parameter.dropFirst(5))
+                }
             }
         }
         return schedules
@@ -556,8 +617,8 @@ struct ICalendarCodec {
             lines += [
                 "BEGIN:VEVENT",
                 "UID:\(schedule.uid ?? schedule.id.uuidString)",
-                schedule.isAllDay ? "DTSTART;VALUE=DATE:\(formatDate(schedule.start, allDay: true))" : "DTSTART:\(formatDate(schedule.start, allDay: false))",
-                schedule.isAllDay ? "DTEND;VALUE=DATE:\(formatDate(schedule.end, allDay: true))" : "DTEND:\(formatDate(schedule.end, allDay: false))",
+                schedule.isAllDay ? "DTSTART;VALUE=DATE:\(formatDate(schedule.start, allDay: true))" : "DTSTART\(schedule.timeZoneIdentifier.map { ";TZID=" + $0 } ?? ""):\(formatDate(schedule.start, allDay: false, timeZoneIdentifier: schedule.timeZoneIdentifier))",
+                schedule.isAllDay ? "DTEND;VALUE=DATE:\(formatDate(schedule.end, allDay: true))" : "DTEND\(schedule.timeZoneIdentifier.map { ";TZID=" + $0 } ?? ""):\(formatDate(schedule.end, allDay: false, timeZoneIdentifier: schedule.timeZoneIdentifier))",
                 "SUMMARY:\(escape(schedule.caption))",
                 "DESCRIPTION:\(escape(schedule.subtitle))",
                 "CATEGORIES:\(schedule.type)"
@@ -575,6 +636,11 @@ struct ICalendarCodec {
                 lines.append("RRULE:\(recurrenceRule)")
             } else if schedule.repetition != .none {
                 lines.append("RRULE:FREQ=\(schedule.repetition.rawValue.uppercased())")
+            }
+            for (key, dates) in [("EXDATE", schedule.excludedDates), ("RDATE", schedule.additionalDates)] {
+                if let dates, !dates.isEmpty {
+                    lines.append(key + ":" + dates.map { formatDate($0, allDay: schedule.isAllDay) }.joined(separator: ","))
+                }
             }
             lines.append("END:VEVENT")
         }
@@ -595,11 +661,11 @@ struct ICalendarCodec {
         return formatter.date(from: source)
     }
 
-    private func formatDate(_ date: Date, allDay: Bool) -> String {
+    private func formatDate(_ date: Date, allDay: Bool, timeZoneIdentifier: String? = nil) -> String {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = .current
-        formatter.dateFormat = allDay ? "yyyyMMdd" : "yyyyMMdd'T'HHmmss"
+        formatter.timeZone = timeZoneIdentifier.flatMap(TimeZone.init(identifier:)) ?? (allDay ? .current : TimeZone(secondsFromGMT: 0)!)
+        formatter.dateFormat = allDay ? "yyyyMMdd" : timeZoneIdentifier == nil ? "yyyyMMdd'T'HHmmss'Z'" : "yyyyMMdd'T'HHmmss"
         return formatter.string(from: date)
     }
 

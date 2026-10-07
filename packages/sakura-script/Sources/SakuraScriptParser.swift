@@ -832,6 +832,33 @@ public struct SakuraScriptParser: Sendable {
                               ].contains(arguments[1].lowercased())
                     {
                         tokens.append(.contentAction(.openContentExplorer(arguments[1].lowercased())))
+                    } else if arguments.count == 3,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "first-eyesight",
+                              let stage = Int(arguments[2])
+                    {
+                        tokens.append(.contentAction(.openFIRSTEyesight(stage: stage)))
+                    } else if arguments.count == 2,
+                              arguments[0].lowercased() == "close",
+                              arguments[1].lowercased() == "first-eyesight"
+                    {
+                        tokens.append(.contentAction(.closeFIRSTEyesight))
+                    } else if arguments.count == 2,
+                              arguments[0].lowercased() == "open",
+                              arguments[1].lowercased() == "first-ipaddress"
+                    {
+                        tokens.append(.contentAction(.firstIPAddress(copy: false)))
+                    } else if arguments.count == 2,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "first-copyipaddress"
+                    {
+                        tokens.append(.contentAction(.firstIPAddress(copy: true)))
+                    } else if arguments.count == 3,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "first-system",
+                              ["shutdown", "restart", "clearrecentdocuments", "refreshmemory"].contains(arguments[2].lowercased())
+                    {
+                        tokens.append(.contentAction(.firstSystemAction(arguments[2].lowercased())))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "open",
                               arguments[1].lowercased() == "dressupexplorer"
@@ -849,7 +876,7 @@ public struct SakuraScriptParser: Sendable {
                         ))
                     } else if arguments.count == 2,
                               arguments[0].lowercased() == "open",
-                              ["backlogviewer", "calendar", "messenger"].contains(arguments[1].lowercased())
+                              ["backlogviewer", "calendar", "messenger", "rateofusegraph"].contains(arguments[1].lowercased())
                     {
                         tokens.append(.open(arguments[1]))
                     } else if arguments.count == 2,
@@ -1365,28 +1392,21 @@ public struct SakuraScriptParser: Sendable {
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "dumpsurface"
                     {
-                        let operands = Array(arguments.dropFirst(2))
-                        let optionEventID = Self.optionValue("event", in: operands)
-                        let positional = operands.filter { !$0.hasPrefix("--") }
-                        tokens.append(.archive(.dumpSurface(.init(
-                            directoryPath: positional.first,
-                            scope: positional.indices.contains(1) ? Int(positional[1]) ?? 0 : 0,
-                            surfaceList: positional.indices.contains(2) && !positional[2].isEmpty
-                                ? positional[2] : nil,
-                            prefix: positional.indices.contains(3) ? positional[3] : "surface",
-                            eventID: optionEventID ?? (positional.indices.contains(4) && !positional[4].isEmpty
-                                ? positional[4] : nil),
-                            cropsFromZero: positional.indices.contains(5) && positional[5] == "1"
-                        ))))
+                        tokens.append(.archive(.dumpSurface(.init(arguments: Array(arguments.dropFirst(2))))))
+                    } else if arguments.count >= 2,
+                              arguments[0].lowercased() == "execute",
+                              arguments[1].lowercased() == "dumpballoon"
+                    {
+                        tokens.append(.archive(.dumpBalloon(.init(arguments: Array(arguments.dropFirst(2))))))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "createupdatedata"
                     {
                         let operands = Array(arguments.dropFirst(2))
-                        let directoryPath = operands.first { !$0.hasPrefix("--") }
+                        let outputPath = operands.first { !$0.hasPrefix("--") }
                         let options = operands.filter { $0.hasPrefix("--") }
                         let eventID = Self.optionValue("event", in: options)
-                        tokens.append(.archive(.createUpdateData(directoryPath: directoryPath, eventID: eventID)))
+                        tokens.append(.archive(.createUpdateData(outputPath: outputPath, eventID: eventID)))
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "execute",
                               arguments[1].lowercased() == "resetwindowpos"
@@ -1910,7 +1930,7 @@ public struct SakuraScriptParser: Sendable {
         return raw
     }
 
-    private func splitArguments(_ source: String) -> [String] {
+    public func splitArguments(_ source: String) -> [String] {
         var arguments: [String] = []
         var current = ""
         var isQuoted = false

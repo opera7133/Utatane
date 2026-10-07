@@ -200,3 +200,11 @@ import UtataneCore
     #expect(request.reference(0) == "init")
     #expect(request.reference(2) == "/wallpaper.png")
 }
+
+@Test func `includes current playback status even when idle`() {
+    let adapter = GhostEventShioriAdapter()
+    #expect(adapter.request(for: .boot).headers["Status"] == "")
+    let status = "talking,timecritical,opening(input),balloon(0=2)"
+    let request = adapter.request(for: .randomTalk, context: ShioriEventContext(status: status))
+    #expect(request.headers["Status"] == status)
+}

@@ -7,6 +7,11 @@ import UtataneShiori
 public actor RishuPersonalityEngine: PersonalityEngine {
     private let session: RishuSession
     private let adapter = GhostEventShioriAdapter()
+    private var requestStatus = ""
+
+    public func updateRequestStatus(_ status: String) async {
+        requestStatus = status
+    }
 
     public init(masterDirectoryURL: URL) throws {
         session = try RishuSession(masterDirectoryURL: masterDirectoryURL)
@@ -24,7 +29,7 @@ public actor RishuPersonalityEngine: PersonalityEngine {
     }
 
     public func response(for event: GhostEvent) async throws -> PersonalityResponse {
-        let raw = try await session.request(adapter.request(for: event).serialized())
+        let raw = try await session.request(adapter.request(for: event, context: .init(status: requestStatus)).serialized())
         let response = try ShioriMessageParser.parseResponse(raw)
         guard (200 ..< 300).contains(response.statusCode) else {
             throw RishuError.protocolFailure("SHIORI returned \(response.statusCode)")

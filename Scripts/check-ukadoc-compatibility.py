@@ -79,8 +79,8 @@ def main() -> int:
         flags=re.MULTILINE,
     )
     sakura_labels = [label for label, _ in sakura_rows]
-    if len(sakura_rows) != 147:
-        failures.append(f"SakuraScript inventory has {len(sakura_rows)} rows; expected 147")
+    if len(sakura_rows) != 148:
+        failures.append(f"SakuraScript inventory has {len(sakura_rows)} rows; expected 148")
     if len(sakura_labels) != len(set(sakura_labels)):
         failures.append("SakuraScript inventory contains duplicate labels")
     sakura_unclassified = [label for label, status in sakura_rows if status == "❌"]
@@ -98,8 +98,8 @@ def main() -> int:
         f"調査結果: ✅ {sakura_counts['✅']} / 🟡 {sakura_counts['🟡']} / "
         f"❌ {sakura_counts['❌']} / ➖ {sakura_counts['➖']}"
     )
-    if "UKADOC分類行数: 147" not in sakura_section:
-        failures.append("SakuraScript inventory does not declare its 147-row baseline")
+    if "UKADOC分類行数: 148" not in sakura_section:
+        failures.append("SakuraScript inventory does not declare its 148-row baseline")
     if sakura_summary not in sakura_section:
         failures.append("SakuraScript inventory summary does not match its rows")
 

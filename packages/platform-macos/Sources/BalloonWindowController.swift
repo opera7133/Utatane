@@ -129,6 +129,8 @@ public enum BalloonWindowAlignment: Sendable, Equatable {
         case .none: .automatic
         case .left: .left
         case .right: .right
+        case .center: .center
+        case .bottom: .bottom
         }
     }
 }
@@ -253,6 +255,35 @@ public final class BalloonWindowController {
         for scope in presentations.keys {
             reposition(scope: scope)
         }
+    }
+
+    public func dumpBalloonImage(to directory: URL, scope: Int, prefix: String = "balloon", hiddenItems: Set<String> = []) throws -> Int {
+        guard !prefix.isEmpty, prefix != ".", prefix != "..",
+              !prefix.contains("/"), !prefix.contains("\\"), !prefix.contains(":"), !prefix.contains("\0")
+        else {
+            throw CocoaError(.fileWriteInvalidFileName)
+        }
+        guard let presentation = presentations[scope] else { return 0 }
+        let data = try presentation.contentView.dumpPNGData { copy in
+            if !hiddenItems.isEmpty {
+                copy.update(text: presentation.text, links: presentation.links, styles: presentation.styles, inlineImages: presentation.inlineImages)
+                copy.setPositionedImages(presentation.positionedImages)
+            }
+            if hiddenItems.contains("balloonmarker") {
+                copy.setMarkerText("")
+                copy.setSSTPMessage(nil)
+            }
+            if hiddenItems.contains("balloonnum") {
+                copy.setNumberText("")
+            }
+        }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try data.write(to: directory.appending(path: "\(prefix)\(scope).png"), options: .atomic)
+        return 1
+    }
+
+    public func displayedSurfaceID(for scope: Int) -> Int? {
+        presentations[scope].map { ($0.style / 2) * 2 }
     }
 
     public var visibleScopes: [Int] {
@@ -921,7 +952,7 @@ public final class BalloonWindowController {
             || shellPresentationSettings[scope]?.preventsBalloonMovement == true
     }
 
-    private func effectiveShellOffset(scope: Int, alignment: BalloonWindowAlignment) -> NSPoint {
+    func effectiveShellOffset(scope: Int, alignment: BalloonWindowAlignment) -> NSPoint {
         guard let offsets = shellPresentationSettings[scope]?.balloonOffsets else { return .zero }
         let x: Int?
         let y: Int?
@@ -930,9 +961,15 @@ public final class BalloonWindowController {
             x = offsets.leftX ?? offsets.x
             y = offsets.leftY ?? offsets.y
         case .right:
-            x = offsets.rightX.map(-) ?? offsets.x
+            x = (offsets.rightX ?? offsets.x).map(-)
             y = offsets.rightY ?? offsets.y
-        case .center, .bottom, .automatic:
+        case .center:
+            x = offsets.centerX ?? offsets.x
+            y = offsets.centerY ?? offsets.y
+        case .bottom:
+            x = offsets.bottomX ?? offsets.centerX ?? offsets.x
+            y = offsets.bottomY ?? offsets.centerY ?? offsets.y
+        case .automatic:
             x = offsets.x
             y = offsets.y
         }
@@ -1036,6 +1073,7 @@ private final class BalloonContentView: NSView {
         set { update(text: newValue, links: []) }
     }
 
+    private var dumpCopyFactory: (() -> BalloonContentView)?
     private let textView: InteractiveTextView
     private let scrollView: NSScrollView
     private let clickWaitMarkerView: NSImageView?
@@ -1054,6 +1092,7 @@ private final class BalloonContentView: NSView {
     private let textScale: CGFloat
     private let isVerticalWriting: Bool
     private var positionedImageViews: [NSImageView] = []
+    private var positionedImages: [PositionedBalloonImage] = []
     private var dragStartMouseLocation: NSPoint?
     private var dragStartWindowOrigin: NSPoint?
     private var didDrag = false
@@ -1157,6 +1196,7 @@ private final class BalloonContentView: NSView {
     }
 
     func setPositionedImages(_ images: [PositionedBalloonImage]) {
+        positionedImages = images
         positionedImageViews.forEach { $0.removeFromSuperview() }
         positionedImageViews = images.map { item in
             let size = NSSize(
@@ -1469,7 +1509,49 @@ private final class BalloonContentView: NSView {
         )
         sstpMessageField.isHidden = true
         addSubview(sstpMessageField)
+        dumpCopyFactory = {
+            BalloonContentView(frame: frame, image: image, clickWaitMarkerImage: clickWaitMarkerImage,
+                               scrollArrow0Image: scrollArrow0Image, scrollArrow1Image: scrollArrow1Image,
+                               onlineMarkerImages: onlineMarkerImages, sstpMarkerImage: sstpMarkerImage,
+                               markerImage: markerImage, balloon: balloon, text: "", displayScale: displayScale, textScale: textScale)
+        }
         updateScrollArrowVisibility()
+    }
+
+    func dumpPNGData(redraw: (BalloonContentView) -> Void) throws -> Data {
+        let width = Int((bounds.width / displayScale).rounded())
+        let height = Int((bounds.height / displayScale).rounded())
+        guard width > 0, height > 0, width <= 16384, height <= 16384, width * height <= 16_777_216,
+              let copy = dumpCopyFactory?() else { throw CocoaError(.fileReadCorruptFile) }
+        copy.textView.textStorage?.setAttributedString(textView.attributedString())
+        copy.textView.frame = textView.frame
+        copy.scrollView.contentView.scroll(to: scrollView.contentView.bounds.origin)
+        copy.setMarkerText(markerTextField.stringValue)
+        copy.setNumberText(numberTextField.stringValue)
+        copy.setSSTPMessage(sstpMessageField.stringValue)
+        copy.setVerticalAlignment(verticalAlignment)
+        copy.onlineMarkerView?.image = onlineMarkerView?.image
+        copy.onlineMarkerView?.isHidden = onlineMarkerView?.isHidden ?? true
+        copy.scrollArrow0View?.isHidden = scrollArrow0View?.isHidden ?? true
+        copy.scrollArrow1View?.isHidden = scrollArrow1View?.isHidden ?? true
+        copy.clickWaitMarkerView?.isHidden = clickWaitMarkerView?.isHidden ?? true
+        copy.setPositionedImages(positionedImages)
+        redraw(copy)
+        copy.layoutSubtreeIfNeeded()
+        guard let cached = copy.bitmapImageRepForCachingDisplay(in: copy.bounds),
+              let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: height,
+                                            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                            colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+              let context = NSGraphicsContext(bitmapImageRep: bitmap) else { throw CocoaError(.fileReadCorruptFile) }
+        copy.cacheDisplay(in: copy.bounds, to: cached)
+        let image = NSImage(size: copy.bounds.size)
+        image.addRepresentation(cached)
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        image.draw(in: NSRect(x: 0, y: 0, width: width, height: height), from: .zero, operation: .copy, fraction: 1)
+        NSGraphicsContext.restoreGraphicsState()
+        guard let data = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileReadCorruptFile) }
+        return data
     }
 
     var visitedAnchorIDs: Set<String> {

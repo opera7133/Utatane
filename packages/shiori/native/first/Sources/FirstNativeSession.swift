@@ -1,4 +1,5 @@
 import Foundation
+import UtataneNetwork
 
 public enum FirstNativeSessionError: LocalizedError, Equatable, Sendable {
     case missingDLL(URL)
@@ -24,6 +25,19 @@ struct FirstTypingQuestion: Equatable, Sendable {
     let expectedAnswer: String
 }
 
+/// Addresses verified against the supported DLL's Todo/Notify/dice form handlers.
+/// Dialogue stays in the user's DLL; host-specific instructions are separate UI.
+enum FirstUtilityFragment: UInt32 {
+    case todoMenu = 0x0047_F8E4
+    case reminderMenu = 0x0047_F828
+    case todoIntroduction = 0x0046_3F6C
+    case reminderIntroduction = 0x0046_5154
+    case todoRecorded = 0x0046_3D68
+    case reminderRecorded = 0x0046_501C
+    case reminderAdded = 0x0046_56C0
+    case fileCaption = 0x0046_5774
+}
+
 /// A Wine-free, read-only session over files supplied by the user.
 ///
 /// Event coverage is deliberately incremental. Unsupported events return nil so
@@ -38,6 +52,39 @@ public struct FirstNativeSession: Sendable {
     private let lastUpdateDate: Date?
     public let masterTalkIntervalSeconds: Int
     public let energy: Int
+
+    func utilityFragment(_ fragment: FirstUtilityFragment) throws -> String {
+        try knownString(at: fragment.rawValue)
+    }
+
+    func diceResultScript(count: Int, sides: Int, total: Int) throws -> String {
+        // 0x00465f5d: sides + count + summed result, in this exact order.
+        try knownString(at: 0x0046_606C) + String(sides) + knownString(at: 0x0046_6080) +
+            String(count) + knownString(at: 0x0046_6098) + knownString(at: 0x0046_6044) +
+            String(total) + knownString(at: 0x0046_6058)
+    }
+
+    func weatherStartScript() throws -> String {
+        let original = try knownString(at: 0x0048_01EC)
+        // Preserve the original dialogue; replace only the obsolete HTTP effect.
+        guard let command = original.range(of: "\\![execute,") else { throw FirstDLLAnalysisError.unsupportedFIRSTVersion }
+        return String(original[..<command.lowerBound]) + "\\![execute,weather-get,--async=OnFIRSTWeather]\\e"
+    }
+
+    func cleanupStartScript(recentDocuments: Bool) throws -> String {
+        let original = try knownString(at: recentDocuments ? 0x0047_F6DC : 0x0047_F678)
+        guard let command = original.range(of: "\\![raise,") else { throw FirstDLLAnalysisError.unsupportedFIRSTVersion }
+        let action = recentDocuments ? "\\![execute,first-system,clearrecentdocuments]" : "\\![execute,emptyrecyclebin]"
+        // Do not claim success before the asynchronous trash result arrives.
+        return "\\0" + String(original[..<command.lowerBound]) + action + "\\e"
+    }
+
+    func cleanupCompleteScript() throws -> String {
+        let original = try knownString(at: 0x0047_F678)
+        guard let command = original.range(of: "\\![raise,"),
+              let end = original[command.upperBound...].firstIndex(of: "]") else { throw FirstDLLAnalysisError.unsupportedFIRSTVersion }
+        return "\\0" + String(original[original.index(after: end)...]) + "\\e"
+    }
 
     public init(masterDirectoryURL: URL) throws {
         let dll = masterDirectoryURL.appending(path: "first.dll")
@@ -107,7 +154,11 @@ public struct FirstNativeSession: Sendable {
                 nil
             }
         case "onsurfacerestore":
-            try normalSurfaceRestoreScript()
+            try normalSurfaceRestoreScript(
+                sakuraSurface: references[0],
+                keroSurface: references[1],
+                choice: Int.random(in: 0 ..< 8)
+            )
         case "onchoiceselect":
             choiceScript(id: references[0])
         case "on_update":
@@ -200,9 +251,25 @@ public struct FirstNativeSession: Sendable {
         case "onbiffbegin":
             try biffBeginScript(detail: references[2], choice: Int.random(in: 0 ..< 2))
         case "onbiffcomplete":
-            try biffCompleteScript(messageCount: references[0])
+            try biffCompleteScript(messageCount: references[0], totalBytes: references[1], account: references[2], topResult: references[4])
+        case "onbiff2complete":
+            try biffCompleteScript(messageCount: references[0], totalBytes: references[1], account: references[2], topResult: references[3])
+        case "onheadlinesense.onfind":
+            try headlineFindScript(
+                name: references[0] ?? "",
+                url: references[1] ?? "",
+                phase: references[2] ?? "",
+                headline: references[3] ?? "",
+                isBathing: false
+            )
         case "onquiztutorial":
             try quizTutorialScript()
+        case "oneyesightgameenter":
+            try eyesightEnterScript()
+        case "oneyesightgamenext":
+            try eyesightNextScript(stage: Int(references[0] ?? "") ?? 0)
+        case "oneyesightgameinput":
+            try eyesightInputScript(answer: references[0] ?? "")
         case "onquizenter":
             try quizEnterScript(reference: references[0])
         case "onquizleave":
@@ -245,8 +312,14 @@ public struct FirstNativeSession: Sendable {
             try knownScript(at: 0x0048_64B0)
         case "on_exitwindows":
             try exitWindowsPromptScript()
+        case "on_exitwindows_yes":
+            "\\![execute,first-system,shutdown]\\e"
         case "on_rebootwindows":
             try rebootWindowsPromptScript()
+        case "on_rebootwindows_yes":
+            "\\![execute,first-system,restart]\\e"
+        case "onfirstcompjapantutorial":
+            try [0x0046_FFE4, 0x0047_004C, 0x0047_00E8, 0x0047_017C].map(knownString(at:)).joined()
         case "on_portal":
             try portalMenuScript()
         case "on_portalselected":
@@ -255,6 +328,14 @@ public struct FirstNativeSession: Sendable {
             try recommendMenuScript()
         case "on_recommendselected":
             try recommendSelectedScript(id: references[0])
+        case "on_news":
+            try fixedNewsMenuScript()
+        case "on_newscore":
+            try fixedNewsEntryScript(id: references[0])
+        case "onweather":
+            try legacyWeatherScript()
+        case "onfirstweather":
+            try currentWeatherScript(references: references)
         default:
             nil
         }
@@ -278,6 +359,24 @@ public struct FirstNativeSession: Sendable {
             throw FirstDLLAnalysisError.invalidAITXTChoice(category)
         }
         return try knownScript(at: 0x0047_C0A8)
+    }
+
+    func eyesightEnterScript() throws -> String {
+        try [0x0047_BBAC, 0x0047_BBF0, 0x0047_BC44, 0x0047_BC68].map(knownString(at:)).joined()
+    }
+
+    func eyesightNextScript(stage: Int) throws -> String {
+        // OnEyesightgameNext (0x0047387b) opens the visual form and its
+        // independent 15-second input box. Open the macOS form before waiting
+        // for that existing input box, whose cancellation path also closes it.
+        try "\\![open,first-eyesight,\(stage)]" + knownString(at: 0x0047_BCC8)
+    }
+
+    func eyesightInputScript(answer: String) throws -> String {
+        // The original handler at 0x0047394c accepts two spellings of right;
+        // FormPaint draws the same C, without randomized direction or scoring.
+        let accepted = try [0x0047_BD20, 0x0047_BD2C].map(knownString(at:))
+        return try "\\![close,first-eyesight]" + knownScript(at: accepted.contains(answer) ? 0x0047_BD3C : 0x0047_BE20)
     }
 
     func quizEnterScript(reference: String?) throws -> String {
@@ -454,7 +553,7 @@ public struct FirstNativeSession: Sendable {
             reaction = try knownString(at: 0x0047_EB4C)
         } else {
             let prefix = try knownString(at: choice == 0 ? 0x0047_EBAC : 0x0047_EBF0)
-            reaction = try prefix + query + knownString(at: 0x0047_EB9C)
+            reaction = try prefix + query + "\\0" + knownString(at: 0x0047_EB9C)
         }
         return try reaction + knownString(at: 0x0047_EC20) +
             percentEncodedQuery(query) + knownString(at: 0x0047_EC5C)
@@ -623,6 +722,33 @@ public struct FirstNativeSession: Sendable {
             knownString(at: 0x0047_D88C)
     }
 
+    /// FIRST's OnFind branches at 0x0047493a distinguish the first/last page
+    /// and bathing state. Page navigation belongs to the native engine rather
+    /// than Materia's implicit headline queue.
+    public func headlineFindScript(
+        name: String,
+        url: String,
+        phase: String,
+        headline: String,
+        isBathing: Bool
+    ) throws -> String? {
+        let first = phase == "First" || phase == "First and Last"
+        let last = phase == "Last" || phase == "First and Last"
+        guard first || phase == "Next" || last else { return nil }
+        let prefix: String = if first {
+            try knownString(at: isBathing ? 0x0047_D588 : 0x0047_D6A8) + name +
+                knownString(at: isBathing ? 0x0047_D59C : 0x0047_D6BC)
+        } else {
+            try knownString(at: isBathing ? 0x0047_D678 : 0x0047_D6DC)
+        }
+        let controls = try last
+            ? knownString(at: 0x0047_D628) + url + knownString(at: 0x0047_D638)
+            : knownString(at: 0x0047_D5BC)
+            .replacingOccurrences(of: "\\q0[][", with: "\\q0[OnFIRSTHeadlineNext][") +
+            url + knownString(at: 0x0047_D5E0)
+        return try prefix + headline + knownString(at: 0x0047_AE7C) + controls
+    }
+
     public func updateCompleteScript(result: String?) throws -> String {
         try knownScript(at: result?.lowercased() == "none" ? 0x0047_DC2C : 0x0047_DC64)
     }
@@ -788,12 +914,33 @@ public struct FirstNativeSession: Sendable {
         return try quotedBIFFDetail(detail) + knownString(at: address)
     }
 
-    /// FIRST has a self-contained response when the mailbox is empty. The
-    /// non-empty branch formats Materia's parsed POP header list and remains
-    /// unsupported until that structured input is available to the engine.
-    public func biffCompleteScript(messageCount: String?) throws -> String? {
-        guard Int(messageCount ?? "") == 0 else { return nil }
-        return try knownScript(at: 0x0047_E288)
+    /// Original nonempty branch at 0x00475709 uses Materia's header list.
+    /// Decode standard TopResult ourselves and retain counts when TOP is absent.
+    public func biffCompleteScript(messageCount: String?, totalBytes: String? = nil, account: String? = nil, topResult: String? = nil) throws -> String? {
+        guard let count = Int(messageCount ?? ""), count >= 0 else { return nil }
+        if count == 0 {
+            return try knownScript(at: 0x0047_E288)
+        }
+        var script = try knownString(at: 0x0047_DAD4) + FirstUtilityText.literal(String((account ?? "").prefix(500))) + knownString(at: 0x0047_E1DC)
+        let groups = String((topResult ?? "").prefix(256_000)).split(separator: "\u{2}").prefix(20)
+        for (index, group) in groups.enumerated() {
+            let header = MailHeaderParser.parse(lines: group.components(separatedBy: "\u{1}"))
+            let sender = header.sender.isEmpty ? "送信者不明" : String(header.sender.prefix(500))
+            let subject = header.subject.isEmpty ? "件名なし" : String(header.subject.prefix(500))
+            script += try knownString(at: 0x0047_E1F4) + String(index + 1) + knownString(at: 0x0047_E200) +
+                FirstUtilityText.literal(sender + "／" + subject) + knownString(at: 0x0047_E20C)
+        }
+        if groups.isEmpty {
+            script += FirstUtilityText.hostNotice("TOP: 未取得（件数のみ）")
+        } else if groups.count < count {
+            script += FirstUtilityText.hostNotice("ヘッダ取得: \(groups.count)/\(count)")
+        }
+        if let bytes = Int(totalBytes ?? ""), bytes >= 0 {
+            script += try knownString(at: 0x0047_E1F4) + String(count) + knownString(at: 0x0047_E21C) + String(bytes) + knownString(at: 0x0047_E22C)
+        } else {
+            script += "\(count)通\\n"
+        }
+        return try script + knownString(at: 0x0047_E2AC)
     }
 
     public func installCompleteScript(type: String?, name: String) throws -> String {
@@ -827,7 +974,7 @@ public struct FirstNativeSession: Sendable {
     }
 
     public func refreshMemoryCompleteScript() throws -> String {
-        try [0x0047_EDC4, 0x0047_EE14, 0x0047_EE48, 0x0047_EE88, 0x0047_EEB8]
+        try "\\![execute,first-system,refreshmemory]" + [0x0047_EDC4, 0x0047_EE14, 0x0047_EE48, 0x0047_EE88, 0x0047_EEB8]
             .map(knownString(at:)).joined()
     }
 
@@ -856,11 +1003,11 @@ public struct FirstNativeSession: Sendable {
     }
 
     public func exitWindowsPromptScript() throws -> String {
-        try [0x0048_48F0, 0x0048_4918, 0x0048_4948].map(knownString(at:)).joined()
+        try [0x0048_48F0, 0x0048_4918, 0x0048_4948].map(knownString(at:)).joined().replacingOccurrences(of: "Windows", with: "Mac")
     }
 
     public func rebootWindowsPromptScript() throws -> String {
-        try [0x0048_49A8, 0x0048_49D4, 0x0048_4948].map(knownString(at:)).joined()
+        try [0x0048_49A8, 0x0048_49D4, 0x0048_4948].map(knownString(at:)).joined().replacingOccurrences(of: "Windows", with: "Mac")
     }
 
     public func portalMenuScript() throws -> String {
@@ -910,6 +1057,46 @@ public struct FirstNativeSession: Sendable {
         return try knownString(at: address)
     }
 
+    /// Historical articles embedded in this DLL, not current RSS headlines.
+    /// The two original menu IDs without a corresponding handler are omitted.
+    func fixedNewsMenuScript() throws -> String {
+        try Self.fixedNewsMenuAddresses.filter { ![0x0048_1634, 0x0048_18E0].contains($0) }
+            .map(knownString(at:)).joined()
+    }
+
+    func fixedNewsEntryScript(id: String?) throws -> String? {
+        guard let id, let entry = try Self.fixedNewsEntries.first(where: {
+            try knownString(at: $0.id) == id
+        }) else { return nil }
+        return try entry.fragments.map(knownString(at:)).joined()
+    }
+
+    /// OnWeather (0x00472bb9) reads the already prepared weather text from
+    /// var/y4410.html. This restores the read path without contacting the old
+    /// service or writing into the user's master directory.
+    func legacyWeatherScript(lines: [String]? = nil) throws -> String {
+        let lines = lines ?? loadedLegacyWeatherLines()
+        guard let lines else { return try knownScript(at: 0x0047_AE88) }
+        guard !lines.isEmpty else { return try knownScript(at: 0x0047_ADF8) }
+        return try knownString(at: 0x0047_AE50) + lines.map {
+            try $0 + knownString(at: 0x0047_AE7C)
+        }.joined()
+    }
+
+    private func loadedLegacyWeatherLines() -> [String]? {
+        let url = masterDirectoryURL.appending(path: "var/y4410.html")
+        guard let bytes = try? Data(contentsOf: url),
+              let contents = String(data: bytes, encoding: .utf8) ?? String(data: bytes, encoding: .shiftJIS)
+        else { return nil }
+        guard !contents.isEmpty else { return [] }
+        var lines = contents.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n").components(separatedBy: "\n")
+        if lines.last == "" {
+            lines.removeLast()
+        }
+        return lines
+    }
+
     public func windowRestoreSleepingScript(shortAbsence: Bool) throws -> String {
         try knownScript(at: shortAbsence ? 0x0048_7268 : 0x0048_7238)
     }
@@ -942,11 +1129,34 @@ public struct FirstNativeSession: Sendable {
     /// Bridges menu commands whose host-side effects have direct SakuraScript
     /// equivalents. Unsupported Materia-only explorer commands stay nil.
     public func choiceScript(id: String?) -> String? {
-        switch id?.lowercased() {
+        guard let id else { return nil }
+        return switch id.lowercased() {
         case "stayontop":
             "\\![set,windowstate,stayontop]\\e"
         case "!stayontop":
             "\\![set,windowstate,!stayontop]\\e"
+        case "minimize":
+            "\\![set,windowstate,minimize]\\e"
+        case "headlinesensorexplorer":
+            "\\![open,headlinesensorexplorer]\\e"
+        case "ghostexplorer", "shellexplorer", "balloonexplorer":
+            "\\![open,\(id.lowercased())]\\e"
+        case "configurationdialog":
+            "\\![open,configurationdialog]\\e"
+        case "sntp":
+            "\\![executesntp]\\e"
+        case "ipaddress":
+            "\\![open,first-ipaddress]\\e"
+        case "executecopyipaddress":
+            "\\![execute,first-copyipaddress]\\e"
+        case "clearrecentdirectory":
+            try? cleanupStartScript(recentDocuments: true)
+        case "clearrecyclebin":
+            try? cleanupStartScript(recentDocuments: false)
+        case "on_exitwindows_yes":
+            "\\![execute,first-system,shutdown]\\e"
+        case "on_rebootwindows_yes":
+            "\\![execute,first-system,restart]\\e"
         case "terminate":
             "\\-\\e"
         case "cancel", "cancel_notalk":
@@ -958,6 +1168,22 @@ public struct FirstNativeSession: Sendable {
 
     public func firstMenuChoiceScript(id: String, energy: Int) throws -> String? {
         switch id.lowercased() {
+        case "google":
+            return try knownString(at: 0x0048_01C4)
+        case "jtogg":
+            return try knownString(at: 0x0047_F9EC) + FirstUtilityText.hostNotice("かな変換") + "\\![open,inputbox,OnFIRSTGurongiInput,-1]"
+        case "jtogv":
+            return try knownString(at: 0x0047_FA4C) + FirstUtilityText.hostNotice("文字変換") + "\\![open,inputbox,OnFIRSTGravityInput,-1]"
+        case "compjapan":
+            return try knownString(at: 0x0047_FAA8) + "\\0\\n\\q[チュートリアル,OnFIRSTCompJapanTutorial]\\q[閉じる,cancel]\\e"
+        case "dice":
+            return try knownString(at: 0x0047_F848) + FirstUtilityText.hostNotice("入力形式: 1d6（個数1〜20、面数2〜1000）") + "\\![open,inputbox,OnFIRSTDiceInput,-1,1d6]"
+        case "ostime":
+            return try uptimeScript(seconds: Int(ProcessInfo.processInfo.systemUptime))
+        case "eyesight":
+            return try eyesightEnterScript()
+        case "weather":
+            return try weatherStartScript()
         case "sleepylevel":
             let address: UInt32 = switch energy {
             case ...30: 0x0047_F198
@@ -978,12 +1204,88 @@ public struct FirstNativeSession: Sendable {
                 0x0047_FE8C, 0x0047_FEAC, 0x0047_C868, 0x0047_FF0C,
                 0x0047_FF34, 0x0047_C868, 0x0047_FF58, 0x0047_C868,
                 0x0047_FF84, 0x0047_FFB4, 0x0047_C868, 0x0047_FFEC,
-                0x0048_0020, 0x0048_0068, 0x0048_00A8, 0x0048_00E8,
+                0x0048_0020, 0x0048_00E8,
                 0x0047_C868, 0x0047_FC04
-            ].map(knownString(at:)).joined()
+            ].map(knownString(at:)).joined().replacingOccurrences(of: "「最近使ったファイル」をクリア", with: "Utataneの最近使ったファイルをクリア")
+                .replacingOccurrences(of: "天気予報", with: "現在の天気")
         default:
             return nil
         }
+    }
+
+    func uptimeScript(seconds: Int) throws -> String {
+        let seconds = max(0, seconds)
+        return try knownString(at: 0x0047_F974) + String(seconds / 3600) + knownString(at: 0x0047_F9B0) +
+            String(seconds / 60 % 60) + knownString(at: 0x0047_DFC4) + String(seconds % 60) +
+            knownString(at: 0x0047_F9C0) + knownString(at: 0x0047_F9CC)
+    }
+
+    func currentWeatherScript(references: [Int: String]) throws -> String {
+        guard references[0] == "ok", let code = Int(references[1] ?? ""),
+              let temperature = Double(references[2] ?? ""), temperature.isFinite
+        else {
+            let message = switch references[0] {
+            case "denied": "位置情報: 許可なし"
+            case "unavailable": "位置情報: 利用不可"
+            case "timeout": "位置情報: タイムアウト"
+            default: "天気取得: 通信失敗"
+            }
+            return try knownScript(at: 0x0047_AE88) + FirstUtilityText.hostNotice(message) + "\\e"
+        }
+        let condition = switch code {
+        case 0: "晴れ"
+        case 1, 2: "晴れ時々くもり"
+        case 3: "くもり"
+        case 45, 48: "霧"
+        case 51, 53, 55: "霧雨"
+        case 56, 57, 66, 67: "凍る雨"
+        case 61, 63, 65, 80, 81, 82: "雨"
+        case 71, 73, 75, 77, 85, 86: "雪"
+        case 95, 96, 99: "雷雨"
+        default: "天気コード\(code)"
+        }
+        let value = String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), temperature)
+        return try knownString(at: 0x0047_AE50) + FirstUtilityText.literal("\(condition)、\(value)℃") + "\\n\\_q\\q[Open-Meteo,https://open-meteo.com/]\\_q\\e"
+    }
+
+    func gurongiConvert(_ input: String) throws -> String {
+        var mapping: [String: String] = [:]
+        for (sources, destination) in Self.gurongiGroups {
+            let replacement = try knownString(at: destination)
+            for source in sources {
+                try mapping[knownString(at: source)] = replacement
+            }
+        }
+        let normalized = input.applyingTransform(.hiraganaToKatakana, reverse: true) ?? input
+        let longVowel = try knownString(at: 0x0041_BB54)
+        var output = ""
+        for character in normalized {
+            let source = String(character)
+            if source == longVowel {
+                if let last = output.last {
+                    output.append(last)
+                }
+            } else {
+                output += mapping[source] ?? source
+            }
+        }
+        return try output.replacingOccurrences(of: knownString(at: 0x0041_BB60), with: knownString(at: 0x0041_B7D0))
+    }
+
+    func timerStartScript(minutes: Int, restarting: Bool, generation: Int = 0) throws -> String? {
+        let address: UInt32
+        switch minutes {
+        case 3: address = restarting ? 0x0047_F4A4 : 0x0047_F46C
+        case 4: address = restarting ? 0x0047_F538 : 0x0047_F500
+        case 5: address = restarting ? 0x0047_F5CC : 0x0047_F594
+        default: return nil
+        }
+        return try "\\![timerraise,\(minutes * 60000),1,OnFIRSTTimerElapsed,\(minutes),\(generation)]" + knownString(at: address)
+    }
+
+    func timerCompleteScript(minutes: Int) throws -> String? {
+        guard (3 ... 5).contains(minutes) else { return nil }
+        return try knownString(at: 0x004A_7A74) + String(minutes) + knownString(at: 0x004A_7A90)
     }
 
     /// FIRST has two normal-state remarks when a choice menu times out.
@@ -1027,6 +1329,25 @@ public struct FirstNativeSession: Sendable {
 
     public func normalSurfaceRestoreScript() throws -> String {
         try knownScript(at: 0x0048_644C)
+    }
+
+    /// The normal-state handler at 0x004798c3 first tests Sakura surface 4,
+    /// then Kero surfaces 11/12. Kero's silent outcome must remain nil rather
+    /// than falling through to the default restore script.
+    public func normalSurfaceRestoreScript(
+        sakuraSurface: String?,
+        keroSurface: String?,
+        choice: Int
+    ) throws -> String? {
+        guard 0 ..< 8 ~= choice else { throw FirstDLLAnalysisError.invalidAITXTChoice(choice) }
+        if sakuraSurface == "4" {
+            return try knownScript(at: choice == 0 ? 0x0048_6350 : 0x0048_6394)
+        }
+        if keroSurface == "11" || keroSurface == "12" {
+            guard choice.isMultiple(of: 2) else { return nil }
+            return try knownScript(at: keroSurface == "11" ? 0x0048_63B8 : 0x0048_6404)
+        }
+        return try normalSurfaceRestoreScript()
     }
 
     /// Replays FIRST's 34-way native talk selector using strings read from the
@@ -1168,7 +1489,7 @@ public struct FirstNativeSession: Sendable {
         for address in Self.normalMenuAddresses {
             script += try knownString(at: address)
         }
-        return script
+        return script.replacingOccurrences(of: "Windows", with: "Mac")
     }
 
     /// Executes the currently understood portion of FIRST's initial OnBoot switch.
@@ -1181,8 +1502,17 @@ public struct FirstNativeSession: Sendable {
         day: Int? = nil,
         scheduleKindChoice: Int? = nil,
         scheduleTemplateChoice: Int? = nil,
-        generatedScheduleChoices: [Int]? = nil
+        generatedScheduleChoices: [Int]? = nil,
+        randomTalkChoice: Int? = nil
     ) throws -> String {
+        // The original eight-way selector at 0x00478e8d sends choices 4...7
+        // to the same random-talk function used by OnAITalk (0x00470ef4).
+        if (4 ... 7).contains(topLevelChoice) {
+            return try randomTalkScript(
+                choice: randomTalkChoice ?? Int.random(in: Self.randomTalkAddresses.indices),
+                aitxtChoices: aitxtChoices
+            )
+        }
         if topLevelChoice == 0 {
             if let address = Self.fixedTimeGreetingAddress(for: hour) {
                 return try knownScript(at: address)
@@ -1425,6 +1755,122 @@ public struct FirstNativeSession: Sendable {
         0x0047_195C, 0x0047_1994, 0x0047_19E8, 0x0047_1A34,
         0x0047_1A78, 0x0047_1AC0, 0x0047_1B04, 0x0047_1B44,
         0x0047_1B8C, 0x0047_1BC8
+    ]
+
+    /// Comparison/assignment branches in 0x0041ac97...0x0041b4bf.
+    private static let gurongiGroups: [([UInt32], UInt32)] = [
+        ([0x0041_B548, 0x0041_B554, 0x0041_B560], 0x0041_B56C),
+        ([0x0041_B578, 0x0041_B584, 0x0041_B590], 0x0041_B59C),
+        ([0x0041_B5A8, 0x0041_B5B4, 0x0041_B5C0], 0x0041_B5CC),
+        ([0x0041_B5D8, 0x0041_B5E4, 0x0041_B5F0], 0x0041_B5FC),
+        ([0x0041_B608, 0x0041_B614, 0x0041_B620], 0x0041_B62C),
+        ([0x0041_B638, 0x0041_B644, 0x0041_B650], 0x0041_B65C),
+        ([0x0041_B668, 0x0041_B674], 0x0041_B680),
+        ([0x0041_B68C, 0x0041_B698], 0x0041_B6A4),
+        ([0x0041_B6B0, 0x0041_B6BC], 0x0041_B6C8),
+        ([0x0041_B6D4, 0x0041_B6E0], 0x0041_B6EC),
+        ([0x0041_B6F8, 0x0041_B704, 0x0041_B710], 0x0041_B71C),
+        ([0x0041_B728, 0x0041_B734], 0x0041_B740),
+        ([0x0041_B74C, 0x0041_B758], 0x0041_B764),
+        ([0x0041_B770, 0x0041_B77C], 0x0041_B788),
+        ([0x0041_B794, 0x0041_B7A0], 0x0041_B7AC),
+        ([0x0041_B7B8, 0x0041_B7C4], 0x0041_B7D0),
+        ([0x0041_B7DC, 0x0041_B7E8, 0x0041_B7F4], 0x0041_B800),
+        ([0x0041_B80C, 0x0041_B818, 0x0041_B824], 0x0041_B830),
+        ([0x0041_B83C, 0x0041_B848, 0x0041_B854], 0x0041_B860),
+        ([0x0041_B86C, 0x0041_B878, 0x0041_B884, 0x0041_B890], 0x0041_B89C),
+        ([0x0041_B8A8], 0x0041_B8B4),
+        ([0x0041_B8C0], 0x0041_B8CC),
+        ([0x0041_B8D8], 0x0041_B8E4),
+        ([0x0041_B8F0], 0x0041_B8FC),
+        ([0x0041_B908], 0x0041_B914),
+        ([0x0041_B920], 0x0041_B92C),
+        ([0x0041_B93C], 0x0041_B948),
+        ([0x0041_B958], 0x0041_B964),
+        ([0x0041_B974], 0x0041_B980),
+        ([0x0041_B98C], 0x0041_B998),
+        ([0x0041_B9A4], 0x0041_B9B0),
+        ([0x0041_B9BC], 0x0041_B9C8),
+        ([0x0041_B9D4], 0x0041_B9E0),
+        ([0x0041_B9EC], 0x0041_B9F8),
+        ([0x0041_BA04], 0x0041_BA10),
+        ([0x0041_BA1C], 0x0041_BA28),
+        ([0x0041_BA34], 0x0041_BA40),
+        ([0x0041_BA4C], 0x0041_BA58),
+        ([0x0041_BA64], 0x0041_BA70),
+        ([0x0041_BA7C], 0x0041_BA88),
+        ([0x0041_BA94], 0x0041_BAA0),
+        ([0x0041_BAAC], 0x0041_BAB8),
+        ([0x0041_BAC4], 0x0041_BAD0),
+        ([0x0041_BADC], 0x0041_BAE8),
+        ([0x0041_BAF4], 0x0041_BB00),
+        ([0x0041_BB0C], 0x0041_BB18),
+        ([0x0041_BB24], 0x0041_BB30),
+        ([0x0041_BB3C], 0x0041_BB48)
+    ]
+
+    private static let fixedNewsMenuAddresses: [UInt32] = [
+        0x0048_1280, 0x0048_12A8, 0x0048_12EC, 0x0048_1330,
+        0x0048_1374, 0x0048_13B4, 0x0048_13E8, 0x0048_1424,
+        0x0048_1458, 0x0048_149C, 0x0048_14C8, 0x0048_1500,
+        0x0048_1544, 0x0048_1580, 0x0048_15C0, 0x0048_15F8,
+        0x0048_1634, 0x0048_1668, 0x0048_16A0, 0x0048_16D0,
+        0x0048_16FC, 0x0048_1730, 0x0048_1774, 0x0048_17A0,
+        0x0048_17D8, 0x0048_1808, 0x0048_1838, 0x0048_1870,
+        0x0048_18A8, 0x0048_18E0, 0x0048_1908, 0x0048_193C,
+        0x0048_1980, 0x0048_19AC, 0x0048_19E4, 0x0048_1A1C,
+        0x0048_1A54, 0x0048_1A94, 0x0048_1AE0, 0x0048_1B18,
+        0x0048_1B74, 0x0047_C868, 0x0047_FC04
+    ]
+
+    private static let fixedNewsEntries: [(id: UInt32, fragments: [UInt32])] = [
+        (0x0048_1BC8, [0x0048_1BD8]),
+        (0x0048_1C98, [0x0048_1CB0, 0x0048_1CF8]),
+        (0x0048_1D1C, [0x0048_1D30, 0x0048_1D7C]),
+        (0x0048_1DE0, [0x0048_1DF8, 0x0048_1E44]),
+        (0x0048_1F18, [0x0048_1F28, 0x0048_1F68]),
+        (0x0048_1FB4, [0x0048_1FC8, 0x0048_200C]),
+        (0x0048_205C, [0x0048_2070, 0x0048_20A8]),
+        (0x0048_20CC, [0x0048_20E4, 0x0048_2130]),
+        (0x0048_2180, [0x0048_2190, 0x0048_21DC]),
+        (0x0048_2200, [0x0048_2214, 0x0048_225C]),
+        (0x0048_22A4, [0x0048_22B8, 0x0048_2300]),
+        (0x0048_2324, [0x0048_2334, 0x0048_2378]),
+        (0x0048_239C, [0x0048_23B8]),
+        (0x0048_2400, [0x0048_2428]),
+        (0x0048_2468, [0x0048_2488]),
+        (0x0048_24BC, [0x0048_24D8]),
+        (0x0048_2524, [0x0048_2540]),
+        (0x0048_2580, [0x0048_25A0]),
+        (0x0048_25EC, [0x0048_2600]),
+        (0x0048_264C, [0x0048_2660]),
+        (0x0048_26B0, [0x0048_26C8]),
+        (0x0048_2708, [0x0048_271C]),
+        (0x0048_2750, [0x0048_2760, 0x0048_27A0]),
+        (0x0048_2870, [0x0048_2884, 0x0048_28C8]),
+        (0x0048_2940, [0x0048_2954, 0x0048_298C]),
+        (0x0048_29CC, [0x0048_29DC, 0x0048_2A24]),
+        (0x0048_2A7C, [0x0048_2A8C, 0x0048_2AB8]),
+        (0x0048_2AF4, [0x0048_2B04, 0x0048_2B50]),
+        (0x0048_2B74, [0x0048_2B84]),
+        (0x0048_2C34, [0x0048_2C44, 0x0048_2C8C]),
+        (0x0048_2D38, [0x0048_2D48, 0x0048_2D84]),
+        (0x0048_2DA8, [0x0048_2DC0, 0x0048_2E04]),
+        (0x0048_2E8C, [0x0048_2E9C, 0x0048_2ED8]),
+        (0x0048_2F48, [0x0048_2F5C, 0x0048_2F94]),
+        (0x0048_2FE0, [0x0048_2FFC, 0x0048_2300]),
+        (0x0048_3040, [0x0048_3054, 0x0048_2300]),
+        (0x0048_30A8, [0x0048_30BC, 0x0048_30F0]),
+        (0x0048_3150, [0x0048_316C]),
+        (0x0048_31F8, [0x0048_3208, 0x0048_3248]),
+        (0x0048_328C, [0x0048_329C, 0x0048_32EC]),
+        (0x0048_3324, [0x0048_3338, 0x0048_3368]),
+        (0x0048_33BC, [0x0048_33CC, 0x0048_33F4]),
+        (0x0048_34B4, [0x0048_34C8]),
+        (0x0048_3578, [0x0048_3590, 0x0048_35D4]),
+        (0x0048_3614, [0x0048_362C, 0x0048_3674]),
+        (0x0048_36C4, [0x0048_36D4, 0x0048_3728]),
+        (0x0048_3780, [0x0048_3790, 0x0048_37D4])
     ]
 
     /// FIRST's default menu fragments with the non-new game/news/update paths.

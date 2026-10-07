@@ -287,6 +287,12 @@ func `parses shell window and balloon presentation defaults`() throws {
     sakura.balloon.offsetxl,30
     sakura.balloon.offsetyr,40
     sakura.balloon.alignment,left
+    sakura.balloon.offsetxc,50
+    sakura.balloon.offsetyc,60
+    sakura.balloon.offsetxb,70
+    sakura.balloon.offsetyb,80
+    kero.balloon.alignment,bottom
+    char2.balloon.alignment,center
     sakura.balloon.dontmove,true
     sakura.balloon.syncscale,true
     char2.seriko.alignmenttodesktop,top
@@ -304,7 +310,9 @@ func `parses shell window and balloon presentation defaults`() throws {
     #expect(sakura.defaultY == 450)
     #expect(sakura.defaultLeft == 32)
     #expect(sakura.defaultTop == 48)
-    #expect(sakura.balloonOffsets == ShellBalloonOffsets(x: 10, y: 20, leftX: 30, rightY: 40))
+    #expect(sakura.balloonOffsets == ShellBalloonOffsets(x: 10, y: 20, leftX: 30, rightY: 40, centerX: 50, centerY: 60, bottomX: 70, bottomY: 80))
+    #expect(shell.presentationSettings[1]?.balloonAlignment == .bottom)
+    #expect(shell.presentationSettings[2]?.balloonAlignment == .center)
     #expect(sakura.balloonAlignment == .left)
     #expect(sakura.preventsBalloonMovement)
     #expect(sakura.synchronizesBalloonScale)

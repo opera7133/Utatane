@@ -310,6 +310,7 @@ public struct SakuraScriptDumpSurfaceCommand: Sendable, Equatable {
     public let prefix: String
     public let eventID: String?
     public let cropsFromZero: Bool
+    public let animationID: String?
 
     public init(
         directoryPath: String? = nil,
@@ -317,7 +318,8 @@ public struct SakuraScriptDumpSurfaceCommand: Sendable, Equatable {
         surfaceList: String? = nil,
         prefix: String = "surface",
         eventID: String? = nil,
-        cropsFromZero: Bool = false
+        cropsFromZero: Bool = false,
+        animationID: String? = nil
     ) {
         self.directoryPath = directoryPath
         self.scope = scope
@@ -325,6 +327,7 @@ public struct SakuraScriptDumpSurfaceCommand: Sendable, Equatable {
         self.prefix = prefix.isEmpty ? "surface" : prefix
         self.eventID = eventID
         self.cropsFromZero = cropsFromZero
+        self.animationID = animationID
     }
 }
 
@@ -333,7 +336,8 @@ public enum SakuraScriptArchiveCommand: Sendable, Equatable {
     case compress(archivePath: String, sourceDirectoryPath: String, eventID: String?, password: String?)
     case createNar(narPath: String?, sourceDirectoryPath: String?, eventID: String?)
     case dumpSurface(SakuraScriptDumpSurfaceCommand)
-    case createUpdateData(directoryPath: String?, eventID: String?)
+    case dumpBalloon(SakuraScriptDumpBalloonCommand)
+    case createUpdateData(outputPath: String?, eventID: String?)
 }
 
 public enum SakuraScriptWebSocketCommand: Sendable, Equatable {
@@ -514,6 +518,10 @@ public enum SakuraScriptContentAction: Sendable, Equatable {
     case openPictureViewer(String?)
     case openArchiveViewer(String?)
     case openAIGraph
+    case openFIRSTEyesight(stage: Int)
+    case closeFIRSTEyesight
+    case firstIPAddress(copy: Bool)
+    case firstSystemAction(String)
     case setTaskTrayIcon(file: String, tooltip: String?, durationMilliseconds: Int?, runCount: Int?)
     case openDeveloperTool(String)
     case openConfigurationDialog(String?)

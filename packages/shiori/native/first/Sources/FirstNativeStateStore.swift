@@ -10,6 +10,8 @@ struct FirstNativePersistentState: Codable, Equatable, Sendable {
     var lastBathDate: Date?
     var lastUpdateDate: Date? = nil
     var typingRecords: [FirstTypingRecord?]? = nil
+    var todoItems: [FirstTodoItem]? = nil
+    var reminders: [FirstReminder]? = nil
 }
 
 struct FirstNativeStateStore: Sendable {

@@ -18,6 +18,12 @@ public enum MateriaFirstPersonalityError: LocalizedError, Equatable, Sendable {
 public actor MateriaFirstPersonalityEngine: PersonalityEngine {
     private let configuration: WindowsShioriProcessConfiguration
     private let adapter = GhostEventShioriAdapter()
+    private var requestStatus = ""
+
+    public func updateRequestStatus(_ status: String) async {
+        requestStatus = status
+    }
+
     private var session: WindowsShioriProcessSession?
     private var sessionStartupTask: Task<WindowsShioriProcessSession, any Error>?
 
@@ -35,7 +41,7 @@ public actor MateriaFirstPersonalityEngine: PersonalityEngine {
 
     public func response(for event: GhostEvent) async throws -> PersonalityResponse {
         let requestEvent = normalized(event)
-        var context = ShioriEventContext(sender: "materia", charset: "Shift_JIS")
+        var context = ShioriEventContext(sender: "materia", charset: "Shift_JIS", status: requestStatus)
         if case let .mouseClick(scope, _) = event {
             context.scope = scope
         } else if case let .mouse(mouseEvent) = event {

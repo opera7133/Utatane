@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import UtataneCore
 @testable import UtataneFirstNative
+import UtataneSakuraScript
 
 @Test func `extracts Delphi CP932 strings from an i386 DLL code section`() throws {
     let script = "\\0\\s0さくら\\1うにゅう"
@@ -473,7 +474,7 @@ import UtataneCore
         forEventID: "OnBIFFComplete",
         references: [0: "0"]
     ) == emptyMailbox)
-    #expect(try session.biffCompleteScript(messageCount: "1") == nil)
+    #expect(try session.biffCompleteScript(messageCount: "1") != nil)
     #expect(try session.biffCompleteScript(messageCount: nil) == nil)
     let installs = try [
         session.installCompleteScript(type: "ghost", name: "UtataneTestGhost,UtataneTestDirectory"),
@@ -644,7 +645,8 @@ import UtataneCore
     #expect(restored.rawValue.contains("\\1\\s[10]"))
     #expect(session.choiceScript(id: "stayontop")?.contains("stayontop") == true)
     #expect(session.choiceScript(id: "!stayontop")?.contains("!stayontop") == true)
-    #expect(session.choiceScript(id: "ghostexplorer") == nil)
+    #expect(session.choiceScript(id: "ghostexplorer") == "\\![open,ghostexplorer]\\e")
+    #expect(session.choiceScript(id: "unknown-explorer") == nil)
     #expect(try session.firstMenuChoiceScript(id: "sleepylevel", energy: 20) != nil)
     #expect(try session.firstMenuChoiceScript(id: "game", energy: 180)?.contains("\\q[") == true)
     #expect(try session.firstMenuChoiceScript(id: "commandbymouse", energy: 180)?.contains("\\q[") == true)
@@ -702,6 +704,244 @@ import UtataneCore
     let bathReturns = try (0 ..< 2).map { try session.returnFromBathScript(choice: $0) }
     #expect(Set(bathReturns).count == 2)
     #expect(bathReturns.allSatisfy { $0.contains("leave,inductionmode") })
+}
+
+@Test func `FIRST boot and surface restore preserve the original branches`() throws {
+    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+    let session = try FirstNativeSession(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent())
+    let talk = try session.randomTalkScript(choice: 5, aitxtChoices: [0, 1, 2])
+    for choice in 4 ... 7 {
+        #expect(try session.onBootScript(
+            hour: 12, topLevelChoice: choice, aitxtChoices: [0, 1, 2], randomTalkChoice: 5
+        ) == talk)
+    }
+    let defaultRestore = try session.normalSurfaceRestoreScript()
+    let concernedRestore = try session.normalSurfaceRestoreScript(sakuraSurface: "4", keroSurface: "11", choice: 0)
+    #expect(concernedRestore != defaultRestore)
+    #expect(try session.normalSurfaceRestoreScript(sakuraSurface: "4", keroSurface: "11", choice: 1) != nil)
+    for surface in ["11", "12"] {
+        let reaction = try session.normalSurfaceRestoreScript(sakuraSurface: "0", keroSurface: surface, choice: 0)
+        #expect(reaction != nil)
+        #expect(reaction != defaultRestore)
+        #expect(try session.normalSurfaceRestoreScript(sakuraSurface: "0", keroSurface: surface, choice: 1) == nil)
+    }
+    #expect(try session.normalSurfaceRestoreScript(sakuraSurface: "0", keroSurface: "10", choice: 1) == defaultRestore)
+    let minimize = try #require(session.choiceScript(id: "minimize"))
+    #expect(SakuraScriptParser().parse(minimize).contains(.contentAction(.minimizeWindows)))
+    let explorer = try #require(session.choiceScript(id: "headlinesensorexplorer"))
+    #expect(SakuraScriptParser().parse(explorer).contains(.contentAction(.openContentExplorer("headlinesensorexplorer"))))
+}
+
+@Test func `FIRST headline batch remains readable through next page and cancel choices`() async throws {
+    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+    let master = URL(filePath: path).deletingLastPathComponent()
+    let stateRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let engine = try NativeFirstPersonalityEngine(masterDirectoryURL: master, stateRootURL: stateRoot)
+    for (index, phase) in ["First", "Next", "Last"].enumerated() {
+        let response = try await engine.handle(event: SHIORIEventFactory.headlinesenseFind(
+            name: "TestFeed", url: "https://example.invalid/\(index)", phase: phase,
+            headline: "FIRSTHeadline\(index)"
+        ))
+        if phase != "Last" {
+            #expect(response == nil)
+        } else {
+            let script = try #require(response?.rawValue)
+            #expect(script.contains("FIRSTHeadline0"))
+            #expect(!script.contains("FIRSTHeadline2"))
+            #expect(script.contains("OnFIRSTHeadlineNext"))
+            #expect(SakuraScriptParser().parse(script).contains { token in
+                guard case let .choice(_, id, _) = token else { return false }
+                return id == "OnFIRSTHeadlineNext"
+            })
+        }
+    }
+    let second = try #require(await engine.handle(event: .choice(id: "OnFIRSTHeadlineNext", arguments: [])))
+    #expect(second.rawValue.contains("FIRSTHeadline1"))
+    let last = try #require(await engine.handle(event: .choice(id: "OnFIRSTHeadlineNext", arguments: [])))
+    #expect(last.rawValue.contains("FIRSTHeadline2"))
+    #expect(!last.rawValue.contains("OnFIRSTHeadlineNext"))
+    #expect(last.rawValue.contains("https://example.invalid/2"))
+    #expect(try await engine.handle(event: .choice(id: "OnFIRSTHeadlineNext", arguments: [])) == nil)
+    #expect(try await engine.handle(event: .choice(id: "hscancel", arguments: []))?.rawValue == "\\e")
+    let single = try #require(await engine.handle(event: SHIORIEventFactory.headlinesenseFind(
+        name: "TestFeed", url: "https://example.invalid/single", phase: "First and Last", headline: "SingleHeadline"
+    )))
+    #expect(single.rawValue.contains("SingleHeadline"))
+    #expect(!single.rawValue.contains("OnFIRSTHeadlineNext"))
+    #expect(try await engine.handle(event: .choice(id: "OnFIRSTHeadlineNext", arguments: [])) == nil)
+    let session = try FirstNativeSession(masterDirectoryURL: master)
+    let bathing = try session.headlineFindScript(
+        name: "TestFeed", url: "https://example.invalid", phase: "First and Last", headline: "BathHeadline", isBathing: true
+    )
+    #expect(bathing != nil)
+    #expect(bathing != single.rawValue)
+    #expect(try session.headlineFindScript(name: "", url: "", phase: "invalid", headline: "", isBathing: false) == nil)
+}
+
+@Test func `FIRST eyesight keeps the original drawing input and timeout contract`() async throws {
+    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+    let master = URL(filePath: path).deletingLastPathComponent()
+    let session = try FirstNativeSession(masterDirectoryURL: master)
+    #expect(try session.firstMenuChoiceScript(id: "eyesight", energy: 360) == session.eyesightEnterScript())
+    let enter = try NativeFirstPersonalityEngine.normalizeFIRSTScript(session.eyesightEnterScript())
+    let enterTokens = SakuraScriptParser().parse(enter)
+    #expect(!enterTokens.contains(.surface(15)))
+    #expect(enterTokens.contains(.surface(10)))
+    #expect(enterTokens.contains(.surface(5)))
+    let next = try session.eyesightNextScript(stage: 0)
+    let tokens = SakuraScriptParser().parse(next)
+    #expect(tokens.first == .contentAction(.openFIRSTEyesight(stage: 0)))
+    #expect(tokens.contains { token in
+        guard case let .inputBox(command) = token else { return false }
+        return command.id == "OnEyesightgameInput" && command.timeoutMilliseconds == 15000
+    })
+    let right = try session.eyesightInputScript(answer: "右")
+    #expect(try session.eyesightInputScript(answer: "みぎ") == right)
+    let failure = try session.eyesightInputScript(answer: "")
+    #expect(failure != right)
+    #expect(try session.eyesightInputScript(answer: "左") == failure)
+    #expect(SakuraScriptParser().parse(right).first == .contentAction(.closeFIRSTEyesight))
+    let engine = try NativeFirstPersonalityEngine(masterDirectoryURL: master)
+    #expect(try await engine.handle(event: .shiori(id: "OnUserInputCancel", references: [0: "OnEyesightgameInput", 1: "timeout"]))?.rawValue == NativeFirstPersonalityEngine.normalizeFIRSTScript(failure))
+    #expect(try await engine.handle(event: .shiori(id: "OnEyesightgameNext", references: [0: "0"]))?.rawValue == NativeFirstPersonalityEngine.normalizeFIRSTScript(next))
+}
+
+@Test func `FIRST errands connect search clock settings and content explorers`() throws {
+    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+    let session = try FirstNativeSession(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent())
+    let searchResponse = try session.firstMenuChoiceScript(id: "google", energy: 360)
+    let search = try #require(searchResponse)
+    #expect(SakuraScriptParser().parse(search).contains { token in
+        guard case let .inputBox(command) = token else { return false }
+        return command.id == "OnGoogle"
+    })
+    #expect(try SakuraScriptParser().parse(#require(session.choiceScript(id: "sntp"))).contains(.sntpStart))
+    for id in ["ghostexplorer", "shellexplorer", "balloonexplorer"] {
+        #expect(try SakuraScriptParser().parse(#require(session.choiceScript(id: id))).contains(.contentAction(.openContentExplorer(id))))
+    }
+    #expect(try SakuraScriptParser().parse(#require(session.choiceScript(id: "configurationdialog"))).contains(.contentAction(.openConfigurationDialog(nil))))
+    #expect(try SakuraScriptParser().parse(#require(session.choiceScript(id: "ipaddress"))).contains(.contentAction(.firstIPAddress(copy: false))))
+    #expect(try SakuraScriptParser().parse(#require(session.choiceScript(id: "executecopyipaddress"))).contains(.contentAction(.firstIPAddress(copy: true))))
+    let uptime = try session.uptimeScript(seconds: 90061)
+    #expect(uptime.contains("25時間1分1秒"))
+}
+
+@Test func `FIRST search returns Sakura surface to the Sakura scope in both reactions`() throws {
+    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+    let session = try FirstNativeSession(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent())
+    for choice in 0 ..< 2 {
+        let script = try session.googleSearchScript(query: "test", choice: choice)
+        let tokens = SakuraScriptParser().parse(NativeFirstPersonalityEngine.normalizeFIRSTScript(script))
+        var scope = 0
+        var foundSearchSurface = false
+        for token in tokens {
+            if case let .scope(value) = token {
+                scope = value
+            }
+            if case .surface(20) = token {
+                foundSearchSurface = true
+                #expect(scope == 0)
+            }
+        }
+        #expect(foundSearchSurface)
+    }
+}
+
+@Test func `FIRST timer replaces an earlier timer and ignores obsolete completions`() async throws {
+    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+    let master = URL(filePath: path).deletingLastPathComponent()
+    let stateRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let engine = try NativeFirstPersonalityEngine(masterDirectoryURL: master, stateRootURL: stateRoot)
+    let session = try FirstNativeSession(masterDirectoryURL: master)
+    for (index, minutes) in [3, 4, 5].enumerated() {
+        let event: GhostEvent = index == 1
+            ? .shiori(id: "OnChoiceSelect", references: [0: "timer\(minutes)minutes"])
+            : .choice(id: "timer\(minutes)minutes", arguments: [])
+        let script = try #require(await engine.handle(event: event))
+        #expect(SakuraScriptParser().parse(script.rawValue).contains(.timerEvent(
+            milliseconds: minutes * 60000, repeats: false, reflectsResponse: true,
+            id: "OnFIRSTTimerElapsed", arguments: [String(minutes), String(index + 1)]
+        )))
+        let expectedResponse = try session.timerStartScript(
+            minutes: minutes, restarting: index > 0, generation: index + 1
+        )
+        let expected = try #require(expectedResponse)
+        #expect(script.rawValue == NativeFirstPersonalityEngine.normalizeFIRSTScript(expected))
+    }
+    #expect(try await engine.handle(event: .shiori(id: "OnFIRSTTimerElapsed", references: [0: "3", 1: "1"])) == nil)
+    #expect(try await engine.handle(event: .shiori(id: "OnFIRSTTimerElapsed", references: [0: "5", 1: "2"])) == nil)
+    let completed = try #require(await engine.handle(event: .shiori(id: "OnFIRSTTimerElapsed", references: [0: "5", 1: "3"])))
+    let expectedCompletionResponse = try session.timerCompleteScript(minutes: 5)
+    let expectedCompletion = try #require(expectedCompletionResponse)
+    #expect(completed.rawValue == NativeFirstPersonalityEngine.normalizeFIRSTScript(expectedCompletion))
+    #expect(try await engine.handle(event: .shiori(id: "OnFIRSTTimerElapsed", references: [0: "5", 1: "3"])) == nil)
+    #expect(try session.timerStartScript(minutes: 99, restarting: false) == nil)
+}
+
+@Test func `FIRST dice validates bounded notation and returns each roll and total`() async throws {
+    #expect(FirstDiceSpecification(input: " 2D6 ")?.count == 2)
+    #expect(FirstDiceSpecification(input: "20d1000")?.sides == 1000)
+    for invalid in ["", "d6", "1d", "0d6", "21d6", "1d1", "1d1001", "1d6d8"] {
+        #expect(FirstDiceSpecification(input: invalid) == nil)
+    }
+    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+    let stateRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: stateRoot) }
+    let engine = try NativeFirstPersonalityEngine(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent(), stateRootURL: stateRoot)
+    let rolled = try #require(await engine.handle(event: .shiori(id: "OnFIRSTDiceInput", references: [0: "2d6"])))
+    let hostResult = try #require(rolled.rawValue.components(separatedBy: "[Utatane] 2d6: ").last)
+    let values = hostResult.components(separatedBy: "\\_q")[0].split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+    #expect(values.count == 2 && values.allSatisfy { (1 ... 6).contains($0) })
+    let session = try FirstNativeSession(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent())
+    let originalResult = try session.diceResultScript(count: 2, sides: 6, total: values.reduce(0, +))
+    #expect(rolled.rawValue.hasPrefix(NativeFirstPersonalityEngine.normalizeFIRSTScript(originalResult)))
+    let invalid = try #require(await engine.handle(event: .shiori(id: "OnFIRSTDiceInput", references: [0: "0d6"])))
+    #expect(SakuraScriptParser().parse(invalid.rawValue).contains { token in
+        guard case let .inputBox(command) = token else { return false }
+        return command.id == "OnFIRSTDiceInput"
+    })
+}
+
+@Test func `FIRST historical news menu entries and cached weather are readable`() throws {
+    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+    let session = try FirstNativeSession(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent())
+    let menu = try session.fixedNewsMenuScript()
+    let choices = SakuraScriptParser().parse(menu).compactMap { token -> String? in
+        guard case let .choice(_, id, arguments) = token, id == "On_Newscore" else { return nil }
+        return arguments.first
+    }
+    #expect(choices.count == 37)
+    for id in choices {
+        #expect(try session.fixedNewsEntryScript(id: id)?.isEmpty == false)
+    }
+    #expect(try session.fixedNewsEntryScript(id: "unknown") == nil)
+    #expect(try session.script(forEventID: "On_News") == menu)
+    #expect(try session.script(forEventID: "On_Newscore", references: [0: choices[0]]) == session.fixedNewsEntryScript(id: choices[0]))
+    let populated = try session.legacyWeatherScript(lines: ["UtataneWeatherOne", "UtataneWeatherTwo"])
+    #expect(populated.contains("UtataneWeatherOne\\nUtataneWeatherTwo\\n"))
+    #expect(try session.legacyWeatherScript(lines: []) != populated)
+}
+
+@Test func `FIRST weather reads an existing UTF8 or ShiftJIS cache without modifying it`() throws {
+    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root.appending(path: "var"), withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(atPath: root.appending(path: "first.dll").path, withDestinationPath: path)
+    let session = try FirstNativeSession(masterDirectoryURL: root)
+    let missing = try session.legacyWeatherScript()
+    let cache = root.appending(path: "var/y4410.html")
+    for encoding in [String.Encoding.utf8, .shiftJIS] {
+        let bytes = try #require("天気確認\r\n晴れ\r\n".data(using: encoding))
+        try bytes.write(to: cache)
+        #expect(try session.legacyWeatherScript() == session.legacyWeatherScript(lines: ["天気確認", "晴れ"]))
+        #expect(try Data(contentsOf: cache) == bytes)
+    }
+    try Data().write(to: cache)
+    #expect(try session.legacyWeatherScript() == session.legacyWeatherScript(lines: []))
+    #expect(try session.legacyWeatherScript() != missing)
 }
 
 @Test func `decodes a known AITXT resource vector`() {

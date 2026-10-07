@@ -8,6 +8,7 @@ public struct ShioriEventContext: Equatable, Sendable {
     public var mouseX: Int?
     public var mouseY: Int?
     public var mouseButton: Int
+    public var status: String
 
     public init(
         sender: String = "Utatane",
@@ -16,7 +17,8 @@ public struct ShioriEventContext: Equatable, Sendable {
         scope: Int = 0,
         mouseX: Int? = nil,
         mouseY: Int? = nil,
-        mouseButton: Int = 0
+        mouseButton: Int = 0,
+        status: String = ""
     ) {
         self.sender = sender
         self.charset = charset
@@ -25,6 +27,7 @@ public struct ShioriEventContext: Equatable, Sendable {
         self.mouseX = mouseX
         self.mouseY = mouseY
         self.mouseButton = mouseButton
+        self.status = status
     }
 }
 
@@ -40,7 +43,8 @@ public struct GhostEventShioriAdapter: Sendable {
             ShioriHeader(name: "Charset", value: context.charset),
             ShioriHeader(name: "Sender", value: context.sender),
             ShioriHeader(name: "SecurityLevel", value: context.securityLevel),
-            ShioriHeader(name: "ID", value: mapping.id)
+            ShioriHeader(name: "ID", value: mapping.id),
+            ShioriHeader(name: "Status", value: context.status)
         ])
         for (index, value) in mapping.references.sorted(by: { $0.key < $1.key }) {
             headers.append(name: "Reference\(index)", value: value)

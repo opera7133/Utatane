@@ -131,7 +131,7 @@ struct TextInputWindowControllerTests {
     }
 
     @Test
-    func `sizes a skinned input panel around the declared field and image`() {
+    func `preserves native skin dimensions even when field and buttons need more width`() {
         let balloon = BalloonDefinition(
             directory: URL(filePath: "/tmp/balloon"),
             name: "test",
@@ -150,10 +150,92 @@ struct TextInputWindowControllerTests {
 
         let size = TextInputWindowController.panelSize(
             for: appearance,
-            backgroundImageSize: NSSize(width: 640, height: 120)
+            backgroundImageSize: NSSize(width: 400, height: 60)
         )
 
-        #expect(size == NSSize(width: 640, height: 166))
+        #expect(size == NSSize(width: 400, height: 60))
+    }
+
+    @Test
+    func `compact borderless input remains keyable and renders at its requested size`() throws {
+        let controller = TextInputWindowController()
+        var cancelled = false
+        var appearance: TextInputWindowController.Appearance?
+        if let path = ProcessInfo.processInfo.environment["UTATANE_INPUT_BALLOON"] {
+            let loader = BalloonLoader()
+            let balloon = try loader.load(from: URL(filePath: path))
+            let imageID = ProcessInfo.processInfo.environment["UTATANE_INPUT_IMAGE_ID"].flatMap(Int.init) ?? 0
+            appearance = .init(balloon: loader.effectiveInputDefinition(for: balloon, id: imageID), backgroundImageURL: loader.inputImageURL(id: imageID, in: balloon))
+        }
+        controller.show(.init(id: "compact-input", title: "Input", initialValue: "おにいちゃん", appearance: appearance,
+                              onCommit: { _ in }, onCancel: { cancelled = true }))
+        defer { controller.close() }
+        let window = try #require(controller.window)
+        #expect(window.canBecomeKey)
+        #expect(!window.styleMask.contains(.titled))
+        #expect(try #require(window.contentView?.bounds.height) < 100)
+        let view = try #require(window.contentView)
+        if let appearance, let url = appearance.backgroundImageURL {
+            let skin = try TextInputWindowController.loadSkinImage(url, appearance: appearance)
+            #expect(view.bounds.size == skin.size)
+        }
+        view.layoutSubtreeIfNeeded()
+        view.display()
+        if let path = ProcessInfo.processInfo.environment["UTATANE_INPUT_PREVIEW"] {
+            let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            try #require(bitmap.representation(using: .png, properties: [:])).write(to: URL(filePath: path))
+        }
+        controller.close()
+        #expect(cancelled)
+    }
+
+    @Test
+    func `input skin uses chroma key PNA and declared self alpha`() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 3, pixelsHigh: 2, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bitmapFormat: [], bytesPerRow: 12, bitsPerPixel: 32))
+        let data = try #require(bitmap.bitmapData)
+        for y in 0 ..< 2 {
+            for x in 0 ..< 3 {
+                let offset = y * bitmap.bytesPerRow + x * 4
+                data[offset] = x == 0 ? 0 : 255
+                data[offset + 1] = x == 0 ? 255 : 0
+                data[offset + 2] = 0
+                data[offset + 3] = 255
+            }
+        }
+        let url = directory.appending(path: "balloonc0.png")
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: url)
+        var descriptor = "type,balloon\nname,test\n"
+        let descriptorURL = directory.appending(path: "descript.txt")
+        try descriptor.write(to: descriptorURL, atomically: true, encoding: .utf8)
+        let loader = BalloonLoader()
+        let appearance = try TextInputWindowController.Appearance(balloon: loader.load(from: directory), backgroundImageURL: url)
+        let image = try TextInputWindowController.loadSkinImage(url, appearance: appearance)
+        let pixels = try #require(image.representations.first as? NSBitmapImageRep)
+        #expect(image.size == NSSize(width: 3, height: 2))
+        #expect(try #require(pixels.colorAt(x: 0, y: 0)).alphaComponent == 0)
+        let solidAlpha = try #require(pixels.colorAt(x: 1, y: 0)).alphaComponent
+        #expect(solidAlpha > 0.99)
+        descriptor += "use_self_alpha,1\n"
+        try descriptor.write(to: descriptorURL, atomically: true, encoding: .utf8)
+        let opaque = try TextInputWindowController.loadSkinImage(url, appearance: .init(balloon: loader.load(from: directory), backgroundImageURL: url))
+        let selfAlpha = try #require((opaque.representations.first as? NSBitmapImageRep)?.colorAt(x: 0, y: 0)).alphaComponent
+        #expect(selfAlpha > 0.99)
+        for y in 0 ..< 2 {
+            for x in 0 ..< 3 {
+                let offset = y * bitmap.bytesPerRow + x * 4
+                for channel in 0 ..< 3 {
+                    data[offset + channel] = x == 0 ? 0 : 255
+                }
+                data[offset + 3] = 255
+            }
+        }
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: url.deletingPathExtension().appendingPathExtension("pna"))
+        let masked = try TextInputWindowController.loadSkinImage(url, appearance: appearance)
+        #expect(try #require((masked.representations.first as? NSBitmapImageRep)?.colorAt(x: 0, y: 0)).alphaComponent == 0)
     }
 
     @Test

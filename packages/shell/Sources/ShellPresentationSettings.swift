@@ -8,6 +8,8 @@ public enum ShellBalloonAlignment: String, Sendable, Equatable {
     case none
     case left
     case right
+    case center
+    case bottom
 }
 
 public struct ShellBalloonOffsets: Sendable, Equatable {
@@ -16,6 +18,10 @@ public struct ShellBalloonOffsets: Sendable, Equatable {
     public let leftX: Int?
     public let leftY: Int?
     public let rightX: Int?
+    public let centerX: Int?
+    public let centerY: Int?
+    public let bottomX: Int?
+    public let bottomY: Int?
     public let rightY: Int?
 
     public init(
@@ -24,7 +30,11 @@ public struct ShellBalloonOffsets: Sendable, Equatable {
         leftX: Int? = nil,
         leftY: Int? = nil,
         rightX: Int? = nil,
-        rightY: Int? = nil
+        rightY: Int? = nil,
+        centerX: Int? = nil,
+        centerY: Int? = nil,
+        bottomX: Int? = nil,
+        bottomY: Int? = nil
     ) {
         self.x = x
         self.y = y
@@ -32,6 +42,10 @@ public struct ShellBalloonOffsets: Sendable, Equatable {
         self.leftY = leftY
         self.rightX = rightX
         self.rightY = rightY
+        self.centerX = centerX
+        self.centerY = centerY
+        self.bottomX = bottomX
+        self.bottomY = bottomY
     }
 }
 

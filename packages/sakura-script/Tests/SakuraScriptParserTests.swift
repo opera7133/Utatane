@@ -1017,7 +1017,7 @@ func `parses open ui dialog and utility commands`() {
             directoryPath: "/tmp/out", scope: 1, surfaceList: "surface0-2,!surface1",
             prefix: "dump", eventID: "OnDumped", cropsFromZero: true
         ))),
-        .archive(.createUpdateData(directoryPath: "/tmp/dir", eventID: "OnUpdated"))
+        .archive(.createUpdateData(outputPath: "/tmp/dir", eventID: "OnUpdated"))
     ])
 }
 
@@ -1061,7 +1061,7 @@ func `parses system dialog commands and options`() {
 @Test
 func `parses createupdatedata without arguments for the current ghost`() {
     #expect(SakuraScriptParser().parse(#"\![execute,createupdatedata]"#) == [
-        .archive(.createUpdateData(directoryPath: nil, eventID: nil))
+        .archive(.createUpdateData(outputPath: nil, eventID: nil))
     ])
 }
 
@@ -1239,4 +1239,14 @@ func `parses iCalendar schedule and file watch commands`() {
         .fileWatch(.start(path: "config.json", eventID: "OnConfigChanged", debounceMilliseconds: 250)),
         .fileWatch(.cancel(path: "config.json"))
     ])
+}
+
+@Test func `dump commands mix named and positional arguments without losing quoted commas`() {
+    let parser = SakuraScriptParser()
+    let surface = parser.parse(#"\![execute,dumpsurface,dump,--scope=1,"--surface=0,2-4",--prefix=test,--async=OnDump,--fromzero=true]"#)
+    #expect(surface == [.archive(.dumpSurface(.init(directoryPath: "dump", scope: 1, surfaceList: "0,2-4", prefix: "test", eventID: "OnDump", cropsFromZero: true)))])
+    let balloon = parser.parse(#"\![execute,dumpballoon,--dir=dump,--scope=2,--prefix=view,--event=OnDump,"--hide=balloonmarker,balloonnum"]"#)
+    #expect(balloon == [.archive(.dumpBalloon(.init(arguments: ["--dir=dump", "--scope=2", "--prefix=view", "--event=OnDump", "--hide=balloonmarker,balloonnum"])))])
+    #expect(SakuraScriptDumpBalloonCommand(arguments: ["dump", "1", "", "OnReady"]).prefix == "balloon")
+    #expect(parser.splitArguments(#"dump,1,"0,2",prefix"#) == ["dump", "1", "0,2", "prefix"])
 }

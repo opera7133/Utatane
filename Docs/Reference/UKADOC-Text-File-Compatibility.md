@@ -69,7 +69,7 @@ UKADOC掲載は102項目。現在利用するのはかなり限定的。
 | 利用 | scope別`bindgroup*.name/default/addid` |
 | 利用 | scope別`bindoption*.group`の`mustselect`・`multiple` |
 | 利用 | scope別`menuitem*`／`menuitemex*`の着せ替え順序・区切り・表示名、`menu,hidden` |
-| 利用 | scope別`seriko.alignmenttodesktop`、`defaultleft/top`、balloonの`offsetx/y/xl/xr/yl/yr`・`alignment`・`dontmove`・`syncscale` |
+| 利用 | scope別`seriko.alignmenttodesktop`、`defaultleft/top`、balloonの`offsetx/y/xl/xr/yl/yr/xc/yc/xb/yb`・`alignment`（left/right/center/bottom）・`dontmove`・`syncscale` |
 | 保持 | scope別`defaultx/defaulty` |
 | 別経路で利用 | `readme`、`readme.charset` |
 | macOS代替 | menuのフォント・色・背景・サイドバー画像は、アクセシビリティとOSテーマに従うmacOS標準メニューを使用するためオーナードローしません |
@@ -121,7 +121,7 @@ UKADOC掲載の主要15項目・構文に対する状況。
 | refresh | ✅ | `1`の場合のみ既存内容をバックアップして置換し、失敗時は旧内容へ復元 |
 | refreshundeletemask | ✅ | コロン区切りのファイル名を全階層で保持。NAR側に同名の新ファイルがある場合は新内容を優先 |
 | supplement | ✅ | acceptで一致した起動中ゴースト、または選択中ゴーストへ差分を重ねる。既存内容を一時コピーしてから追加・上書きし、失敗時は元のディレクトリへ復元 |
-| `*.directory`／`*.source.directory` | 🟡 | Ghost／Shell同梱のballoon・headlineと、末尾番号による複数同梱に対応 |
+| `*.directory`／`*.source.directory` | 🟡 | Ghost／Shell同梱のballoon・headline等と末尾番号による複数同梱に対応。source.directoryはサブフォルダとWindows区切りも受理し、展開元の外へ出るパスは拒否 |
 | `*.refresh`／`*.refreshundeletemask` | ✅ | 同梱balloon・headline・plugin・calendar.skin・calendar.pluginの各項目に対応 |
 | developer_optionsの相対パス規則 | ✅ | `noupdate`／`nonar`のファイル・フォルダ・glob指定を各生成処理へ反映 |
 

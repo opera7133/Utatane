@@ -534,8 +534,15 @@ public struct NarInstaller: Sendable {
                 guard let destinationName = metadata[key] else { continue }
                 let safeDestinationName = try validatedDirectoryName(destinationName)
                 let sourceName = metadata["\(identifier).source.directory"] ?? safeDestinationName
-                let safeSourceName = try validatedDirectoryName(sourceName)
+                let safeSourceName = sourceName.replacingOccurrences(of: "\\", with: "/")
+                let components = safeSourceName.split(separator: "/", omittingEmptySubsequences: false)
+                guard !components.isEmpty, components.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." && !$0.contains("\0") && !$0.contains(":") }) else {
+                    throw NarInstallError.invalidDirectoryName(sourceName)
+                }
                 let bundledSource = sourceRoot.appending(path: safeSourceName, directoryHint: .isDirectory)
+                guard bundledSource.resolvingSymlinksInPath().path.hasPrefix(sourceRoot.resolvingSymlinksInPath().path + "/") else {
+                    throw NarInstallError.invalidDirectoryName(sourceName)
+                }
                 guard fileManager.fileExists(atPath: bundledSource.path) else {
                     throw NarInstallError.missingSourceDirectory(safeSourceName)
                 }

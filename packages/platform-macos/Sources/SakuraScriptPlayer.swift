@@ -117,7 +117,7 @@ public final class SakuraScriptPlayer {
     private static var signaledSyncObjects: Set<String> = []
     private let parser = SakuraScriptParser()
     private let imageLoader = SurfaceImageLoader()
-    private let surfaceWindowController: SurfaceWindowController
+    let surfaceWindowController: SurfaceWindowController
     private let balloonWindowController: BalloonWindowController
     private let geometryProvider: any PresentationGeometryProviding
     private var characterDelayMilliseconds = 50
@@ -130,6 +130,7 @@ public final class SakuraScriptPlayer {
         let characterDelayMilliseconds: Int?
         let policy: SakuraScriptPlaybackPolicy
         let sstpMessage: String?
+        let context: SakuraScriptPlaybackContext
     }
 
     private var queuedPlaybacks: [QueuedPlayback] = []
@@ -166,6 +167,45 @@ public final class SakuraScriptPlayer {
     public private(set) var didCancelVanishPlayback = false
 
     public private(set) var isTimeCritical = false
+    private var statusActivities: [UUID: String] = [:]
+
+    public var executionStatus: String {
+        var states: [String] = []
+        if playbackTask != nil {
+            states.append("talking")
+        }
+        if let interactionMode {
+            states.append(interactionMode == .passive ? "passive" : "induction")
+        }
+        if isTimeCritical {
+            states.append("timecritical")
+        }
+        if preventsUserBreak {
+            states.append("nouserbreak")
+        }
+        let visible = balloonWindowController.visibleScopes
+        if statusActivities.values.contains("online") || visible.contains(where: { balloonWindowController.isOnlineMarkerVisible(scope: $0) }) {
+            states.append("online")
+        }
+        if visible.contains(where: { balloonWindowController.textAndLinks(for: $0)?.1.contains(where: { $0.kind == .choice }) == true }) {
+            states.append("choosing")
+        }
+        if NSApp?.isHidden == true {
+            states.append("minimizing")
+        }
+        let openings = Set(statusActivities.values.filter { $0 != "online" }).sorted()
+        if !openings.isEmpty {
+            states.append("opening(" + openings.joined(separator: "/") + ")")
+        }
+        if !visible.isEmpty {
+            states.append("balloon(" + visible.map { "\($0)=\(balloonWindowController.displayedSurfaceID(for: $0) ?? 0)" }.joined(separator: "/") + ")")
+        }
+        return states.joined(separator: ",")
+    }
+
+    public func acceptsSSTP(owned: Bool, queues: Bool) -> Bool {
+        owned || queues || !isTimeCritical
+    }
 
     public var onError: (@MainActor (Error) -> Void)?
     public var onChoice: (@MainActor (String, [String]) -> Void)?
@@ -240,7 +280,12 @@ public final class SakuraScriptPlayer {
     }
 
     private func playbackTokens(_ script: SakuraScript, policy: SakuraScriptPlaybackPolicy = .trusted) -> [PlaybackToken] {
-        parser.parseLocated(script.rawValue).filter { allowsSakuraScriptToken($0.token, policy: policy) }.map {
+        if currentPlaybackContext.flags.contains("strict") {
+            for diagnostic in parser.diagnostics(script.rawValue) {
+                AppLogStore.shared.warning(diagnostic.message, category: "SakuraScript", details: "位置: \(diagnostic.range.lowerBound)..<\(diagnostic.range.upperBound)")
+            }
+        }
+        return parser.parseLocated(script.rawValue).filter { allowsSakuraScriptToken($0.token, policy: policy) }.map {
             PlaybackToken(token: $0.token, source: script.rawValue, location: $0.location)
         }
     }
@@ -433,6 +478,7 @@ public final class SakuraScriptPlayer {
         isWaitingForClick = false
         isPlaybackComplete = false
         isTimeCritical = false
+        statusActivities.removeAll()
         currentBalloon = balloon
         currentScriptRawValue = script.rawValue
         currentPlaybackScope = 0
@@ -514,11 +560,12 @@ public final class SakuraScriptPlayer {
         balloon: BalloonDefinition,
         characterDelayMilliseconds: Int? = nil,
         policy: SakuraScriptPlaybackPolicy = .trusted,
-        sstpMessage: String? = nil
+        sstpMessage: String? = nil,
+        context: SakuraScriptPlaybackContext = .init()
     ) {
         let request = QueuedPlayback(script: script, balloon: balloon,
                                      characterDelayMilliseconds: characterDelayMilliseconds,
-                                     policy: policy, sstpMessage: sstpMessage)
+                                     policy: policy, sstpMessage: sstpMessage, context: context)
         if playbackTask == nil {
             playQueued(request)
         } else {
@@ -529,7 +576,7 @@ public final class SakuraScriptPlayer {
     private func playQueued(_ request: QueuedPlayback) {
         startPlayback(request.script, balloon: request.balloon,
                       characterDelayMilliseconds: request.characterDelayMilliseconds,
-                      policy: request.policy, sstpMessage: request.sstpMessage)
+                      policy: request.policy, sstpMessage: request.sstpMessage, context: request.context)
     }
 
     public func interrupt(
@@ -609,6 +656,7 @@ public final class SakuraScriptPlayer {
         isWaitingForClick = false
         isPlaybackComplete = false
         isTimeCritical = false
+        statusActivities.removeAll()
         preventsUserBreak = false
         balloonWindowController.setWaitingForClick(false)
         if hidesBalloon {
@@ -903,6 +951,24 @@ public final class SakuraScriptPlayer {
                 // Commands are consumed atomically; text advances one source character at a time.
                 if case .text = located.token {} else if let location = located.location {
                     currentPlaybackCharacterPosition = location.range.upperBound
+                }
+                if currentPlaybackContext.flags.contains("strict") {
+                    var missing: String?
+                    switch located.token {
+                    case let .animation(identifier, _): if !surfaceWindowController.hasAnimation(identifier, scope: scope) {
+                            missing = "アニメーション: " + identifier
+                        }
+                    case let .surface(id) where id >= 0: if !surfaceWindowController.hasSurface(String(id), scope: scope) {
+                            missing = "サーフェス: " + String(id)
+                        }
+                    case let .namedSurface(identifier): if !surfaceWindowController.hasSurface(identifier, scope: scope) {
+                            missing = "サーフェス: " + identifier
+                        }
+                    default: break
+                    }
+                    if let missing {
+                        AppLogStore.shared.warning("指定対象が存在しない " + missing, category: "SakuraScript", details: "位置: \(located.location?.range.lowerBound ?? 0)")
+                    }
                 }
                 switch located.token {
                 case let .text(text):
@@ -1432,13 +1498,19 @@ public final class SakuraScriptPlayer {
                 case let .environmentVariable(name):
                     pendingTokens.insert(located.expandedText(environmentValue(for: name)), at: 0)
                 case let .property(property):
-                    await pendingTokens.insert(located.expandedText(onPropertyValue?(property) ?? ""), at: 0)
+                    var value = runtimePropertyValue(for: property)
+                    if value == nil {
+                        value = await onPropertyValue?(property)
+                    }
+                    pendingTokens.insert(located.expandedText(value ?? ""), at: 0)
                 case let .getProperties(eventID, properties):
                     if let response = await onGetProperties?(eventID, properties) {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .setProperty(property, value):
-                    await onSetProperty?(property, value)
+                    if (try? setRuntimeProperty(value, for: property)) != true {
+                        await onSetProperty?(property, value)
+                    }
                 case let .font(name, arguments):
                     if name == "valign" {
                         let alignment: BalloonVerticalAlignment = switch arguments.first?.lowercased() {
@@ -1627,10 +1699,16 @@ public final class SakuraScriptPlayer {
                 case let .closeSystemDialog(id):
                     onCloseSystemDialog?(id)
                 case let .communicateBox(initialValue):
+                    let activity = UUID()
+                    statusActivities[activity] = "communicate"
+                    defer { statusActivities[activity] = nil }
                     if let response = await onCommunicateBox?(initialValue) {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .teachBox(initialValue):
+                    let activity = UUID()
+                    statusActivities[activity] = "teach"
+                    defer { statusActivities[activity] = nil }
                     if let response = await onTeachBox?(initialValue) {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
@@ -1650,14 +1728,23 @@ public final class SakuraScriptPlayer {
                 case .resetBalloonPositions:
                     balloonWindowController.resetWindowPositions()
                 case let .inputBox(command):
+                    let activity = UUID()
+                    statusActivities[activity] = "input"
+                    defer { statusActivities[activity] = nil }
                     if let response = await onInputBox?(command) {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .systemDialog(command):
+                    let activity = UUID()
+                    statusActivities[activity] = "dialog"
+                    defer { statusActivities[activity] = nil }
                     if let response = await onSystemDialog?(command) {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .http(request):
+                    let activity = UUID()
+                    statusActivities[activity] = "online"
+                    defer { statusActivities[activity] = nil }
                     if let response = await onHTTP?(request) {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
@@ -1684,14 +1771,23 @@ public final class SakuraScriptPlayer {
                 case let .webSocket(command):
                     await onWebSocket?(command)
                 case let .weatherGet(eventID):
+                    let activity = UUID()
+                    statusActivities[activity] = "online"
+                    defer { statusActivities[activity] = nil }
                     if let response = await onWeatherGet?(eventID) {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case .sntpStart:
+                    let activity = UUID()
+                    statusActivities[activity] = "online"
+                    defer { statusActivities[activity] = nil }
                     if let response = await onSNTPStart?() {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case .sntpCorrect:
+                    let activity = UUID()
+                    statusActivities[activity] = "online"
+                    defer { statusActivities[activity] = nil }
                     if let response = await onSNTPCorrect?() {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
@@ -1737,6 +1833,9 @@ public final class SakuraScriptPlayer {
         } catch is CancellationError {
             return
         } catch {
+            if currentPlaybackContext.flags.contains("strict") {
+                AppLogStore.shared.warning(error.localizedDescription, category: "SakuraScript", details: "位置: \(currentPlaybackCharacterPosition)")
+            }
             onError?(error)
         }
     }
@@ -2295,6 +2394,7 @@ public final class SakuraScriptPlayer {
     private func playbackDidFinish() {
         playbackTask = nil
         isTimeCritical = false
+        statusActivities.removeAll()
         isPlaybackComplete = true
         isWaitingForClick = false
         preventsUserBreak = false

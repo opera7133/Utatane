@@ -14,10 +14,22 @@ public struct UpdateDataGeneratorResult: Sendable, Equatable {
 public struct UpdateDataGenerator: Sendable {
     public init() {}
 
+    public func generateStandard(in directoryURL: URL) throws -> UpdateDataGeneratorResult {
+        let result = try generate(in: directoryURL)
+        for relativePath in ["updates.txt", "ghost/master/updates2.dau", "ghost/master/updates.txt"] {
+            _ = try generate(in: directoryURL, outputURL: directoryURL.appending(path: relativePath))
+        }
+        return result
+    }
+
     public func generate(
         in directoryURL: URL,
         manifestFilename: String = "updates2.dau"
     ) throws -> UpdateDataGeneratorResult {
+        try generate(in: directoryURL, outputURL: directoryURL.appending(path: manifestFilename))
+    }
+
+    public func generate(in directoryURL: URL, outputURL manifestURL: URL) throws -> UpdateDataGeneratorResult {
         var isDir: ObjCBool = false
         guard FileManager.default.fileExists(atPath: directoryURL.path, isDirectory: &isDir), isDir.boolValue else {
             throw CocoaError(.fileNoSuchFile)
@@ -41,6 +53,7 @@ public struct UpdateDataGenerator: Sendable {
             let resourceValues = try? fileURL.resourceValues(forKeys: [.isRegularFileKey])
             guard resourceValues?.isRegularFile == true else { continue }
 
+            guard fileURL.resolvingSymlinksInPath().standardizedFileURL != manifestURL.resolvingSymlinksInPath().standardizedFileURL else { continue }
             let filename = fileURL.lastPathComponent
             if filename == "updates2.dau"
                 || filename == "updates.txt"
@@ -77,13 +90,14 @@ public struct UpdateDataGenerator: Sendable {
 
         entries.sort { $0.relativePath < $1.relativePath }
 
-        var manifestContent = ""
+        let isDAU = manifestURL.pathExtension.lowercased() == "dau"
+        var manifestContent = isDAU ? "" : "charset,UTF-8\r\n"
         for (index, entry) in entries.enumerated() {
-            let charset = index == 0 ? "charset=UTF-8\u{1}" : ""
-            manifestContent += "\(entry.relativePath)\u{1}\(entry.md5)\u{1}size=\(entry.size)\u{1}date=\(entry.date)\u{1}\(charset)\r\n"
+            let charset = isDAU && index == 0 ? "charset=UTF-8\u{1}" : ""
+            manifestContent += "\(isDAU ? "" : "file,")\(entry.relativePath)\u{1}\(entry.md5)\u{1}size=\(entry.size)\u{1}date=\(entry.date)\u{1}\(charset)\r\n"
         }
 
-        let manifestURL = directoryURL.appending(path: manifestFilename)
+        try FileManager.default.createDirectory(at: manifestURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try manifestContent.write(to: manifestURL, atomically: true, encoding: .utf8)
 
         return UpdateDataGeneratorResult(

@@ -3,6 +3,20 @@ import UtataneCore
 import UtataneRuntime
 import UtataneSakuraScript
 
+struct FirstDiceSpecification: Equatable {
+    let count: Int
+    let sides: Int
+
+    init?(input: String) {
+        let parts = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            .split(separator: "d", omittingEmptySubsequences: false)
+        guard parts.count == 2, let count = Int(parts[0]), let sides = Int(parts[1]),
+              (1 ... 20).contains(count), (2 ... 1000).contains(sides) else { return nil }
+        self.count = count
+        self.sides = sides
+    }
+}
+
 /// Incremental Wine-free FIRST personality support for the original known DLL.
 /// Unsupported events intentionally return nil while their native behavior is reconstructed.
 public actor NativeFirstPersonalityEngine: PersonalityEngine {
@@ -53,6 +67,15 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
     private var typingQuestion: FirstTypingQuestion?
     private var typingQuestionStartedAt: Date?
     private var typingRecords: [FirstTypingRecord?]
+    private var headlinePages: [(name: String, url: String, headline: String)] = []
+    private var headlinePageIndex = 0
+    private var timerMinutes: Int?
+    private var timerGeneration = 0
+    private var todoItems: [FirstTodoItem]
+    private var reminders: [FirstReminder]
+    private var pendingTodoEditID: String?
+    private var pendingReminderEditID: String?
+    private var pendingReminderFileID: String?
 
     public init(
         masterDirectoryURL: URL,
@@ -73,6 +96,8 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
         lastBathDate = persistentState?.lastBathDate
         lastUpdateDate = persistentState?.lastUpdateDate
         typingRecords = Self.normalizedTypingRecords(persistentState?.typingRecords)
+        todoItems = persistentState?.todoItems ?? []
+        reminders = persistentState?.reminders ?? []
     }
 
     public static func supports(masterDirectoryURL: URL) -> Bool {
@@ -80,6 +105,101 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
     }
 
     public func handle(event: GhostEvent) async throws -> SakuraScript? {
+        let selectedID: String? = switch event {
+        case let .choice(id, _): id
+        case let .shiori(id, references):
+            id.caseInsensitiveCompare("OnChoiceSelect") == .orderedSame ? references[0] : id
+        default: nil
+        }
+        let utilityArguments: [Int: String] = switch event {
+        case let .choice(_, arguments): Dictionary(uniqueKeysWithValues: arguments.enumerated().map { ($0.offset, $0.element) })
+        case let .shiori(_, references): references
+        default: [:]
+        }
+        if let selectedID, let response = try utilityScript(id: selectedID, arguments: utilityArguments) {
+            return normalized(response)
+        }
+        if case let .shiori(id, references) = event {
+            if id.caseInsensitiveCompare("OnFIRSTGurongiInput") == .orderedSame {
+                let converted = try session.gurongiConvert(String((references[0] ?? "").prefix(2000)))
+                return normalized("\\0\\s0\(FirstUtilityText.literal(converted))\\e")
+            }
+            if id.caseInsensitiveCompare("OnFIRSTGravityInput") == .orderedSame {
+                let converted = FirstUtilityText.gravity(String((references[0] ?? "").prefix(2000)))
+                return normalized(converted.map { "\\0\\s0\(FirstUtilityText.literal($0))\\e" } ?? "\\0" + FirstUtilityText.hostNotice("変換不可: Shift_JIS文字コード範囲外") + "\\e")
+            }
+            if id.caseInsensitiveCompare("OnRecycleBinEmpty") == .orderedSame {
+                return try normalized(references[4] == "1" ? session.cleanupCompleteScript() : "\\0" + FirstUtilityText.hostNotice("ごみ箱: 空または削除失敗") + "\\e")
+            }
+        }
+        if let selectedID,
+           let minutes = ["timer3minutes": 3, "timer4minutes": 4, "timer5minutes": 5][selectedID.lowercased()]
+        {
+            timerGeneration += 1
+            let script = try session.timerStartScript(minutes: minutes, restarting: timerMinutes != nil, generation: timerGeneration)
+            timerMinutes = minutes
+            return script.map(normalized)
+        }
+        if case let .shiori(id, references) = event,
+           id.caseInsensitiveCompare("OnFIRSTTimerElapsed") == .orderedSame
+        {
+            guard let minutes = timerMinutes, Int(references[0] ?? "") == minutes,
+                  Int(references[1] ?? "") == timerGeneration else { return nil }
+            timerMinutes = nil
+            return try session.timerCompleteScript(minutes: minutes).map(normalized)
+        }
+        if case let .shiori(id, references) = event,
+           id.caseInsensitiveCompare("OnFIRSTDiceInput") == .orderedSame
+        {
+            guard let dice = FirstDiceSpecification(input: references[0] ?? "") else {
+                return normalized("\\0" + FirstUtilityText.hostNotice("入力形式: 1d6（個数1〜20、面数2〜1000）") + "\\![open,inputbox,OnFIRSTDiceInput,-1,1d6]")
+            }
+            let rolls = (0 ..< dice.count).map { _ in Int.random(in: 1 ... dice.sides) }
+            return try normalized(session.diceResultScript(count: dice.count, sides: dice.sides, total: rolls.reduce(0, +)) + FirstUtilityText.hostNotice("\(dice.count)d\(dice.sides): \(rolls.map(String.init).joined(separator: ", "))") + "\\e")
+        }
+        if case let .shiori(id, references) = event,
+           id.caseInsensitiveCompare("OnFIRSTIPAddress") == .orderedSame
+        {
+            return try normalized(session.ipResultScript(ipAddress: references[0]))
+        }
+        if selectedID?.caseInsensitiveCompare("OnFIRSTHeadlineNext") == .orderedSame {
+            guard headlinePageIndex + 1 < headlinePages.count else { return nil }
+            headlinePageIndex += 1
+            return try currentHeadlineScript()
+        }
+        if selectedID?.caseInsensitiveCompare("hscancel") == .orderedSame {
+            headlinePages.removeAll()
+            return normalized("\\e")
+        }
+        if selectedID?.caseInsensitiveCompare("OnChoiceTimeout") == .orderedSame {
+            headlinePages.removeAll()
+        }
+        if case let .shiori(id, references) = event,
+           id.caseInsensitiveCompare("OnUserInputCancel") == .orderedSame,
+           references[0]?.caseInsensitiveCompare("OnEyesightgameInput") == .orderedSame
+        {
+            return try normalized(session.eyesightInputScript(answer: ""))
+        }
+        if case let .shiori(id, references) = event,
+           id.caseInsensitiveCompare("OnHeadlinesense.OnFind") == .orderedSame
+        {
+            let phase = references[2] ?? ""
+            guard ["First", "First and Last", "Next", "Last"].contains(phase) else { return nil }
+            if phase == "First" || phase == "First and Last" {
+                headlinePages.removeAll()
+                headlinePageIndex = 0
+            } else if headlinePages.isEmpty {
+                return nil
+            }
+            if headlinePages.count < 50 {
+                headlinePages.append((references[0] ?? "", references[1] ?? "", references[3] ?? ""))
+            }
+            // The host dispatches all OnFind events in one batch. Present only
+            // after the last item arrives so later pages cannot overwrite the
+            // first page before the user has read it.
+            guard phase == "Last" || phase == "First and Last" else { return nil }
+            return try currentHeadlineScript()
+        }
         if case .close = event {
             persistState()
             switch Self.closeAction(
@@ -159,7 +279,7 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
             resetTypingGame()
             return try normalized(session.typingGameLeaveScript())
         }
-        if case let .choice(id, _) = event,
+        if let id = selectedID,
            let script = try session.firstMenuChoiceScript(id: id, energy: energy)
         {
             return normalized(script)
@@ -167,6 +287,21 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
         if case let .shiori(id, references) = event,
            id.caseInsensitiveCompare("OnSecondChange") == .orderedSame
         {
+            if references[3] != "0", let reminder = reminders.first(where: { $0.dueDate <= now() }) {
+                let previousReminders = reminders
+                reminders.removeAll { $0.id == reminder.id }
+                if let nextDate = reminder.followingDate(after: now()) {
+                    var next = reminder
+                    next.dueDate = nextDate
+                    reminders.append(next)
+                    reminders.sort { $0.dueDate < $1.dueDate }
+                }
+                guard persistState() else {
+                    reminders = previousReminders
+                    return nil
+                }
+                return normalized("\\0\\s0\(FirstUtilityText.literal(reminder.text))\(reminder.fileOpenScript)\\e")
+            }
             return try handleSecondChange(canTalk: references[3] != "0")
         }
         if case let .shiori(id, _) = event,
@@ -213,7 +348,7 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
                 return try normalized(session.randomTalkScript(choice: Int.random(in: 0 ..< 34)))
             }
         }
-        if case let .shiori(id, _) = event,
+        if case let .shiori(id, references) = event,
            id.caseInsensitiveCompare("OnSurfaceRestore") == .orderedSame
         {
             switch activityState {
@@ -224,7 +359,12 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
             case .drowsy:
                 return nil
             case .normal:
-                return try normalized(session.normalSurfaceRestoreScript())
+                guard let script = try session.normalSurfaceRestoreScript(
+                    sakuraSurface: references[0],
+                    keroSurface: references[1],
+                    choice: Int.random(in: 0 ..< 8)
+                ) else { return nil }
+                return normalized(script)
             }
         }
         if case let .shiori(id, references) = event,
@@ -364,6 +504,7 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
         if case let .shiori(id, references) = event,
            id.caseInsensitiveCompare("OnHeadlinesenseFailure") == .orderedSame
         {
+            headlinePages.removeAll()
             guard let script = try session.headlineFailureScript(
                 reason: references[0],
                 isBathing: activityState == .bathing
@@ -378,6 +519,7 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
         if case let .shiori(id, references) = event,
            id.caseInsensitiveCompare("OnHeadlinesenseBegin") == .orderedSame
         {
+            headlinePages.removeAll()
             return try normalized(session.headlineBeginScript(
                 name: references[0] ?? "",
                 isBathing: activityState == .bathing
@@ -480,6 +622,22 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
             activityState = .normal
         }
         return normalized(rawScript)
+    }
+
+    private func currentHeadlineScript() throws -> SakuraScript? {
+        guard headlinePages.indices.contains(headlinePageIndex) else { return nil }
+        let page = headlinePages[headlinePageIndex]
+        let first = headlinePageIndex == 0
+        let last = headlinePageIndex == headlinePages.count - 1
+        let phase = first ? (last ? "First and Last" : "First") : (last ? "Last" : "Next")
+        guard let script = try session.headlineFindScript(
+            name: page.name,
+            url: page.url,
+            phase: phase,
+            headline: page.headline,
+            isBathing: activityState == .bathing
+        ) else { return nil }
+        return normalized(script)
     }
 
     private func handleSecondChange(canTalk: Bool) throws -> SakuraScript? {
@@ -610,13 +768,146 @@ public actor NativeFirstPersonalityEngine: PersonalityEngine {
         }
     }
 
-    private func persistState() {
-        try? stateStore.save(FirstNativePersistentState(
-            energy: energy,
-            lastBathDate: lastBathDate,
-            lastUpdateDate: lastUpdateDate,
-            typingRecords: typingRecords
-        ))
+    @discardableResult
+    private func persistState() -> Bool {
+        do {
+            try stateStore.save(FirstNativePersistentState(
+                energy: energy,
+                lastBathDate: lastBathDate,
+                lastUpdateDate: lastUpdateDate,
+                typingRecords: typingRecords,
+                todoItems: todoItems,
+                reminders: reminders
+            ))
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private func utilityScript(id: String, arguments: [Int: String]) throws -> String? {
+        let previousTodos = todoItems
+        let previousReminders = reminders
+        let text = (arguments[0] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let todo: Bool
+        switch id.lowercased() {
+        case "todo": return try todoMenuScript()
+        case "notify": return try reminderMenuScript()
+        case "onfirsttodoadd":
+            pendingTodoEditID = nil
+            return try session.utilityFragment(.todoIntroduction) + FirstUtilityText.hostNotice("Todo: 内容を入力（1〜500文字、100件まで）") + "\\![open,inputbox,OnFIRSTTodoInput,-1]"
+        case "onfirsttodoedit":
+            guard todoItems.contains(where: { $0.id == text }) else { return try todoMenuScript() }
+            pendingTodoEditID = text
+            return try session.utilityFragment(.todoIntroduction) + FirstUtilityText.hostNotice("Todo: 内容を編集") + "\\![open,inputbox,OnFIRSTTodoInput,-1]"
+        case "onuserinputcancel" where text == "OnFIRSTTodoInput":
+            pendingTodoEditID = nil
+            return try todoMenuScript()
+        case "onfirstnotifyadd":
+            pendingReminderEditID = nil
+            return try session.utilityFragment(.reminderIntroduction) + FirstUtilityText.hostNotice("Notify: yyyy-MM-dd HH:mm|内容、10m|内容、every10m|内容、daily09:00|内容（起動中のみ通知）") + "\\![open,inputbox,OnFIRSTNotifyInput,-1]"
+        case "onfirstnotifyedit":
+            guard reminders.contains(where: { $0.id == text }) else { return try reminderMenuScript() }
+            pendingReminderEditID = text
+            return try session.utilityFragment(.reminderIntroduction) + FirstUtilityText.hostNotice("Notify編集: yyyy-MM-dd HH:mm|内容、10m|内容、every10m|内容、daily09:00|内容") + "\\![open,inputbox,OnFIRSTNotifyInput,-1]"
+        case "onfirstnotifyfile":
+            guard reminders.contains(where: { $0.id == text }) else { return try reminderMenuScript() }
+            pendingReminderFileID = text
+            let caption = try session.utilityFragment(.fileCaption).components(separatedBy: "（")[0]
+            return "\\0" + FirstUtilityText.hostNotice(caption + "（空欄で解除、~/使用可。カンマ・角括弧・引用符・バックスラッシュ・%不可）") + "\\![open,inputbox,OnFIRSTNotifyFileInput,-1]"
+        case "onuserinputcancel" where text == "OnFIRSTNotifyInput" || text == "OnFIRSTNotifyFileInput":
+            pendingReminderEditID = nil
+            pendingReminderFileID = nil
+            return try reminderMenuScript()
+        case "onfirstnotifyfileinput":
+            guard let id = pendingReminderFileID, let index = reminders.firstIndex(where: { $0.id == id }) else { return try reminderMenuScript() }
+            let path = text.isEmpty ? nil : FirstReminder.validatedFilePath(text)
+            guard text.isEmpty || path != nil else {
+                return "\\0" + FirstUtilityText.hostNotice("パス形式エラー") + "\\q[再入力,OnFIRSTNotifyFile,\(id)]\\e"
+            }
+            reminders[index].filePath = path
+            pendingReminderFileID = nil
+            todo = false
+        case "onfirsttodoinput":
+            guard !text.isEmpty, text.count <= 500, pendingTodoEditID != nil || todoItems.count < 100 else {
+                return "\\0" + FirstUtilityText.hostNotice("内容: 1〜500文字、項目: 100件まで") + "\\q[戻る,todo]\\e"
+            }
+            if let id = pendingTodoEditID {
+                guard let index = todoItems.firstIndex(where: { $0.id == id }) else {
+                    pendingTodoEditID = nil
+                    return try todoMenuScript()
+                }
+                todoItems[index].text = text
+            } else {
+                todoItems.append(FirstTodoItem(text: text))
+            }
+            pendingTodoEditID = nil
+            todo = true
+        case "onfirsttodotoggle":
+            guard let index = todoItems.firstIndex(where: { $0.id == text }) else { return try todoMenuScript() }
+            todoItems[index].completed.toggle()
+            todo = true
+        case "onfirsttododelete":
+            todoItems.removeAll { $0.id == text }
+            todo = true
+        case "onfirstnotifyinput":
+            guard var reminder = FirstReminder.parse(text, now: now()), pendingReminderEditID != nil || reminders.count < 100 else {
+                return "\\0" + FirstUtilityText.hostNotice("Notify: 未来の日時、1〜525600分、内容1〜500文字、100件まで") + "\\q[再入力,OnFIRSTNotifyAdd]\\e"
+            }
+            if let id = pendingReminderEditID {
+                guard let index = reminders.firstIndex(where: { $0.id == id }) else {
+                    pendingReminderEditID = nil
+                    return try reminderMenuScript()
+                }
+                reminder.id = id
+                reminder.filePath = reminders[index].filePath
+                reminders[index] = reminder
+            } else {
+                reminders.append(reminder)
+            }
+            pendingReminderEditID = nil
+            reminders.sort { $0.dueDate < $1.dueDate }
+            todo = false
+        case "onfirstnotifydelete":
+            reminders.removeAll { $0.id == text }
+            todo = false
+        default: return nil
+        }
+        guard persistState() else {
+            todoItems = previousTodos
+            reminders = previousReminders
+            return "\\0" + FirstUtilityText.hostNotice("保存失敗: 変更を取り消しました") + "\\e"
+        }
+        let addedReminder = reminders.count > previousReminders.count
+        let recorded = try session.utilityFragment(todo ? .todoRecorded : (addedReminder ? .reminderAdded : .reminderRecorded))
+        return try recorded + "\\n" + (todo ? todoMenuScript() : reminderMenuScript())
+    }
+
+    private func todoMenuScript() throws -> String {
+        var script = try session.utilityFragment(.todoMenu) + "\\n\\_q[Utatane]\\n\\q[追加,OnFIRSTTodoAdd]\\n"
+        for (index, item) in todoItems.enumerated() {
+            script += "\(index + 1). \(item.completed ? "✓" : "・") \(FirstUtilityText.literal(item.text))\\n"
+            script += "\\q[編集,OnFIRSTTodoEdit,\(item.id)] \\q[完了・未完了,OnFIRSTTodoToggle,\(item.id)] \\q[削除,OnFIRSTTodoDelete,\(item.id)]\\n"
+        }
+        return script + "\\q[閉じる,cancel]\\_q\\e"
+    }
+
+    private func reminderMenuScript() throws -> String {
+        var script = try session.utilityFragment(.reminderMenu) + "\\n\\_q[Utatane]\\n\\q[追加,OnFIRSTNotifyAdd]\\n"
+        let formatter = FirstReminder.dateFormatter()
+        for item in reminders {
+            let repeatLabel = switch item.repeatRule {
+            case let .everyMinutes(minutes): "（\(minutes)分ごと）"
+            case .daily: "（毎日）"
+            case nil: ""
+            }
+            script += "\(formatter.string(from: item.dueDate))\(repeatLabel)：\(FirstUtilityText.literal(item.text))\\n"
+            if let path = item.filePath {
+                script += "開く：\(FirstUtilityText.literal(path))\\n"
+            }
+            script += "\\q[編集,OnFIRSTNotifyEdit,\(item.id)] \\q[開くファイル,OnFIRSTNotifyFile,\(item.id)] \\q[削除,OnFIRSTNotifyDelete,\(item.id)]\\n"
+        }
+        return script + "\\q[閉じる,cancel]\\_q\\e"
     }
 
     private func normalized(_ rawScript: String) -> SakuraScript {

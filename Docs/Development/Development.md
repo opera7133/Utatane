@@ -153,3 +153,5 @@ swift test --package-path packages --filter UtataneFirstNativeTests
 ```sh
 swift build --package-path packages -c release --product utatane-mcp
 ```
+
+利用できるツールは`get_active_ghost_list`・`get_expression_table`・`SakuraScript`に加え、`get_status`・`get_log`・`raise_event`・`reload`・`dump_surface`・`dump_balloon`です。`ghost_id`を省略すると現在のゴーストを対象にします。`raise_event`はイベント名とReference配列、`reload`はghost／shell／balloon／shiori／makotoを指定できます。画像の出力先は対象ゴースト配下に限り、相対パスは`ghost/master`を基準にします。状態取得やログ取得の引数はMCPクライアントが取得する各ツールのスキーマを参照してください。

@@ -178,7 +178,7 @@ let package = Package(
         ),
         .target(
             name: "UtataneFirstNative",
-            dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript"],
+            dependencies: ["UtataneCore", "UtataneRuntime", "UtataneSakuraScript", "UtataneNetwork"],
             path: "shiori/native/first/Sources"
         ),
         .target(

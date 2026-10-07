@@ -387,6 +387,41 @@ public final class SurfaceWindowController {
         }
     }
 
+    public func defaultSurfaceID(for scope: Int) -> Int? {
+        defaultSurfaceIDs[scope]
+    }
+
+    public func setDefaultSurfaceID(_ id: Int, scope: Int) {
+        defaultSurfaceIDs[scope] = id
+    }
+
+    public func hasAnimation(_ identifier: String, scope: Int) -> Bool {
+        characters[scope]?.hasAnimation(identifier) ?? false
+    }
+
+    public func hasSurface(_ identifier: String, scope: Int) -> Bool {
+        guard let shell, let id = shell.resolveSurface(identifier, scope: scope) else { return false }
+        return shell.surfaces[id] != nil || (try? ShellLoader().loadSurface(id: id, from: shell.directory)) != nil
+    }
+
+    public func runningAnimationIDs(for scope: Int) -> [Int] {
+        characters[scope]?.runningAnimationIDs ?? []
+    }
+
+    public var stickyWindowGroups: [[Int]] {
+        stickyGroups.map { $0.sorted() }
+    }
+
+    public func replaceStickyWindowGroups(_ groups: [[Int]]) {
+        var used: Set<Int> = []
+        stickyGroups = groups.compactMap { group in
+            let scopes = Set(group)
+            guard scopes.count >= 2, scopes.allSatisfy({ $0 >= 0 }), used.isDisjoint(with: scopes) else { return nil }
+            used.formUnion(scopes)
+            return scopes
+        }
+    }
+
     public func surfaceID(for scope: Int) -> Int? {
         characters[scope]?.currentSurfaceID
     }
@@ -423,7 +458,8 @@ public final class SurfaceWindowController {
         scope: Int,
         surfaceList: String?,
         prefix: String = "surface",
-        cropsFromZero: Bool = false
+        cropsFromZero: Bool = false,
+        animationID: String? = nil
     ) throws -> Int {
         guard let shell, let character = characters[scope] else { return 0 }
         guard !prefix.isEmpty,
@@ -444,6 +480,13 @@ public final class SurfaceWindowController {
                 options: Data.WritingOptions.atomic
             )
             count += 1
+            if let animationID {
+                count += try character.dumpAnimationFrames(surfaceID: id, identifier: animationID, cropsFromZero: cropsFromZero) { frame, image in
+                    guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff),
+                          let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
+                    try png.write(to: directory.appending(path: String(format: "%@%d_%04d.png", prefix, id, frame)), options: .atomic)
+                }
+            }
         }
         return count
     }
@@ -1145,6 +1188,11 @@ private final class CharacterSurfaceController {
     private var collisionMode = (enabled: false, showsNames: true)
 
     func dumpImage(surfaceID: Int, cropsFromZero: Bool) throws -> NSImage {
+        let result = try dumpCanvas(surfaceID: surfaceID)
+        return cropsFromZero ? result.croppedFromZero(loader: imageLoader) : result.image
+    }
+
+    private func dumpCanvas(surfaceID: Int, excluded: Set<Int> = []) throws -> SurfaceImageCanvas {
         guard let shell else {
             throw ShellError.missingSurface(id: surfaceID, directory: URL(fileURLWithPath: "/"))
         }
@@ -1161,9 +1209,39 @@ private final class CharacterSurfaceController {
                 usesSelfAlpha: shell.usesSelfAlpha, usesFullSelfAlpha: shell.usesFullSelfAlpha
             ))
         }
-        let result = try applyInitialAnimationCanvas(to: base, definition: definition, shell: shell,
-                                                     visited: [surfaceID], expands: true)
-        return cropsFromZero ? result.croppedFromZero(loader: imageLoader) : result.image
+        return try applyInitialAnimationCanvas(to: base, definition: definition, shell: shell,
+                                               visited: [surfaceID], excludedAnimationIDs: excluded, expands: true)
+    }
+
+    func dumpAnimationFrames(surfaceID: Int, identifier: String, cropsFromZero: Bool,
+                             output: (Int, NSImage) throws -> Void) throws -> Int
+    {
+        guard let shell, let definition = shell.surfaces[surfaceID],
+              let animation = definition.animations.first(where: { String($0.id) == identifier || $0.name?.caseInsensitiveCompare(identifier) == .orderedSame }) else { return 0 }
+        guard animation.patterns.count <= 10000 else { throw CocoaError(.fileReadTooLarge) }
+        let base = try dumpCanvas(surfaceID: surfaceID, excluded: [animation.id])
+        for (index, pattern) in animation.patterns.sorted(by: { $0.order < $1.order }).enumerated() {
+            let method = pattern.method.lowercased()
+            let frame: SurfaceImageCanvas
+            if pattern.fileName != nil || ["start", "stop", "alternativestart", "alternativestop", "parallelstart", "parallelstop", "scaling"].contains(method) {
+                throw CocoaError(.featureUnsupported)
+            } else if method == "move" {
+                frame = SurfaceImageCanvas(image: base.image, origin: NSPoint(x: base.origin.x + CGFloat(pattern.x), y: base.origin.y + CGFloat(pattern.y)))
+            } else if method == "insert" || pattern.surfaceID < 0 {
+                frame = base
+            } else if method == "base" {
+                frame = try dumpCanvas(surfaceID: pattern.surfaceID, excluded: [animation.id])
+            } else if let operation = animationCompositingOperation(for: method) {
+                let layer = try pattern.surfaceID == surfaceID ? base : renderLayerCanvas(surfaceID: pattern.surfaceID, shell: shell, visited: [surfaceID],
+                                                                                          ignoresTransparency: method == "asis", expands: true)
+                frame = try base.compositing(layer, x: pattern.x, y: pattern.y, operation: operation,
+                                             clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(method), expands: true, loader: imageLoader)
+            } else {
+                throw CocoaError(.featureUnsupported)
+            }
+            try output(index, cropsFromZero ? frame.croppedFromZero(loader: imageLoader) : frame.image)
+        }
+        return animation.patterns.count
     }
 
     func setStayOnTop(_ stayOnTop: Bool) {
@@ -1216,6 +1294,10 @@ private final class CharacterSurfaceController {
     var visibleWindowFrame: NSRect? {
         guard item?.isVisible == true else { return nil }
         return item?.frame
+    }
+
+    var runningAnimationIDs: [Int] {
+        animationTasks.keys.sorted()
     }
 
     var currentSurfaceID: Int? {
@@ -1652,6 +1734,11 @@ private final class CharacterSurfaceController {
         guard !locked, let pendingAnimationImage else { return }
         self.pendingAnimationImage = nil
         setAnimationImage(pendingAnimationImage)
+    }
+
+    func hasAnimation(_ identifier: String) -> Bool {
+        guard let id = animationID(for: identifier) else { return false }
+        return currentSurfaceDefinition?.animations.contains { $0.id == id } ?? false
     }
 
     private func animationID(for identifier: String) -> Int? {

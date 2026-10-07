@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import UtataneBalloon
+import UtataneCore
 import UtataneSakuraScript
 
 @MainActor
@@ -39,6 +40,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         public let inputY: Int
         public let inputWidth: Int?
         public let inputHeight: Int?
+        public let usesSelfAlpha: Bool
+        public let usesFullSelfAlpha: Bool
         public let backgroundImageURL: URL?
         public let confirmButtonUpImageURL: URL?
         public let confirmButtonDownImageURL: URL?
@@ -54,6 +57,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             inputY = balloon.communicateBoxY
             inputWidth = balloon.communicateBoxWidth
             inputHeight = balloon.communicateBoxHeight
+            usesSelfAlpha = balloon.usesSelfAlpha
+            usesFullSelfAlpha = balloon.usesFullSelfAlpha
             self.backgroundImageURL = backgroundImageURL
             confirmButtonUpImageURL = Self.imageURL(named: "ok_up.png", in: balloon.directory)
             confirmButtonDownImageURL = Self.imageURL(named: "ok_down.png", in: balloon.directory)
@@ -126,7 +131,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         }
     }
 
-    private var window: NSWindow?
+    private(set) var window: NSWindow?
     private var currentRequest: Request?
     private var timeoutTask: Task<Void, Never>?
     private var timeoutHandler: (@MainActor () -> Void)?
@@ -139,8 +144,12 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         closeCurrentWindow(invokeCancel: true)
         currentRequest = request
 
+        let backgroundImage = request.prompt?.isEmpty == false ? nil : request.appearance.flatMap { appearance in
+            appearance.backgroundImageURL.flatMap { try? Self.loadSkinImage($0, appearance: appearance) }
+        }
         let view = TextInputDialogView(
             request: request,
+            backgroundImage: backgroundImage,
             onCommit: { [weak self] text in
                 self?.submitCurrent(text)
             },
@@ -152,21 +161,21 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             }
         )
 
-        let styleMask: NSWindow.StyleMask = request.allowsCancel
-            ? [.titled, .closable]
-            : [.titled]
-
-        let backgroundImageSize = request.appearance?.backgroundImageURL
-            .flatMap { NSImage(contentsOf: $0)?.size }
-        let panelSize = Self.panelSize(for: request.appearance, backgroundImageSize: backgroundImageSize)
-        let panel = NSPanel(
+        let backgroundImageSize = backgroundImage?.size
+        let panelSize = Self.panelSize(for: request.appearance, backgroundImageSize: backgroundImageSize, hasPrompt: request.prompt?.isEmpty == false, allowsCancel: request.allowsCancel)
+        let panel = InputPanel(
             contentRect: NSRect(origin: .zero, size: panelSize),
-            styleMask: styleMask,
+            styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
         panel.title = request.title
-        panel.contentViewController = NSHostingController(rootView: view)
+        panel.isOpaque = false
+        panel.backgroundColor = .clear
+        panel.hasShadow = true
+        panel.isMovableByWindowBackground = true
+        panel.contentViewController = NSHostingController(rootView: view.frame(width: panelSize.width, height: panelSize.height))
+        panel.setContentSize(panelSize)
         panel.isReleasedWhenClosed = false
         panel.delegate = self
         panel.center()
@@ -308,15 +317,26 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             .filter { !$0.isEmpty && seen.insert($0).inserted }
     }
 
-    static func panelSize(for appearance: Appearance?, backgroundImageSize: NSSize?) -> NSSize {
-        guard let appearance else { return NSSize(width: 380, height: 160) }
-        let inputWidth = CGFloat(max(appearance.inputWidth ?? 340, 120))
-        let inputHeight = CGFloat(max(appearance.inputHeight ?? 24, 22))
-        let contentWidth = CGFloat(max(appearance.inputX, 20)) + inputWidth + 20
-        let contentHeight = CGFloat(max(appearance.inputY, 20)) + inputHeight + 84
+    static func loadSkinImage(_ url: URL, appearance: Appearance) throws -> NSImage {
+        let mask = url.deletingPathExtension().appendingPathExtension("pna")
+        return try SurfaceImageLoader().load(
+            SurfaceAsset(id: -1, imageURL: url, alphaMaskURL: FileManager.default.fileExists(atPath: mask.path) ? mask : nil),
+            usesSelfAlpha: appearance.usesSelfAlpha, usesFullSelfAlpha: appearance.usesFullSelfAlpha
+        )
+    }
+
+    static func panelSize(for appearance: Appearance?, backgroundImageSize: NSSize?, hasPrompt: Bool = false, allowsCancel: Bool = true) -> NSSize {
+        if let backgroundImageSize, !hasPrompt {
+            return backgroundImageSize
+        }
+        let inputWidth = CGFloat(max(appearance?.inputWidth ?? 280, 120))
+        let inputHeight = CGFloat(max(appearance?.inputHeight ?? 24, 24))
+        let buttonsWidth: CGFloat = allowsCancel ? 78 : 44
+        let contentWidth = CGFloat(max(appearance?.inputX ?? 10, 8)) + inputWidth + buttonsWidth + 22
+        let contentHeight = CGFloat(max(appearance?.inputY ?? 24, 24)) + inputHeight + 10 + (hasPrompt ? 46 : 0)
         return NSSize(
             width: max(380, contentWidth, backgroundImageSize?.width ?? 0),
-            height: max(160, contentHeight, backgroundImageSize?.height ?? 0)
+            height: max(58, contentHeight, backgroundImageSize?.height ?? 0)
         )
     }
 
@@ -358,8 +378,15 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
     }
 }
 
+private final class InputPanel: NSPanel {
+    override var canBecomeKey: Bool {
+        true
+    }
+}
+
 private struct TextInputDialogView: View {
     let request: TextInputWindowController.Request
+    let backgroundImage: NSImage?
     let onCommit: (String) -> Void
     let onCancel: () -> Void
     @State private var text: String
@@ -369,10 +396,12 @@ private struct TextInputDialogView: View {
 
     init(
         request: TextInputWindowController.Request,
+        backgroundImage: NSImage?,
         onCommit: @escaping (String) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.request = request
+        self.backgroundImage = backgroundImage
         self.onCommit = onCommit
         self.onCancel = onCancel
         _text = State(initialValue: request.initialValue)
@@ -383,77 +412,76 @@ private struct TextInputDialogView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             inputBackground
-            VStack(alignment: .leading, spacing: 14) {
+            // Skins can include their own title in the background image.
+            if backgroundImage == nil {
+                Text(request.title)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(inputForegroundColor)
+                    .lineLimit(1)
+                    .padding(.leading, inputOriginX)
+                    .padding(.trailing, 10)
+                    .padding(.top, 5)
+            }
+            VStack(alignment: .leading, spacing: 8) {
                 if let prompt = request.prompt, !prompt.isEmpty {
                     Text(prompt)
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
-                Group {
-                    switch request.inputKind {
-                    case .password:
-                        SecureField(request.placeholder ?? "", text: $text)
+                HStack(spacing: 6) {
+                    Group {
+                        switch request.inputKind {
+                        case .password:
+                            SecureField(request.placeholder ?? "", text: $text)
+                                .textFieldStyle(.roundedBorder)
+                                .focused($isFocused)
+                                .onSubmit { submit() }
+                        case .date:
+                            DatePicker("", selection: $dateValue, displayedComponents: .date)
+                                .labelsHidden()
+                        case .time:
+                            DatePicker("", selection: $dateValue, displayedComponents: .hourAndMinute)
+                                .labelsHidden()
+                        case let .slider(minimum, maximum):
+                            HStack {
+                                Slider(
+                                    value: $sliderValue,
+                                    in: Double(minimum) ... Double(max(maximum, minimum + 1)),
+                                    step: 1
+                                )
+                                Text(String(Int(sliderValue.rounded())))
+                                    .monospacedDigit()
+                                    .frame(minWidth: 64, alignment: .trailing)
+                            }
+                        case .text where request.autocompleteValues.isEmpty,
+                             .ipAddress where request.autocompleteValues.isEmpty:
+                            TextField(
+                                request.placeholder ?? "",
+                                text: $text
+                            )
                             .textFieldStyle(.roundedBorder)
                             .focused($isFocused)
-                            .onSubmit { submit() }
-                    case .date:
-                        DatePicker("", selection: $dateValue, displayedComponents: .date)
-                            .labelsHidden()
-                    case .time:
-                        DatePicker("", selection: $dateValue, displayedComponents: .hourAndMinute)
-                            .labelsHidden()
-                    case let .slider(minimum, maximum):
-                        HStack {
-                            Slider(
-                                value: $sliderValue,
-                                in: Double(minimum) ... Double(max(maximum, minimum + 1)),
-                                step: 1
+                            .onSubmit {
+                                submit()
+                            }
+                        default:
+                            AutocompleteTextField(
+                                text: $text,
+                                placeholder: request.placeholder ?? "",
+                                values: request.autocompleteValues,
+                                fontName: request.appearance?.fontName,
+                                fontHeight: CGFloat(max(request.appearance?.fontHeight ?? 13, 1)),
+                                fontColor: request.appearance.map { nsColor($0.fontColor) } ?? .textColor,
+                                backgroundColor: request.appearance?.backgroundColor.map(nsColor),
+                                onCommit: { _ in onCommit(submittedValue) }
                             )
-                            Text(String(Int(sliderValue.rounded())))
-                                .monospacedDigit()
-                                .frame(minWidth: 64, alignment: .trailing)
                         }
-                    case .text where request.autocompleteValues.isEmpty,
-                         .ipAddress where request.autocompleteValues.isEmpty:
-                        TextField(
-                            request.placeholder ?? "",
-                            text: $text
-                        )
-                        .textFieldStyle(.roundedBorder)
-                        .focused($isFocused)
-                        .onSubmit {
-                            submit()
-                        }
-                    default:
-                        AutocompleteTextField(
-                            text: $text,
-                            placeholder: request.placeholder ?? "",
-                            values: request.autocompleteValues,
-                            fontName: request.appearance?.fontName,
-                            fontHeight: CGFloat(max(request.appearance?.fontHeight ?? 13, 1)),
-                            fontColor: nsColor(
-                                request.appearance?.fontColor ?? BalloonColor(red: 0, green: 0, blue: 0)
-                            ),
-                            backgroundColor: request.appearance?.backgroundColor.map(nsColor),
-                            onCommit: { _ in onCommit(submittedValue) }
-                        )
                     }
-                }
-                .font(inputFont)
-                .foregroundStyle(inputForegroundColor)
-                .frame(width: inputWidth, height: inputHeight)
-                .background(inputBackgroundColor, in: RoundedRectangle(cornerRadius: 5))
-                HStack {
-                    if request.allowsCancel {
-                        dialogButton(
-                            title: String(localized: "キャンセル"),
-                            upURL: request.appearance?.cancelButtonUpImageURL,
-                            downURL: request.appearance?.cancelButtonDownImageURL,
-                            action: onCancel
-                        )
-                        .keyboardShortcut(.cancelAction)
-                    }
-                    Spacer()
+                    .font(inputFont)
+                    .foregroundStyle(inputForegroundColor)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: inputHeight)
+                    .background(inputBackgroundColor, in: RoundedRectangle(cornerRadius: 5))
                     dialogButton(
                         title: request.actionTitle,
                         upURL: request.appearance?.confirmButtonUpImageURL,
@@ -461,13 +489,24 @@ private struct TextInputDialogView: View {
                         action: submit
                     )
                     .keyboardShortcut(.defaultAction)
+                    if request.allowsCancel {
+                        dialogButton(
+                            title: String(localized: "キャンセル"),
+                            upURL: request.appearance?.cancelButtonUpImageURL,
+                            downURL: request.appearance?.cancelButtonDownImageURL,
+                            isCancel: true,
+                            action: onCancel
+                        )
+                        .keyboardShortcut(.cancelAction)
+                    }
                 }
             }
             .padding(.leading, inputOriginX)
             .padding(.top, inputOriginY)
-            .padding(.trailing, 20)
-            .padding(.bottom, 20)
+            .padding(.trailing, 10)
+            .padding(.bottom, backgroundImage == nil ? 10 : 4)
         }
+        .clipShape(RoundedRectangle(cornerRadius: backgroundImage == nil ? 10 : 0))
         .onAppear {
             isFocused = true
         }
@@ -496,15 +535,32 @@ private struct TextInputDialogView: View {
         title: String,
         upURL: URL?,
         downURL: URL?,
+        isCancel: Bool = false,
         action: @escaping () -> Void
     ) -> some View {
-        if let upURL, let upImage = NSImage(contentsOf: upURL) {
-            let downImage = downURL.flatMap(NSImage.init(contentsOf:)) ?? upImage
+        if let appearance = request.appearance, let upURL,
+           let upImage = try? TextInputWindowController.loadSkinImage(upURL, appearance: appearance)
+        {
+            let downImage = downURL.flatMap { try? TextInputWindowController.loadSkinImage($0, appearance: appearance) } ?? upImage
             Button(title, action: action)
                 .buttonStyle(BalloonImageButtonStyle(upImage: upImage, downImage: downImage))
                 .accessibilityLabel(title)
         } else {
-            Button(title, action: action)
+            Button(action: action) {
+                if isCancel {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 26, height: buttonHeight)
+                } else {
+                    Text(title).font(.system(size: 12, weight: .medium))
+                        .padding(.horizontal, 8).frame(minWidth: 28, minHeight: buttonHeight)
+                }
+            }
+            .buttonStyle(.plain)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 4))
+            .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(inputForegroundColor.opacity(0.35)))
+            .accessibilityLabel(title)
+            .help(title)
         }
     }
 
@@ -549,31 +605,31 @@ private struct TextInputDialogView: View {
 
     @ViewBuilder
     private var inputBackground: some View {
-        if let url = request.appearance?.backgroundImageURL,
-           let image = NSImage(contentsOf: url)
-        {
+        if let image = backgroundImage {
             Image(nsImage: image)
-                .resizable()
-                .scaledToFill()
+                .interpolation(.none)
+                .frame(width: image.size.width, height: image.size.height)
         } else {
-            Color(NSColor.windowBackgroundColor)
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(NSColor.windowBackgroundColor))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.primary.opacity(0.25)))
         }
     }
 
     private var inputOriginX: CGFloat {
-        CGFloat(max(request.appearance?.inputX ?? 20, 0))
+        CGFloat(max(request.appearance?.inputX ?? 10, 8))
     }
 
     private var inputOriginY: CGFloat {
-        CGFloat(max(request.appearance?.inputY ?? 20, 0))
+        CGFloat(max(request.appearance?.inputY ?? 24, backgroundImage == nil ? 24 : 0))
     }
 
-    private var inputWidth: CGFloat {
-        CGFloat(max(request.appearance?.inputWidth ?? 340, 120))
+    private var buttonHeight: CGFloat {
+        min(24, backgroundImage.map { max(16, $0.size.height - inputOriginY - 4) } ?? 24)
     }
 
     private var inputHeight: CGFloat {
-        CGFloat(max(request.appearance?.inputHeight ?? 24, 22))
+        min(CGFloat(max(request.appearance?.inputHeight ?? 24, 20)), backgroundImage.map { max(16, $0.size.height - inputOriginY - 4) } ?? 24)
     }
 
     private var inputFont: Font {
@@ -585,7 +641,7 @@ private struct TextInputDialogView: View {
     }
 
     private var inputForegroundColor: Color {
-        color(request.appearance?.fontColor ?? BalloonColor(red: 0, green: 0, blue: 0))
+        request.appearance.map { color($0.fontColor) } ?? .primary
     }
 
     private var inputBackgroundColor: Color {

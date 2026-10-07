@@ -17,6 +17,13 @@ public enum LegacyMateriaScriptNormalizer {
                 scope = 0
             } else if command == "1" || command == "u" {
                 scope = 1
+            } else if command == "x" {
+                // UKADOC: ordinary click-wait resets the speaker to Sakura.
+                // The SSP noclear variant retains the current speaker.
+                let suffix = String(characters.dropFirst(index + 2).prefix(9)).lowercased()
+                if suffix != "[noclear]" {
+                    scope = 0
+                }
             } else if command == "p", index + 3 < characters.count,
                       characters[index + 2] == "[",
                       let closing = characters[(index + 3)...].firstIndex(of: "]"),

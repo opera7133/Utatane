@@ -40,6 +40,11 @@ actor FallbackPersonalityEngine: PersonalityEngine {
         return try await fallback.response(for: event)
     }
 
+    func updateRequestStatus(_ status: String) async {
+        await primary.updateRequestStatus(status)
+        await fallback.updateRequestStatus(status)
+    }
+
     func shutdown() async {
         await primary.shutdown()
         await fallback.shutdown()
@@ -68,6 +73,11 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
 
     private let backend: Backend
     private let adapter = GhostEventShioriAdapter()
+    private var requestStatus = ""
+
+    func updateRequestStatus(_ status: String) async {
+        requestStatus = status
+    }
 
     init(backend: Backend) {
         self.backend = backend
@@ -85,7 +95,7 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
     }
 
     func response(for event: GhostEvent) async throws -> PersonalityResponse {
-        var context = ShioriEventContext(charset: backend.charset)
+        var context = ShioriEventContext(charset: backend.charset, status: requestStatus)
         if case let .mouseClick(scope, _) = event {
             context.scope = scope
         } else if case let .mouse(mouseEvent) = event {

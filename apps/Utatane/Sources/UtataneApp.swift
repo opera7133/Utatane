@@ -356,6 +356,7 @@ private struct UtataneRootView: View {
     @State private var contentPickerController = ContentPickerWindowController()
     @State private var contentExplorerController = ContentExplorerWindowController()
     @State private var aiGraphWindowController = AIGraphWindowController()
+    @State private var firstEyesightWindowController = FIRSTEyesightWindowController()
     @State private var ipMessengerWindowController = IPMessengerWindowController()
     @State private var textInputWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
@@ -403,6 +404,7 @@ private struct UtataneRootView: View {
     @State private var configuredSpeechSynthesisEnabled: Bool?
     @State private var configuredSpeechRecognitionEnabled: Bool?
     @State private var activeSpeechSynthesisCount = 0
+    @State private var usageWindowController = GhostUsageWindowController()
     @State private var calendarWindowController = CalendarWindowController(
         storeURL: ContentRoot.calendarSchedulesURL,
         skinDirectories: ContentRoot.calendarSkinReadDirectories
@@ -502,7 +504,10 @@ private struct UtataneRootView: View {
                 currentGhostName: { currentGhost?.name },
                 playRandomTalk: { sendEvent(.randomTalk) },
                 changeGhost: { showGhostPicker() },
-                restoreSurfaces: { surfaceWindowController.restoreSurfaces() },
+                restoreSurfaces: {
+                    NSApplication.shared.unhide(nil)
+                    surfaceWindowController.restoreSurfaces()
+                },
                 showSpeechHistory: { showSpeechHistory() },
                 showSettings: { showSettingsPane(.general) },
                 showHelp: { UtataneHelp.open() },
@@ -607,6 +612,7 @@ private struct UtataneRootView: View {
             showContentExplorer()
         }
         .onReceive(NotificationCenter.default.publisher(for: .restoreUtataneSurfaces)) { _ in
+            NSApplication.shared.unhide(nil)
             surfaceWindowController.restoreSurfaces()
         }
         .onReceive(NotificationCenter.default.publisher(for: .showUtataneSpeechHistory)) { _ in
@@ -821,6 +827,12 @@ private struct UtataneRootView: View {
                 await updateCurrentBalloon(isAutomatic: true)
             }
         }
+        .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "calendar-subscriptions", id: "calendar") {
+            while !Task.isCancelled {
+                await calendarWindowController.refreshSubscriptions()
+                do { try await Task.sleep(for: .seconds(3600)) } catch { break }
+            }
+        }
         .applicationRuntimeTask(in: applicationDelegate.runtimeTasks, key: "headline-refresh", id: "\(networkSettings.automaticHeadlineRefresh)-\(networkSettings.headlineRefreshIntervalMinutes)") {
             guard networkSettings.automaticHeadlineRefresh else { return }
             while !Task.isCancelled {
@@ -982,7 +994,7 @@ private struct UtataneRootView: View {
             values["currentghost.path"] = currentGhost.rootDirectory.path
             values["ghostlist.current.name"] = currentGhost.name
             values["ghostlist.current.path"] = currentGhost.rootDirectory.path
-            values["currentghost.status"] = "running"
+            values["currentghost.status"] = scriptPlayer.executionStatus
             values["currentghost.scope.count"] = String(currentGhost.characters.count)
             for character in currentGhost.characters {
                 let scope = character.scope
@@ -1624,6 +1636,44 @@ private struct UtataneRootView: View {
         return true
     }
 
+    private func playSakuraScriptFile(_ file: SakuraScriptFile) async throws {
+        var target = currentGhost
+        var previous: Task<Void, Never>?
+        var playbacks: [Task<Void, Never>] = []
+        defer { playbacks.forEach { $0.cancel() } }
+        for step in file.steps {
+            try Task.checkCancellation()
+            switch step {
+            case let .ghost(name):
+                guard let selected = model.ghosts.first(where: { ghost($0, matches: name) }) else { throw CocoaError(.fileNoSuchFile) }
+                if selected.id != currentGhost?.id, calledGhosts[selected.id] == nil {
+                    try await startCalledGhost(selected)
+                }
+                target = selected
+            case let .wait(milliseconds): try await Task.sleep(for: .milliseconds(milliseconds))
+            case let .script(source, waitsForPrevious):
+                if waitsForPrevious {
+                    await previous?.value
+                }
+                let player: SakuraScriptPlayer
+                let selectedBalloon: BalloonDefinition
+                if let target, let runtime = calledGhosts[target.id] {
+                    player = runtime.player; selectedBalloon = runtime.balloon
+                } else if target?.id == currentGhost?.id, let balloon {
+                    player = scriptPlayer; selectedBalloon = balloon
+                } else {
+                    throw CocoaError(.fileNoSuchFile)
+                }
+                let task = Task { await player.playAndWait(SakuraScript(rawValue: source), balloon: selectedBalloon) }
+                previous = task
+                playbacks.append(task)
+            }
+        }
+        for playback in playbacks {
+            await playback.value
+        }
+    }
+
     private func installFromHomeURL(_ homeURL: URL) async {
         let fileManager = FileManager.default
         let root = fileManager.temporaryDirectory.appending(
@@ -1654,6 +1704,9 @@ private struct UtataneRootView: View {
     }
 
     private func sendSecondChange(at date: Date) {
+        if Calendar.current.component(.second, from: date) == 0 {
+            broadcastEvent(.notification(id: "rateofusegraph", references: GhostUsageHistory.references(model.ghosts)))
+        }
         calendarWindowController.checkFiveMinuteReminders(at: date)
         guard !isTransitioningGhost else { return }
         let references = secondChangeReferences(for: surfaceWindowController)
@@ -1997,6 +2050,10 @@ private struct UtataneRootView: View {
 
     private func closeCurrentGhost(reason: GhostStopReason, isReload: Bool = false) async -> String {
         guard let activeSession = session else { return "" }
+        if let ghost = currentGhost {
+            GhostUsageHistory.store.end(ghost.rootDirectory.path)
+        }
+        firstEyesightWindowController.close()
 
         do {
             if reason == .vanish {
@@ -2263,6 +2320,9 @@ private struct UtataneRootView: View {
                 sendEvent(.shiori(id: "OnChoiceTimeout", references: [0: script]))
             }
             scriptPlayer.onOpen = { target in
+                if target.lowercased() == "rateofusegraph" {
+                    usageWindowController.show(ghosts: model.ghosts); return
+                }
                 if target.caseInsensitiveCompare("calendar") == .orderedSame {
                     calendarWindowController.showCalendar()
                     return
@@ -2428,7 +2488,10 @@ private struct UtataneRootView: View {
             scriptPlayer.onGetProperties = { eventID, properties in
                 guard let activeSession = session else { return nil }
                 await registerCurrentGhostProperties()
-                let values = await propertySystem.values(for: properties)
+                let storedValues = await propertySystem.values(for: properties)
+                let values = properties.enumerated().map { index, property in
+                    scriptPlayer.runtimePropertyValue(for: property) ?? storedValues[index]
+                }
                 return try? await activeSession.handle(event: .shiori(
                     id: eventID,
                     references: Dictionary(uniqueKeysWithValues: values.enumerated().map { ($0.offset, $0.element) })
@@ -2458,6 +2521,11 @@ private struct UtataneRootView: View {
                 systemDialogController.close(id: id)
             }
             scriptPlayer.onInputBox = { command in
+                defer {
+                    if command.id.caseInsensitiveCompare("OnEyesightgameInput") == .orderedSame {
+                        firstEyesightWindowController.close()
+                    }
+                }
                 guard let activeSession = session else { return nil }
                 let autocomplete = try? await activeSession.handle(event: .shiori(
                     id: "inputbox.autocomplete",
@@ -2658,11 +2726,13 @@ private struct UtataneRootView: View {
                 personalityEngine: personalityEngine(for: ghost),
                 variableStore: GhostVariableStore(fileURL: ContentRoot.variableStoreURL(for: ghost)),
                 logStore: .shared,
-                ghostName: ghost.name
+                ghostName: ghost.name,
+                requestStatus: { [player = scriptPlayer] in await player.executionStatus }
             )
             session = ghostSession
             configureContextMenu()
             _ = try? await ghostSession.start(event: SHIORIEventFactory.initialize(isReload: isReload))
+            GhostUsageHistory.store.begin(GhostUsageHistory.identity(ghost))
             siteMenuResources[ghost.id] = await loadSiteMenuResources(from: ghostSession)
             configureContextMenu()
             let shellDefinition = try shellLoader.load(from: shellChoice.directory)
@@ -3404,7 +3474,8 @@ private struct UtataneRootView: View {
                     scope: command.scope,
                     surfaceList: command.surfaceList,
                     prefix: command.prefix,
-                    cropsFromZero: command.cropsFromZero
+                    cropsFromZero: command.cropsFromZero,
+                    animationID: command.animationID
                 )
                 guard let eventID = command.eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? eventID : "OnDumpSurfaceComplete"
@@ -3418,12 +3489,44 @@ private struct UtataneRootView: View {
                     0: destinationURL.path
                 ]))
             }
-        case let .createUpdateData(directoryPath, eventID):
-            let targetURL = directoryPath.map(resolvePath) ?? currentGhost.rootDirectory
+        case let .dumpBalloon(command):
+            let destinationURL = command.directoryPath.map(resolvePath)
+                ?? masterDirectory.appending(path: "var", directoryHint: .isDirectory)
+            do {
+                let root = currentGhost.rootDirectory.resolvingSymlinksInPath().standardizedFileURL.path
+                let destination = destinationURL.resolvingSymlinksInPath().standardizedFileURL.path
+                guard destinationURL.lastPathComponent != ".utatane-rejected-path",
+                      destination == root || destination.hasPrefix(root + "/")
+                else {
+                    throw CocoaError(.fileWriteNoPermission)
+                }
+                let count = try balloonWindowController.dumpBalloonImage(
+                    to: destinationURL, scope: command.scope, prefix: command.prefix, hiddenItems: command.hiddenItems
+                )
+                guard let eventID = command.eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? eventID : "OnDumpBalloonComplete"
+                return try await activeSession.handle(event: .shiori(id: id, references: [
+                    0: String(count)
+                ]))
+            } catch {
+                guard let eventID = command.eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnDumpBalloonFailure"
+                return try? await activeSession.handle(event: .shiori(id: id, references: [
+                    0: destinationURL.path
+                ]))
+            }
+        case let .createUpdateData(outputPath, eventID):
+            let targetURL = outputPath.flatMap { $0.isEmpty ? nil : resolvePath($0) }
+                ?? currentGhost.rootDirectory.appending(path: "updates2.dau")
             do {
                 _ = try? await activeSession.handle(event: .shiori(id: "OnUpdatedataCreating", references: [:]))
                 let generator = UpdateDataGenerator()
-                let result = try generator.generate(in: targetURL)
+                guard targetURL.lastPathComponent != ".utatane-rejected-path" else {
+                    throw CocoaError(.fileWriteNoPermission)
+                }
+                let result = try outputPath?.isEmpty != false
+                    ? generator.generateStandard(in: currentGhost.rootDirectory)
+                    : generator.generate(in: currentGhost.rootDirectory, outputURL: targetURL)
                 let standardResponse = try? await activeSession.handle(event: .shiori(
                     id: "OnUpdatedataCreated",
                     references: [:]
@@ -3851,18 +3954,35 @@ private struct UtataneRootView: View {
                     ? URL(fileURLWithPath: filePath)
                     : (currentGhost?.rootDirectory.appending(path: "ghost/master").appending(path: filePath) ?? URL(fileURLWithPath: filePath))
                 installNar(from: fileURL)
-            case let .url(urlString, _):
-                guard let downloadURL = URL(string: urlString), ["http", "https"].contains(downloadURL.scheme?.lowercased()) else { return }
+            case let .url(urlString, type):
+                guard let downloadURL = URL(string: urlString), isWebURL(downloadURL) else { return }
                 Task {
-                    guard let (data, response) = try? await URLSession.shared.data(from: downloadURL),
-                          let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode)
-                    else { return }
-                    let tempDir = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
-                    try? FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
-                    let filename = downloadURL.lastPathComponent.isEmpty ? "download.nar" : downloadURL.lastPathComponent
-                    let tempFile = tempDir.appending(path: filename)
-                    try? data.write(to: tempFile)
-                    installNar(from: tempFile)
+                    do {
+                        if type?.lowercased() == "homeurl" {
+                            await installFromHomeURL(downloadURL)
+                            return
+                        }
+                        if let type, URLInstallPayload(rawValue: type.lowercased()) == nil {
+                            throw CocoaError(.featureUnsupported)
+                        }
+                        let data = try await NetworkFetchClient(maximumBytes: 128 * 1024 * 1024).fetch(downloadURL)
+                        guard let kind = type.flatMap({ URLInstallPayload(rawValue: $0.lowercased()) })
+                            ?? URLInstallPayload.detect(data: data, url: downloadURL) else { throw CocoaError(.fileReadUnknown) }
+                        switch kind {
+                        case .homeurl: await installFromHomeURL(downloadURL)
+                        case .feed:
+                            let feed = try RSSFeedClient.parse(data)
+                            try NetworkSensorStore().register(url: downloadURL, name: feed.title, type: .feed, root: ContentRoot.headlineInstallationDirectory)
+                            reloadHeadlines()
+                        case .ical:
+                            try calendarWindowController.subscribe(url: downloadURL, data: data)
+                        case .ssf: try await playSakuraScriptFile(SakuraScriptFile(data: data))
+                        case .nar:
+                            let tempFile = FileManager.default.temporaryDirectory.appending(path: "utatane-url-\(UUID().uuidString).nar")
+                            try data.write(to: tempFile)
+                            installNar(from: tempFile)
+                        }
+                    } catch { showError(error.localizedDescription) }
                 }
             }
         case .reloadGhost:
@@ -3926,6 +4046,33 @@ private struct UtataneRootView: View {
             )
         case .openAIGraph:
             showAIGraph(calledRuntime: calledRuntime)
+        case let .openFIRSTEyesight(stage):
+            firstEyesightWindowController.show(stage: stage, title: (calledRuntime?.ghost ?? currentGhost)?.name ?? "Utatane")
+        case .closeFIRSTEyesight:
+            firstEyesightWindowController.close()
+        case let .firstIPAddress(copy):
+            let addresses = Host.current().addresses.filter { $0 != "::1" && !$0.hasPrefix("127.") }.sorted()
+            let address = addresses.first(where: { !$0.contains(":") }) ?? addresses.first
+            if copy {
+                if let address {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(address, forType: .string)
+                }
+            } else {
+                let event = GhostEvent.shiori(id: "OnFIRSTIPAddress", references: address.map { [0: $0] } ?? [:])
+                if let calledRuntime {
+                    calledRuntime.send(event)
+                } else {
+                    sendEvent(event)
+                }
+            }
+        case let .firstSystemAction(identifier):
+            guard let operation = FIRSTSystemOperation.allCases.first(where: { $0.rawValue.lowercased() == identifier.lowercased() }) else { return }
+            do {
+                try FIRSTSystemOperations().perform(operation)
+            } catch {
+                showError(error.localizedDescription)
+            }
         case let .setTaskTrayIcon(file, tooltip, durationMilliseconds, runCount):
             let ghost = calledRuntime?.ghost ?? currentGhost
             let candidates = [
@@ -3971,8 +4118,11 @@ private struct UtataneRootView: View {
             networkSettings.selectedPane = settingsPane(for: identifier)
             openSettings()
         case .minimizeWindows:
-            surfaceWindowController.hideAll()
-            balloonWindowController.hideAll()
+            // App hide/unhide notifications already deliver the paired
+            // OnWindowStateMinimize/Restore events to every running ghost.
+            // Unlike ordering out individual windows this also keeps scripts
+            // from making a minimized ghost reappear before restoration.
+            NSApplication.shared.hide(nil)
         case .saveWallpaper:
             savedDesktopWallpaperURLs = Dictionary(uniqueKeysWithValues: NSScreen.screens.compactMap { screen in
                 NSWorkspace.shared.desktopImageURL(for: screen).map { (screen.localizedName, $0) }
@@ -4274,6 +4424,7 @@ private struct UtataneRootView: View {
 
     private func dismissCurrentGhost(menuScope: Int = 0, windowScope: Int = 0) {
         guard !isClosingCurrentGhost else { return }
+        firstEyesightWindowController.close()
         isClosingCurrentGhost = true
         Task {
             defer { isClosingCurrentGhost = false }
@@ -4614,7 +4765,7 @@ private struct UtataneRootView: View {
             let references = [
                 0: String(result.messageCount), 1: String(result.totalBytes),
                 2: effectiveAccount, 3: String(difference),
-                4: "", 5: "", 6: "", 7: ""
+                4: result.topResult, 5: "", 6: "", 7: result.senderAndSubject
             ]
             let completion = try? await session.handle(event: .shiori(
                 id: "OnBIFFComplete",
@@ -4623,13 +4774,15 @@ private struct UtataneRootView: View {
             if completion?.rawValue.isEmpty != false, difference > 0 {
                 return try? await session.handle(event: .shiori(id: "OnBIFF2Complete", references: [
                     0: String(result.messageCount), 1: String(result.totalBytes),
-                    2: effectiveAccount, 3: ""
+                    2: effectiveAccount, 3: result.topResult
                 ]))
             }
             return completion
         } catch {
+            let reason = (error as? URLError)?.code == .timedOut ? "timeout"
+                : (error as NSError).domain == "POP3" ? "kick" : "defect"
             return try? await session.handle(event: .shiori(id: "OnBIFFFailure", references: [
-                0: error.localizedDescription,
+                0: reason,
                 2: effectiveAccount
             ]))
         }
@@ -5304,6 +5457,7 @@ private struct UtataneRootView: View {
 
     private func functionMenu(for target: GhostContextMenuTarget) -> SurfaceContextMenuItem {
         var items: [SurfaceContextMenuItem] = [
+            .action(title: "使ってるぞグラフ", handler: { usageWindowController.show(ghosts: model.ghosts) }),
             .action(title: String(localized: "カレンダー"), handler: { calendarWindowController.showCalendar() }),
             .action(title: String(localized: "IP Messenger"), handler: { ipMessengerWindowController.showMessenger() }),
             .action(title: String(localized: "エクスプローラ"), handler: { showContentExplorer() }),
@@ -5855,10 +6009,12 @@ private struct UtataneRootView: View {
                 windowMode: networkSettings.windowMode,
                 presentationSession: calledPresentationSession
             )
+            runtime.installedGhosts = { model.ghosts }
             runtime.onError = { showError($0.localizedDescription) }
             runtime.onNarDrop = { installNars(from: $0) }
             runtime.onWallpaperDrop = { url in await changeDesktopWallpaper(to: url) }
             runtime.onOpenMessenger = { ipMessengerWindowController.showMessenger() }
+            runtime.onOpenUsageGraph = { usageWindowController.show(ghosts: model.ghosts) }
             runtime.onCommunication = { target, sentence in
                 deliverCommunication(from: ghost, target: target, sentence: sentence)
             }
@@ -7294,10 +7450,11 @@ private struct UtataneRootView: View {
             if request.method == "EXECUTE" {
                 return await handleSSTPExecute(request, command: command)
             }
-            return handleMCPBridgeCommand(
+            return await handleMCPBridgeCommand(
                 command,
                 ghostID: request.value(for: "Ghost-ID"),
-                script: request.value(for: "Script")
+                script: request.value(for: "Script"),
+                payload: request.value(for: "Payload")
             )
         }
         guard request.value(for: "Sender") != nil || request.value(for: "User-Agent") != nil else {
@@ -7310,6 +7467,11 @@ private struct UtataneRootView: View {
                 statusCode: explicitlyTargeted ? 404 : 503,
                 reason: explicitlyTargeted ? "Not Found" : "Service Unavailable"
             )
+        }
+        let options = Set((request.value(for: "Option") ?? "").lowercased().split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
+        let owned = request.value(for: "ID") == target.ghost.rootDirectory.lastPathComponent
+        guard target.player.acceptsSSTP(owned: owned, queues: ["SEND", "NOTIFY"].contains(request.method) && options.contains("nobreak")) else {
+            return SSTPResponse(statusCode: 409, reason: "Conflict")
         }
         if request.method == "COMMUNICATE" {
             guard target.ghost.allowsSSTPCommunicate else {
@@ -7326,13 +7488,10 @@ private struct UtataneRootView: View {
         let activeSession = target.session
         let activeBalloon = target.balloon
         let sstpSender = request.value(for: "Sender") ?? request.value(for: "User-Agent") ?? ""
-        let options = Set((request.value(for: "Option") ?? "").lowercased().split(separator: ",").map {
-            $0.trimmingCharacters(in: .whitespaces)
-        })
-        guard sstpQuietUntil.map({ $0 <= Date() }) ?? true else {
+        guard owned || (sstpQuietUntil.map { $0 <= Date() } ?? true) else {
             return SSTPResponse(statusCode: 409, reason: "Conflict")
         }
-        if sstpQuietUntil != nil {
+        if let until = sstpQuietUntil, until <= Date() {
             sstpQuietUntil = nil
         }
         var script: SakuraScript?
@@ -7353,17 +7512,17 @@ private struct UtataneRootView: View {
         }
         AppLogStore.shared.info("SSTPスクリプト再生", category: "SSTP", details: script.rawValue)
         if options.contains("nobreak") {
-            target.player.enqueue(script, balloon: activeBalloon, sstpMessage: sstpSender)
+            target.player.enqueue(script, balloon: activeBalloon, sstpMessage: sstpSender, context: .init(flags: Array(options)))
         } else if let breakEvent = target.player.sstpBreakEvent {
             let breakResponse = try? await activeSession.handle(event: breakEvent)
             if let breakResponse, !breakResponse.rawValue.isEmpty {
-                target.player.play(breakResponse, balloon: activeBalloon, sstpMessage: sstpSender)
-                target.player.enqueue(script, balloon: activeBalloon, sstpMessage: sstpSender)
+                target.player.play(breakResponse, balloon: activeBalloon, sstpMessage: sstpSender, context: .init(flags: Array(options)))
+                target.player.enqueue(script, balloon: activeBalloon, sstpMessage: sstpSender, context: .init(flags: Array(options)))
             } else {
-                target.player.play(script, balloon: activeBalloon, sstpMessage: sstpSender)
+                target.player.play(script, balloon: activeBalloon, sstpMessage: sstpSender, context: .init(flags: Array(options)))
             }
         } else {
-            target.player.play(script, balloon: activeBalloon, sstpMessage: sstpSender)
+            target.player.play(script, balloon: activeBalloon, sstpMessage: sstpSender, context: .init(flags: Array(options)))
         }
         return SSTPResponse(script: script.rawValue)
     }
@@ -7450,7 +7609,7 @@ private struct UtataneRootView: View {
         }
         if let script = try? await target.session.handle(event: event) {
             let sender = request.value(for: "Sender") ?? request.value(for: "User-Agent")
-            target.player.play(script, balloon: target.balloon, sstpMessage: sender)
+            target.player.play(script, balloon: target.balloon, sstpMessage: sender, context: .init(flags: (request.value(for: "Option") ?? "").lowercased().split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }))
             return SSTPResponse(script: script.rawValue)
         }
         return SSTPResponse(statusCode: 204, reason: "No Content")
@@ -7472,6 +7631,9 @@ private struct UtataneRootView: View {
             ].joined(separator: ",")
         case "getnames", "getghostnamelist":
             data = model.ghosts.map(\.name).joined(separator: "\r\n")
+        case "getstatus":
+            guard let target else { return SSTPResponse(statusCode: 503, reason: "Service Unavailable") }
+            data = target.player.executionStatus
         case "getghostname": data = target?.ghost.name
         case "getshellname": data = target?.shell.name
         case "getballoonname": data = target?.balloon.name
@@ -7496,11 +7658,18 @@ private struct UtataneRootView: View {
             data = sstpCookies[sender]?[name] ?? ""
         case "getproperty":
             guard let name = parsed.parameters.first else { return SSTPResponse(statusCode: 400, reason: "Bad Request") }
-            data = try? await propertySystem.value(for: name)
+            if let value = target?.player.runtimePropertyValue(for: name) {
+                data = value
+            } else {
+                await registerCurrentGhostProperties()
+                data = try? await propertySystem.value(for: name)
+            }
         case "setproperty":
             guard parsed.parameters.count >= 2 else { return SSTPResponse(statusCode: 400, reason: "Bad Request") }
             do {
-                try await propertySystem.setValue(parsed.parameters[1], for: parsed.parameters[0])
+                if try target?.player.setRuntimeProperty(parsed.parameters[1], for: parsed.parameters[0]) != true {
+                    try await propertySystem.setValue(parsed.parameters[1], for: parsed.parameters[0])
+                }
                 return SSTPResponse(statusCode: 204, reason: "No Content")
             } catch {
                 return SSTPResponse(statusCode: 420, reason: "Refuse")
@@ -7526,11 +7695,22 @@ private struct UtataneRootView: View {
             ))
             return SSTPResponse(statusCode: 204, reason: "No Content")
         case "dumpsurface":
-            let path = parsed.parameters.first(where: { !$0.hasPrefix("--") })
-            _ = await handleArchive(.dumpSurface(.init(
-                directoryPath: path,
-                eventID: sstpOption("--event", in: parsed.parameters)
-            )))
+            guard let target else { return SSTPResponse(statusCode: 503, reason: "Service Unavailable") }
+            let archive = SakuraScriptArchiveCommand.dumpSurface(.init(arguments: parsed.parameters))
+            if let runtime = calledGhosts[target.ghost.id] {
+                _ = await runtime.handleArchive(archive)
+            } else {
+                _ = await handleArchive(archive)
+            }
+            return SSTPResponse(statusCode: 204, reason: "No Content")
+        case "dumpballoon":
+            guard let target else { return SSTPResponse(statusCode: 503, reason: "Service Unavailable") }
+            let archive = SakuraScriptArchiveCommand.dumpBalloon(.init(arguments: parsed.parameters))
+            if let runtime = calledGhosts[target.ghost.id] {
+                _ = await runtime.handleArchive(archive)
+            } else {
+                _ = await handleArchive(archive)
+            }
             return SSTPResponse(statusCode: 204, reason: "No Content")
         default:
             return SSTPResponse(statusCode: 501, reason: "Not Implemented")
@@ -7543,8 +7723,8 @@ private struct UtataneRootView: View {
         if let open = command.firstIndex(of: "["), command.hasSuffix("]") {
             let name = String(command[..<open])
             let parameters = command[command.index(after: open) ..< command.index(before: command.endIndex)]
-                .split(separator: ",", omittingEmptySubsequences: false).map(String.init)
-            return (name, parameters)
+
+            return (name, SakuraScriptParser().splitArguments(String(parameters)))
         }
         let parameters = (0 ..< 256).compactMap { request.value(for: "Reference\($0)") }
         return (command, parameters)
@@ -7560,8 +7740,12 @@ private struct UtataneRootView: View {
     private func handleMCPBridgeCommand(
         _ command: String,
         ghostID: String?,
-        script: String?
-    ) -> SSTPResponse {
+        script: String?,
+        payload: String? = nil
+    ) async -> SSTPResponse {
+        let arguments = payload.flatMap { Data(base64Encoded: $0) }.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+        let runtime = ghostID.flatMap { id in calledGhosts.values.first { $0.ghost.rootDirectory.lastPathComponent == id } }
+        let selectsMain = ghostID == nil || ghostID == currentGhost?.rootDirectory.lastPathComponent
         switch command {
         case "GetActiveGhostList":
             return jsonSSTPResponse(activeGhostDescriptions())
@@ -7583,6 +7767,49 @@ private struct UtataneRootView: View {
                 "surfaces": Array(Set(definition.surfaces.keys).union(imageIDs)).sorted(),
                 "aliases": aliases
             ])
+        case "GetStatus", "GetLog", "RaiseEvent", "Reload", "DumpSurface", "DumpBalloon":
+            guard selectsMain || runtime != nil else { return SSTPResponse(statusCode: 404, reason: "Ghost Not Found") }
+            guard let ghost = runtime?.ghost ?? currentGhost, let activeSession = runtime?.session ?? session else { return SSTPResponse(statusCode: 503, reason: "Service Unavailable") }
+            let player = runtime?.player ?? scriptPlayer
+            let activeBalloon = runtime?.balloon ?? balloon
+            do {
+                switch command {
+                case "GetStatus": return jsonSSTPResponse(["ghost_id": ghost.rootDirectory.lastPathComponent, "status": player.executionStatus])
+                case "GetLog":
+                    let limit = arguments["limit"] as? Int ?? 100
+                    guard (1 ... 500).contains(limit) else { throw CocoaError(.fileReadCorruptFile) }
+                    let entries = AppLogStore.shared.snapshot().filter { ghostID == nil || $0.ghostName == ghost.name }.suffix(limit)
+                    return jsonSSTPResponse(entries.map { ["time": ISO8601DateFormatter().string(from: $0.timestamp), "level": $0.level.rawValue, "category": $0.category, "message": $0.message, "details": $0.details ?? ""] })
+                case "RaiseEvent":
+                    guard let id = arguments["event"] as? String, !id.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
+                    let references = arguments["references"] as? [String] ?? []
+                    guard references.count <= 256 else { throw CocoaError(.fileReadCorruptFile) }
+                    let response = try await activeSession.handle(event: .shiori(id: id, references: Dictionary(uniqueKeysWithValues: references.enumerated().map { ($0.offset, $0.element) })))
+                    if let response, let activeBalloon {
+                        player.play(response, balloon: activeBalloon)
+                    }
+                    return jsonSSTPResponse(["event": id, "script": response?.rawValue ?? ""])
+                case "Reload":
+                    let actions: [String: SakuraScriptContentAction] = ["ghost": .reloadGhost, "shell": .reloadShell, "balloon": .reloadBalloon, "shiori": .reloadShiori, "makoto": .reloadMakoto]
+                    guard let action = actions[arguments["component"] as? String ?? "ghost"] else { throw CocoaError(.fileReadCorruptFile) }
+                    player.onContentAction?(action)
+                    return jsonSSTPResponse(["accepted": true])
+                default:
+                    guard let path = arguments["directory"] as? String, !path.isEmpty else { throw CocoaError(.fileReadCorruptFile) }
+                    let root = ghost.rootDirectory.resolvingSymlinksInPath().standardizedFileURL
+                    let directory = (path.hasPrefix("/") ? URL(fileURLWithPath: path) : root.appending(path: "ghost/master").appending(path: path)).resolvingSymlinksInPath().standardizedFileURL
+                    guard directory.path == root.path || directory.path.hasPrefix(root.path + "/") else { throw CocoaError(.fileWriteNoPermission) }
+                    let scope = arguments["scope"] as? Int ?? 0
+                    guard scope >= 0 else { throw CocoaError(.fileReadCorruptFile) }
+                    let prefix = arguments["prefix"] as? String ?? (command == "DumpSurface" ? "surface" : "balloon")
+                    let count: Int = if command == "DumpSurface" {
+                        try (runtime?.surfaceController ?? surfaceWindowController).dumpSurfaceImages(to: directory, scope: scope, surfaceList: arguments["surface"] as? String, prefix: prefix)
+                    } else {
+                        try (runtime?.balloonController ?? balloonWindowController).dumpBalloonImage(to: directory, scope: scope, prefix: prefix, hiddenItems: Set(arguments["hide"] as? [String] ?? []))
+                    }
+                    return jsonSSTPResponse(["directory": directory.path, "count": count])
+                }
+            } catch { return SSTPResponse(statusCode: 420, reason: "Refuse") }
         case "SakuraScript":
             guard let script else { return SSTPResponse(statusCode: 400, reason: "Script Required") }
             let sakuraScript = SakuraScript(rawValue: script.replacingOccurrences(of: "\\n", with: "\n"))
@@ -9051,8 +9278,7 @@ func startupInformationEvents(
         ("pluginpathlist", indexed(ContentRoot.pluginReadDirectories.map(\.path))),
         ("calendarskinpathlist", [0: ContentRoot.calendarSkinsDirectory.path]),
         ("calendarpluginpathlist", [0: ContentRoot.calendarPluginsDirectory.path]),
-        ("rateofusegraph", [0: [ghost.name, mainName, partnerName, "0", "0", "0", "boot"]
-                .joined(separator: "\u{1}")]),
+        ("rateofusegraph", GhostUsageHistory.references(ghosts)),
         ("enable_log", [0: "1"]),
         ("enable_debug", [0: _isDebugAssertConfiguration() ? "1" : "0"]),
         ("OnNotifySelfInfo", [

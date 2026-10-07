@@ -96,3 +96,45 @@ func `update ignore include and negation filter generated files`() throws {
     #expect(content.contains("ghost/master/keep.dat\u{1}"))
     #expect(!content.contains("ghost/master/skip.txt\u{1}"))
 }
+
+@Test(arguments: ["custom.dau", "custom.txt"])
+func `custom update output excludes itself and preserves standard manifests`(filename: String) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    let master = root.appending(path: "ghost/master")
+    try FileManager.default.createDirectory(at: master, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data("payload".utf8).write(to: master.appending(path: "test.txt"))
+    let output = master.appending(path: filename)
+    try Data("previous".utf8).write(to: output)
+    let standard = root.appending(path: "updates2.dau")
+    try Data("keep".utf8).write(to: standard)
+    let result = try UpdateDataGenerator().generate(in: root, outputURL: output)
+    #expect(result.fileCount == 1)
+    let content = try String(contentsOf: output, encoding: .utf8)
+    #expect(!content.contains(filename))
+    #expect(content.contains("ghost/master/test.txt\u{1}"))
+    #expect(try String(contentsOf: standard, encoding: .utf8) == "keep")
+    if filename.hasSuffix(".dau") {
+        #expect(!content.hasPrefix("charset,"))
+        #expect(content.contains("charset=UTF-8"))
+    } else {
+        #expect(content.hasPrefix("charset,UTF-8\r\nfile,"))
+        #expect(!content.contains("charset="))
+    }
+}
+
+@Test func `standard update generation writes both formats at both standard locations`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root.appending(path: "ghost/master"), withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data("payload".utf8).write(to: root.appending(path: "ghost/master/test.txt"))
+    let result = try UpdateDataGenerator().generateStandard(in: root)
+    #expect(result.fileCount == 1)
+    for filename in ["updates2.dau", "updates.txt"] {
+        let text = try String(contentsOf: root.appending(path: filename), encoding: .utf8)
+        #expect(text.contains("ghost/master/test.txt\u{1}"))
+        #expect(!text.contains("updates2.dau\u{1}"))
+        #expect(!text.contains("updates.txt\u{1}"))
+        #expect(try text == String(contentsOf: root.appending(path: "ghost/master/\(filename)"), encoding: .utf8))
+    }
+}

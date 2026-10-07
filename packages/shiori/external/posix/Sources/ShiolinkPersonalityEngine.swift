@@ -8,6 +8,11 @@ public actor ShiolinkPersonalityEngine: PersonalityEngine {
     private let session: ShiolinkSession
     private let charset: String
     private let adapter = GhostEventShioriAdapter()
+    private var requestStatus = ""
+
+    public func updateRequestStatus(_ status: String) async {
+        requestStatus = status
+    }
 
     public init(masterDirectoryURL: URL) throws {
         let configuration = try ShiolinkConfiguration(directory: masterDirectoryURL)
@@ -28,7 +33,7 @@ public actor ShiolinkPersonalityEngine: PersonalityEngine {
     }
 
     public func response(for event: GhostEvent) async throws -> PersonalityResponse {
-        var context = ShioriEventContext(charset: charset)
+        var context = ShioriEventContext(charset: charset, status: requestStatus)
         if case let .mouseClick(scope, _) = event {
             context.scope = scope
         } else if case let .mouse(mouseEvent) = event {

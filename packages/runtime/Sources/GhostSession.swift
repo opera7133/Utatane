@@ -12,18 +12,21 @@ public actor GhostSession {
     private let variableStore: GhostVariableStore?
     private let logStore: AppLogStore?
     private let ghostName: String?
+    private let requestStatus: @Sendable () async -> String
     public private(set) var state: State = .inactive
 
     public init(
         personalityEngine: any PersonalityEngine,
         variableStore: GhostVariableStore? = nil,
         logStore: AppLogStore? = nil,
-        ghostName: String? = nil
+        ghostName: String? = nil,
+        requestStatus: @escaping @Sendable () async -> String = { "" }
     ) {
         self.personalityEngine = personalityEngine
         self.variableStore = variableStore
         self.logStore = logStore
         self.ghostName = ghostName
+        self.requestStatus = requestStatus
     }
 
     public func start(event: GhostEvent = .boot) async throws -> SakuraScript? {
@@ -47,6 +50,7 @@ public actor GhostSession {
 
     public func response(for event: GhostEvent) async throws -> PersonalityResponse? {
         guard state == .running, let personalityEngine else { return nil }
+        await personalityEngine.updateRequestStatus(requestStatus())
         logRequest(event)
         do {
             let response = try await personalityEngine.response(for: event)
@@ -153,6 +157,7 @@ public actor GhostSession {
 
     private func handleLogged(event: GhostEvent) async throws -> SakuraScript? {
         guard let personalityEngine else { return nil }
+        await personalityEngine.updateRequestStatus(requestStatus())
         logRequest(event)
         do {
             let script = try await personalityEngine.handle(event: event)

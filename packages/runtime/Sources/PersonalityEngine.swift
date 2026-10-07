@@ -16,10 +16,13 @@ public protocol PersonalityEngine: Sendable {
     func handle(event: GhostEvent) async throws -> SakuraScript?
     func response(for event: GhostEvent) async throws -> PersonalityResponse
     func shutdown() async
+    func updateRequestStatus(_ status: String) async
 }
 
 public extension PersonalityEngine {
     func shutdown() async {}
+
+    func updateRequestStatus(_ status: String) async {}
 
     func response(for event: GhostEvent) async throws -> PersonalityResponse {
         try await PersonalityResponse(script: handle(event: event))

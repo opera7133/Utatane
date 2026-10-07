@@ -4,8 +4,8 @@
 
 UtataneはSocket SSTPとSSTP over HTTPを扱います。Windowsの`WM_COPYDATA`を使うDirect SSTPは、macOSでは対象外です。
 
-調査日: 2026-09-24（中断通知・予約再生を追記）
-調査結果: ✅ 18 / 🟡 2 / ❌ 0 / ➖ 3
+調査日: 2026-10-07（状態取得・割り込み制御・表示プロパティを追記）
+調査結果: ✅ 19 / 🟡 3 / ❌ 0 / ➖ 3
 
 ## 通信と共通仕様
 
@@ -32,12 +32,15 @@ SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを�
 
 新しいSSTPが再生中のSSTPを中断する時は、`OnSSTPBreak`へその時点のスクリプト・話者・タグ込みの文字位置を渡します。`nobreak`の予約内容を中断対象と取り違えないようにし、新しい会話へ置き換えたり再生をキャンセルしたりした時は、残った予約も取り消します。
 
-`Option: strict`の解釈エラーログは未対応です。Parserは元スクリプトの位置情報を保持できますが、不正な引数や存在しないサーフェスなどを診断して記録する処理は別途必要です。
+`\t`による割り込み禁止中は通常のSEND／NOTIFY／COMMUNICATE／GIVEを409で拒否します。SEND／NOTIFYの`nobreak`は予約でき、SHIORI `uniqueid`と一致する`ID`を付けたOwned SSTPは割り込みできます。
+
+`Option: strict`はSEND／NOTIFY／GIVEとnobreakによる予約再生で解釈警告をログへ記録します。未知の命令、一部の不正な引数、存在しないサーフェス・アニメーションを元スクリプトの位置付きで診断します。すべての命令の引数検証とSSPの警告条件の完全な再現は未対応です。
 
 ## EXECUTE command
 
 | command | 状況 | 備考 |
 | --- | --- | --- |
+| GetStatus | ✅ | 選択対象のSHIORI Status形式の現在状態。再生、モード、入力欄、選択肢、表示中バルーンを反映。非同期バックグラウンド通信のonline表示は一部未接続 |
 | GetName／GetNames | ✅ | 起動中キャラクター名、インストール済みゴースト名 |
 | GetGhostName／GetShellName／GetBalloonName | ✅ | 選択対象の現在値 |
 | GetVersion／GetShortVersion | ✅ | Utataneのbundle version |
@@ -45,9 +48,10 @@ SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを�
 | GetPluginNameList | ✅ | 認識済みプラグイン名を改行区切りで返します |
 | Quiet／Restore | ✅ | 16秒またはRestoreまで通常SSTP再生を409で抑止 |
 | SetCookie／GetCookie | ✅ | Sender単位の実行中メモリ保存 |
-| SetProperty／GetProperty | ✅ | Property Systemへ接続。読み取り専用値への書込は420 |
+| SetProperty／GetProperty | ✅ | Property Systemと対象プレイヤーへ接続。surface.num／animation.num／seriko.defaultsurface／sticky-windowは表示へ反映。その他の読み取り専用値への書込は420 |
 | CompressArchive／ExtractArchive | 🟡 | ghost/master配下に限定した安全なZIP操作。SSP管理下全フォルダや暗号化ZIP完全互換は未対応 |
-| DumpSurface | 🟡 | 現在の本体側surfaceをPNG出力。SSPの全scope・crop・prefix引数は未対応 |
+| DumpSurface | 🟡 | scope・surface指定・crop・prefix・eventの位置／名前付き引数からPNGを出力。対象ゴーストを選択できる。animation指定で基本パターンを連番出力。別アニメーションの開始・停止、動画・拡縮パターンは未対応 |
+| DumpBalloon | 🟡 | 対象ゴースト・scopeの保持中バルーンをPNGへ出力。位置／名前付き引数、prefix、event、hideを受理。実バルーンとの画素照合は未確認 |
 | GetFMO／ReceiverGhostHWnd | ➖ | WindowsのFMO／HWND依存のためmacOS対象外 |
 | MoveAsync／SetTrayIcon／SetTrayBalloon | ➖ | macOSに同等のSSP tray／HWND機構がないため対象外 |
 

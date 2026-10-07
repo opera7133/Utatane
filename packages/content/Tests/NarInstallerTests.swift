@@ -293,7 +293,7 @@ func `installs a ghost and its numbered bundled objects together`() throws {
     let package = fixture.source.appending(path: "package", directoryHint: .isDirectory)
     let ghostMaster = package.appending(path: "ghost/master", directoryHint: .isDirectory)
     let balloon = package.appending(path: "balloon", directoryHint: .isDirectory)
-    let secondBalloon = package.appending(path: "balloon-extra", directoryHint: .isDirectory)
+    let secondBalloon = package.appending(path: "bundled/balloon-extra", directoryHint: .isDirectory)
     let headline = package.appending(path: "headline", directoryHint: .isDirectory)
     let plugin = package.appending(path: "plugin", directoryHint: .isDirectory)
     let calendarSkin = package.appending(path: "calendar-skin", directoryHint: .isDirectory)
@@ -307,7 +307,7 @@ func `installs a ghost and its numbered bundled objects together`() throws {
     try FileManager.default.createDirectory(at: calendarPlugin, withIntermediateDirectories: true)
     try Data((
         "type,ghost\ndirectory,test-ghost\nballoon.directory,test-balloon\nballoon.source.directory,balloon\n" +
-            "balloon1.directory,test-balloon-extra\nballoon1.source.directory,balloon-extra\n" +
+            "balloon1.directory,test-balloon-extra\nballoon1.source.directory,bundled\\balloon-extra\n" +
             "headline.directory,test-headline\nheadline.source.directory,headline\n" +
             "plugin.directory,test-plugin\nplugin.source.directory,plugin\n" +
             "calendar.skin.directory,test-calendar-skin\ncalendar.skin.source.directory,calendar-skin\n" +
@@ -614,4 +614,17 @@ private func makeArchive(
     process.waitUntilExit()
     try #require(process.terminationStatus == 0)
     return archive
+}
+
+@Test(arguments: ["../outside", "nested/../../outside", "/absolute", "C:\\outside", "nested//balloon"])
+func `bundled source directory rejects paths outside extraction root`(sourcePath: String) throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let package = fixture.source.appending(path: "package")
+    try FileManager.default.createDirectory(at: package.appending(path: "ghost/master"), withIntermediateDirectories: true)
+    try Data("type,ghost\ndirectory,test-ghost\nballoon.directory,test-balloon\nballoon.source.directory,\(sourcePath)\n".utf8)
+        .write(to: package.appending(path: "install.txt"))
+    let archive = try makeArchive(from: fixture.source, at: fixture.root)
+    #expect(throws: NarInstallError.self) { try NarInstaller().install(archiveURL: archive, roots: fixture.roots) }
+    #expect(!FileManager.default.fileExists(atPath: fixture.roots.ghostsDirectory.appending(path: "test-ghost").path))
 }

@@ -4,7 +4,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 
 この表は2026-09-21時点のソースコードを基にしています。各節の調査日と備考で、確認した範囲を確認してください。実機で未確認の項目は「対応」に含めません。
 
-現行UKADOCには、構文違いを個別に数えて359件のSakuraScript項目があります。この表では同じ実装経路を使う構文をまとめ、147行に分類しています。集計と行数はCIで検査します。
+初回照合では、構文違いを個別に数えて359件のSakuraScript項目を対象にしました。その後追加された`dumpballoon`も追記し、同じ実装経路を使う構文を148行に分類しています。集計と行数はCIで検査します。
 
 ## 判定
 
@@ -25,8 +25,8 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 
 調査日: 2026-09-21
 UKADOC掲載構文数: 359
-UKADOC分類行数: 147
-調査結果: ✅ 117 / 🟡 21 / ❌ 0 / ➖ 9
+UKADOC分類行数: 148
+調査結果: ✅ 116 / 🟡 23 / ❌ 0 / ➖ 9
 
 ### 基本仕様
 
@@ -195,8 +195,8 @@ UKADOC分類行数: 147
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\![set,property,...]` | 🟡 | 構文・書込可否検証・Property Systemへの書き込み経路を実装。個別のUI／サウンド状態setterは未実装 |
-| `\![get,property,...]` | 🟡 | 複数プロパティを指定イベントのReferenceへ通知。日時、OS／locale／timezone／uptime、CPU、メモリ、ディスク、カーソル、モニター、テーマ、baseware、currentghostのscope座標・surface・balloon、activeghostlist、ghost／shell／balloon／headline／plugin一覧に対応。UKADOC全プロパティとの照合は継続中 |
+| `\![set,property,...]` | 🟡 | scope別surface.num・animation.num・seriko.defaultsurfaceとseriko.sticky-windowを表示へ反映。sticky-windowはグループを置換し、不正・重複グループを無視。メニュー・カーソル・サウンド等のsetterは未実装 |
+| `\![get,property,...]` | 🟡 | 複数プロパティを指定イベントのReferenceへ通知。日時、OS／locale／timezone／uptime、CPU、メモリ、ディスク、カーソル、モニター、テーマ、baseware、currentghost.status、scope座標・surface・実行中animation・既定surface・balloon、activeghostlist、ghost／shell／balloon／headline／plugin一覧に対応。UKADOC全プロパティとの照合は継続中 |
 | `%property[...]` | 🟡 | `get,property`と共通の値を再生中に展開。未登録値の拡充と、変動するAppKit値の取得時更新は継続中 |
 
 ### HTTP、WebSocket、アーカイブなど
@@ -206,16 +206,17 @@ UKADOC分類行数: 147
 | `\![execute,http-get,URL,...]` | 🟡 | async／sync、param、主要header、timeout、no-cache、file／nofile、progress-notify、streaming、TLS情報通知に対応。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行います。同一URLの並行実行とmultipartは未対応 |
 | http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded bodyと主要共通オプションに対応。multipart、入力ファイル、証明書検証無効化は未対応 |
 | `\![execute,rss-get/rss-post,URL,...]` | 🟡 | RSS/Atomの取得・基本パース、完了／失敗、TLS情報通知に対応。全オプションは未照合 |
-| `\![execute,ical-get/ical-post,URL,...]` | 🟡 | iCalendar取得・解析、完了／失敗／進捗／TLS情報通知、主要VEVENTフィールドとlimitに対応。繰り返し展開とfrom／toによる完全な絞り込みは未対応 |
-| `\![execute,schedule-add/delete/get,...]` | 🟡 | Utataneの共有予定表へ登録・削除・取得し、完了／失敗を通知。主要フィールドと単純な週・月・年の繰り返しに対応し、RRULE・EXDATEの完全解釈は未対応 |
+| `\![execute,ical-get/ical-post,URL,...]` | 🟡 | iCalendar取得・解析、完了／失敗／進捗／TLS情報通知に対応。from／to／expand／limitと日・週・月・年のRRULE（INTERVAL・COUNT・UNTIL・BYDAY・BYMONTHDAY・BYMONTH・WKST）、EXDATE・RDATE・TZID・DURATION・複数日予定を展開する。BYSETPOS、時・分・秒単位の繰り返し、RECURRENCE-IDによる個別変更、独自VTIMEZONE定義は未対応 |
+| `\![execute,schedule-add/delete/get,...]` | 🟡 | Utataneの共有予定表へ登録・削除・取得し、完了／失敗を通知。主要フィールド、期間指定とical-getと同じ範囲の繰り返し展開に対応。完全なRFC 5545互換ではない |
 | `\![execute,filewatch,...]` / `\![cancel,filewatch,...]` | ✅ | ファイル・ディレクトリを監視し、作成・更新・削除をdebounce後に通知。ゴースト終了時に監視を解除 |
 | websocket execute/send/close/cancel | 🟡 | ws/wss接続、Open、header・subprotocol、テキスト／バイナリ送受信、close／cancel、最大5回の自動再接続とTLS情報通知に対応。証明書subject／issuerは空欄 |
 | `\![cancel,http/http-get/ical,...]` | ✅ | 特定URLまたは全実行中のHTTP・iCalendarリクエストをキャンセル |
 | `\![execute,extractarchive/compressarchive,...]` | 🟡 | ghost/master配下に限定してZIP展開・圧縮を実行し、結果またはエラーコードをイベント通知。パストラバーサル・シンボリックリンクを拒否。SSP管理下の他フォルダと暗号化方式の完全互換は未対応 |
-| dumpsurface | 🟡 | ゴースト配下へのPNG出力、scope、surface ID／範囲／除外指定、`__system_surface_all__`／`__system_surface_defined__`、prefix、イベント完了時の成功件数に対応。element・初期bind合成の負座標領域を保持し、ゼロ位置切り出し指定時だけ0,0で切り抜く。入れ子の合成とPNG画素をテスト済み。合成範囲を拡張する時の上限は各辺16,384px・計16,777,216画素。実シェルでの各合成方式の照合待ち |
-| `\![execute,install,path/url,...]` | ✅ | ローカルファイルパスまたはURL指定のNARインストールコマンドを接続 |
+| dumpballoon | 🟡 | 現在の描画内容をPNGへ出力。非表示の保持内容、等倍サイズ、位置／名前付き引数、prefix、完了イベント、--hideのballoonmarker／balloonnumに対応。hide指定時は再描画禁止中の保留内容も別ビューで描き直し、表示中のビューは変更しない。イベント指定時も出力完了を待つ。バックグラウンド出力は未対応で、実バルーンとの画素照合は未確認 |
+| dumpsurface | 🟡 | ディレクトリ／scope／surface／prefix／event（async）／fromzeroの名前付き引数と位置引数の混在にも対応。animation指定で基本的なbase・overlay・move・clear等を連番PNGへ出力。別アニメーションの開始・停止や動画・拡縮パターン、イベント指定時のバックグラウンド出力は未対応。ゴースト配下へのPNG出力、scope、surface ID／範囲／除外指定、`__system_surface_all__`／`__system_surface_defined__`、prefix、イベント完了時の成功件数に対応。element・初期bind合成の負座標領域を保持し、ゼロ位置切り出し指定時だけ0,0で切り抜く。入れ子の合成とPNG画素をテスト済み。合成範囲を拡張する時の上限は各辺16,384px・計16,777,216画素。実シェルでの各合成方式の照合待ち |
+| `\![execute,install,path/url,...]` | 🟡 | ローカルNARとURL指定のNAR・feed・homeurl・ical・ssfに対応。feed／icalは購読先を保存し、icalは起動時と1時間ごとに再取得。SSFはversion 1.0のghost・script・script_nowait・waitを実行（UTF-8／Shift_JIS）。自動判別は内容と拡張子による。全MIME・ドラッグ対象との照合は未対応 |
 | ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl/df/data、応答単位progress、完了・失敗イベントに対応。macOS `ping`の制約によりdataは先頭16バイトのパターンを指定サイズまで繰り返します |
-| createnar / createupdatedata | 🟡 | `createupdatedata`は引数なしで実行元ゴーストの`updates2.dau`を生成（明示パス拡張も対応）。`createnar`は引数なしで保存先を選び、実行元ゴーストをNAR化する。スクリプトが任意の絶対パスへ直接書き出す動作は安全のため制限 |
+| createnar / createupdatedata | 🟡 | `createupdatedata`は引数省略時にルートとghost/masterへupdates2.dau／updates.txtを生成。出力ファイル指定はghost/master基準で、.dauはDAU、それ以外はテキスト形式。自身の出力は一覧から除外し、明示指定時は標準ファイルを変更しない。`createnar`は引数なしで保存先を選び、実行元ゴーストをNAR化する。スクリプトが任意の絶対パスへ直接書き出す動作は安全のため制限 |
 | emptyrecyclebin | ✅ | ユーザーの`~/.Trash`を空にし、実行元と他ゴーストへ前後の件数・容量・成否を通知 |
 | create shortcut | ➖ | Windowsショートカット固有のためmacOSでは対象外 |
 | passive / induction / select / collision mode | 🟡 | passive／induction、collision表示に加え、selectrectの全画面矩形選択と開始・終了・マウス・キャンセル通知に対応。メニュー・DnD・更新・最小化・終了等の全制限は未実装 |

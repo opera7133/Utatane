@@ -1,5 +1,6 @@
 import Foundation
 import UtataneCore
+import UtatanePlatformMacOS
 import UtataneSakuraScript
 
 enum SakuraScriptCalendarSupport {
@@ -38,8 +39,45 @@ enum SakuraScriptCalendarSupport {
 
     static func references(source: String, options: [String: String] = [:]) -> [Int: String] {
         let schedules = (try? ICalendarCodec().decode(source)) ?? []
-        let limit = options["limit"].flatMap(Int.init)
-        let selected = limit.map { $0 == 0 ? schedules : Array(schedules.prefix(max(0, $0))) } ?? schedules
+        let periodMode = ["from", "to", "expand", "limit"].contains { options[$0] != nil }
+        var filtered: [(schedule: UtataneSchedule, occurrenceDay: Date?)] = schedules.map { ($0, nil) }
+        var from: Date?
+        var to: Date?
+        if periodMode {
+            let calendar = Calendar.current
+            let lower = options["from"].flatMap { ICalendarDateParser.parse($0) } ?? calendar.startOfDay(for: Date())
+            let days = options["expand"].map { Int($0) ?? 30 } ?? 1830
+            let maximumEnd = calendar.date(byAdding: .day, value: 1830, to: lower)!
+            let requestedEnd = options["to"].flatMap { ICalendarDateParser.parse($0) }
+                .flatMap { calendar.date(byAdding: .day, value: 1, to: $0) }
+                ?? calendar.date(byAdding: .day, value: max(0, min(1830, days)), to: lower)!
+            let upper = min(maximumEnd, requestedEnd)
+            from = lower
+            to = upper.addingTimeInterval(-1)
+            if upper <= lower {
+                filtered = []
+            } else {
+                let range = DateInterval(start: lower, end: upper)
+                filtered = schedules.flatMap { schedule -> [(schedule: UtataneSchedule, occurrenceDay: Date?)] in
+                    let occurrences = schedule.occurrences(in: range)
+                    var entries: [(schedule: UtataneSchedule, occurrenceDay: Date?)] = []
+                    for occurrence in occurrences {
+                        let days = CalendarRecurrence.occurrenceDays(start: occurrence.start, end: occurrence.end, excluded: schedule.excludedDates ?? [], in: range)
+                        for day in days {
+                            entries.append((occurrence, day))
+                            if options["expand"] == nil {
+                                return entries
+                            }
+                        }
+                    }
+                    return entries
+                }.sorted { left, right in
+                    left.occurrenceDay == right.occurrenceDay ? left.schedule.start < right.schedule.start : left.occurrenceDay! < right.occurrenceDay!
+                }
+            }
+        }
+        let limit = options["limit"].flatMap(Int.init) ?? (periodMode ? 200 : 0)
+        let selected = limit == 0 ? filtered : Array(filtered.prefix(max(0, limit)))
         let fields = calendarFields(source)
         var result = [
             0: [
@@ -48,11 +86,12 @@ enum SakuraScriptCalendarSupport {
                 fields["CALSCALE"] ?? "GREGORIAN",
                 String(selected.count),
                 String(schedules.count),
-                sspDate(options["from"]),
-                sspDate(options["to"])
+                from.map { sspDate($0, allDay: true) } ?? "",
+                to.map { sspDate($0, allDay: true) } ?? ""
             ].joined(separator: "\u{1}")
         ]
-        for (index, schedule) in selected.enumerated() {
+        for (index, entry) in selected.enumerated() {
+            let schedule = entry.schedule
             let end = schedule.isAllDay
                 ? Calendar.current.date(byAdding: .day, value: -1, to: schedule.end) ?? schedule.end
                 : schedule.end
@@ -68,7 +107,7 @@ enum SakuraScriptCalendarSupport {
                 escaped(schedule.type),
                 schedule.recurrenceRule ?? "",
                 schedule.isAllDay ? "1" : "0",
-                ""
+                entry.occurrenceDay.map { sspDate($0, allDay: true) } ?? ""
             ].joined(separator: "\u{1}")
         }
         return result

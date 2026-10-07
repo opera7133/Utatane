@@ -21,7 +21,7 @@ AUDITED_EVENTS = {
     "pluginpathlist": ("✅", "起動時に有効な全プラグインフォルダの絶対パスを優先順でNOTIFY。DebugではLocalも含みます"),
     "calendarskinpathlist": ("✅", "起動時にカレンダースキン格納パスをNOTIFY"),
     "calendarpluginpathlist": ("✅", "起動時にカレンダープラグイン格納パスをNOTIFY"),
-    "rateofusegraph": ("✅", "起動中ゴーストをboot状態の1レコードとしてNOTIFY。起動回数・時間・割合は0固定で履歴集計は未実装"),
+    "rateofusegraph": ("✅", "起動回数・利用時間を永続保存し、全期間・7日・30日の集計を13フィールドで起動時と毎分NOTIFY。boot／install／vanishを区別する。導入前の履歴は復元しない。グラフの実機表示は確認待ち"),
     "enable_log": ("✅", "起動時にUtataneのアプリ内ログが有効であることをReference0=1でNOTIFY。Utataneでは実行中の切替UIを提供しない"),
     "enable_debug": ("✅", "起動時にDebugビルドなら1、Releaseなら0をReference0へNOTIFY。Utataneでは実行中の切替UIを提供しない"),
     "basewareversion": ("✅", "起動時にUtataneの表示バージョン・本体名・ビルド番号をNOTIFY。SSPの数値形式との完全一致は未確認"),
@@ -306,7 +306,7 @@ PARTIAL_EVENT_NOTES = {
     "OnSSTPBreak": "nobreakなしの新しいSSTPが再生中SSTPを中断する際に発行。Reference0は中断スクリプト、Reference1は0。Reference2は現在0固定",
     "OnScheduleRead": "カレンダー詳細の「予定を読む」からReference0〜3を通知。スキンアイコンのホバー読み上げは未実装",
     "OnURLQuery": "URL・scope・推定MIME type・nar/unknownを通知し、スクリプト応答時は標準処理を中止。feed・homeurl判定は未対応",
-    "OnUpdatedataCreating": "`createupdatedata`による`updates2.dau`生成の直前にReferenceなしで通知。フォルダD&Dからの作成UIは未実装",
+    "OnUpdatedataCreating": "`createupdatedata`による更新定義生成の直前にReferenceなしで通知。フォルダD&Dからの作成UIは未実装",
 }
 
 INAPPLICABLE_EVENTS = {
@@ -344,13 +344,13 @@ ONLINE_ADDITIONAL_AUDITED_EVENTS = {
     "OnWindowModeChange": ("✅", "起動時とウインドウモード切替時に現在・直前のモードを通知し、切替時はOnDisplayChangeも発行"),
     "installedcalendarskinname": AUDITED_EVENTS["installedcalendarskinname"],
     "installedcalendarpluginname": AUDITED_EVENTS["installedcalendarpluginname"],
-    "OnExecuteICalComplete": ("✅", "ical-get／ical-postで取得したiCalendarを解析し、カレンダー情報とVEVENTをReference列へ通知。主要フィールドと件数制限に対応"),
+    "OnExecuteICalComplete": ("✅", "ical-get／ical-postで取得したiCalendarを解析し、カレンダー情報とVEVENTをReference列へ通知。主要フィールド、期間指定・繰り返し展開・件数制限に対応。RRULEの対応範囲はSakuraScript表を参照"),
     "OnExecuteICalFailure": ("✅", "iCalendarの通信・HTTP・解析失敗をHTTP系と同じReference形式で通知"),
     "OnExecuteICalProgress": ("✅", "--progress-notify指定時にiCalendar取得の進捗を通知"),
     "OnExecuteICal_SSLInfo": ("✅", "HTTPSでiCalendarを取得した時にTLS情報を通知"),
     "OnExecuteScheduleComplete": ("✅", "schedule-add／schedule-deleteで共有予定表への登録・削除が完了した時に操作種別とUIDを通知"),
     "OnExecuteScheduleFailure": ("✅", "schedule-add／schedule-deleteの入力不正・対象なしを理由とUID付きで通知"),
-    "OnExecuteScheduleGetComplete": ("✅", "schedule-getで共有予定表をiCalendarと同じReference形式で通知"),
+    "OnExecuteScheduleGetComplete": ("✅", "schedule-getで共有予定表をiCalendarと同じReference形式で通知。期間指定と繰り返し展開、複数日予定の発生日を返す"),
     "OnExecuteFileWatchChange": ("✅", "filewatchで指定したファイルまたはディレクトリの作成・更新・削除をdebounce後に通知"),
     "OnExecuteFileWatchFailure": ("✅", "filewatchの監視先ディレクトリがない場合や監視を継続できない場合に理由を通知"),
 }

@@ -65,10 +65,12 @@ final class CalledGhostRuntime {
         didSet { surfaceController.contextMenuItems = { [weak self] scope in self?.contextMenuItems?(scope) ?? [] } }
     }
 
+    var installedGhosts: (() -> [InstalledGhost])?
     var onError: ((Error) -> Void)?
     var onCommunication: ((String, String) -> Void)?
     var onNarDrop: (([URL]) -> Void)?
     var onWallpaperDrop: ((URL) async -> Bool)?
+    var onOpenUsageGraph: (() -> Void)?
     var onOpenMessenger: (() -> Void)?
     var onContentAction: ((SakuraScriptContentAction) -> Void)?
     var onComponentLifecycle: ((SakuraScriptComponent, Bool) async -> Void)?
@@ -189,7 +191,8 @@ final class CalledGhostRuntime {
             personalityEngine: personalityEngine,
             variableStore: GhostVariableStore(fileURL: ContentRoot.variableStoreURL(for: ghost)),
             logStore: .shared,
-            ghostName: ghost.name
+            ghostName: ghost.name,
+            requestStatus: { [player] in await player.executionStatus }
         )
         eventDelivery = SuspendingGhostEventDelivery(session: session)
         player.configurePlayback(
@@ -265,6 +268,7 @@ final class CalledGhostRuntime {
         try show(shell: shell)
         surfaceController.setPresentationHidden(true)
         _ = try? await session.start(event: SHIORIEventFactory.initialize())
+        GhostUsageHistory.store.begin(GhostUsageHistory.identity(ghost))
         if let definition = try? shellLoader.load(from: shell.directory)
             .applyingPresentationDefaults(from: ghost)
         {
@@ -273,6 +277,7 @@ final class CalledGhostRuntime {
                 shell: shell,
                 balloon: balloon,
                 shellDefinition: definition,
+                installedGhosts: installedGhosts?(),
                 windowMode: windowMode,
                 speechSynthesisEnabled: player.isSpeechSynthesisEnabled,
                 speechRecognitionEnabled: speechRecognitionEnabled,
@@ -606,6 +611,7 @@ final class CalledGhostRuntime {
         // Record suspension before awaiting SHIORI so termination can unpause
         // the renderer for its final script even during OnCacheSuspend.
         isCached = true
+        GhostUsageHistory.store.end(ghost.rootDirectory.path)
         eventDelivery.setSuspended(true)
         fileWatchManager.setSuspended(true)
         periodicEventRunner.cancel()
@@ -630,6 +636,7 @@ final class CalledGhostRuntime {
         balloonController.setPresentationHidden(false)
         player.setSuspended(false)
         isCached = false
+        GhostUsageHistory.store.begin(GhostUsageHistory.identity(ghost), countsBoot: false)
         eventDelivery.setSuspended(false)
         fileWatchManager.setSuspended(false)
         if let script {
@@ -639,6 +646,7 @@ final class CalledGhostRuntime {
     }
 
     private func stop(reason: GhostStopReason) async -> String {
+        GhostUsageHistory.store.end(ghost.rootDirectory.path)
         isStopping = true
         if reason != .vanish {
             eventDelivery.finish()
@@ -998,6 +1006,9 @@ final class CalledGhostRuntime {
             self?.onTrayBalloon?(command)
         }
         player.onOpen = { [weak self] target in
+            if target.lowercased() == "rateofusegraph" {
+                self?.onOpenUsageGraph?(); return
+            }
             if target.caseInsensitiveCompare("messenger") == .orderedSame {
                 self?.onOpenMessenger?()
                 return
@@ -1045,15 +1056,18 @@ final class CalledGhostRuntime {
             }
             await propertySystem.register(values: MacOSPropertySnapshot.values(
                 geometryProvider: presentationGeometry
-            ))
+            ).merging(["currentghost.status": player.executionStatus]) { _, new in new })
             return try? await propertySystem.value(for: property)
         }
         player.onGetProperties = { [weak self] eventID, properties in
             guard let self else { return nil }
             await propertySystem.register(values: MacOSPropertySnapshot.values(
                 geometryProvider: presentationGeometry
-            ))
-            let values = await propertySystem.values(for: properties)
+            ).merging(["currentghost.status": player.executionStatus]) { _, new in new })
+            let storedValues = await propertySystem.values(for: properties)
+            let values = properties.enumerated().map { index, property in
+                player.runtimePropertyValue(for: property) ?? storedValues[index]
+            }
             return try? await eventDelivery.handle(event: .shiori(
                 id: eventID,
                 references: Dictionary(uniqueKeysWithValues: values.enumerated().map { ($0.offset, $0.element) })
@@ -1083,6 +1097,11 @@ final class CalledGhostRuntime {
         }
         player.onInputBox = { [weak self] command in
             guard let self else { return nil }
+            defer {
+                if command.id.caseInsensitiveCompare("OnEyesightgameInput") == .orderedSame {
+                    onContentAction?(.closeFIRSTEyesight)
+                }
+            }
             let autocomplete = try? await eventDelivery.handle(event: .shiori(
                 id: "inputbox.autocomplete",
                 references: [0: command.inputTypeName, 1: command.id]
@@ -1647,7 +1666,7 @@ final class CalledGhostRuntime {
         }
     }
 
-    private func handleArchive(_ command: SakuraScriptArchiveCommand) async -> SakuraScript? {
+    func handleArchive(_ command: SakuraScriptArchiveCommand) async -> SakuraScript? {
         let runner = ArchiveOperationRunner()
         let masterDirectory = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
 
@@ -1771,7 +1790,8 @@ final class CalledGhostRuntime {
                     scope: command.scope,
                     surfaceList: command.surfaceList,
                     prefix: command.prefix,
-                    cropsFromZero: command.cropsFromZero
+                    cropsFromZero: command.cropsFromZero,
+                    animationID: command.animationID
                 )
                 guard let eventID = command.eventID else { return nil }
                 let id = eventID.hasPrefix("On") ? eventID : "OnDumpSurfaceComplete"
@@ -1785,12 +1805,44 @@ final class CalledGhostRuntime {
                     0: destinationURL.path
                 ]))
             }
-        case let .createUpdateData(directoryPath, eventID):
-            let targetURL = directoryPath.map(resolvePath) ?? ghost.rootDirectory
+        case let .dumpBalloon(command):
+            let destinationURL = command.directoryPath.map(resolvePath)
+                ?? masterDirectory.appending(path: "var", directoryHint: .isDirectory)
+            do {
+                let root = ghost.rootDirectory.resolvingSymlinksInPath().standardizedFileURL.path
+                let destination = destinationURL.resolvingSymlinksInPath().standardizedFileURL.path
+                guard destinationURL.lastPathComponent != ".utatane-rejected-path",
+                      destination == root || destination.hasPrefix(root + "/")
+                else {
+                    throw CocoaError(.fileWriteNoPermission)
+                }
+                let count = try balloonController.dumpBalloonImage(
+                    to: destinationURL, scope: command.scope, prefix: command.prefix, hiddenItems: command.hiddenItems
+                )
+                guard let eventID = command.eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? eventID : "OnDumpBalloonComplete"
+                return try await eventDelivery.handle(event: .shiori(id: id, references: [
+                    0: String(count)
+                ]))
+            } catch {
+                guard let eventID = command.eventID else { return nil }
+                let id = eventID.hasPrefix("On") ? "\(eventID)Failure" : "OnDumpBalloonFailure"
+                return try? await eventDelivery.handle(event: .shiori(id: id, references: [
+                    0: destinationURL.path
+                ]))
+            }
+        case let .createUpdateData(outputPath, eventID):
+            let targetURL = outputPath.flatMap { $0.isEmpty ? nil : resolvePath($0) }
+                ?? ghost.rootDirectory.appending(path: "updates2.dau")
             do {
                 _ = try? await eventDelivery.handle(event: .shiori(id: "OnUpdatedataCreating", references: [:]))
                 let generator = UpdateDataGenerator()
-                let result = try generator.generate(in: targetURL)
+                guard targetURL.lastPathComponent != ".utatane-rejected-path" else {
+                    throw CocoaError(.fileWriteNoPermission)
+                }
+                let result = try outputPath?.isEmpty != false
+                    ? generator.generateStandard(in: ghost.rootDirectory)
+                    : generator.generate(in: ghost.rootDirectory, outputURL: targetURL)
                 let standardResponse = try? await eventDelivery.handle(event: .shiori(
                     id: "OnUpdatedataCreated",
                     references: [:]

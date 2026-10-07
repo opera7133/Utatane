@@ -7,6 +7,12 @@ import UtataneShiori
 public actor POSIXShioriPersonalityEngine: PersonalityEngine {
     private let session: POSIXShioriSession
     private let adapter = GhostEventShioriAdapter()
+    private var requestStatus = ""
+
+    public func updateRequestStatus(_ status: String) async {
+        requestStatus = status
+    }
+
     private let charset: String
 
     public init(
@@ -33,7 +39,7 @@ public actor POSIXShioriPersonalityEngine: PersonalityEngine {
     }
 
     public func response(for event: GhostEvent) async throws -> PersonalityResponse {
-        var context = ShioriEventContext(charset: charset)
+        var context = ShioriEventContext(charset: charset, status: requestStatus)
         if case let .mouseClick(scope, _) = event {
             context.scope = scope
         } else if case let .mouse(mouseEvent) = event {

@@ -264,6 +264,14 @@ public struct ShellLoader: Sendable {
                     builder.balloonOffsetRightX = Int(fields[1])
                 case "balloon.offsetyr":
                     builder.balloonOffsetRightY = Int(fields[1])
+                case "balloon.offsetxc":
+                    builder.balloonOffsetCenterX = Int(fields[1])
+                case "balloon.offsetyc":
+                    builder.balloonOffsetCenterY = Int(fields[1])
+                case "balloon.offsetxb":
+                    builder.balloonOffsetBottomX = Int(fields[1])
+                case "balloon.offsetyb":
+                    builder.balloonOffsetBottomY = Int(fields[1])
                 case "balloon.alignment":
                     builder.balloonAlignment = ShellBalloonAlignment(rawValue: fields[1].lowercased())
                 case "balloon.dontmove":
@@ -423,6 +431,10 @@ private struct ShellScopePresentationBuilder {
     var balloonOffsetLeftY: Int?
     var balloonOffsetRightX: Int?
     var balloonOffsetRightY: Int?
+    var balloonOffsetCenterX: Int?
+    var balloonOffsetCenterY: Int?
+    var balloonOffsetBottomX: Int?
+    var balloonOffsetBottomY: Int?
     var balloonAlignment: ShellBalloonAlignment?
     var preventsBalloonMovement: Bool?
     var synchronizesBalloonScale: Bool?
@@ -440,7 +452,11 @@ private struct ShellScopePresentationBuilder {
                 leftX: balloonOffsetLeftX,
                 leftY: balloonOffsetLeftY,
                 rightX: balloonOffsetRightX,
-                rightY: balloonOffsetRightY
+                rightY: balloonOffsetRightY,
+                centerX: balloonOffsetCenterX,
+                centerY: balloonOffsetCenterY,
+                bottomX: balloonOffsetBottomX,
+                bottomY: balloonOffsetBottomY
             ),
             balloonAlignment: balloonAlignment,
             preventsBalloonMovement: preventsBalloonMovement,

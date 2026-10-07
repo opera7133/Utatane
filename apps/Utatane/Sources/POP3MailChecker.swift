@@ -1,5 +1,6 @@
 import Foundation
 import Network
+import UtataneNetwork
 
 struct POP3Configuration: Sendable {
     let accountName: String
@@ -13,6 +14,21 @@ struct POP3Configuration: Sendable {
 struct POP3CheckResult: Sendable, Equatable {
     let messageCount: Int
     let totalBytes: Int
+    let headerLines: [[String]]
+
+    var topResult: String {
+        headerLines.map { $0.map(Self.referenceText).joined(separator: "\u{1}") }.joined(separator: "\u{2}")
+    }
+
+    var senderAndSubject: String {
+        guard let lines = headerLines.first else { return "" }
+        let summary = MailHeaderParser.parse(lines: lines)
+        return [summary.sender, summary.subject].map(Self.referenceText).joined(separator: "\u{1}")
+    }
+
+    private static func referenceText(_ value: String) -> String {
+        String(value.prefix(4096)).filter { !$0.isNewline && !$0.unicodeScalars.contains(where: { $0.value < 32 }) }
+    }
 }
 
 private final class POP3Connection: @unchecked Sendable {
@@ -41,18 +57,51 @@ private final class POP3Connection: @unchecked Sendable {
     }
 
     func check(user: String, password: String) async throws -> POP3CheckResult {
-        defer { connection.cancel() }
+        guard !user.contains(where: \.isNewline), !password.contains(where: \.isNewline) else { throw URLError(.badURL) }
+        let timeout = Task { [connection] in
+            do { try await Task.sleep(for: .seconds(30)) } catch { return }
+            connection.cancel()
+        }
+        defer {
+            timeout.cancel()
+            connection.cancel()
+        }
         try await start()
         try await expectOK(readLine())
         _ = try await command("USER \(user)")
         _ = try await command("PASS \(password)")
         let stat = try await command("STAT")
-        _ = try? await command("QUIT")
         let fields = stat.split(separator: " ")
-        guard fields.count >= 3, let count = Int(fields[1]), let bytes = Int(fields[2]) else {
+        guard fields.count >= 3, let count = Int(fields[1]), let bytes = Int(fields[2]), count >= 0, bytes >= 0 else {
             throw URLError(.cannotParseResponse)
         }
-        return POP3CheckResult(messageCount: count, totalBytes: bytes)
+        var headers: [[String]] = []
+        if count > 0 {
+            for index in stride(from: count, through: max(1, count - 19), by: -1) {
+                // TOP is optional. An unsupported command leaves the session
+                // synchronized, so preserve STAT counts without downloading bodies.
+                try await send(Data("TOP \(index) 0\r\n".utf8))
+                let status = try await readLine()
+                if status.hasPrefix("-ERR") {
+                    break
+                }
+                try expectOK(status)
+                var lines: [String] = []
+                var headerBytes = 0
+                while true {
+                    let line = try await readLine()
+                    if line == "." {
+                        break
+                    }
+                    headerBytes += line.utf8.count
+                    guard headerBytes <= 64 * 1024, lines.count < 1000 else { throw URLError(.dataLengthExceedsMaximum) }
+                    lines.append(line.hasPrefix("..") ? String(line.dropFirst()) : line)
+                }
+                headers.append(lines)
+            }
+        }
+        _ = try? await command("QUIT")
+        return POP3CheckResult(messageCount: count, totalBytes: bytes, headerLines: headers)
     }
 
     private func start() async throws {
@@ -66,6 +115,9 @@ private final class POP3Connection: @unchecked Sendable {
                 case let .failed(error), let .waiting(error):
                     guard startState.claim() else { return }
                     continuation.resume(throwing: error)
+                case .cancelled:
+                    guard startState.claim() else { return }
+                    continuation.resume(throwing: URLError(.timedOut))
                 default:
                     break
                 }
@@ -108,11 +160,12 @@ private final class POP3Connection: @unchecked Sendable {
             if let range = buffer.range(of: Data([0x0D, 0x0A])) {
                 let line = buffer[..<range.lowerBound]
                 buffer.removeSubrange(..<range.upperBound)
-                return String(decoding: line, as: UTF8.self)
+                return String(data: line, encoding: .utf8) ?? String(data: line, encoding: .shiftJIS) ?? String(decoding: line, as: UTF8.self)
             }
             let data = try await receive()
             guard !data.isEmpty else { throw URLError(.networkConnectionLost) }
             buffer.append(data)
+            guard buffer.count <= 128 * 1024 else { throw URLError(.dataLengthExceedsMaximum) }
         }
     }
 

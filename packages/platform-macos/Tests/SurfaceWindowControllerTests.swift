@@ -833,3 +833,29 @@ import UtataneShell
         "ghost.nar", "SHELL.NAR", "old_ghost.zip", "BALLOON.ZIP"
     ])
 }
+
+@Test @MainActor func `surface dump exports animation patterns without changing visible surface`() throws {
+    let (defaults, positions) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try makeTopLeftKeyedPNG(width: 4, height: 4).write(to: root.appending(path: "surface0.png"))
+    try makePNG(width: 4, height: 4, color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)).write(to: root.appending(path: "surface1.png"))
+    let animation = SurfaceAnimation(id: 10, interval: "never", patterns: [
+        .init(order: 0, method: "base", surfaceID: 1, waitMilliseconds: 10000, x: 0, y: 0),
+        .init(order: 1, method: "overlay", surfaceID: 1, waitMilliseconds: 10000, x: -2, y: 0),
+        .init(order: 2, method: "overlay", surfaceID: -1, waitMilliseconds: 0, x: 0, y: 0)
+    ])
+    let shell = ShellDefinition(directory: root, surfaces: [0: .init(id: 0, collisions: [], animations: [animation])])
+    let controller = SurfaceWindowController(positionStore: positions)
+    defer { controller.resetContent() }
+    try controller.show(shell: shell, scope: 0, surfaceID: 0)
+    let directory = root.appending(path: "dump")
+    #expect(try controller.dumpSurfaceImages(to: directory, scope: 0, surfaceList: "0", animationID: "10") == 4)
+    #expect(controller.surfaceID(for: 0) == 0)
+    #expect(controller.runningAnimationIDs(for: 0).isEmpty)
+    let overlay = try #require(NSBitmapImageRep(data: Data(contentsOf: directory.appending(path: "surface0_0001.png"))))
+    #expect(overlay.pixelsWide == 6)
+    #expect(FileManager.default.fileExists(atPath: directory.appending(path: "surface0_0002.png").path))
+}
