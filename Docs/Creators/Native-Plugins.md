@@ -33,7 +33,7 @@ void *request(void *request_message, int32_t *message_length);
 
 ## BalloonSelector
 
-BalloonSelectorのmacOS移植版は、Utatane Modulesの[導入手順](https://github.com/opera7133/utatane-modules/blob/main/docs/balloonselector.md)に沿ってNARを生成します。この対応は未リリースの開発版向けです。公開済み本体やModulesからの自動導入にはまだ対応していません。
+BalloonSelectorのmacOS移植版は、Utatane Modulesの[導入手順](https://github.com/opera7133/utatane-modules/blob/main/docs/balloonselector.md)に沿ってNARを生成します。この対応にはUtatane 0.2.16以降とmacOS版YAYAが必要です。Modulesからのプラグイン自動導入にはまだ対応していません。
 
 macOS版YAYAをModulesから導入し、生成したNARをUtataneへインストールします。右クリックメニューのプラグインからBalloonSelectorを実行すると、バルーンのプレビュー付き一覧を開きます。原版の3×3配置の代わりに、1ページ9件の一列リストで表示します。プラグインIDと、選択・キャンセル時にゴーストへ送るイベントは原版と同じです。
 
