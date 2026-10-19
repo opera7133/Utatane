@@ -56,6 +56,7 @@ public struct BalloonDefinition: Sendable, Equatable {
     public let communicateBoxFontName: String?
     public let communicateBoxFontHeight: Int
     public let communicateBoxFontColor: BalloonColor
+    public let communicateBoxPlaceholderColor: BalloonColor?
     public let communicateBoxBackgroundColor: BalloonColor?
     public let communicateBoxX: Int
     public let communicateBoxY: Int
@@ -123,6 +124,7 @@ public struct BalloonDefinition: Sendable, Equatable {
         communicateBoxFontName: String? = nil,
         communicateBoxFontHeight: Int = 13,
         communicateBoxFontColor: BalloonColor = .init(red: 0, green: 0, blue: 0),
+        communicateBoxPlaceholderColor: BalloonColor? = nil,
         communicateBoxBackgroundColor: BalloonColor? = nil,
         communicateBoxX: Int = 20,
         communicateBoxY: Int = 20,
@@ -189,6 +191,7 @@ public struct BalloonDefinition: Sendable, Equatable {
         self.communicateBoxFontName = communicateBoxFontName
         self.communicateBoxFontHeight = communicateBoxFontHeight
         self.communicateBoxFontColor = communicateBoxFontColor
+        self.communicateBoxPlaceholderColor = communicateBoxPlaceholderColor
         self.communicateBoxBackgroundColor = communicateBoxBackgroundColor
         self.communicateBoxX = communicateBoxX
         self.communicateBoxY = communicateBoxY
@@ -276,6 +279,7 @@ public enum BalloonInputStyle: Int, Sendable, Equatable {
     case teach = 2
     case input = 3
     case addressBar = 4
+    case textArea = 5
 }
 
 public enum BalloonWindowPositionX: Sendable, Equatable {

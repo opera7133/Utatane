@@ -11,11 +11,13 @@ import ZIPFoundation
     defer { try? FileManager.default.removeItem(at: root) }
     let library = Data("library bytes".utf8)
     let libraryHash = digest(library)
+    let helper = Data("#!/bin/sh\nexit 0\n".utf8)
     let manifest = Data("""
-    {"schemaVersion":1,"id":"wmove","version":"1.0.0","revision":1,"abi":"saori-1","minimumOS":"14.0","architectures":["arm64"],"files":{"lib/libwmove.dylib":"\(libraryHash)"}}
+    {"schemaVersion":1,"id":"wmove","version":"1.0.0","revision":1,"abi":"saori-1","minimumOS":"14.0","architectures":["arm64"],"files":{"lib/libwmove.dylib":"\(libraryHash)","bin/helper":"\(digest(helper))"}}
     """.utf8)
     let valid = try makePackage(at: root.appending(path: "valid.zip"), entries: [
         ("wmove/lib/libwmove.dylib", library),
+        ("wmove/bin/helper", helper),
         ("wmove/module.json", manifest)
     ])
     let (module, artifact) = try catalogEntry(for: valid)
@@ -24,6 +26,8 @@ import ZIPFoundation
         archiveURL: valid, module: module, artifact: artifact, managedRootURL: managed
     )
     #expect(try Data(contentsOf: destination.appending(path: "lib/libwmove.dylib")) == library)
+
+    #expect(FileManager.default.isExecutableFile(atPath: destination.appending(path: "bin/helper").path))
 
     let unsafe = try makePackage(at: root.appending(path: "unsafe.zip"), entries: [
         ("wmove/../outside", Data("bad".utf8)),

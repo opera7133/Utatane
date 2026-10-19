@@ -2,6 +2,47 @@ import Foundation
 import Testing
 @testable import UtataneShell
 
+@Test func `accepts opening braces on block headers used by distributed shells`() throws {
+    let document = SurfacesParser().parseDocument("""
+    descript{ // header comment
+    maxwidth,512
+    }
+    surface8,20-22,!20{ // selector comment
+    element0,base,part{button}.png,0,0
+    animation0.interval,runonce
+    animation0.pattern0,overlay,8,0,0,0
+    }
+    surface.append8,21 {
+    collision0,0,0,10,10,Button
+    }
+    surface30{}
+    surface.append30{
+    name,empty base
+    }
+    surface.append99{
+    name,does not exist
+    }
+    sakura.surface.alias{
+    popup,[21]
+    }
+    surface40
+    {
+    name,separate braces
+    }
+    """)
+
+    #expect(document.surfaces.keys.sorted() == [8, 21, 22, 30, 40])
+    #expect(document.maximumSurfaceWidth == 512)
+    #expect(document.aliases[0]?["popup"] == [21])
+    let popup = try #require(document.surfaces[21])
+    #expect(popup.elements.first?.filename == "part{button}.png")
+    #expect(popup.animations.first?.patterns.first?.surfaceID == 8)
+    #expect(popup.collisions.first?.name == "Button")
+    #expect(document.surfaces[22]?.collisions.isEmpty == true)
+    #expect(document.surfaces[30]?.name == "empty base")
+    #expect(document.surfaces[40]?.name == "separate braces")
+}
+
 @Test func `parses legacy SERIKO interval and pattern directives`() throws {
     let surfaces = SurfacesParser().parse("""
     surface1

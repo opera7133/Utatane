@@ -56,7 +56,7 @@ AUDITED_EVENTS = {
     "OnChoiceHover": ("✅", "選択肢上で1秒静止した時にラベル・ID・追加引数を通知。SSPの静止時間との完全一致は未確認"),
     "OnShellScaling": ("✅", "設定でシェル倍率が変わった時に新旧の縦横パーセントをReference0〜3へ通知。Utataneの倍率設定は縦横同値"),
     "OnSoundError": ("✅", "音声ファイル解決・AVAudioPlayer生成・再生終了失敗時にplay・エラーコード・ファイル・説明を通知。実動未確認"),
-    "OnSoundStop": ("✅", "SakuraScript音声の自然終了とstop操作でファイル名・end/closeを通知。ループ終了など全経路は未確認"),
+    "OnSoundStop": ("✅", "SakuraScript音声の自然終了時にファイル名とendを通知。sound,stopは通知せず、次の再生命令へ継続する。再生ウィンドウのclose通知は未実装"),
     "OnTextDrop": ("✅", "サーフェスへのテキストDnDで改行をバイト値1に変換し本文とscopeを通知。イベント生成テストで確認"),
     "OnURLDragDropping": ("✅", "Web URLがサーフェスへ重なった時にURLとscopeを通知。受入可否の詳細判定は未実装"),
     "OnURLDropping": ("✅", "Web URLがサーフェスへドロップされた時にURLとscopeを通知。後続のダウンロード機能は未実装"),
@@ -90,6 +90,8 @@ AUDITED_EVENTS = {
     "OnGhostCalled": ("✅", "呼出先で呼出元の本体名・呼出スクリプト・ゴースト名・パスと呼出先シェル名をReference0〜3・7へ通知し、無応答ならOnBootへフォールバック。テスト済み"),
     "OnGhostCalling": ("✅", "手動呼出時のReference0〜3を実装。automatic経路は未実装"),
     "OnFileDrop2": ("✅", "全ファイル／ディレクトリのパスとMIME typeをバイト値1区切りでReference0・2へ、scopeをReference1へ通知。複数項目の順序とMIME判定をテスト済み"),
+    "OnFileDropEx": ("✅", "OnFileDrop2が無応答の場合に同じReferenceで問い合わせる。旧イベントからの応答があれば既定アプリを開かない。順序・重複防止をテスト済み"),
+    "OnFileDrop": ("✅", "OnFileDrop2とOnFileDropExが無応答の場合、ファイルごとにパス・scope・MIME typeをReference0〜2へ通知。順序と複数応答をテスト済み"),
     "OnFileDropping": ("✅", "ファイルドラッグ進入時に先頭ファイルのパスとscopeをReference0〜1へ通知。サーフェス入力からの経路とイベント生成をテスト済み"),
     "OnDirectoryDrop": ("✅", "ドロップされた各ディレクトリについてパスとscopeをReference0〜1へ個別通知。混在する複数項目をテスト済み"),
     "OnGhostChanging": ("✅", "切替前に発行するがReference0のみ。manual/automatic・名前・パスが不足"),
@@ -311,8 +313,6 @@ PARTIAL_EVENT_NOTES = {
 
 INAPPLICABLE_EVENTS = {
     "OnFileDropped": "旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行",
-    "OnFileDrop": "旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行",
-    "OnFileDropEx": "旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行",
     "OnTabletMode": "macOSに対応するタブレットモードがないため対象外",
     "OnEmbryoExist": "Windows用Materiaの同時起動検出イベントでありmacOS版では対象外",
     "OnNekodorifExist": "Windows用猫どりふの同時起動検出イベントでありmacOS版では対象外",
@@ -322,6 +322,9 @@ INAPPLICABLE_EVENTS = {
 }
 
 ONLINE_ADDITIONAL_EVENTS = [
+    "OnSoundSpectrum",
+    "OnTextAreaInput",
+    "OnTextAreaInputCancel",
     "OnScheduleTodayNotify",
     "OnDesktopWallpaperChange",
     "OnWindowModeChange",
@@ -339,6 +342,9 @@ ONLINE_ADDITIONAL_EVENTS = [
 ]
 
 ONLINE_ADDITIONAL_AUDITED_EVENTS = {
+    "OnSoundSpectrum": ("🟡", "AVFoundation対応音声の波形を解析し、指定間隔・0/5/10/15/31帯域・チャンネル別レベル・ピークホールド・再生位置をGET通知。停止時はゼロ、ポーズ中は通知しない。メイン・呼び出しゴーストに接続。MIDI/CD/動画やSSPとの数値の完全一致は未対応"),
+    "OnTextAreaInput": ("✅", "textareabox決定時にID・バイト値1区切りの内容・空欄・追加Referenceを通知。Onで始まるIDはそのイベントへ内容から通知。メイン・呼び出しゴーストに接続。実ゴースト操作は未確認"),
+    "OnTextAreaInputCancel": ("✅", "ID・timeout／close・編集中の内容・追加Referenceを通知。時間切れでも決定イベントへフォールバックしない。実ゴースト操作は未確認"),
     "OnScheduleTodayNotify": ("✅", "予定の追加・編集・削除・取り込みや日付変更で今日の予定が変化した時、全起動ゴーストへNOTIFY"),
     "OnDesktopWallpaperChange": AUDITED_EVENTS["OnDesktopWallpaperChange"],
     "OnWindowModeChange": ("✅", "起動時とウインドウモード切替時に現在・直前のモードを通知し、切替時はOnDisplayChangeも発行"),
@@ -506,10 +512,10 @@ def render(ukadoc_file: Path) -> str:
                 note = UNIMPLEMENTED_EVENTS[event_id]
             elif event_id in PARTIAL_EVENTS:
                 status = "🟡"
-                note = AUDITED_EVENTS.get(
+                note = PARTIAL_EVENT_NOTES.get(
                     event_id,
-                    ("🟡", PARTIAL_EVENT_NOTES[event_id]),
-                )[1]
+                    "発生経路の一部のみ実装。発生条件・Reference・応答処理の照合は未完",
+                )
             elif event_id in INAPPLICABLE_EVENTS:
                 status = "➖"
                 note = INAPPLICABLE_EVENTS[event_id]

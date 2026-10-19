@@ -9,6 +9,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
     public enum InputKind: Sendable, Equatable {
         case text
         case password
+        case textArea
         case date
         case slider(minimum: Int, maximum: Int)
         case time
@@ -17,6 +18,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         public init(_ kind: SakuraScriptInputCommand.Kind) {
             switch kind {
             case .text: self = .text
+            case .textArea: self = .textArea
             case .password: self = .password
             case .date: self = .date
             case let .slider(minimum, maximum): self = .slider(minimum: minimum, maximum: maximum)
@@ -28,12 +30,13 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
 
     public enum InputResult: Sendable, Equatable {
         case submitted(String)
-        case cancelled(timedOut: Bool)
+        case cancelled(timedOut: Bool, value: String = "")
     }
 
     public struct Appearance: Sendable, Equatable {
         public let fontName: String?
         public let fontHeight: Int
+        public let placeholderColor: BalloonColor?
         public let fontColor: BalloonColor
         public let backgroundColor: BalloonColor?
         public let inputX: Int
@@ -48,15 +51,21 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         public let cancelButtonUpImageURL: URL?
         public let cancelButtonDownImageURL: URL?
 
-        public init(balloon: BalloonDefinition, backgroundImageURL: URL?) {
-            fontName = balloon.communicateBoxFontName
-            fontHeight = balloon.communicateBoxFontHeight
-            fontColor = balloon.communicateBoxFontColor
+        public init(balloon: BalloonDefinition, backgroundImageURL: URL?, usesBalloonTextArea: Bool = false) {
+            fontName = usesBalloonTextArea ? balloon.fontName : balloon.communicateBoxFontName
+            fontHeight = usesBalloonTextArea ? balloon.fontHeight : balloon.communicateBoxFontHeight
+            fontColor = usesBalloonTextArea ? balloon.fontColor : balloon.communicateBoxFontColor
+            placeholderColor = balloon.communicateBoxPlaceholderColor
             backgroundColor = balloon.communicateBoxBackgroundColor
-            inputX = balloon.communicateBoxX
-            inputY = balloon.communicateBoxY
-            inputWidth = balloon.communicateBoxWidth
-            inputHeight = balloon.communicateBoxHeight
+            let imageSize = backgroundImageURL.flatMap { NSImage(contentsOf: $0)?.size }
+            inputX = usesBalloonTextArea ? balloon.validRectLeft : balloon.communicateBoxX
+            inputY = usesBalloonTextArea ? balloon.validRectTop : balloon.communicateBoxY
+            inputWidth = usesBalloonTextArea
+                ? imageSize.map { max(1, (balloon.validRectRight ?? Int($0.width) - 14) - balloon.validRectLeft) }
+                : balloon.communicateBoxWidth
+            inputHeight = usesBalloonTextArea
+                ? imageSize.map { max(1, (balloon.validRectBottom ?? Int($0.height) - 14) - balloon.validRectTop) }
+                : balloon.communicateBoxHeight
             usesSelfAlpha = balloon.usesSelfAlpha
             usesFullSelfAlpha = balloon.usesFullSelfAlpha
             self.backgroundImageURL = backgroundImageURL
@@ -64,6 +73,23 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             confirmButtonDownImageURL = Self.imageURL(named: "ok_down.png", in: balloon.directory)
             cancelButtonUpImageURL = Self.imageURL(named: "cancel_up.png", in: balloon.directory)
             cancelButtonDownImageURL = Self.imageURL(named: "cancel_down.png", in: balloon.directory)
+        }
+
+        public static func textArea(
+            balloon: BalloonDefinition, balloonID: Int?, scope: Int, surfaceID: Int?
+        ) -> Self {
+            let loader = BalloonLoader()
+            let id = balloonID ?? BalloonInputStyle.textArea.rawValue
+            if let image = loader.inputImageURL(id: id, in: balloon) {
+                return .init(balloon: loader.effectiveInputDefinition(for: balloon, id: id), backgroundImageURL: image)
+            }
+            let style = max(0, surfaceID ?? 0)
+            let speaker: BalloonSpeaker = scope == 0 ? .sakura : (scope == 1 ? .kero : .character(scope: scope))
+            return .init(
+                balloon: loader.effectiveDefinition(for: balloon, speaker: speaker, style: style),
+                backgroundImageURL: try? loader.imageURL(speaker: speaker, style: style, in: balloon),
+                usesBalloonTextArea: true
+            )
         }
 
         private static func imageURL(named name: String, in directory: URL) -> URL? {
@@ -131,6 +157,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    public private(set) var currentValue = ""
     private(set) var window: NSWindow?
     private var currentRequest: Request?
     private var timeoutTask: Task<Void, Never>?
@@ -143,6 +170,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
     public func show(_ request: Request) {
         closeCurrentWindow(invokeCancel: true)
         currentRequest = request
+        currentValue = Self.editableValue(request.initialValue, kind: request.inputKind, maximumLength: request.maximumLength)
 
         let backgroundImage = request.prompt?.isEmpty == false ? nil : request.appearance.flatMap { appearance in
             appearance.backgroundImageURL.flatMap { try? Self.loadSkinImage($0, appearance: appearance) }
@@ -150,6 +178,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         let view = TextInputDialogView(
             request: request,
             backgroundImage: backgroundImage,
+            onTextChange: { [weak self] text in self?.updateCurrentText(text) },
             onCommit: { [weak self] text in
                 self?.submitCurrent(text)
             },
@@ -162,7 +191,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         )
 
         let backgroundImageSize = backgroundImage?.size
-        let panelSize = Self.panelSize(for: request.appearance, backgroundImageSize: backgroundImageSize, hasPrompt: request.prompt?.isEmpty == false, allowsCancel: request.allowsCancel)
+        let panelSize = Self.panelSize(for: request.appearance, backgroundImageSize: backgroundImageSize, hasPrompt: request.prompt?.isEmpty == false, allowsCancel: request.allowsCancel, isTextArea: request.inputKind == .textArea)
         let panel = InputPanel(
             contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.borderless],
@@ -184,7 +213,14 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         window = panel
     }
 
+    func updateCurrentText(_ text: String) {
+        guard let request = currentRequest else { return }
+        currentValue = Self.editableValue(text, kind: request.inputKind, maximumLength: request.maximumLength)
+    }
+
     func submitCurrent(_ text: String) {
+        updateCurrentText(text)
+        let value = currentValue
         let request = currentRequest
         if request?.keepsOpenAfterCommit == true {
             timeoutTask?.cancel()
@@ -193,7 +229,10 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         } else {
             closeCurrentWindow(invokeCancel: false)
         }
-        request?.onCommit(text)
+        if request?.keepsOpenAfterCommit == true, request?.clearsValueAfterCommit == true {
+            currentValue = ""
+        }
+        request?.onCommit(value)
     }
 
     public func showPrompt(
@@ -243,6 +282,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         inputKind: InputKind,
         maximumLength: Int?,
         autocompleteValues: [String],
+        placeholder: String? = nil,
         appearance: Appearance?,
         timeoutMilliseconds: Int?
     ) async -> InputResult {
@@ -254,13 +294,16 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
                 inputKind: inputKind,
                 maximumLength: maximumLength,
                 autocompleteValues: autocompleteValues,
+                placeholder: placeholder,
                 appearance: appearance,
                 onCommit: { value in continuation.resume(returning: .submitted(value)) },
-                onCancel: { continuation.resume(returning: .cancelled(timedOut: false)) }
+                onCancel: {
+                    continuation.resume(returning: .cancelled(timedOut: false, value: inputKind == .textArea ? self.currentValue : ""))
+                }
             ))
             if let timeoutMilliseconds, timeoutMilliseconds > 0 {
                 timeoutHandler = {
-                    continuation.resume(returning: .cancelled(timedOut: true))
+                    continuation.resume(returning: .cancelled(timedOut: true, value: inputKind == .textArea ? self.currentValue : ""))
                 }
                 timeoutTask = Task { [weak self] in
                     try? await Task.sleep(for: .milliseconds(timeoutMilliseconds))
@@ -282,6 +325,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         appearance: Appearance?,
         timeoutMilliseconds: Int?,
         clearsValueAfterSubmit: Bool,
+        inputKind: InputKind = .text,
+        placeholder: String? = nil,
         onSubmit: @escaping @MainActor @Sendable (String) -> Void,
         onCancel: @escaping @MainActor @Sendable (Bool) -> Void
     ) {
@@ -289,9 +334,10 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             id: id,
             title: title,
             initialValue: initialValue,
-            inputKind: .text,
+            inputKind: inputKind,
             maximumLength: maximumLength,
             autocompleteValues: autocompleteValues,
+            placeholder: placeholder,
             appearance: appearance,
             keepsOpenAfterCommit: true,
             clearsValueAfterCommit: clearsValueAfterSubmit,
@@ -305,6 +351,50 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
                 closeCurrentWindow(invokeCancel: false)
                 onCancel(true)
             }
+        }
+    }
+
+    public func showTextArea(
+        command: SakuraScriptInputCommand,
+        appearance: Appearance?,
+        sendEvent: @escaping @MainActor @Sendable (GhostEvent) async -> SakuraScript?,
+        playResponse: @escaping @MainActor @Sendable (SakuraScript) -> Void
+    ) async -> SakuraScript? {
+        if command.keepsOpenAfterSubmit {
+            showPersistentInput(
+                id: command.id, title: String(localized: "文字を入力"), initialValue: command.initialValue,
+                maximumLength: command.maximumLength, autocompleteValues: [], appearance: appearance,
+                timeoutMilliseconds: command.timeoutMilliseconds, clearsValueAfterSubmit: !command.keepsValueAfterSubmit,
+                inputKind: .textArea, placeholder: command.placeholder,
+                onSubmit: { value in
+                    Task {
+                        if let response = await sendEvent(SHIORIEventFactory.textAreaInput(id: command.id, value: value, additionalReferences: command.references)) {
+                            playResponse(response)
+                        }
+                    }
+                },
+                onCancel: { [weak self] timedOut in
+                    let value = self?.currentValue ?? ""
+                    Task {
+                        if let response = await sendEvent(SHIORIEventFactory.textAreaInputCancel(id: command.id, timedOut: timedOut, value: value, additionalReferences: command.references)) {
+                            playResponse(response)
+                        }
+                    }
+                }
+            )
+            return nil
+        }
+        let result = await showInput(
+            id: command.id, title: String(localized: "文字を入力"), initialValue: command.initialValue,
+            inputKind: .textArea, maximumLength: command.maximumLength, autocompleteValues: [],
+            placeholder: command.placeholder, appearance: appearance, timeoutMilliseconds: command.timeoutMilliseconds
+        )
+        guard !Task.isCancelled else { return nil }
+        switch result {
+        case let .submitted(value):
+            return await sendEvent(SHIORIEventFactory.textAreaInput(id: command.id, value: value, additionalReferences: command.references))
+        case let .cancelled(timedOut, value):
+            return await sendEvent(SHIORIEventFactory.textAreaInputCancel(id: command.id, timedOut: timedOut, value: value, additionalReferences: command.references))
         }
     }
 
@@ -325,19 +415,27 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         )
     }
 
-    static func panelSize(for appearance: Appearance?, backgroundImageSize: NSSize?, hasPrompt: Bool = false, allowsCancel: Bool = true) -> NSSize {
+    static func panelSize(for appearance: Appearance?, backgroundImageSize: NSSize?, hasPrompt: Bool = false, allowsCancel: Bool = true, isTextArea: Bool = false) -> NSSize {
         if let backgroundImageSize, !hasPrompt {
             return backgroundImageSize
         }
         let inputWidth = CGFloat(max(appearance?.inputWidth ?? 280, 120))
-        let inputHeight = CGFloat(max(appearance?.inputHeight ?? 24, 24))
+        let inputHeight = CGFloat(max(appearance?.inputHeight ?? (isTextArea ? 160 : 24), 24))
         let buttonsWidth: CGFloat = allowsCancel ? 78 : 44
         let contentWidth = CGFloat(max(appearance?.inputX ?? 10, 8)) + inputWidth + buttonsWidth + 22
-        let contentHeight = CGFloat(max(appearance?.inputY ?? 24, 24)) + inputHeight + 10 + (hasPrompt ? 46 : 0)
+        let contentHeight = CGFloat(max(appearance?.inputY ?? 24, 24)) + inputHeight + 10 + (hasPrompt ? 46 : 0) + (isTextArea ? 32 : 0)
         return NSSize(
             width: max(380, contentWidth, backgroundImageSize?.width ?? 0),
             height: max(58, contentHeight, backgroundImageSize?.height ?? 0)
         )
+    }
+
+    static func editableValue(_ value: String, kind: InputKind, maximumLength: Int?) -> String {
+        let normalized = kind == .textArea
+            ? value.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n").replacingOccurrences(of: "\u{1}", with: "\n")
+            : value
+        guard let maximumLength, maximumLength >= 0 else { return normalized }
+        return String(normalized.prefix(maximumLength))
     }
 
     public func close(id: String? = nil) {
@@ -387,6 +485,7 @@ private final class InputPanel: NSPanel {
 private struct TextInputDialogView: View {
     let request: TextInputWindowController.Request
     let backgroundImage: NSImage?
+    let onTextChange: (String) -> Void
     let onCommit: (String) -> Void
     let onCancel: () -> Void
     @State private var text: String
@@ -397,14 +496,16 @@ private struct TextInputDialogView: View {
     init(
         request: TextInputWindowController.Request,
         backgroundImage: NSImage?,
+        onTextChange: @escaping (String) -> Void,
         onCommit: @escaping (String) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.request = request
         self.backgroundImage = backgroundImage
+        self.onTextChange = onTextChange
         self.onCommit = onCommit
         self.onCancel = onCancel
-        _text = State(initialValue: request.initialValue)
+        _text = State(initialValue: TextInputWindowController.editableValue(request.initialValue, kind: request.inputKind, maximumLength: request.maximumLength))
         _dateValue = State(initialValue: Self.initialDate(for: request))
         _sliderValue = State(initialValue: Double(request.initialValue) ?? 0)
     }
@@ -428,11 +529,22 @@ private struct TextInputDialogView: View {
                         .font(.body)
                         .foregroundStyle(.secondary)
                 }
-                HStack(spacing: 6) {
+                inputLayout {
                     Group {
                         switch request.inputKind {
+                        case .textArea:
+                            MultilineInputField(
+                                text: $text,
+                                placeholder: request.placeholder?.replacingOccurrences(of: "\u{1}", with: "\n") ?? "",
+                                font: inputNSFont,
+                                textColor: request.appearance.map { nsColor($0.fontColor) } ?? .textColor,
+                                placeholderColor: placeholderNSColor,
+                                maximumLength: request.maximumLength,
+                                onChange: onTextChange,
+                                onCommit: submit
+                            )
                         case .password:
-                            SecureField(request.placeholder ?? "", text: $text)
+                            SecureField("", text: $text, prompt: Text(request.placeholder ?? "").foregroundColor(Color(placeholderNSColor)))
                                 .textFieldStyle(.roundedBorder)
                                 .focused($isFocused)
                                 .onSubmit { submit() }
@@ -457,7 +569,8 @@ private struct TextInputDialogView: View {
                              .ipAddress where request.autocompleteValues.isEmpty:
                             TextField(
                                 request.placeholder ?? "",
-                                text: $text
+                                text: $text,
+                                prompt: Text(request.placeholder ?? "").foregroundColor(Color(placeholderNSColor))
                             )
                             .textFieldStyle(.roundedBorder)
                             .focused($isFocused)
@@ -468,6 +581,7 @@ private struct TextInputDialogView: View {
                             AutocompleteTextField(
                                 text: $text,
                                 placeholder: request.placeholder ?? "",
+                                placeholderColor: placeholderNSColor,
                                 values: request.autocompleteValues,
                                 fontName: request.appearance?.fontName,
                                 fontHeight: CGFloat(max(request.appearance?.fontHeight ?? 13, 1)),
@@ -482,24 +596,27 @@ private struct TextInputDialogView: View {
                     .frame(maxWidth: .infinity)
                     .frame(height: inputHeight)
                     .background(inputBackgroundColor, in: RoundedRectangle(cornerRadius: 5))
-                    dialogButton(
-                        title: request.actionTitle,
-                        upURL: request.appearance?.confirmButtonUpImageURL,
-                        downURL: request.appearance?.confirmButtonDownImageURL,
-                        action: submit
-                    )
-                    .keyboardShortcut(.defaultAction)
-                    if request.allowsCancel {
+                    HStack(spacing: 6) {
                         dialogButton(
-                            title: String(localized: "キャンセル"),
-                            upURL: request.appearance?.cancelButtonUpImageURL,
-                            downURL: request.appearance?.cancelButtonDownImageURL,
-                            isCancel: true,
-                            action: onCancel
+                            title: request.actionTitle,
+                            upURL: request.appearance?.confirmButtonUpImageURL,
+                            downURL: request.appearance?.confirmButtonDownImageURL,
+                            action: submit
                         )
-                        .keyboardShortcut(.cancelAction)
+                        .keyboardShortcut(.return, modifiers: request.inputKind == .textArea ? .control : [])
+                        if request.allowsCancel {
+                            dialogButton(
+                                title: String(localized: "キャンセル"),
+                                upURL: request.appearance?.cancelButtonUpImageURL,
+                                downURL: request.appearance?.cancelButtonDownImageURL,
+                                isCancel: true,
+                                action: onCancel
+                            )
+                            .keyboardShortcut(.cancelAction)
+                        }
                     }
                 }
+                .frame(width: request.inputKind == .textArea ? request.appearance?.inputWidth.map(CGFloat.init) : nil)
             }
             .padding(.leading, inputOriginX)
             .padding(.top, inputOriginY)
@@ -514,6 +631,7 @@ private struct TextInputDialogView: View {
             if let limit = request.maximumLength, limit >= 0, value.count > limit {
                 text = String(value.prefix(limit))
             }
+            onTextChange(TextInputWindowController.editableValue(value, kind: request.inputKind, maximumLength: request.maximumLength))
             if request.inputKind == .ipAddress {
                 let filtered = value.filter { $0.isNumber || $0 == "." || $0 == "," }
                 if filtered != value {
@@ -521,6 +639,10 @@ private struct TextInputDialogView: View {
                 }
             }
         }
+    }
+
+    private var inputLayout: AnyLayout {
+        request.inputKind == .textArea ? AnyLayout(VStackLayout(alignment: .trailing, spacing: 6)) : AnyLayout(HStackLayout(spacing: 6))
     }
 
     private func submit() {
@@ -577,7 +699,7 @@ private struct TextInputDialogView: View {
             return String(Int(sliderValue.rounded()))
         case .ipAddress:
             return text.replacingOccurrences(of: ".", with: ",")
-        case .text, .password:
+        case .text, .password, .textArea:
             return text
         }
     }
@@ -629,7 +751,21 @@ private struct TextInputDialogView: View {
     }
 
     private var inputHeight: CGFloat {
-        min(CGFloat(max(request.appearance?.inputHeight ?? 24, 20)), backgroundImage.map { max(16, $0.size.height - inputOriginY - 4) } ?? 24)
+        let isTextArea = request.inputKind == .textArea
+        let requested = CGFloat(max(request.appearance?.inputHeight ?? (isTextArea ? 160 : 24), 20))
+        let available = backgroundImage.map { max(16, $0.size.height - inputOriginY - (isTextArea ? 36 : 4)) } ?? requested
+        return min(requested, available)
+    }
+
+    private var inputNSFont: NSFont {
+        let height = CGFloat(max(request.appearance?.fontHeight ?? 13, 1))
+        return request.appearance?.fontName?.split(separator: ",").lazy.compactMap {
+            NSFont(name: $0.trimmingCharacters(in: .whitespacesAndNewlines), size: height)
+        }.first ?? .systemFont(ofSize: height)
+    }
+
+    private var placeholderNSColor: NSColor {
+        request.appearance?.placeholderColor.map(nsColor) ?? .placeholderTextColor
     }
 
     private var inputFont: Font {
@@ -685,6 +821,7 @@ private struct BalloonImageButtonStyle: ButtonStyle {
 private struct AutocompleteTextField: NSViewRepresentable {
     @Binding var text: String
     let placeholder: String
+    let placeholderColor: NSColor
     let values: [String]
     let fontName: String?
     let fontHeight: CGFloat
@@ -700,7 +837,7 @@ private struct AutocompleteTextField: NSViewRepresentable {
         let comboBox = NSComboBox()
         comboBox.usesDataSource = false
         comboBox.completes = true
-        comboBox.placeholderString = placeholder
+        comboBox.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [.foregroundColor: placeholderColor])
         comboBox.addItems(withObjectValues: values)
         comboBox.stringValue = text
         applyAppearance(to: comboBox)
@@ -721,6 +858,7 @@ private struct AutocompleteTextField: NSViewRepresentable {
     }
 
     private func applyAppearance(to comboBox: NSComboBox) {
+        comboBox.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [.foregroundColor: placeholderColor])
         let names = fontName?.split(separator: ",").map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
         } ?? []
@@ -752,5 +890,105 @@ private struct AutocompleteTextField: NSViewRepresentable {
             else { return }
             onCommit(comboBox.stringValue)
         }
+    }
+}
+
+struct MultilineInputField: NSViewRepresentable {
+    @Binding var text: String
+    let placeholder: String
+    let font: NSFont
+    let textColor: NSColor
+    let placeholderColor: NSColor
+    let maximumLength: Int?
+    let onChange: (String) -> Void
+    let onCommit: () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scroll = NSScrollView()
+        scroll.hasVerticalScroller = true
+        scroll.drawsBackground = false
+        let editor = TextAreaEditor(frame: scroll.bounds)
+        editor.isRichText = false
+        editor.isAutomaticQuoteSubstitutionEnabled = false
+        editor.isAutomaticDashSubstitutionEnabled = false
+        editor.isAutomaticTextReplacementEnabled = false
+        editor.isHorizontallyResizable = false
+        editor.isVerticallyResizable = true
+        editor.autoresizingMask = [.width]
+        editor.textContainer?.widthTracksTextView = true
+        editor.textContainerInset = NSSize(width: 4, height: 4)
+        editor.drawsBackground = false
+        editor.delegate = context.coordinator
+        scroll.documentView = editor
+        updateNSView(scroll, context: context)
+        return scroll
+    }
+
+    func updateNSView(_ scroll: NSScrollView, context: Context) {
+        context.coordinator.parent = self
+        guard let editor = scroll.documentView as? TextAreaEditor else { return }
+        if editor.string != text, !editor.hasMarkedText() {
+            editor.string = text
+        }
+        editor.font = font
+        editor.textColor = textColor
+        editor.placeholder = placeholder
+        editor.placeholderColor = placeholderColor
+        editor.onCommit = onCommit
+        editor.needsDisplay = true
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: MultilineInputField
+        init(_ parent: MultilineInputField) {
+            self.parent = parent
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let editor = notification.object as? NSTextView, !editor.hasMarkedText() else { return }
+            let value = TextInputWindowController.editableValue(editor.string, kind: .textArea, maximumLength: parent.maximumLength)
+            if value != editor.string {
+                editor.string = value
+            }
+            parent.text = value
+            parent.onChange(value)
+            editor.needsDisplay = true
+        }
+    }
+}
+
+final class TextAreaEditor: NSTextView {
+    var placeholder = ""
+    var placeholderColor: NSColor = .placeholderTextColor
+    var onCommit: (() -> Void)?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window != nil {
+            window?.makeFirstResponder(self)
+        }
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if [36, 76].contains(event.keyCode), event.modifierFlags.contains(.control), !hasMarkedText() {
+            onCommit?()
+            return
+        }
+        super.keyDown(with: event)
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard string.isEmpty, !hasMarkedText(), !placeholder.isEmpty else { return }
+        let inset = textContainerInset
+        let padding = textContainer?.lineFragmentPadding ?? 0
+        (placeholder as NSString).draw(
+            in: NSRect(x: inset.width + padding, y: inset.height, width: max(0, bounds.width - 2 * (inset.width + padding)), height: bounds.height - inset.height),
+            withAttributes: [.font: font ?? NSFont.systemFont(ofSize: 13), .foregroundColor: placeholderColor]
+        )
     }
 }

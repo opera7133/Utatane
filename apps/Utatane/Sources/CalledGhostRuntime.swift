@@ -29,6 +29,7 @@ final class CalledGhostRuntime {
     private let presentationSession: GhostPresentationSession?
     private let presentationGeometry: any PresentationGeometryProviding
     private let textInputWindowController = TextInputWindowController()
+    private let textAreaWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
     private let fileWatchManager = SakuraScriptFileWatchManager()
     private let speechHistoryStore: SpeechHistoryStore
@@ -454,9 +455,9 @@ final class CalledGhostRuntime {
                     id: "OnSecondChange",
                     references: references
                 )) else { return }
-                guard !Task.isCancelled, canTalk else { return }
+                guard !Task.isCancelled, player.canTalk else { return }
                 if let script = response.script {
-                    player.play(script, balloon: balloon)
+                    player.enqueuePeriodic(script, balloon: balloon, eventID: "OnSecondChange")
                 }
                 forwardCommunication(response)
             } catch {
@@ -648,6 +649,7 @@ final class CalledGhostRuntime {
     private func stop(reason: GhostStopReason) async -> String {
         GhostUsageHistory.store.end(ghost.rootDirectory.path)
         isStopping = true
+        textAreaWindowController.close()
         if reason != .vanish {
             eventDelivery.finish()
         } else {
@@ -829,17 +831,27 @@ final class CalledGhostRuntime {
         Task { await player.resetWindowPositionsFromMenu(balloon: balloon) }
     }
 
-    private func show(shell newShell: InstalledShell) throws {
-        player.cancel()
+    func reloadShell() {
+        do {
+            try show(shell: shell, preservingPlayback: true)
+        } catch {
+            onError?(error)
+        }
+    }
+
+    private func show(shell newShell: InstalledShell, preservingPlayback: Bool = false) throws {
+        if !preservingPlayback {
+            player.cancel()
+        }
         let definition = try shellLoader.load(from: newShell.directory)
             .applyingPresentationDefaults(from: ghost)
         balloonController.configure(shell: definition)
-        try surfaceController.show(
-            shell: definition,
-            defaultSurfaceIDs: Dictionary(uniqueKeysWithValues: ghost.characters.map {
-                ($0.scope, $0.defaultSurfaceID)
-            })
-        )
+        let defaultSurfaces = Dictionary(uniqueKeysWithValues: ghost.characters.map { ($0.scope, $0.defaultSurfaceID) })
+        if preservingPlayback {
+            try player.reloadShell(definition, defaultSurfaceIDs: defaultSurfaces)
+        } else {
+            try surfaceController.show(shell: definition, defaultSurfaceIDs: defaultSurfaces)
+        }
         player.configure(defaultBalloonSurfaceIDs: Dictionary(uniqueKeysWithValues: ghost.characters.map {
             ($0.scope, $0.defaultBalloonSurfaceID)
         }))
@@ -987,6 +999,18 @@ final class CalledGhostRuntime {
         player.onAnchorHover = { [weak self] label, id, arguments in
             self?.send(.shiori(id: "OnAnchorHover", references: linkEventReferences(label, id, arguments)))
         }
+        player.onSoundSpectrum = { [weak self] references in
+            guard let self, !isStopping, !eventDelivery.isSuspended else { return }
+            do {
+                guard let response = try await eventDelivery.response(for: .shiori(id: "OnSoundSpectrum", references: references)) else { return }
+                if let script = response.script {
+                    player.enqueuePeriodic(script, balloon: balloon, eventID: "OnSoundSpectrum")
+                }
+                forwardCommunication(response)
+            } catch {
+                AppLogStore.shared.error("OnSoundSpectrumエラー: \(error.localizedDescription)", category: "SHIORI", ghostName: ghost.name)
+            }
+        }
         player.onSoundStop = { [weak self] file, reason in
             self?.send(.shiori(id: "OnSoundStop", references: [0: file, 1: reason]))
         }
@@ -1120,6 +1144,8 @@ final class CalledGhostRuntime {
                     appearance: appearance,
                     timeoutMilliseconds: command.timeoutMilliseconds,
                     clearsValueAfterSubmit: !command.keepsValueAfterSubmit,
+                    placeholder: command.placeholder,
+
                     onSubmit: { [weak self] value in
                         guard let self else { return }
                         Task {
@@ -1164,6 +1190,7 @@ final class CalledGhostRuntime {
                 inputKind: .init(command.kind),
                 maximumLength: command.maximumLength,
                 autocompleteValues: autocompleteValues,
+                placeholder: command.placeholder,
                 appearance: appearance,
                 timeoutMilliseconds: command.timeoutMilliseconds
             )
@@ -1190,6 +1217,22 @@ final class CalledGhostRuntime {
                 additionalReferences: command.references
             ))
         }
+        player.onTextAreaBox = { [weak self] command, scope in
+            guard let self else { return nil }
+            return await textAreaWindowController.showTextArea(
+                command: command,
+                appearance: .textArea(balloon: balloon, balloonID: command.balloonID, scope: scope, surfaceID: balloonController.displayedSurfaceID(for: scope)),
+                sendEvent: { [weak self] event in
+                    guard let self, !isStopping else { return nil }
+                    return try? await eventDelivery.handle(event: event)
+                },
+                playResponse: { [weak self] response in
+                    guard let self, !response.rawValue.isEmpty else { return }
+                    player.play(response, balloon: balloon)
+                }
+            )
+        }
+        player.onCloseTextAreaBox = { [weak self] id in self?.textAreaWindowController.close(id: id) }
         player.onCloseInputBox = { [weak self] id in
             self?.textInputWindowController.close(id: id)
         }
@@ -1361,11 +1404,18 @@ final class CalledGhostRuntime {
         }
         Task {
             do {
-                guard let droppedEvent = FileDropEventRouter.dropped(scope: scope, urls: urls) else { return }
-                let response = try await eventDelivery.response(for: droppedEvent)
-                if let script = response?.script {
-                    player.play(script, balloon: balloon)
-                    if let response {
+                let responses = try await FileDropEventRouter.responses(scope: scope, urls: urls) {
+                    try await self.eventDelivery.response(for: $0)
+                }
+                if !responses.isEmpty {
+                    for (index, response) in responses.enumerated() {
+                        if let script = response.script {
+                            if index == 0 {
+                                player.play(script, balloon: balloon)
+                            } else {
+                                player.enqueue(script, balloon: balloon)
+                            }
+                        }
                         forwardCommunication(response)
                     }
                     return

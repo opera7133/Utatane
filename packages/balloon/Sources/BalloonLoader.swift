@@ -231,6 +231,7 @@ public struct BalloonLoader: Sendable {
                 green: integer("communicatebox.font.color.g", in: values, default: 0),
                 blue: integer("communicatebox.font.color.b", in: values, default: 0)
             ),
+            communicateBoxPlaceholderColor: color(prefix: "communicatebox.placeholder.color", in: values),
             communicateBoxBackgroundColor: color(prefix: "communicatebox.background.color", in: values),
             communicateBoxX: integer("communicatebox.x", in: values, default: 20),
             communicateBoxY: integer("communicatebox.y", in: values, default: 20),

@@ -266,7 +266,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UtatanePlatformMacOSTests",
-            dependencies: ["UtataneCore", "UtatanePlatformMacOS"],
+            dependencies: ["UtataneCore", "UtatanePlatformMacOS", "UtatanePlugin", "UtataneModuleHost", "UtataneShiori"],
             path: "platform-macos/Tests"
         ),
         .testTarget(

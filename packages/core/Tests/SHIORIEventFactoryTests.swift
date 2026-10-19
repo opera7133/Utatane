@@ -596,3 +596,17 @@ import Testing
         0: "compress-task", 1: "directory not found"
     ]))
 }
+
+@Test func `textarea events encode line breaks and preserve reference positions`() {
+    #expect(SHIORIEventFactory.textAreaInput(id: "diary", value: "a\r\nb\rc\n", additionalReferences: ["", "extra"]) == .shiori(
+        id: "OnTextAreaInput", references: [0: "diary", 1: "a\u{1}b\u{1}c\u{1}", 2: "", 3: "", 4: "extra"]
+    ))
+    #expect(SHIORIEventFactory.textAreaInput(id: "OnDiary", value: "a\nb", additionalReferences: ["extra"]) == .shiori(
+        id: "OnDiary", references: [0: "a\u{1}b", 1: "", 2: "extra"]
+    ))
+    for timedOut in [false, true] {
+        #expect(SHIORIEventFactory.textAreaInputCancel(id: "OnDiary", timedOut: timedOut, value: "draft\n", additionalReferences: ["extra"]) == .shiori(
+            id: "OnTextAreaInputCancel", references: [0: "OnDiary", 1: timedOut ? "timeout" : "close", 2: "draft\u{1}", 3: "extra"]
+        ))
+    }
+}

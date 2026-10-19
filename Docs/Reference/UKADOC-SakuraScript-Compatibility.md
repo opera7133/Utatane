@@ -4,7 +4,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 
 この表は2026-09-21時点のソースコードを基にしています。各節の調査日と備考で、確認した範囲を確認してください。実機で未確認の項目は「対応」に含めません。
 
-初回照合では、構文違いを個別に数えて359件のSakuraScript項目を対象にしました。その後追加された`dumpballoon`も追記し、同じ実装経路を使う構文を148行に分類しています。集計と行数はCIで検査します。
+初回照合では、構文違いを個別に数えて359件のSakuraScript項目を対象にしました。その後追加された`dumpballoon`と`textareabox`も追記し、同じ実装経路を使う構文を150行に分類しています。集計と行数はCIで検査します。
 
 ## 判定
 
@@ -24,9 +24,9 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 基準: [さくらスクリプトリスト](https://ssp.shillest.net/ukadoc/manual/list_sakura_script.html)
 
 調査日: 2026-09-21
-UKADOC掲載構文数: 359
-UKADOC分類行数: 148
-調査結果: ✅ 116 / 🟡 23 / ❌ 0 / ➖ 9
+UKADOC掲載構文数: 361
+UKADOC分類行数: 150
+調査結果: ✅ 115 / 🟡 26 / ❌ 0 / ➖ 9
 
 ### 基本仕様
 
@@ -60,9 +60,9 @@ UKADOC分類行数: 148
 | `\![set,alpha,...]` | ✅ | scope別の0〜100指定、上限クランプ、負値で値を維持した再描画、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
 | effect / effect2 / filter | ➖ | SSPのWindows用サーフェスエフェクトプラグインを呼ぶ命令。互換プラグイン実行基盤がmacOSにないため対象外 |
 | `\4`, `\5` | ✅ | `\4`（他キャラから離れる方向への一定移動）と `\5`（他キャラとの隣接位置への接近移動）に対応 |
-| `\![move]`, `\![moveasync]` | ✅ | 指定座標・アニメーション時間（ミリ秒）によるウィンドウ移動に対応（同期・非同期移動） |
+| `\![move]`, `\![moveasync]` | 🟡 | 同期・非同期移動、スコープ番号・me・screen・primaryscreen・globalの基準、base-offset／move-offsetのleft・right・top・bottom・center・baseに対応。新旧引数、Y下向き座標とfixをテスト済み。他ゴーストの名前による基準、非同期移動のcancel、moveによるsticky-window追従とoption群は未対応 |
 | `\![set/reset,position...]` | ✅ | `set,position,x,y,scope`で指定scopeをスクリーン座標へ移動してドラッグ固定し、`reset,position`で全scopeの固定を解除 |
-| `\![set/reset,zorder...]` | ✅ | `\![set,zorder,スコープ...]` によるサーフェス・バルーンウィンドウの重なり順序（Z-Order）指定と、`\![reset,zorder]` による解除に対応 |
+| `\![set/reset,zorder...]` | 🟡 | surfaceスコープの前後関係を左から手前の順として保持。複数グループ、サーフェス更新・再表示・シェル再読み込み後の維持とresetによる解除をテスト済み。balloonを含む個別ウィンドウ指定は未対応 |
 | `\![set/reset,sticky-window...]` | ✅ | `\![set,sticky-window,スコープ...]` による複数キャラクターウィンドウの連動ドラッグ移動と、`\![reset,sticky-window]` による解除に対応 |
 | `\![execute,resetwindowpos]` | ✅ | 保存済みの全scopeのサーフェス・バルーン位置を消去し、表示中ウィンドウを初期配置へ戻します |
 | `\![vanishbymyself]` | ✅ | 現在のゴーストを安全に終了してmacOSのゴミ箱へ移動。切り替え先ゴースト名と`--option=query`による確認画面にも対応 |
@@ -162,14 +162,14 @@ UKADOC分類行数: 148
 | `\![raise,...]` | ✅ | SHIORIイベントを発生させ、元スクリプトの残りを破棄して応答スクリプトへ切り替えます |
 | `\![embed,...]` | ✅ | SHIORIイベントの戻り値を現在の再生列へ埋め込みます |
 | timerraise / raiseother / timerraiseother | ✅ | `timerraise`、`raiseother`、`timerraiseother`に対応。他ゴーストは名前指定と全ゴースト指定が可能。遅延・反復・キャンセルとraise応答再生をテストで確認 |
-| notify / timernotify / timernotifyother | ✅ | 自ゴーストへの`notify`・`timernotify`と`notifyother`・`timernotifyother`に対応し、SHIORI応答は表示しません。遅延・反復・キャンセルをテストで確認 |
+| notify / timernotify / timernotifyother | ✅ | 自ゴーストへの`notify`・`timernotify`はSHIORIのNOTIFYとして配送。`notifyother`・`timernotifyother`にも対応し、SHIORI応答は表示しません。遅延・反復・キャンセルと配送経路をテストで確認 |
 | timerraiseplugin / timernotifyplugin | ✅ | プラグインごと・イベント名ごとの遅延、反復、0ミリ秒指定によるキャンセル、raise応答再生に対応 |
 
 ### サウンド
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\8[file]`, `\_v[file]`, `\_V`, `\![sound,...]` | 🟡 | `\8` / `\_v`（非同期音声再生）、`\_V`（音声再生完了待ち）、`\![sound,...]`（play/load/loop/wait/pause/resume/stop/option）に対応。volume、balance、rate、seektimeに対応。`ghost/master` 内のAVFoundation対応音声のみ。CD・動画ウィンドウは未対応 |
+| `\8[file]`, `\_v[file]`, `\_V`, `\![sound,...]` | 🟡 | `\8` / `\_v`（非同期音声再生）、`\_V`（音声再生完了待ち）、`\![sound,...]`（play/load/loop/wait/pause/resume/stop/option）に対応。volume、balance、rate、seektime、spectrum（間隔・帯域数・ピーク保持）に対応。音声波形からOnSoundSpectrumと再生位置を通知。AVFoundation対応音声の相対パス・絶対パスとWindows式区切りに対応。CD・動画ウィンドウは未対応 |
 
 ### 外部UI・入力
 
@@ -178,9 +178,11 @@ UKADOC分類行数: 148
 | `\j[ID]`, `\![open,browser,...]` | ✅ | メイン／呼び出しゴーストともHTTP・HTTPSを既定ブラウザで開き、`mailto:`を標準メールアプリへ、`file:`の絶対パスまたは`ghost/master`相対パスを関連付けアプリへ渡します。危険なURL schemeとゴースト外へ抜ける相対パスは拒否 |
 | mailer / addressbar / editor / explorer | ➖ | macOSでの代替と安全境界が必要 |
 | teachbox / communicatebox | ✅ | `\![open,communicatebox,初期値]` / `\![open,teachbox,初期値]` に対応し、入力値を `OnCommunicate` / `OnTeach` イベントとして SHIORI へ通知 |
-| `\![open,inputbox,...]` | ✅ | 旧形式と`--timeout`・`--text`・`--limit`・`--reference`・`--balloon`を解析。時間切れと手動closeを区別し、`OnUserInputCancel`が空応答なら`timeout`値の入力イベントへフォールバック。通常のInputBoxでは`noclose`による複数回入力と、`noclear`による入力値保持にも対応 |
+| `\![open,inputbox,...]` | ✅ | 旧形式と`--timeout`・`--text`・`--limit`・`--reference`・`--balloon`・`--placeholder`を解析。時間切れと手動closeを区別し、`OnUserInputCancel`が空応答なら`timeout`値の入力イベントへフォールバック。通常のInputBoxでは`noclose`による複数回入力と、`noclear`による入力値保持にも対応 |
 | password/date/slider/time/ip input | ✅ | パスワード欄、DatePicker、Slider、時刻選択、IPv4入力を使い、各形式のReference値を返します。旧形式と`--text`形式をParserテストで確認 |
 | `\![close,inputbox,...]` | ✅ | `\![close,inputbox,ID]` の構文解析とハンドラ接続に対応 |
+| `\![open,textareabox,...]` | 🟡 | 複数行入力、Enter改行／Ctrl+Enter確定、初期値・placeholder・limit・reference・timeout・noclose／noclearに対応。改行はバイト値1へ変換し、キャンセル時も編集中の内容を通知。通常入力とは独立して開閉し、入力補完と時間切れ時の決定イベントへの再送はしない。balloonc5または指定画像、無い場合は現在の話者のバルーン本文書式とvalidrectを使用。SSPとの画像配置の完全一致と実ゴーストでの日本語変換操作は未確認 |
+| `\![close,textareabox,ID]` | ✅ | 指定IDまたは`__SYSTEM_ALL_INPUT__`で複数行入力だけを閉じる。`close,inputbox`とは別経路。メイン・呼び出しゴーストへ接続 |
 | configuration / 各explorer / calendar | ✅ | configurationの画面IDをUtataneの設定ペインへ対応付け、ghost／shell／balloon／headline／plugin explorerを共通コンテンツ画面、calendarを予定表として開く |
 | graph / aigraph | 🟡 | `open,aigraph`で`getaistateex`の複数グラフと従来の`getaistate`をレーダーチャート表示し、`reload,aigraph`で表示中だけ再取得します。ゴースト／バルーン利用率グラフは未実装 |
 | help / messenger / readme / terms / file | ✅ | `terms`はterms.txtをダイアログ表示して同意・拒否イベントを通知。`messenger`、`readme`、`help`、`file`、`folder`も対応 |
@@ -196,7 +198,7 @@ UKADOC分類行数: 148
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\![set,property,...]` | 🟡 | scope別surface.num・animation.num・seriko.defaultsurfaceとseriko.sticky-windowを表示へ反映。sticky-windowはグループを置換し、不正・重複グループを無視。メニュー・カーソル・サウンド等のsetterは未実装 |
-| `\![get,property,...]` | 🟡 | 複数プロパティを指定イベントのReferenceへ通知。日時、OS／locale／timezone／uptime、CPU、メモリ、ディスク、カーソル、モニター、テーマ、baseware、currentghost.status、scope座標・surface・実行中animation・既定surface・balloon、activeghostlist、ghost／shell／balloon／headline／plugin一覧に対応。UKADOC全プロパティとの照合は継続中 |
+| `\![get,property,...]` | 🟡 | 複数プロパティを指定イベントのReferenceへ通知。プラグイン由来のスクリプトは発信元プラグインへ完了を返す。`currentghost.balloon.scope(N).validwidth`／`validheight`も取得できる。日時、OS／locale／timezone／uptime、CPU、メモリ、ディスク、カーソル、モニター、テーマ、baseware、currentghost.status、scope座標・surface・実行中animation・既定surface・balloon、activeghostlist、ghost／shell／balloon／headline／plugin一覧に対応。`currentghost.sound.count`とindex(0)／要素名指定のname・path・id・position・duration・playing・pause・loop・preload・errorは現在保持する単一音声から取得する。複数音声、メタデータとサウンドのsetterは未対応。UKADOC全プロパティとの照合は継続中 |
 | `%property[...]` | 🟡 | `get,property`と共通の値を再生中に展開。未登録値の拡充と、変動するAppKit値の取得時更新は継続中 |
 
 ### HTTP、WebSocket、アーカイブなど
@@ -220,7 +222,7 @@ UKADOC分類行数: 148
 | emptyrecyclebin | ✅ | ユーザーの`~/.Trash`を空にし、実行元と他ゴーストへ前後の件数・容量・成否を通知 |
 | create shortcut | ➖ | Windowsショートカット固有のためmacOSでは対象外 |
 | passive / induction / select / collision mode | 🟡 | passive／induction、collision表示に加え、selectrectの全画面矩形選択と開始・終了・マウス・キャンセル通知に対応。メニュー・DnD・更新・最小化・終了等の全制限は未実装 |
-| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | 旧`reloadsurface`、surface、shell、balloon、ghost、shiori、makoto、表示中のaigraphを実装。`reload,descript`は全体指定とghost／shell／balloon／headline／plugin／calendar.skinの対象指定に対応する。SHIORIとMAKOTOは結合された人格エンジンを再生成する。language／calendar.pluginは未対応 |
+| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | 旧`reloadsurface`、surface、shell、balloon、ghost、shiori、makoto、表示中のaigraphを実装。shellは実行中のスクリプトと予約イベントを維持して読み直す（Playerテストで確認）。`reload,descript`は全体指定とghost／shell／balloon／headline／plugin／calendar.skinの対象指定に対応する。SHIORIとMAKOTOは結合された人格エンジンを再生成する。language／calendar.pluginは未対応 |
 | `\![unload/load,shiori]` | ✅ | 実行中の人格エンジンを解放し、load時にゴースト設定から再生成。unload中はイベントに応答しない |
 | `\![unload/load,makoto]` | 🟡 | MAKOTO変換を外した／含めた人格エンジンへ切り替える。切り替え時にSHIORIも再生成される点はSSPと異なる |
 | `\![set,shioridebugmode,true/false]` | ✅ | 開発用パレットのSHIORIリクエスト画面を表示／非表示にする。Utataneは通常時もSHIORI通信をログへ記録する |

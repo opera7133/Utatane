@@ -3,12 +3,26 @@ import UtataneCore
 
 public extension SakuraScriptPlayer {
     func runtimePropertyValue(for property: String) -> String? {
+        if let value = soundPropertyValue(for: property) {
+            return value
+        }
         let key = property.lowercased()
         if key == "currentghost.status" {
             return executionStatus
         }
         if key == "currentghost.seriko.sticky-window" {
             return surfaceWindowController.stickyWindowGroups.map { $0.map(String.init).joined(separator: ",") }.joined(separator: ";")
+        }
+        let balloonPrefix = "currentghost.balloon.scope("
+        if key.hasPrefix(balloonPrefix), let end = key.firstIndex(of: ")"),
+           let scope = Int(key[key.index(key.startIndex, offsetBy: balloonPrefix.count) ..< end]), scope >= 0,
+           let size = balloonValidSize(scope: scope)
+        {
+            switch key[key.index(after: end)...] {
+            case ".validwidth": return String(Int(size.width))
+            case ".validheight": return String(Int(size.height))
+            default: break
+            }
         }
         guard let (scope, field) = Self.scopeProperty(key) else { return nil }
         switch field {

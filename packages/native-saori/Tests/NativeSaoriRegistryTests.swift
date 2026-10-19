@@ -122,3 +122,17 @@ private final class CandidateRecorder: @unchecked Sendable {
     var paths: [String] = []
     var resources: [String] = []
 }
+
+@Test func `Windows underscore names resolve hyphenated shared module IDs`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let shared = root.appending(path: "managed/proxy-ex/lib/libproxy_ex.dylib")
+    try FileManager.default.createDirectory(at: shared.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: shared)
+    let module = RecordingExternalModule()
+    let registry = NativeSaoriRegistry(baseDirectoryURL: root.appending(path: "ghost/master"),
+                                       managedModulesURL: root.appending(path: "managed"),
+                                       externalModuleFactory: { url, _, _ in url == shared ? module : nil })
+    registry.load("saori\\proxy_ex.dll")
+    #expect(registry.call("proxy_ex.dll", arguments: ["test"]) == "external")
+}

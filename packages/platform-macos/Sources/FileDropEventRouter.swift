@@ -1,6 +1,7 @@
 import Foundation
 import UniformTypeIdentifiers
 import UtataneCore
+import UtataneRuntime
 
 public enum FileDropEventRouter {
     public static func dropping(scope: Int, urls: [URL]) -> GhostEvent? {
@@ -23,6 +24,31 @@ public enum FileDropEventRouter {
     public static func dropped(scope: Int, urls: [URL]) -> GhostEvent? {
         guard !urls.isEmpty else { return nil }
         return .shiori(id: "OnFileDrop2", references: references(scope: scope, urls: urls))
+    }
+
+    @MainActor
+    public static func responses(
+        scope: Int, urls: [URL],
+        request: (GhostEvent) async throws -> PersonalityResponse?
+    ) async throws -> [PersonalityResponse] {
+        guard !urls.isEmpty else { return [] }
+        let references = references(scope: scope, urls: urls)
+        for id in ["OnFileDrop2", "OnFileDropEx"] {
+            if let response = try await request(.shiori(id: id, references: references)),
+               response.script != nil
+            {
+                return [response]
+            }
+        }
+        var responses: [PersonalityResponse] = []
+        for url in urls {
+            if let response = try await request(.shiori(
+                id: "OnFileDrop", references: Self.references(scope: scope, urls: [url])
+            )), response.script != nil {
+                responses.append(response)
+            }
+        }
+        return responses
     }
 
     public static func viewerOpened(scope: Int, urls: [URL]) -> GhostEvent? {

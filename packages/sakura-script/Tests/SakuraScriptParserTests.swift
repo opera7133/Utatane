@@ -1250,3 +1250,21 @@ func `parses iCalendar schedule and file watch commands`() {
     #expect(SakuraScriptDumpBalloonCommand(arguments: ["dump", "1", "", "OnReady"]).prefix == "balloon")
     #expect(parser.splitArguments(#"dump,1,"0,2",prefix"#) == ["dump", "1", "0,2", "prefix"])
 }
+
+@Test func `parses textarea options without collapsing byte one line separators`() {
+    let tokens = SakuraScriptParser().parse("\\![open,textareabox,OnDiary,--text=一行目\u{1}二行目,--placeholder=案内\u{1}続き,--limit=40,--reference=extra,--balloon=5,--option=noclose,--option=noclear]\\![close,textareabox,OnDiary]\\![close,inputbox,__SYSTEM_ALL_INPUT__]")
+    let command = SakuraScriptInputCommand(kind: .textArea, id: "OnDiary", timeoutMilliseconds: nil,
+                                           initialValue: "一行目\u{1}二行目", maximumLength: 40, references: ["extra"],
+                                           options: ["noclose", "noclear"], balloonID: 5, placeholder: "案内\u{1}続き")
+    #expect(tokens == [.inputBox(command), .closeTextAreaBox(id: "OnDiary"), .closeInputBox(id: "__SYSTEM_ALL_INPUT__")])
+    #expect(command.keepsOpenAfterSubmit)
+    #expect(command.keepsValueAfterSubmit)
+    #expect(command.inputTypeName == "textareabox")
+    #expect(SakuraScriptParser().parse(#"\![open,inputbox,name,--placeholder=名前]\![open,passwordinput,pw,--placeholder=秘密]"#) == [
+        .inputBox(.init(kind: .text, id: "name", timeoutMilliseconds: nil, initialValue: "", placeholder: "名前")),
+        .inputBox(.init(kind: .password, id: "pw", timeoutMilliseconds: nil, initialValue: "", placeholder: "秘密"))
+    ])
+    #expect(SakuraScriptParser().parse("\\![open,textareabox,memo,1000,初期\u{1}値]") == [
+        .inputBox(.init(kind: .textArea, id: "memo", timeoutMilliseconds: 1000, initialValue: "初期\u{1}値"))
+    ])
+}

@@ -39,6 +39,105 @@ import UtataneCore
 import UtataneSakuraScript
 import UtataneShell
 
+@Test @MainActor
+func `shell reload continues the invoking script and keeps scheduled events`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try makePNG(width: 40, height: 60).write(to: root.appending(path: "surface0.png"))
+    try makePNG(width: 20, height: 30).write(to: root.appending(path: "part.png"))
+    let (defaults, positions) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let surfaces = SurfaceWindowController(positionStore: positions)
+    try surfaces.show(shell: ShellLoader().load(from: root), surfaceID: 0)
+    let balloons = BalloonWindowController(positionStore: positions)
+    let player = SakuraScriptPlayer(surfaceWindowController: surfaces, balloonWindowController: balloons)
+    defer { player.cancel(); surfaces.hideAll() }
+    var events: [String] = []
+    player.onEmbeddedNotification = { id, _ in events.append(id) }
+    player.onContentAction = { action in
+        guard action == .reloadShell else { return }
+        do {
+            try Data("surface3001{\nelement0,base,part.png,0,0\n}".utf8)
+                .write(to: root.appending(path: "surfaces_generated.txt"))
+            try player.reloadShell(ShellLoader().load(from: root), defaultSurfaceIDs: [0: 0])
+        } catch { Issue.record(error) }
+    }
+    let frame = surfaces.windowFrame(for: 0)
+    await player.playAndWait(SakuraScript(rawValue: #"\![timernotify,20,1,OnTimer]\![reload,shell]\![notify,OnAfterReload]\s[3001]\e"#), balloon: makeBalloon(directory: root))
+    #expect(events.contains("OnAfterReload"))
+    #expect(surfaces.surfaceID(for: 0) == 3001)
+    #expect(surfaces.renderedImage(for: 0)?.size == NSSize(width: 20, height: 30))
+    #expect(frame != nil)
+    try await requireEventually { events.contains("OnTimer") }
+}
+
+@MainActor
+@Test func `notify and timernotify use notification delivery instead of GET events`() async throws {
+    let (defaults, positions) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let surfaces = SurfaceWindowController(positionStore: positions)
+    let player = SakuraScriptPlayer(surfaceWindowController: surfaces,
+                                    balloonWindowController: BalloonWindowController(positionStore: positions))
+    defer { player.configure(environmentVariables: [:]); player.cancel() }
+    var notifications: [String: [String]] = [:]
+    var requests: [String] = []
+    player.onEmbeddedNotification = { id, arguments in notifications[id] = arguments }
+    player.onEmbeddedEvent = { id, _ in
+        requests.append(id)
+        return SakuraScript(rawValue: #"\![notify,OnRaisedReply,reply]"#)
+    }
+    await player.playAndWait(SakuraScript(rawValue: #"\![notify,OnImmediate,direct]\![timernotify,20,1,OnDelayed,timer]\![timerraise,20,1,OnRaised]"#),
+                             balloon: makeBalloon(directory: FileManager.default.temporaryDirectory))
+    try await requireEventually { notifications["OnDelayed"] != nil && notifications["OnRaisedReply"] != nil }
+    #expect(notifications["OnImmediate"] == ["direct"])
+    #expect(notifications["OnDelayed"] == ["timer"])
+    #expect(requests == ["OnRaised"])
+}
+
+@MainActor
+@Test func `surface command batches keep intermediate glyphs hidden across embedded requests`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let red = NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    let blue = NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    let green = NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1)
+    try Data("seriko.use_self_alpha,1".utf8).write(to: root.appending(path: "descript.txt"))
+    for (id, width, color) in [(0, 4, red), (1, 4, red), (2, 2, blue), (3, 2, green)] {
+        try makePNG(width: width, height: 4, color: color).write(to: root.appending(path: "surface\(id).png"))
+    }
+    try Data("""
+    surface1{
+    animation1.interval,never
+    animation1.pattern0,overlay,2,0,0,0
+    animation2.interval,never
+    animation2.pattern0,overlay,3,0,2,0
+    }
+    """.utf8).write(to: root.appending(path: "surfaces.txt"))
+    let (defaults, positions) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let surfaces = SurfaceWindowController(positionStore: positions)
+    let shell = try ShellLoader().load(from: root)
+    try surfaces.show(shell: shell, surfaceID: 0)
+    let number = try #require(surfaces.windowNumbers.first)
+    let window = try #require(NSApplication.shared.windows.first { $0.windowNumber == number })
+    let player = SakuraScriptPlayer(surfaceWindowController: surfaces,
+                                    balloonWindowController: BalloonWindowController(positionStore: positions))
+    defer { player.cancel(); surfaces.resetContent() }
+    player.onEmbeddedEvent = { _, _ in
+        let visible = (window.contentView as? NSImageView)?.image
+        #expect(visible?.colorAtCenter()?.redComponent ?? 0 > 0.9)
+        return nil
+    }
+    await player.playAndWait(SakuraScript(rawValue: #"\s[1]\i[1]\![embed,OnObserve]\i[2]\e"#),
+                             balloon: makeBalloon(directory: root))
+    let image = try #require((window.contentView as? NSImageView)?.image?.tiffRepresentation)
+    let bitmap = try #require(NSBitmapImageRep(data: image))
+    #expect(bitmap.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB)?.blueComponent ?? 0 > 0.9)
+    #expect(bitmap.colorAt(x: 3, y: 0)?.usingColorSpace(.deviceRGB)?.greenComponent ?? 0 > 0.9)
+}
+
 @Test(arguments: ["master", "master2nd"])
 func `loads the installed twin shell surfaces`(shellDirectoryName: String) throws {
     let repositoryRoot = URL(filePath: #filePath)

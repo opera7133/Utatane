@@ -359,6 +359,7 @@ private struct UtataneRootView: View {
     @State private var firstEyesightWindowController = FIRSTEyesightWindowController()
     @State private var ipMessengerWindowController = IPMessengerWindowController()
     @State private var textInputWindowController = TextInputWindowController()
+    @State private var textAreaWindowController = TextInputWindowController()
     private let systemDialogController = SystemDialogController()
     private let screenSelectionController = ScreenSelectionController()
     private let networkStatusMonitor = NetworkStatusMonitor()
@@ -1399,11 +1400,18 @@ private struct UtataneRootView: View {
         }
         Task {
             do {
-                guard let droppedEvent = FileDropEventRouter.dropped(scope: scope, urls: urls) else { return }
-                let response = try await session.response(for: droppedEvent)
-                if let script = response?.script {
-                    scriptPlayer.play(script, balloon: balloon)
-                    if let response {
+                let responses = try await FileDropEventRouter.responses(scope: scope, urls: urls) {
+                    try await session.response(for: $0)
+                }
+                if !responses.isEmpty {
+                    for (index, response) in responses.enumerated() {
+                        if let script = response.script {
+                            if index == 0 {
+                                scriptPlayer.play(script, balloon: balloon)
+                            } else {
+                                scriptPlayer.enqueue(script, balloon: balloon)
+                            }
+                        }
                         forwardCommunication(from: currentGhost, response: response)
                     }
                     return
@@ -1721,9 +1729,9 @@ private struct UtataneRootView: View {
                         id: "OnSecondChange",
                         references: primaryReferences
                     )) else { return }
-                    guard !Task.isCancelled, canTalk else { return }
+                    guard !Task.isCancelled, scriptPlayer.canTalk else { return }
                     if let script = response.script, let balloon {
-                        scriptPlayer.play(script, balloon: balloon)
+                        scriptPlayer.enqueuePeriodic(script, balloon: balloon, eventID: "OnSecondChange")
                     }
                     forwardCommunication(from: currentGhost, response: response)
                 } catch {
@@ -1776,9 +1784,9 @@ private struct UtataneRootView: View {
 
     private func sendPluginSecondChange() {
         pluginSecondChangeRunner.submit {
-            for (_, response) in await pluginRuntime.secondChangeResponses() {
+            for (plugin, response) in await pluginRuntime.secondChangeResponses() {
                 guard !Task.isCancelled else { return }
-                if let script = await resolvePluginResponse(response), let balloon {
+                if let script = await resolvePluginResponse(response, pluginID: plugin.id), let balloon {
                     scriptPlayer.play(script, balloon: balloon)
                 }
             }
@@ -1786,17 +1794,43 @@ private struct UtataneRootView: View {
     }
 
     @MainActor
-    private func resolvePluginResponse(_ response: PluginResponse) async -> SakuraScript? {
+    private func resolvePluginResponse(_ response: PluginResponse, pluginID: String) async -> SakuraScriptPluginPlayback? {
         var script = response.script.map(SakuraScript.init(rawValue:))
+        var flags = (response.headers["ScriptOption"] ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+        let notifies = (response.headers["EventOption"] ?? "").split(separator: ",").contains { $0.trimmingCharacters(in: .whitespaces).lowercased() == "notify" }
         if let event = response.event, let session,
-           let eventResponse = try? await session.response(for: .shiori(
-               id: event,
-               references: response.references
-           ))
+           let eventResponse = try? await session.response(for: notifies
+               ? .notification(id: event, references: response.references)
+               : .shiori(id: event, references: response.references))
         {
-            script = eventResponse.script ?? script
+            if !notifies, let reply = eventResponse.script {
+                script = reply
+                flags = []
+            }
         }
-        return script
+        return script.map { .init(script: $0, origin: .init(id: pluginID), flags: flags) }
+    }
+
+    @MainActor
+    private func resolvePluginSelection(origin: SakuraScriptPluginOrigin, link: BalloonTextLink, label: String) async -> SakuraScriptPluginPlayback? {
+        guard !isTransitioningGhost, let activeSession = session else { return nil }
+        var ghostReply: SakuraScript?
+        var pluginReply: SakuraScriptPluginPlayback?
+        for event in link.pluginSelectionEvents(label: label) {
+            if ghostReply == nil {
+                let references = Dictionary(uniqueKeysWithValues: event.arguments.enumerated().map { ($0.offset, $0.element) })
+                if let response = try? await activeSession.response(for: .shiori(id: event.id, references: references)) {
+                    forwardCommunication(from: currentGhost, response: response)
+                    if let script = response.script, !script.rawValue.isEmpty {
+                        ghostReply = script
+                    }
+                }
+            }
+            if pluginReply == nil {
+                pluginReply = await invokePlugin(target: origin.id, event: event.id, arguments: event.arguments, reflectsResponse: true)
+            }
+        }
+        return pluginReply ?? ghostReply.map { .init(script: $0) }
     }
 
     @MainActor
@@ -1805,7 +1839,7 @@ private struct UtataneRootView: View {
         event: String,
         arguments: [String],
         reflectsResponse: Bool
-    ) async -> SakuraScript? {
+    ) async -> SakuraScriptPluginPlayback? {
         let references = Dictionary(uniqueKeysWithValues: arguments.enumerated().map { ($0.offset, $0.element) })
         do {
             guard let response = try await pluginRuntime.request(
@@ -1815,36 +1849,39 @@ private struct UtataneRootView: View {
                 sender: currentGhost?.name,
                 references: references
             ) else {
-                return await pluginFailureScript(
+                return await (pluginFailureScript(
                     reason: pluginExists(target) ? "disabled" : "notfound",
                     target: target,
                     event: event,
                     arguments: arguments,
                     reflectsResponse: reflectsResponse
-                )
+                )).map { .init(script: $0) }
+            }
+            if response.statusCode == 204 {
+                return nil
             }
             guard response.statusCode == 200 else {
-                return await pluginFailureScript(
+                return await (pluginFailureScript(
                     reason: String(response.statusCode),
                     target: target,
                     event: event,
                     arguments: arguments,
                     reflectsResponse: reflectsResponse
-                )
+                )).map { .init(script: $0) }
             }
-            return reflectsResponse ? await resolvePluginResponse(response) : nil
+            return reflectsResponse ? await resolvePluginResponse(response, pluginID: target) : nil
         } catch {
             AppLogStore.shared.error(
                 "プラグイン実行エラー: \(target) / \(event): \(error.localizedDescription)",
                 category: "Plugin"
             )
-            return await pluginFailureScript(
+            return await (pluginFailureScript(
                 reason: "500",
                 target: target,
                 event: event,
                 arguments: arguments,
                 reflectsResponse: reflectsResponse
-            )
+            )).map { .init(script: $0) }
         }
     }
 
@@ -2054,6 +2091,7 @@ private struct UtataneRootView: View {
             GhostUsageHistory.store.end(ghost.rootDirectory.path)
         }
         firstEyesightWindowController.close()
+        textAreaWindowController.close()
 
         do {
             if reason == .vanish {
@@ -2304,6 +2342,18 @@ private struct UtataneRootView: View {
             scriptPlayer.onAnchorHover = { label, id, arguments in
                 sendEvent(.shiori(id: "OnAnchorHover", references: linkEventReferences(label, id, arguments)))
             }
+            scriptPlayer.onSoundSpectrum = { references in
+                guard !isTransitioningGhost, let session, let balloon else { return }
+                do {
+                    guard let response = try await session.response(for: .shiori(id: "OnSoundSpectrum", references: references)) else { return }
+                    if let script = response.script {
+                        scriptPlayer.enqueuePeriodic(script, balloon: balloon, eventID: "OnSoundSpectrum")
+                    }
+                    forwardCommunication(from: currentGhost, response: response)
+                } catch {
+                    AppLogStore.shared.error("OnSoundSpectrumエラー: \(error.localizedDescription)", category: "SHIORI", ghostName: currentGhost?.name)
+                }
+            }
             scriptPlayer.onSoundStop = { file, reason in
                 sendEvent(.shiori(id: "OnSoundStop", references: [0: file, 1: reason]))
             }
@@ -2470,6 +2520,10 @@ private struct UtataneRootView: View {
                     })
                 ))
             }
+            scriptPlayer.additionalImageDirectories = ContentRoot.balloonReadDirectories
+            scriptPlayer.onPluginSelection = { origin, link, label in
+                await resolvePluginSelection(origin: origin, link: link, label: label)
+            }
             scriptPlayer.onPluginEvent = { target, id, arguments, reflectsResponse in
                 await invokePlugin(
                     target: target,
@@ -2545,6 +2599,8 @@ private struct UtataneRootView: View {
                         appearance: appearance,
                         timeoutMilliseconds: command.timeoutMilliseconds,
                         clearsValueAfterSubmit: !command.keepsValueAfterSubmit,
+                        placeholder: command.placeholder,
+
                         onSubmit: { value in
                             Task {
                                 if let response = try? await activeSession.handle(event: SHIORIEventFactory.userInput(
@@ -2591,6 +2647,7 @@ private struct UtataneRootView: View {
                     inputKind: .init(command.kind),
                     maximumLength: command.maximumLength,
                     autocompleteValues: autocompleteValues,
+                    placeholder: command.placeholder,
                     appearance: appearance,
                     timeoutMilliseconds: command.timeoutMilliseconds
                 )
@@ -2616,6 +2673,25 @@ private struct UtataneRootView: View {
                     supplementalValue: command.supplementalValue,
                     additionalReferences: command.references
                 ))
+            }
+            scriptPlayer.onTextAreaBox = { command, scope in
+                guard let activeSession = session else { return nil }
+                return await textAreaWindowController.showTextArea(
+                    command: command,
+                    appearance: balloon.map { .textArea(balloon: $0, balloonID: command.balloonID, scope: scope, surfaceID: balloonWindowController.displayedSurfaceID(for: scope)) },
+                    sendEvent: { event in
+                        guard !isTransitioningGhost else { return nil }
+                        return try? await activeSession.handle(event: event)
+                    },
+                    playResponse: { response in
+                        if !response.rawValue.isEmpty, let balloon {
+                            scriptPlayer.play(response, balloon: balloon)
+                        }
+                    }
+                )
+            }
+            scriptPlayer.onCloseTextAreaBox = { id in
+                textAreaWindowController.close(id: id)
             }
             scriptPlayer.onCloseInputBox = { id in
                 textInputWindowController.close(id: id)
@@ -2781,13 +2857,13 @@ private struct UtataneRootView: View {
             if let event = await MacOSOSUpdateHistorySampler().event() {
                 _ = try? await ghostSession.handle(event: event)
             }
-            for (_, response) in await pluginRuntime.broadcast(
+            for (plugin, response) in await pluginRuntime.broadcast(
                 event: "OnGhostBoot",
                 sender: ghost.name,
                 references: pluginGhostReferences(for: ghost)
             ) {
-                if let script = await resolvePluginResponse(response), let balloon {
-                    await scriptPlayer.playAndWait(script, balloon: balloon)
+                if let script = await resolvePluginResponse(response, pluginID: plugin.id), let balloon {
+                    await scriptPlayer.playAndWait(script.script, balloon: balloon, context: script.context)
                 }
             }
             let bootEvent = SHIORIEventFactory.boot(shellName: shellChoice.name)
@@ -3686,20 +3762,23 @@ private struct UtataneRootView: View {
         return SakuraScript(rawValue: "\\0\\s[6]\(fallback)\\e")
     }
 
-    private func show(shell installedShell: InstalledShell, restoring presentation: SurfaceWindowController.ReloadPresentation? = nil) throws {
-        scriptPlayer.cancel()
+    private func show(shell installedShell: InstalledShell, restoring presentation: SurfaceWindowController.ReloadPresentation? = nil,
+                      preservingPlayback: Bool = false) throws
+    {
+        if !preservingPlayback {
+            scriptPlayer.cancel()
+        }
         let loadedShell = try shellLoader.load(from: installedShell.directory)
         let shell = currentGhost.map { loadedShell.applyingPresentationDefaults(from: $0) } ?? loadedShell
         currentShellDefinition = shell
         balloonWindowController.configure(shell: shell)
         let characters = currentGhost?.characters ?? []
-        try surfaceWindowController.show(
-            shell: shell,
-            defaultSurfaceIDs: Dictionary(
-                uniqueKeysWithValues: characters.map { ($0.scope, $0.defaultSurfaceID) }
-            ),
-            restoring: presentation
-        )
+        let defaultSurfaces = Dictionary(uniqueKeysWithValues: characters.map { ($0.scope, $0.defaultSurfaceID) })
+        if preservingPlayback {
+            try scriptPlayer.reloadShell(shell, defaultSurfaceIDs: defaultSurfaces)
+        } else {
+            try surfaceWindowController.show(shell: shell, defaultSurfaceIDs: defaultSurfaces, restoring: presentation)
+        }
         scriptPlayer.configure(
             defaultBalloonSurfaceIDs: Dictionary(
                 uniqueKeysWithValues: characters.map { ($0.scope, $0.defaultBalloonSurfaceID) }
@@ -3997,9 +4076,13 @@ private struct UtataneRootView: View {
             }
         case .reloadShell:
             if let calledRuntime {
-                calledRuntime.select(shell: calledRuntime.shell)
+                calledRuntime.reloadShell()
             } else if let selectedShell {
-                select(shell: selectedShell)
+                do {
+                    try show(shell: selectedShell, preservingPlayback: true)
+                } catch {
+                    showError(error.localizedDescription)
+                }
             }
         case .reloadBalloon:
             if let calledRuntime {
@@ -5792,6 +5875,7 @@ private struct UtataneRootView: View {
         recentContentStore.record(kind: .plugin, identifier: plugin.id, name: plugin.name)
         configureContextMenu()
         Task {
+            await notifyPluginContent()
             let script = await invokePlugin(
                 target: plugin.id,
                 event: "OnMenuExec",
@@ -7423,6 +7507,8 @@ private struct UtataneRootView: View {
             case .unavailable: throw NativeSHIORIPluginError.unsupportedRuntime
             }
         }
+        _ = await pluginRuntime.broadcast(event: "version")
+        await notifyPluginContent()
         for failure in failures {
             AppLogStore.shared.error(
                 "プラグイン「\(failure.plugin.name)」を読み込めませんでした: \(failure.message)",
@@ -7430,6 +7516,13 @@ private struct UtataneRootView: View {
                 details: failure.plugin.directory.path
             )
         }
+    }
+
+    private func notifyPluginContent() async {
+        let indexed: ([String]) -> [Int: String] = { Dictionary(uniqueKeysWithValues: $0.enumerated().map { ($0.offset, $0.element) }) }
+        _ = await pluginRuntime.broadcast(method: "NOTIFY", event: "installedballoonname", references: [0: installedBalloons.map(\.name).joined(separator: "\u{1}")])
+        _ = await pluginRuntime.broadcast(method: "NOTIFY", event: "balloonpathlist", references: indexed(ContentRoot.balloonReadDirectories.map { $0.path.hasSuffix("/") ? $0.path : $0.path + "/" }))
+        _ = await pluginRuntime.broadcast(method: "NOTIFY", event: "pluginpathlist", references: indexed(ContentRoot.pluginReadDirectories.map(\.path)))
     }
 
     private func sanitizeNetworkText(_ source: String) -> String {

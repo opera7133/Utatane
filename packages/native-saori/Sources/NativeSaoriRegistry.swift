@@ -148,7 +148,7 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
         guard declaredURL.pathExtension.lowercased() == "dll" else { return [] }
         let stem = declaredURL.deletingPathExtension().lastPathComponent.lowercased()
         let directory = declaredURL.deletingLastPathComponent()
-        let moduleID = stem == "saori_cpuid" ? "saori-cpuid" : stem
+        let moduleID = stem.replacingOccurrences(of: "_", with: "-")
         let managedRoot = ProcessInfo.processInfo.environment["UTATANE_SAORI_ROOT"]
             .flatMap { $0.hasPrefix("/") && !$0.contains("\0") ? URL(filePath: $0) : nil } ?? managedModulesURL
         return [

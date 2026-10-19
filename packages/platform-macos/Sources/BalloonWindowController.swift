@@ -17,6 +17,7 @@ public struct BalloonTextLink: Sendable, Equatable {
     public let normalAppearance: BalloonLinkAppearanceOverride?
     public let hoveredAppearance: BalloonLinkAppearanceOverride?
     public let visitedAppearance: BalloonLinkAppearanceOverride?
+    public let pluginOrigin: SakuraScriptPluginOrigin?
 
     public init(
         range: NSRange,
@@ -26,7 +27,8 @@ public struct BalloonTextLink: Sendable, Equatable {
         fontColor: BalloonColor? = nil,
         normalAppearance: BalloonLinkAppearanceOverride? = nil,
         hoveredAppearance: BalloonLinkAppearanceOverride? = nil,
-        visitedAppearance: BalloonLinkAppearanceOverride? = nil
+        visitedAppearance: BalloonLinkAppearanceOverride? = nil,
+        pluginOrigin: SakuraScriptPluginOrigin? = nil
     ) {
         self.range = range
         self.id = id
@@ -36,6 +38,7 @@ public struct BalloonTextLink: Sendable, Equatable {
         self.normalAppearance = normalAppearance
         self.hoveredAppearance = hoveredAppearance
         self.visitedAppearance = visitedAppearance
+        self.pluginOrigin = pluginOrigin
     }
 }
 

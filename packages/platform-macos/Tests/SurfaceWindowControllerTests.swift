@@ -8,6 +8,105 @@ import UtataneCore
 import UtataneSakuraScript
 import UtataneShell
 
+@MainActor
+@Test func `renders element surfaces and animation layers with inline opening braces`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data("seriko.use_self_alpha,1".utf8).write(to: root.appending(path: "descript.txt"))
+    try makePNG(width: 8, height: 6).write(to: root.appending(path: "body.png"))
+    try makePNG(width: 8, height: 6, color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1))
+        .write(to: root.appending(path: "popup.png"))
+    try Data("""
+    surface0
+    {
+    element0,base,body.png,0,0
+    }
+    """.utf8).write(to: root.appending(path: "surfaces.txt"))
+    try Data("""
+    surface8{
+    element0,base,body.png,0,0
+    animation0.interval,runonce
+    animation0.pattern0,overlay,21,0,0,0
+    }
+    surface21{
+    element0,base,popup.png,0,0
+    }
+    surface.append0{
+    collision0,0,0,8,6,Button
+    }
+    """.utf8).write(to: root.appending(path: "surfaces_misc.txt"))
+
+    let shell = try ShellLoader().load(from: root)
+    #expect(shell.surfaces[0]?.collisions.first?.name == "Button")
+    let controller = SurfaceWindowController()
+    defer { controller.hideAll() }
+    try controller.show(shell: shell, surfaceID: 0)
+    for id in [21, 8] {
+        try controller.changeSurface(to: id)
+        let image = try #require(controller.renderedImage(for: 0))
+        #expect(image.size == NSSize(width: 8, height: 6))
+        #expect(image.colorAtCenter()?.redComponent == 1)
+    }
+}
+
+@MainActor
+@Test func `positions the first element and expands later elements in animation layers`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try makePNG(width: 4, height: 3, color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1))
+        .write(to: root.appending(path: "glyph.png"))
+    try makePNG(width: 30, height: 20, color: NSColor(deviceRed: 0, green: 0, blue: 0, alpha: 0))
+        .write(to: root.appending(path: "surface0.png"))
+    try Data("seriko.use_self_alpha,1".utf8).write(to: root.appending(path: "descript.txt"))
+    try Data("""
+    surface0{
+    animation1.interval,never
+    animation1.pattern0,overlay,10,0,0,0
+    }
+    surface10{
+    element3,base,glyph.png,7,5
+    element4,overlay,glyph.png,12,5
+    }
+    """.utf8).write(to: root.appending(path: "surfaces.txt"))
+    let controller = SurfaceWindowController()
+    defer { controller.hideAll() }
+    try controller.show(shell: ShellLoader().load(from: root), surfaceID: 10)
+    #expect(controller.renderedImage()?.size == NSSize(width: 16, height: 8))
+    try controller.changeSurface(to: 0)
+    controller.playAnimation(identifier: "1", scope: 0)
+    let data = try #require(controller.renderedImage()?.tiffRepresentation)
+    let bitmap = try #require(NSBitmapImageRep(data: data))
+    #expect(bitmap.colorAt(x: 0, y: 0)?.alphaComponent == 0)
+    for x in [7, 12, 15] {
+        #expect(bitmap.colorAt(x: x, y: 5)?.usingColorSpace(.deviceRGB)?.redComponent == 1)
+    }
+}
+
+@MainActor
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_TEST_CLDSP2_SHELL_PATH"] != nil))
+func `renders installed CLDSP2 surfaces without changing ghost files`() throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_TEST_CLDSP2_SHELL_PATH"])
+    let shell = try ShellLoader().load(from: URL(filePath: path))
+    let controller = SurfaceWindowController()
+    defer { controller.hideAll() }
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 0, 1: 1, 2: 2, 3: 5, 4: 21, 5: 21])
+    #expect(controller.visibleScopes == [0, 1, 2, 3, 4, 5])
+    for id in [21, 8, 2000, 3000] {
+        #expect(shell.surfaces[id] != nil)
+        try controller.changeSurface(to: id)
+        let image = try #require(controller.renderedImage(for: 0))
+        if id == 21 {
+            // The popup's idle surface is deliberately transparent.
+            #expect(image.size == NSSize(width: 37, height: 13))
+            #expect(!image.hasVisiblePixels)
+        } else {
+            #expect(image.hasVisiblePixels, "surface\(id)")
+        }
+    }
+}
+
 @Test func `default ghost dialogue font prefers Japanese glyphs`() {
     let font = ghostDialogueFont(named: nil, size: 14)
     let resolved = CTFontCreateForString(
@@ -313,6 +412,40 @@ import UtataneShell
     #expect(renderedHorse.transparentPixelRatio > 0.5)
     try controller.changeSurface(scope: 2, to: 999)
     #expect(try #require(controller.renderedImage(for: 2)).transparentPixelRatio == 1)
+}
+
+@MainActor
+@Test func `zorder keeps its first scope in front across redraw hide and shell reload`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try makePNG(width: 8, height: 8).write(to: root.appending(path: "surface0.png"))
+    let shell = ShellDefinition(directory: root, surfaces: [:])
+    let controller = SurfaceWindowController()
+    defer { controller.resetContent() }
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 0, 1: 0, 2: 0, 3: 0])
+    let numbers = controller.windowNumbers
+    func expectInFront(_ front: Int, of back: Int) throws {
+        let order = NSApplication.shared.orderedWindows.map(\.windowNumber)
+        #expect(try #require(order.firstIndex(of: numbers[front])) < #require(order.firstIndex(of: numbers[back])))
+    }
+    controller.setZOrder(["1", "0"])
+    controller.setZOrder(["3", "2"])
+    try expectInFront(1, of: 0)
+    try expectInFront(3, of: 2)
+    for _ in 0 ..< 3 {
+        try controller.changeSurface(scope: 0, to: 0)
+        try controller.changeSurface(scope: 2, to: 0)
+        try expectInFront(1, of: 0)
+        try expectInFront(3, of: 2)
+    }
+    try controller.changeSurface(scope: 1, to: -1)
+    try controller.changeSurface(scope: 1, to: 0)
+    try expectInFront(1, of: 0)
+    let presentation = controller.captureReloadPresentation()
+    try controller.show(shell: shell, defaultSurfaceIDs: [0: 0, 1: 0, 2: 0, 3: 0], restoring: presentation)
+    try expectInFront(1, of: 0)
+    try expectInFront(3, of: 2)
 }
 
 @MainActor

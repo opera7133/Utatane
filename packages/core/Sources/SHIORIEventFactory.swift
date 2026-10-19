@@ -553,6 +553,29 @@ public enum SHIORIEventFactory {
         )
     }
 
+    public static func textAreaInput(id: String, value: String, additionalReferences: [String] = []) -> GhostEvent {
+        let content = textAreaWireValue(value)
+        return .shiori(
+            id: id.hasPrefix("On") ? id : "OnTextAreaInput",
+            references: indexedReferences((id.hasPrefix("On") ? [content, ""] : [id, content, ""]) + additionalReferences)
+        )
+    }
+
+    public static func textAreaInputCancel(
+        id: String, timedOut: Bool, value: String, additionalReferences: [String] = []
+    ) -> GhostEvent {
+        .shiori(
+            id: "OnTextAreaInputCancel",
+            references: indexedReferences([id, timedOut ? "timeout" : "close", textAreaWireValue(value)] + additionalReferences)
+        )
+    }
+
+    private static func textAreaWireValue(_ value: String) -> String {
+        value.replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+            .replacingOccurrences(of: "\n", with: "\u{1}")
+    }
+
     public static func balloonChange(name: String, path: String) -> GhostEvent {
         .shiori(id: "OnBalloonChange", references: [0: name, 1: path])
     }

@@ -105,7 +105,7 @@ public struct ModulePackageInstaller: Sendable {
                 }
                 let relative = String(path.dropFirst(module.id.count + 1))
                 extractedFiles.insert(relative)
-                try manager.setAttributes([.posixPermissions: relative.hasSuffix(".dylib") ? 0o755 : 0o644],
+                try manager.setAttributes([.posixPermissions: (relative.hasSuffix(".dylib") || relative.hasPrefix("bin/")) ? 0o755 : 0o644],
                                           ofItemAtPath: output.path)
             }
         }

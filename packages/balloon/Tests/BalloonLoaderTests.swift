@@ -345,6 +345,9 @@ func `loads input appearance and balloonc surface overrides`() throws {
     communicatebox.font.color.r,10
     communicatebox.font.color.g,20
     communicatebox.font.color.b,30
+    communicatebox.placeholder.color.r,70
+    communicatebox.placeholder.color.g,80
+    communicatebox.placeholder.color.b,90
     communicatebox.background.color.r,40
     communicatebox.background.color.g,50
     communicatebox.background.color.b,60
@@ -368,6 +371,7 @@ func `loads input appearance and balloonc surface overrides`() throws {
     #expect(effective.communicateBoxFontName == "Helvetica")
     #expect(effective.communicateBoxFontHeight == 15)
     #expect(effective.communicateBoxFontColor == BalloonColor(red: 10, green: 20, blue: 30))
+    #expect(effective.communicateBoxPlaceholderColor == BalloonColor(red: 70, green: 80, blue: 90))
     #expect(effective.communicateBoxBackgroundColor == BalloonColor(red: 40, green: 50, blue: 60))
     #expect(effective.communicateBoxX == 32)
     #expect(effective.communicateBoxY == 18)

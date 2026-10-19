@@ -26,6 +26,58 @@ private func withPositionPlayer(_ body: (SakuraScriptPlayer, BalloonWindowContro
 }
 
 @Test @MainActor
+func `property only clock updates leave the player talkable every second`() async throws {
+    try await withPositionPlayer { player, balloons, balloon in
+        var seconds: [String] = []
+        player.onGetProperties = { event, properties in
+            #expect(event == "OnClock")
+            #expect(properties == ["system.second"])
+            seconds.append(String(seconds.count))
+            return SakuraScript(rawValue: #"\e"#)
+        }
+        for _ in 0 ..< 3 {
+            #expect(player.canTalk)
+            await player.playAndWait(SakuraScript(rawValue: #"\t\0\![get,property,OnClock,system.second]\e"#), balloon: balloon)
+            #expect(balloons.visibleScopes.isEmpty)
+            #expect(player.canTalk)
+            #expect(!player.isDialogueActive)
+        }
+        #expect(seconds == ["0", "1", "2"])
+    }
+}
+
+@Test @MainActor
+func `periodic clock updates queue the latest tick behind display work without interrupting it`() async throws {
+    try await withPositionPlayer { player, _, balloon in
+        var pending: CheckedContinuation<SakuraScript?, Never>?
+        var events: [String] = []
+        player.onGetProperties = { _, _ in
+            await withCheckedContinuation { pending = $0 }
+        }
+        player.onEmbeddedNotification = { id, _ in events.append(id) }
+        player.play(SakuraScript(rawValue: #"\![get,property,OnClock,system.second]\![notify,OnOriginalFinished]\e"#), balloon: balloon)
+        try await requireEventually { pending != nil }
+        #expect(player.canTalk)
+        player.enqueuePeriodic(SakuraScript(rawValue: #"\![notify,OnStaleTick]\e"#), balloon: balloon, eventID: "OnSecondChange")
+        player.enqueuePeriodic(SakuraScript(rawValue: #"\![notify,OnLatestTick]\e"#), balloon: balloon, eventID: "OnSecondChange")
+        #expect(events.isEmpty)
+        pending?.resume(returning: nil)
+        try await requireEventually { events.contains("OnLatestTick") }
+        #expect(events == ["OnOriginalFinished", "OnLatestTick"])
+        var completed = false
+        player.onPlaybackFinished = { completed = true }
+        let dialogue = #"台詞\x"#
+        player.play(SakuraScript(rawValue: dialogue), balloon: balloon, characterDelayMilliseconds: 0)
+        try await requireEventually { player.playbackPosition?.characterOffset == dialogue.count }
+        #expect(!player.canTalk)
+        player.enqueuePeriodic(SakuraScript(rawValue: #"\![notify,MustNotRun]"#), balloon: balloon, eventID: "OnSecondChange")
+        player.advance()
+        try await requireEventually { completed }
+        #expect(!events.contains("MustNotRun"))
+    }
+}
+
+@Test @MainActor
 func `terminal only translation keeps the original talk`() async throws {
     try await withPositionPlayer { player, _, balloon in
         let original = SakuraScript(rawValue: #"\0会話\e"#)
@@ -116,5 +168,28 @@ func `filtered commands and property expansion keep source offsets`() async thro
         player.play(SakuraScript(rawValue: propertySource), balloon: balloon, characterDelayMilliseconds: 0)
         try await requireEventually { player.playbackPosition?.characterOffset == propertySource.count }
         #expect(player.playbackPosition?.script == propertySource)
+    }
+}
+
+@Test @MainActor
+func `textarea playback keeps scope and routes close independently of ordinary input`() async throws {
+    try await withPositionPlayer { player, _, balloon in
+        var areaScopes: [Int] = []
+        var ordinaryIDs: [String] = []
+        var closedAreas: [String] = []
+        var closedInputs: [String] = []
+        player.onTextAreaBox = { command, scope in
+            areaScopes.append(scope)
+            #expect(command.placeholder == "memo")
+            return SakuraScript(rawValue: #"\![close,textareabox,reply]"#)
+        }
+        player.onInputBox = { command in ordinaryIDs.append(command.id); return nil }
+        player.onCloseTextAreaBox = { closedAreas.append($0) }
+        player.onCloseInputBox = { closedInputs.append($0) }
+        await player.playAndWait(SakuraScript(rawValue: #"\p[2]\![open,textareabox,area,--placeholder=memo]\![close,inputbox,__SYSTEM_ALL_INPUT__]\![close,textareabox,area]\![open,inputbox,name]"#), balloon: balloon, characterDelayMilliseconds: 0)
+        #expect(areaScopes == [2])
+        #expect(ordinaryIDs == ["name"])
+        #expect(closedAreas == ["reply", "area"])
+        #expect(closedInputs == ["__SYSTEM_ALL_INPUT__"])
     }
 }

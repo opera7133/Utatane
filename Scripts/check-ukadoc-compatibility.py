@@ -24,6 +24,7 @@ CLAIMED_SYNTAX = (
     "windowposition.y",
     "windowposition.limit",
     "communicatebox.width",
+    "communicatebox.placeholder.color",
     "menuitemex",
     "shared-index",
     "exclusive",
@@ -57,8 +58,8 @@ def main() -> int:
         flags=re.MULTILINE,
     )
     event_ids = [event_id for event_id, _ in event_rows]
-    if len(event_rows) != 304:
-        failures.append(f"SHIORI Event inventory has {len(event_rows)} rows; expected 304")
+    if len(event_rows) != 307:
+        failures.append(f"SHIORI Event inventory has {len(event_rows)} rows; expected 307")
     if len(event_ids) != len(set(event_ids)):
         failures.append("SHIORI Event inventory contains duplicate event IDs")
     counts = {status: sum(row_status == status for _, row_status in event_rows) for status in ("✅", "🟡", "❌", "➖")}
@@ -66,8 +67,8 @@ def main() -> int:
         f"調査結果: ✅ {counts['✅']} / 🟡 {counts['🟡']} / "
         f"❌ {counts['❌']} / ➖ {counts['➖']}"
     )
-    if "UKADOC掲載イベント数: 304" not in event_document:
-        failures.append("SHIORI Event inventory does not declare the current 304-event UKADOC baseline")
+    if "UKADOC掲載イベント数: 307" not in event_document:
+        failures.append("SHIORI Event inventory does not declare the current 307-event UKADOC baseline")
     if expected_summary not in event_document:
         failures.append("SHIORI Event inventory summary does not match its rows")
 
@@ -79,8 +80,8 @@ def main() -> int:
         flags=re.MULTILINE,
     )
     sakura_labels = [label for label, _ in sakura_rows]
-    if len(sakura_rows) != 148:
-        failures.append(f"SakuraScript inventory has {len(sakura_rows)} rows; expected 148")
+    if len(sakura_rows) != 150:
+        failures.append(f"SakuraScript inventory has {len(sakura_rows)} rows; expected 150")
     if len(sakura_labels) != len(set(sakura_labels)):
         failures.append("SakuraScript inventory contains duplicate labels")
     sakura_unclassified = [label for label, status in sakura_rows if status == "❌"]
@@ -92,14 +93,14 @@ def main() -> int:
         status: sum(row_status == status for _, row_status in sakura_rows)
         for status in ("✅", "🟡", "❌", "➖")
     }
-    if "UKADOC掲載構文数: 359" not in sakura_section:
-        failures.append("SakuraScript inventory does not declare the current 359-syntax UKADOC baseline")
+    if "UKADOC掲載構文数: 361" not in sakura_section:
+        failures.append("SakuraScript inventory does not declare the current 361-syntax UKADOC baseline")
     sakura_summary = (
         f"調査結果: ✅ {sakura_counts['✅']} / 🟡 {sakura_counts['🟡']} / "
         f"❌ {sakura_counts['❌']} / ➖ {sakura_counts['➖']}"
     )
-    if "UKADOC分類行数: 148" not in sakura_section:
-        failures.append("SakuraScript inventory does not declare its 148-row baseline")
+    if "UKADOC分類行数: 150" not in sakura_section:
+        failures.append("SakuraScript inventory does not declare its 150-row baseline")
     if sakura_summary not in sakura_section:
         failures.append("SakuraScript inventory summary does not match its rows")
 

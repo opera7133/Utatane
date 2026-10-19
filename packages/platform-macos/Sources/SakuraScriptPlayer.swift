@@ -3,6 +3,7 @@ import CoreText
 import UtataneBalloon
 import UtataneCore
 import UtataneSakuraScript
+import UtataneShell
 
 public enum SakuraScriptOpenTargetResolver {
     public static func resolve(_ target: String, relativeTo masterDirectory: URL) -> URL? {
@@ -40,11 +41,13 @@ public struct SakuraScriptPlaybackContext: Sendable, Equatable {
     public let eventID: String?
     public let references: [Int: String]
     public let flags: [String]
+    public let pluginOrigin: SakuraScriptPluginOrigin?
 
-    public init(eventID: String? = nil, references: [Int: String] = [:], flags: [String] = []) {
+    public init(eventID: String? = nil, references: [Int: String] = [:], flags: [String] = [], pluginOrigin: SakuraScriptPluginOrigin? = nil) {
         self.eventID = eventID
         self.references = references
         self.flags = flags
+        self.pluginOrigin = pluginOrigin
     }
 }
 
@@ -106,9 +109,10 @@ private struct PlaybackToken {
     let token: SakuraScriptToken
     var source: String?
     var location: SakuraScriptSourceLocation?
+    var pluginOrigin: SakuraScriptPluginOrigin?
 
     func expandedText(_ text: String) -> PlaybackToken {
-        PlaybackToken(token: .text(text), source: source, location: location.map { .init(range: $0.range) })
+        PlaybackToken(token: .text(text), source: source, location: location.map { .init(range: $0.range) }, pluginOrigin: pluginOrigin)
     }
 }
 
@@ -123,6 +127,7 @@ public final class SakuraScriptPlayer {
     private var characterDelayMilliseconds = 50
     private var postDialogueDismissalMilliseconds: Int
     private var playbackGeneration: UInt64 = 0
+    private var playbackBlocksPeriodicTalk = true
     private var playbackTask: Task<Void, Never>?
     private struct QueuedPlayback {
         let script: SakuraScript
@@ -145,6 +150,15 @@ public final class SakuraScriptPlayer {
     private var defaultBalloonSurfaceIDs: [Int: Int] = [:]
     private var playbackContinuation: CheckedContinuation<Void, Never>?
     private let soundPlayer = SakuraScriptSoundPlayer()
+    var isSoundMuted: Bool {
+        get { soundPlayer.isMuted }
+        set { soundPlayer.isMuted = newValue }
+    }
+
+    func soundPropertyValue(for property: String) -> String? {
+        soundPlayer.propertyValue(for: property)
+    }
+
     private var environmentVariables: [String: String] = [:]
     private var eventTimers: [String: Task<Void, Never>] = [:]
     private var currentBalloon: BalloonDefinition?
@@ -164,6 +178,11 @@ public final class SakuraScriptPlayer {
     private var currentPlaybackCharacterPosition = 0
     private var currentSSTPMessage: String?
     private var currentPlaybackContext = SakuraScriptPlaybackContext()
+    private var consumedPluginInteractions: Set<UUID> = []
+    private var activatedPluginOrigin: SakuraScriptPluginOrigin?
+    private var pluginInteractionRevision: UInt64 = 0
+    private var runtimeBalloonStyles: [Int: Int] = [:]
+    public var additionalImageDirectories: [URL] = []
     public private(set) var didCancelVanishPlayback = false
 
     public private(set) var isTimeCritical = false
@@ -217,6 +236,7 @@ public final class SakuraScriptPlayer {
     public var onChoiceHover: (@MainActor (String, String, [String]) -> Void)?
     public var onAnchorEnter: (@MainActor (String?, String?, [String]) -> Void)?
     public var onAnchorHover: (@MainActor (String, String, [String]) -> Void)?
+    public var onSoundSpectrum: (@MainActor ([Int: String]) async -> Void)?
     public var onSoundStop: (@MainActor (String, String) -> Void)?
     public var onSoundLoop: (@MainActor (String) -> Void)?
     public var onSoundError: (@MainActor (String, Error) -> Void)?
@@ -230,6 +250,8 @@ public final class SakuraScriptPlayer {
     public var onTalkPlayback: (@MainActor (SakuraScriptTalkPhase, SakuraScript, SakuraScriptPlaybackContext) -> Void)?
     public var onEmbeddedNotification: (@MainActor (String, [String]) async -> Void)?
     public var onEmbeddedEvent: (@MainActor (String, [String]) async -> SakuraScript?)?
+    public var onTextAreaBox: (@MainActor (SakuraScriptInputCommand, Int) async -> SakuraScript?)?
+    public var onCloseTextAreaBox: (@MainActor (String) -> Void)?
     public var onInputBox: (@MainActor (SakuraScriptInputCommand) async -> SakuraScript?)?
     public var onSystemDialog: (@MainActor (SakuraScriptSystemDialogCommand) async -> SakuraScript?)?
     public var onCloseSystemDialog: (@MainActor (String) -> Void)?
@@ -261,7 +283,8 @@ public final class SakuraScriptPlayer {
     public var onComponentLifecycle: (@MainActor (SakuraScriptComponent, Bool) async -> Void)?
     public var onShioriDebugMode: (@MainActor (Bool) -> Void)?
     public var onOtherEvent: (@MainActor (String, String, [String], Bool) async -> Void)?
-    public var onPluginEvent: (@MainActor (String, String, [String], Bool) async -> SakuraScript?)?
+    public var onPluginSelection: (@MainActor (SakuraScriptPluginOrigin, BalloonTextLink, String) async -> SakuraScriptPluginPlayback?)?
+    public var onPluginEvent: (@MainActor (String, String, [String], Bool) async -> SakuraScriptPluginPlayback?)?
     public var onDialogueContent: (@MainActor () -> Void)?
     public var onSpeechSynthesisActivity: (@MainActor (Bool) -> Void)?
     public var onSurfaceRestore: (@MainActor () -> Void)?
@@ -269,7 +292,7 @@ public final class SakuraScriptPlayer {
 
     /// A snapshot of the script actually being played, after translation.
     public var playbackPosition: SakuraScriptPlaybackPosition? {
-        guard isDialogueActive else { return nil }
+        guard playbackTask != nil || isPlaybackComplete else { return nil }
         return .init(script: currentScriptRawValue, scope: currentPlaybackScope,
                      characterOffset: currentPlaybackCharacterPosition)
     }
@@ -279,23 +302,24 @@ public final class SakuraScriptPlayer {
         return .shiori(id: "OnSSTPBreak", references: playbackPosition.references)
     }
 
-    private func playbackTokens(_ script: SakuraScript, policy: SakuraScriptPlaybackPolicy = .trusted) -> [PlaybackToken] {
+    private func playbackTokens(_ script: SakuraScript, policy: SakuraScriptPlaybackPolicy = .trusted, pluginOrigin: SakuraScriptPluginOrigin? = nil) -> [PlaybackToken] {
         if currentPlaybackContext.flags.contains("strict") {
             for diagnostic in parser.diagnostics(script.rawValue) {
                 AppLogStore.shared.warning(diagnostic.message, category: "SakuraScript", details: "位置: \(diagnostic.range.lowerBound)..<\(diagnostic.range.upperBound)")
             }
         }
         return parser.parseLocated(script.rawValue).filter { allowsSakuraScriptToken($0.token, policy: policy) }.map {
-            PlaybackToken(token: $0.token, source: script.rawValue, location: $0.location)
+            PlaybackToken(token: $0.token, source: script.rawValue, location: $0.location, pluginOrigin: pluginOrigin)
         }
     }
 
     public var isDialogueActive: Bool {
-        playbackTask != nil || isPlaybackComplete
+        playbackTask != nil || (isPlaybackComplete && !balloonWindowController.visibleScopes.isEmpty)
     }
 
     public var canTalk: Bool {
-        !isDialogueActive && interactionMode == nil
+        interactionMode == nil && (!isDialogueActive || (!playbackBlocksPeriodicTalk && !isTimeCritical
+                && balloonWindowController.visibleScopes.isEmpty))
     }
 
     public var isSpeechSynthesisEnabled: Bool {
@@ -334,6 +358,7 @@ public final class SakuraScriptPlayer {
         }
         self.postDialogueDismissalMilliseconds = postDialogueDismissalMilliseconds
         self.surfaceRestoreDelayMilliseconds = max(0, surfaceRestoreDelayMilliseconds)
+        soundPlayer.onSpectrum = { [weak self] references in await self?.onSoundSpectrum?(references) }
         soundPlayer.onStop = { [weak self] file, reason in self?.onSoundStop?(file, reason) }
         soundPlayer.onLoop = { [weak self] file in self?.onSoundLoop?(file) }
         soundPlayer.onError = { [weak self] file, error in self?.onSoundError?(file, error) }
@@ -357,6 +382,19 @@ public final class SakuraScriptPlayer {
         balloonWindowController.onLinkActivate = { [weak self] link, label in
             guard let self else { return }
             activatedLinkKind = link.kind
+            activatedPluginOrigin = link.pluginOrigin
+            if let origin = link.pluginOrigin, let onPluginSelection, !link.id.lowercased().hasPrefix("script:"),
+               consumedPluginInteractions.insert(origin.interactionID).inserted
+            {
+                let revision = link.kind == .choice ? pluginInteractionRevision &+ 1 : pluginInteractionRevision
+                Task { [weak self] in
+                    guard let self, revision == pluginInteractionRevision else { return }
+                    let reply = await onPluginSelection(origin, link, label)
+                    guard revision == pluginInteractionRevision, let reply, let balloon = currentBalloon else { return }
+                    play(reply, balloon: balloon)
+                }
+                return
+            }
             switch link.kind {
             case .choice:
                 if let onChoiceSelection {
@@ -372,13 +410,15 @@ public final class SakuraScriptPlayer {
         balloonWindowController.onLinkClick = { [weak self] id, arguments in
             guard let self else { return }
             let linkKind = activatedLinkKind
+            let pluginOrigin = activatedPluginOrigin
             activatedLinkKind = nil
+            activatedPluginOrigin = nil
             if id.lowercased().hasPrefix("script:") {
                 let script = String(id.dropFirst("script:".count))
                 let balloon = currentBalloon
                 cancel(hidesBalloon: false)
                 if let balloon {
-                    play(SakuraScript(rawValue: script), balloon: balloon)
+                    play(SakuraScript(rawValue: script), balloon: balloon, context: .init(pluginOrigin: pluginOrigin))
                 }
             } else {
                 if linkKind != .anchor {
@@ -435,6 +475,14 @@ public final class SakuraScriptPlayer {
         soundPlayer.discard()
     }
 
+    /// Refresh generated surface definitions without ending the invoking script
+    /// or removing its scheduled events and retained dialogue.
+    public func reloadShell(_ shell: ShellDefinition, defaultSurfaceIDs: [Int: Int]) throws {
+        let presentation = surfaceWindowController.captureReloadPresentation()
+        balloonWindowController.configure(shell: shell)
+        try surfaceWindowController.show(shell: shell, defaultSurfaceIDs: defaultSurfaceIDs, restoring: presentation)
+    }
+
     public func play(
         _ script: SakuraScript,
         balloon: BalloonDefinition,
@@ -461,6 +509,7 @@ public final class SakuraScriptPlayer {
         onPresentationReady: (@MainActor () -> Void)? = nil
     ) {
         guard !(preventsUserBreak && playbackTask != nil) else { return }
+        pluginInteractionRevision &+= 1
         if playbackTask != nil, currentSSTPMessage == nil, context.eventID != "OnBalloonBreak" {
             onBalloonBreak?(
                 currentScriptRawValue,
@@ -481,6 +530,7 @@ public final class SakuraScriptPlayer {
         statusActivities.removeAll()
         currentBalloon = balloon
         currentScriptRawValue = script.rawValue
+        playbackBlocksPeriodicTalk = true
         currentPlaybackScope = 0
         currentPlaybackCharacterPosition = 0
         currentSSTPMessage = sstpMessage
@@ -494,12 +544,13 @@ public final class SakuraScriptPlayer {
         playbackTask = Task { [weak self] in
             guard let self, await suspensionClock.waitUntilActive() else { return }
             let expanded = SakuraScript(rawValue: expandEnvironmentVariables(in: script.rawValue))
-            let translation = await onTranslate?(expanded, context)
+            let translation = context.flags.contains("notranslate") ? nil : await onTranslate?(expanded, context)
             let effectiveScript = translation?.rawValue == #"\e"# ? expanded : translation ?? expanded
             guard await suspensionClock.waitUntilActive(), !Task.isCancelled else { return }
             currentScriptRawValue = effectiveScript.rawValue
             let parseStartedAt = ProcessInfo.processInfo.systemUptime
-            var tokens = playbackTokens(effectiveScript, policy: policy)
+            var tokens = playbackTokens(effectiveScript, policy: policy, pluginOrigin: context.pluginOrigin)
+            playbackBlocksPeriodicTalk = tokens.contains { !Self.isDisplayUpdate($0.token) }
             if context.eventID == "OnMouseDoubleClick" {
                 let elapsed = Int((ProcessInfo.processInfo.systemUptime - parseStartedAt) * 1000)
                 AppLogStore.shared.debug("ダブルクリックの台詞解析 \(elapsed) ms", category: "SHIORI")
@@ -508,6 +559,7 @@ public final class SakuraScriptPlayer {
             if continuesPreviousDialogue {
                 tokens.removeFirst()
             } else {
+                consumedPluginInteractions.removeAll()
                 balloonWindowController.hideAll()
                 balloonWindowController.clearPositionedImages()
             }
@@ -555,6 +607,14 @@ public final class SakuraScriptPlayer {
         }
     }
 
+    public func play(_ reply: SakuraScriptPluginPlayback, balloon: BalloonDefinition) {
+        if reply.flags.contains("nobreak") {
+            enqueue(reply.script, balloon: balloon, context: reply.context)
+        } else {
+            play(reply.script, balloon: balloon, context: reply.context)
+        }
+    }
+
     public func enqueue(
         _ script: SakuraScript,
         balloon: BalloonDefinition,
@@ -577,6 +637,25 @@ public final class SakuraScriptPlayer {
         startPlayback(request.script, balloon: request.balloon,
                       characterDelayMilliseconds: request.characterDelayMilliseconds,
                       policy: request.policy, sstpMessage: request.sstpMessage, context: request.context)
+    }
+
+    /// Keep only the newest pending periodic update while a display script finishes.
+    public func enqueuePeriodic(_ script: SakuraScript, balloon: BalloonDefinition, eventID: String) {
+        guard canTalk else { return }
+        queuedPlaybacks.removeAll { $0.context.eventID == eventID }
+        enqueue(script, balloon: balloon, context: .init(eventID: eventID))
+    }
+
+    private static func isDisplayUpdate(_ token: SakuraScriptToken) -> Bool {
+        switch token {
+        case .scope, .surface, .namedSurface, .animation, .stopAnimation,
+             .pauseAnimation, .resumeAnimation, .offsetAnimation, .getProperties,
+             .embeddedEvent, .raisedEvent, .notifyEvent, .timerEvent, .quickSection,
+             .repaintLock, .setZOrder, .resetZOrder, .end:
+            true
+        case let .text(text): text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        default: false
+        }
     }
 
     public func interrupt(
@@ -641,6 +720,7 @@ public final class SakuraScriptPlayer {
     }
 
     private func cancel(hidesBalloon: Bool) {
+        pluginInteractionRevision &+= 1
         playbackGeneration &+= 1
         queuedPlaybacks.removeAll()
         pendingInterrupts.removeAll()
@@ -686,6 +766,13 @@ public final class SakuraScriptPlayer {
         onPresentationReady: (@MainActor () -> Void)? = nil
     ) async {
         var presentationReady = onPresentationReady
+        var renderingBatch: UUID?
+        func finishRenderingBatch() {
+            guard let batch = renderingBatch else { return }
+            surfaceWindowController.endRenderingBatch(batch)
+            renderingBatch = nil
+        }
+        defer { finishRenderingBatch() }
         func revealPresentation() {
             presentationReady?()
             presentationReady = nil
@@ -721,6 +808,7 @@ public final class SakuraScriptPlayer {
         var styleRunsByScope = previousContent.mapValues(\.styles)
         var inlineImagesByScope = previousContent.mapValues(\.inlineImages)
         var balloonStyleByScope = defaultBalloonSurfaceIDs
+        runtimeBalloonStyles = defaultBalloonSurfaceIDs
         var activatedScopes = continuesPreviousDialogue
             ? Set(balloonWindowController.visibleScopes)
             : Set<Int>()
@@ -785,7 +873,8 @@ public final class SakuraScriptPlayer {
                     fontColor: link.fontColor,
                     normalAppearance: link.normalAppearance,
                     hoveredAppearance: link.hoveredAppearance,
-                    visitedAppearance: link.visitedAppearance
+                    visitedAppearance: link.visitedAppearance,
+                    pluginOrigin: link.pluginOrigin
                 )
             }
             styleRunsByScope[scope] = styleRunsByScope[scope, default: []].flatMap { run in
@@ -939,6 +1028,22 @@ public final class SakuraScriptPlayer {
                     pendingTokens.insert(contentsOf: interrupt, at: 0)
                 }
                 let located = pendingTokens.removeFirst()
+                if !Self.isDisplayUpdate(located.token) {
+                    playbackBlocksPeriodicTalk = true
+                }
+                // Keep fast surface updates atomic across SHIORI callbacks, but
+                // publish the frame before text, waits, dialogs or other work.
+                switch located.token {
+                case .scope, .surface, .namedSurface, .quickSection,
+                     .embeddedEvent, .raisedEvent, .notifyEvent, .getProperties,
+                     .animation, .stopAnimation, .pauseAnimation, .resumeAnimation,
+                     .offsetAnimation, .repaintLock, .timerEvent, .setZOrder, .resetZOrder:
+                    if renderingBatch == nil {
+                        renderingBatch = surfaceWindowController.beginRenderingBatch()
+                    }
+                default:
+                    finishRenderingBatch()
+                }
                 if let source = located.source, let location = located.location {
                     currentScriptRawValue = source
                     currentPlaybackCharacterPosition = location.range.lowerBound
@@ -972,6 +1077,7 @@ public final class SakuraScriptPlayer {
                 }
                 switch located.token {
                 case let .text(text):
+                    finishRenderingBatch()
                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         revealPresentation()
                     }
@@ -1042,6 +1148,7 @@ public final class SakuraScriptPlayer {
                     }
                 case let .scope(newScope):
                     if newScope != scope, talkingScopes.remove(scope) != nil {
+                        finishRenderingBatch()
                         await surfaceWindowController.playIntervalAnimationAndWait("endtalk", scope: scope)
                     }
                     speechHistoryRecorder?.setScope(newScope)
@@ -1058,6 +1165,7 @@ public final class SakuraScriptPlayer {
                     try surfaceWindowController.changeSurface(scope: scope, named: identifier)
                 case let .animation(identifier, waitsForCompletion):
                     if waitsForCompletion {
+                        finishRenderingBatch()
                         await surfaceWindowController.playAnimationAndWait(
                             identifier: identifier,
                             scope: scope
@@ -1072,6 +1180,7 @@ public final class SakuraScriptPlayer {
                 case let .resumeAnimation(identifier):
                     surfaceWindowController.resumeAnimation(identifier: identifier, scope: scope)
                 case let .waitForAnimation(identifier):
+                    finishRenderingBatch()
                     await surfaceWindowController.waitForAnimation(identifier: identifier, scope: scope)
                 case let .offsetAnimation(identifier, x, y):
                     surfaceWindowController.setAnimationOffset(
@@ -1083,6 +1192,9 @@ public final class SakuraScriptPlayer {
                 case let .addAnimation(addition):
                     surfaceWindowController.addAnimation(addition, scope: scope)
                 case let .repaintLock(locked, manual):
+                    if !locked {
+                        finishRenderingBatch()
+                    }
                     surfaceWindowController.setRepaintLocked(locked, scope: scope)
                     if locked {
                         repaintLockedScopes.insert(scope)
@@ -1107,6 +1219,7 @@ public final class SakuraScriptPlayer {
                 case let .balloonMoveLock(locked):
                     balloonWindowController.setMovementLocked(locked, scope: scope)
                 case let .surfaceAlpha(percent, durationMilliseconds, waitsForCompletion):
+                    finishRenderingBatch()
                     let alpha = percent.map { Double($0) / 100 }
                     if waitsForCompletion {
                         await surfaceWindowController.setAlpha(
@@ -1130,6 +1243,7 @@ public final class SakuraScriptPlayer {
                     waitsForCompletion
                 ):
                     let horizontal = Double(horizontalPercent) / 100
+                    finishRenderingBatch()
                     let vertical = Double(verticalPercent) / 100
                     if waitsForCompletion {
                         await surfaceWindowController.setRuntimeScale(
@@ -1223,6 +1337,7 @@ public final class SakuraScriptPlayer {
                     }
                 case let .balloonSurface(style):
                     balloonStyleByScope[scope] = style
+                    runtimeBalloonStyles[scope] = style
                     if style < 0 {
                         balloonWindowController.hide(scope: scope)
                     } else if activatedScopes.contains(scope) {
@@ -1351,6 +1466,7 @@ public final class SakuraScriptPlayer {
                 case let .syncObjectReset(name):
                     Self.signaledSyncObjects.remove(name)
                 case let .syncObjectWait(name, timeoutMilliseconds):
+                    finishRenderingBatch()
                     let startedAt = ProcessInfo.processInfo.systemUptime
                     while !Self.signaledSyncObjects.contains(name) {
                         if let timeoutMilliseconds,
@@ -1374,6 +1490,7 @@ public final class SakuraScriptPlayer {
                         autoscroll: autoscrollByScope[scope] ?? true
                     )
                 case let .wait(milliseconds):
+                    finishRenderingBatch()
                     revealPresentation()
                     if fastForwardRequested {
                         fastForwardRequested = false
@@ -1381,6 +1498,7 @@ public final class SakuraScriptPlayer {
                         try await sleep(milliseconds: milliseconds)
                     }
                 case let .waitUntil(milliseconds):
+                    finishRenderingBatch()
                     revealPresentation()
                     if let milliseconds {
                         let elapsed = Int((ProcessInfo.processInfo.systemUptime - preciseWaitStartedAt) * 1000)
@@ -1391,6 +1509,7 @@ public final class SakuraScriptPlayer {
                         preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
                     }
                 case let .waitForClick(clearOnResume):
+                    finishRenderingBatch()
                     revealPresentation()
                     fastForwardRequested = false
                     advanceRequested = false
@@ -1428,7 +1547,8 @@ public final class SakuraScriptPlayer {
                             arguments: arguments,
                             fontColor: nil,
                             normalAppearance: style.cursorNotSelectedAppearance,
-                            hoveredAppearance: style.cursorAppearance
+                            hoveredAppearance: style.cursorAppearance,
+                            pluginOrigin: located.pluginOrigin
                         )
                     )
                     try activateIfNeeded(scope: scope)
@@ -1443,7 +1563,8 @@ public final class SakuraScriptPlayer {
                         fontColor: nil,
                         normalAppearance: style.cursorNotSelectedAppearance,
                         hoveredAppearance: style.cursorAppearance,
-                        visitedAppearance: nil
+                        visitedAppearance: nil,
+                        pluginOrigin: located.pluginOrigin
                     )
                 case .choiceEnd:
                     guard let choice = choicesByScope.removeValue(forKey: scope) else { continue }
@@ -1457,7 +1578,8 @@ public final class SakuraScriptPlayer {
                             fontColor: choice.fontColor,
                             normalAppearance: choice.normalAppearance,
                             hoveredAppearance: choice.hoveredAppearance,
-                            visitedAppearance: choice.visitedAppearance
+                            visitedAppearance: choice.visitedAppearance,
+                            pluginOrigin: choice.pluginOrigin
                         )
                     )
                     updateContent(scope: scope, autoscroll: false)
@@ -1472,7 +1594,8 @@ public final class SakuraScriptPlayer {
                         fontColor: style.anchorFontColor,
                         normalAppearance: style.anchorNotSelectedAppearance,
                         hoveredAppearance: style.anchorAppearance,
-                        visitedAppearance: style.anchorVisitedAppearance
+                        visitedAppearance: style.anchorVisitedAppearance,
+                        pluginOrigin: located.pluginOrigin
                     )
                 case .anchorEnd:
                     guard let anchor = anchorsByScope.removeValue(forKey: scope) else { continue }
@@ -1487,7 +1610,8 @@ public final class SakuraScriptPlayer {
                             fontColor: anchor.fontColor,
                             normalAppearance: anchor.normalAppearance,
                             hoveredAppearance: anchor.hoveredAppearance,
-                            visitedAppearance: anchor.visitedAppearance
+                            visitedAppearance: anchor.visitedAppearance,
+                            pluginOrigin: anchor.pluginOrigin
                         )
                     )
                     updateContent(scope: scope)
@@ -1504,7 +1628,23 @@ public final class SakuraScriptPlayer {
                     }
                     pendingTokens.insert(located.expandedText(value ?? ""), at: 0)
                 case let .getProperties(eventID, properties):
-                    if let response = await onGetProperties?(eventID, properties) {
+                    if let origin = located.pluginOrigin {
+                        var values: [String] = []
+                        for property in properties {
+                            if let value = runtimePropertyValue(for: property) {
+                                values.append(value)
+                            } else {
+                                await values.append(onPropertyValue?(property) ?? "")
+                            }
+                        }
+                        if let reply = await onPluginEvent?(origin.id, eventID, values, true) {
+                            if reply.flags.contains("nobreak") {
+                                enqueue(reply.script, balloon: balloon, context: reply.context)
+                            } else {
+                                pendingTokens.insert(contentsOf: playbackTokens(reply.script, pluginOrigin: reply.origin), at: 0)
+                            }
+                        }
+                    } else if let response = await onGetProperties?(eventID, properties) {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .setProperty(property, value):
@@ -1570,6 +1710,9 @@ public final class SakuraScriptPlayer {
                 case let .open(target):
                     onOpen?(target)
                 case let .sound(command):
+                    if command == .wait {
+                        finishRenderingBatch()
+                    }
                     try await soundPlayer.execute(command)
                 case let .embeddedEvent(id, arguments):
                     if let embeddedScript = await onEmbeddedEvent?(id, arguments) {
@@ -1582,14 +1725,18 @@ public final class SakuraScriptPlayer {
                         return
                     }
                 case let .notifyEvent(id, arguments):
-                    _ = await onEmbeddedEvent?(id, arguments)
+                    await onEmbeddedNotification?(id, arguments)
                 case let .otherEvent(target, id, arguments, reflectsResponse):
                     await onOtherEvent?(target, id, arguments, reflectsResponse)
                 case let .pluginEvent(target, id, arguments, reflectsResponse):
                     if let response = await onPluginEvent?(target, id, arguments, reflectsResponse),
                        reflectsResponse
                     {
-                        pendingTokens = playbackTokens(response)
+                        if response.flags.contains("nobreak") {
+                            enqueue(response.script, balloon: balloon, context: response.context)
+                        } else {
+                            pendingTokens = playbackTokens(response.script, pluginOrigin: response.origin)
+                        }
                     }
                 case let .timerEvent(milliseconds, repeats, reflectsResponse, id, arguments):
                     scheduleEventTimer(
@@ -1614,6 +1761,9 @@ public final class SakuraScriptPlayer {
                     surfaceWindowController.setStayOnTop(stayOnTop)
                     balloonWindowController.setStayOnTop(stayOnTop)
                 case let .moveSurface(x, y, time, isAsync, options):
+                    if time > 0 {
+                        finishRenderingBatch()
+                    }
                     await surfaceWindowController.moveSurface(
                         scope: scope,
                         x: x,
@@ -1631,8 +1781,10 @@ public final class SakuraScriptPlayer {
                 case .resetPosition:
                     surfaceWindowController.resetFixedPositions()
                 case .separateCharacters:
+                    finishRenderingBatch()
                     await surfaceWindowController.separateCharacters(scope: scope)
                 case .approachCharacters:
+                    finishRenderingBatch()
                     await surfaceWindowController.approachCharacters(scope: scope)
                 case let .setZOrder(order):
                     surfaceWindowController.setZOrder(order)
@@ -1694,11 +1846,14 @@ public final class SakuraScriptPlayer {
                     )
                 case let .cancelHTTP(url):
                     onCancelHTTP?(url)
+                case let .closeTextAreaBox(id):
+                    onCloseTextAreaBox?(id)
                 case let .closeInputBox(id):
                     onCloseInputBox?(id)
                 case let .closeSystemDialog(id):
                     onCloseSystemDialog?(id)
                 case let .communicateBox(initialValue):
+                    finishRenderingBatch()
                     let activity = UUID()
                     statusActivities[activity] = "communicate"
                     defer { statusActivities[activity] = nil }
@@ -1706,6 +1861,7 @@ public final class SakuraScriptPlayer {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .teachBox(initialValue):
+                    finishRenderingBatch()
                     let activity = UUID()
                     statusActivities[activity] = "teach"
                     defer { statusActivities[activity] = nil }
@@ -1728,13 +1884,20 @@ public final class SakuraScriptPlayer {
                 case .resetBalloonPositions:
                     balloonWindowController.resetWindowPositions()
                 case let .inputBox(command):
+                    finishRenderingBatch()
                     let activity = UUID()
                     statusActivities[activity] = "input"
                     defer { statusActivities[activity] = nil }
-                    if let response = await onInputBox?(command) {
+                    let response = if command.kind == .textArea {
+                        await onTextAreaBox?(command, scope)
+                    } else {
+                        await onInputBox?(command)
+                    }
+                    if let response {
                         pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
                     }
                 case let .systemDialog(command):
+                    finishRenderingBatch()
                     let activity = UUID()
                     statusActivities[activity] = "dialog"
                     defer { statusActivities[activity] = nil }
@@ -1816,6 +1979,7 @@ public final class SakuraScriptPlayer {
                     styleRunsByScope.removeAll()
                     inlineImagesByScope.removeAll()
                 case .end:
+                    finishRenderingBatch()
                     for talkingScope in talkingScopes.sorted() {
                         await surfaceWindowController.playIntervalAnimationAndWait("endtalk", scope: talkingScope)
                     }
@@ -1827,6 +1991,7 @@ public final class SakuraScriptPlayer {
                     continue
                 }
             }
+            finishRenderingBatch()
             for talkingScope in talkingScopes.sorted() {
                 await surfaceWindowController.playIntervalAnimationAndWait("endtalk", scope: talkingScope)
             }
@@ -1919,9 +2084,12 @@ public final class SakuraScriptPlayer {
                     return
                 }
                 guard let self, !Task.isCancelled else { return }
-                let response = await onEmbeddedEvent?(id, arguments)
-                if reflectsResponse, let response {
-                    play(response, balloon: balloon)
+                if reflectsResponse {
+                    if let response = await onEmbeddedEvent?(id, arguments) {
+                        play(response, balloon: balloon)
+                    }
+                } else {
+                    await onEmbeddedNotification?(id, arguments)
                 }
             } while repeats && !Task.isCancelled
             self?.eventTimers[id] = nil
@@ -2039,6 +2207,20 @@ public final class SakuraScriptPlayer {
         return result
     }
 
+    func balloonValidSize(scope: Int) -> NSSize? {
+        guard let balloon = currentBalloon else { return nil }
+        let style = max(0, runtimeBalloonStyles[scope] ?? 0)
+        let speaker: BalloonSpeaker = scope == 0 ? .sakura : (scope == 1 ? .kero : .character(scope: scope))
+        let loader = BalloonLoader()
+        let definition = loader.effectiveDefinition(for: balloon, speaker: speaker, style: style)
+        guard let url = try? loader.imageURL(speaker: speaker, style: style, in: balloon),
+              let image = NSImage(contentsOf: url) else { return nil }
+        return NSSize(
+            width: max(0, (definition.validRectRight ?? Int(image.size.width) - 14) - definition.validRectLeft),
+            height: max(0, (definition.validRectBottom ?? Int(image.size.height) - 14) - definition.validRectTop)
+        )
+    }
+
     private func resolveInlineImage(path: String, isOpaque: Bool, options: [String]) -> NSImage? {
         let usesSelfAlpha = options.contains {
             $0.caseInsensitiveCompare("--option=use_self_alpha") == .orderedSame
@@ -2055,7 +2237,17 @@ public final class SakuraScriptPlayer {
         }
         guard let baseDirectory = resourceBaseDirectory else { return nil }
         let normalizedPath = path.replacingOccurrences(of: "\\", with: "/")
-        let url = baseDirectory.appending(path: normalizedPath)
+        let url: URL
+        if normalizedPath.hasPrefix("/") {
+            let candidate = URL(fileURLWithPath: normalizedPath).standardizedFileURL.resolvingSymlinksInPath()
+            guard ([baseDirectory] + additionalImageDirectories).contains(where: { root in
+                let path = root.standardizedFileURL.resolvingSymlinksInPath().path
+                return candidate.path.hasPrefix(path + "/")
+            }) else { return nil }
+            url = candidate
+        } else {
+            url = baseDirectory.appending(path: normalizedPath)
+        }
         if FileManager.default.fileExists(atPath: url.path) {
             image = if isOpaque || usesSelfAlpha {
                 NSImage(contentsOf: url)
@@ -2395,6 +2587,8 @@ public final class SakuraScriptPlayer {
         playbackTask = nil
         isTimeCritical = false
         statusActivities.removeAll()
+        // Keep the source position after completion, including scripts without
+        // a visible balloon. Only retained balloons block OnSecondChange talks.
         isPlaybackComplete = true
         isWaitingForClick = false
         preventsUserBreak = false
@@ -2407,7 +2601,7 @@ public final class SakuraScriptPlayer {
             return
         }
         dismissalTask?.cancel()
-        guard interactionMode != .passive else { return }
+        guard isDialogueActive, interactionMode != .passive else { return }
         guard let timeout = completedDialogueTimeoutMilliseconds else { return }
         dismissalTask = Task { [weak self] in
             guard let self else { return }
@@ -2518,4 +2712,5 @@ private struct ActiveAnchor {
     let normalAppearance: BalloonLinkAppearanceOverride?
     let hoveredAppearance: BalloonLinkAppearanceOverride?
     let visitedAppearance: BalloonLinkAppearanceOverride?
+    let pluginOrigin: SakuraScriptPluginOrigin?
 }

@@ -5,9 +5,9 @@
 
 基準: [SHIORI Eventリスト](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html)
 
-UKADOC掲載イベント数: 304
-調査日: 2026-09-24
-調査結果: ✅ 248 / 🟡 45 / ❌ 2 / ➖ 9
+UKADOC掲載イベント数: 307
+調査日: 2026-09-20
+調査結果: ✅ 252 / 🟡 46 / ❌ 2 / ➖ 7
 
 ## 判定
 
@@ -189,8 +189,8 @@ UKADOC掲載イベント数: 304
 | --- | --- | --- |
 | [`OnFileDropping`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDropping) | ✅ | ファイルドラッグ進入時に先頭ファイルのパスとscopeをReference0〜1へ通知。サーフェス入力からの経路とイベント生成をテスト済み |
 | [`OnFileDropped`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDropped) | ➖ | 旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行 |
-| [`OnFileDrop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDrop) | ➖ | 旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行 |
-| [`OnFileDropEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDropEx) | ➖ | 旧仕様のため対象外。複数項目とMIME typeを扱えるOnFileDrop2を発行 |
+| [`OnFileDrop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDrop) | ✅ | OnFileDrop2とOnFileDropExが無応答の場合、ファイルごとにパス・scope・MIME typeをReference0〜2へ通知。順序と複数応答をテスト済み |
+| [`OnFileDropEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDropEx) | ✅ | OnFileDrop2が無応答の場合に同じReferenceで問い合わせる。旧イベントからの応答があれば既定アプリを開かない。順序・重複防止をテスト済み |
 | [`OnFileDrop2`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnFileDrop2) | ✅ | 全ファイル／ディレクトリのパスとMIME typeをバイト値1区切りでReference0・2へ、scopeをReference1へ通知。複数項目の順序とMIME判定をテスト済み |
 | [`OnMediaPlayerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMediaPlayerOpen) | ✅ | `OnFileDrop2`未応答の音声・動画を既定アプリで開いた後、同じReferenceで通知。実機応答は未確認 |
 | [`OnPictureViewerOpen`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnPictureViewerOpen) | ✅ | `OnFileDrop2`未応答の画像を既定アプリで開いた後、同じReferenceで通知。実機応答は未確認 |
@@ -416,7 +416,7 @@ UKADOC掲載イベント数: 304
 | [`OnOtherGhostTalk`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnOtherGhostTalk) | ✅ | set,otherghosttalkでopt-inしたゴーストへ他ゴーストの再生前または再生後のスクリプトと発生元情報を通知 |
 | [`OnEmbryoExist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnEmbryoExist) | ➖ | Windows用Materiaの同時起動検出イベントでありmacOS版では対象外 |
 | [`OnNekodorifExist`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNekodorifExist) | ➖ | Windows用猫どりふの同時起動検出イベントでありmacOS版では対象外 |
-| [`OnSoundStop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundStop) | ✅ | SakuraScript音声の自然終了とstop操作でファイル名・end/closeを通知。ループ終了など全経路は未確認 |
+| [`OnSoundStop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundStop) | ✅ | SakuraScript音声の自然終了時にファイル名とendを通知。sound,stopは通知せず、次の再生命令へ継続する。再生ウィンドウのclose通知は未実装 |
 | [`OnSoundLoop`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundLoop) | ✅ | SakuraScriptのループ音声が末尾から次の周回へ入るたびにファイル名をReference0へ通知。周回・終了・失敗の判定を自動テスト済み |
 | [`OnSoundError`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundError) | ✅ | 音声ファイル解決・AVAudioPlayer生成・再生終了失敗時にplay・エラーコード・ファイル・説明を通知。実動未確認 |
 | [`OnMusicPlayEx`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnMusicPlayEx) | ✅ | 設定有効時、ブラウザ以外の曲変更を検出して通知。無反応ならOnMusicPlayへフォールバック。判定不能な再生元もこちらへ送る。実アプリでの通知は未確認 |
@@ -471,6 +471,14 @@ UKADOC掲載イベント数: 304
 | [`OnNotifyOSInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyOSInfo) | ✅ | 起動時にmacOS・CPUコア数・物理メモリ・uptimeをReference0〜3へNOTIFY。CPUクロックと仮想メモリは概算値 |
 | [`OnNotifyFontInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyFontInfo) | 🟡 | 起動時にmacOSで利用可能なフォント名をReference列へNOTIFY。フォント変更の動的再通知は未対応 |
 | [`OnNotifyInternationalInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyInternationalInfo) | ✅ | 起動時にUTC時差・夏時間・国・言語コードをReference0〜3へNOTIFY。Locale未設定時は空欄 |
+
+## オンラインUKADOC追加イベント
+
+| イベント | 状況 | Utataneの挙動・差分 |
+| --- | --- | --- |
+| [`OnSoundSpectrum`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundSpectrum) | 🟡 | AVFoundation対応音声の波形を解析し、指定間隔・0/5/10/15/31帯域・チャンネル別レベル・ピークホールド・再生位置をGET通知。停止時はゼロ、ポーズ中は通知しない。メイン・呼び出しゴーストに接続。MIDI/CD/動画やSSPとの数値の完全一致は未対応 |
+| [`OnTextAreaInput`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTextAreaInput) | ✅ | textareabox決定時にID・バイト値1区切りの内容・空欄・追加Referenceを通知。Onで始まるIDはそのイベントへ内容から通知。メイン・呼び出しゴーストに接続。実ゴースト操作は未確認 |
+| [`OnTextAreaInputCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTextAreaInputCancel) | ✅ | ID・timeout／close・編集中の内容・追加Referenceを通知。時間切れでも決定イベントへフォールバックしない。実ゴースト操作は未確認 |
 
 ## 更新ルール
 

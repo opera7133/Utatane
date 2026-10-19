@@ -9,6 +9,42 @@ import UtataneSakuraScript
 import UtataneShell
 
 @Test @MainActor
+func `script movement aligns panels to a scope and converts top left coordinates`() async throws {
+    let (defaults, positions) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try makePNG(width: 40, height: 60).write(to: root.appending(path: "surface0.png"))
+    try makePNG(width: 70, height: 20).write(to: root.appending(path: "surface1.png"))
+    try makePNG(width: 120, height: 80).write(to: root.appending(path: "balloons0.png"))
+    let geometry = MutablePresentationGeometryProvider(screens: [
+        PresentationScreenGeometry(
+            frame: NSRect(x: 100, y: 50, width: 1000, height: 700),
+            visibleFrame: NSRect(x: 100, y: 50, width: 1000, height: 700),
+            bitsPerPixel: 32, scale: 1, isPrimary: true
+        )
+    ])
+    let surfaces = SurfaceWindowController(positionStore: positions, geometryProvider: geometry)
+    surfaces.setPlacement(locksToDesktopBottom: false, keepsOnScreen: false)
+    try surfaces.show(shell: ShellDefinition(directory: root, surfaces: [:]), defaultSurfaceIDs: [0: 0, 1: 1, 2: 1])
+    let balloons = BalloonWindowController(positionStore: positions)
+    let player = SakuraScriptPlayer(surfaceWindowController: surfaces, balloonWindowController: balloons)
+    defer { player.cancel(); surfaces.hideAll() }
+    await surfaces.moveSurface(x: 300, y: 400, time: 0, isAsync: false)
+    await player.playAndWait(SakuraScript(rawValue: #"\1\![move,--X=0,--Y=0,--time=0,--base=0]\p[2]\![move,40,100,0,0,left.top,left.top]\e"#), balloon: makeBalloon(directory: root))
+    #expect(surfaces.windowFrame(for: 1) == NSRect(x: 300, y: 440, width: 70, height: 20))
+    #expect(surfaces.windowFrame(for: 2) == NSRect(x: 340, y: 340, width: 70, height: 20))
+    await player.playAndWait(SakuraScript(rawValue: #"\1\![move,--X=80,--Y=-200,--base=screen,--base-offset=left.bottom,--move-offset=right.top]\e"#), balloon: makeBalloon(directory: root))
+    #expect(surfaces.windowFrame(for: 1) == NSRect(x: 110, y: 230, width: 70, height: 20))
+    await player.playAndWait(SakuraScript(rawValue: #"\1\![move,--X=fix,--Y=20,--base=me]\e"#), balloon: makeBalloon(directory: root))
+    #expect(surfaces.windowFrame(for: 1) == NSRect(x: 110, y: 210, width: 70, height: 20))
+    await player.playAndWait(SakuraScript(rawValue: #"\0会話中\e"#), balloon: makeBalloon(directory: root), characterDelayMilliseconds: 0)
+    #expect(!player.canTalk)
+    #expect(player.isDialogueActive)
+}
+
+@Test @MainActor
 func `balloons follow their surface while preserving independent balloon movement`() async throws {
     let (defaults, positionStore) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## [0.2.16] - 2026-10-19
+
+### 音声・ファイル操作
+
+- 音声の`--spectrum`に対応し、指定間隔で帯域・チャンネル別の音量レベル・ピーク値・再生位置を`OnSoundSpectrum`へ通知するようにした
+- 音声の現在位置・長さ・再生／一時停止状態などを`currentghost.sound`から取得できるようにした。`sound,stop`による停止と自然終了のイベントを区別する
+- 音声の読み込み・再生で絶対パスとWindows式の区切りを扱えるようにし、外部ファイルを読み込めない問題を修正した
+- ファイルドロップで`OnFileDrop2`が無応答なら`OnFileDropEx`、続いてファイルごとの`OnFileDrop`へ問い合わせるようにした
+
+### シェル・スクリプト再生
+
+- `move --base=0`などのスコープ相対移動と座標基準を反映した
+- 開始波括弧を同じ行に書いたsurface定義を読み込めるようにした
+- シェルのelement合成で最初の部品の座標と後続部品による描画範囲の拡張を反映し、画像が左上で切り取られる問題を修正した
+- スコープのzorderを左から手前の順として保持し、サーフェス更新・再表示・シェル再読み込みでも重なり順を維持するようにした
+- 連続するサーフェス・アニメーション命令の合成と表示をまとめ、更新負荷と描画途中のちらつきを軽減した
+- 表示だけの処理中は毎秒イベントの最新の応答を待ち行列へ置き、定期表示の更新が止まる問題を修正した。台詞や入力中は割り込ませない
+- `notify`・`timernotify`をSHIORIのNOTIFYとして送るようにし、応答確認を使うスクリプトの不要な再実行を防いだ
+- `reload,shell`で実行中のスクリプトや予約イベントを取り消さずにシェルを読み直し、動的に生成した表示の更新を続行できるようにした
+
+### 入力・プラグイン・モジュール
+
+- SSP 2.9.10の複数行入力`textareabox`に対応した。Enterで改行、Ctrl+Enterで確定し、時間切れ・キャンセル時にも編集中の内容を通知する。メインと呼び出しゴーストの両方で使える
+- `inputbox`・`passwordinput`・`textareabox`の`--placeholder=`と、バルーンの`communicatebox.placeholder.color.r/g/b`に対応した
+- SHIORI型プラグインからのバルーン一覧取得・画像表示・選択とキャンセルの通知を接続した。サイズ取得や選択肢の応答を発信元へ返し、`ScriptOption: notranslate`を反映する
+- 共通SAORIのカタログID検索でアンダースコアをハイフンへ正規化し、パッケージの`bin/`に含まれる補助プログラムへ実行権限を付けるようにした
+
 ## [0.2.15] - 2026-10-07
 
 - 入力ダイアログをコンパクトな一行のパネルへ変更した。背景を等倍で表示し、入力欄の横へ決定・閉じるボタンを配置する。クロマキー、PNA、use_self_alphaを背景とボタンにも適用する
@@ -813,7 +840,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.15...HEAD
+[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.16...HEAD
+[0.2.16]: https://github.com/opera7133/Utatane/compare/v0.2.15...v0.2.16
 [0.2.15]: https://github.com/opera7133/Utatane/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/opera7133/Utatane/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/opera7133/Utatane/compare/v0.2.12...v0.2.13

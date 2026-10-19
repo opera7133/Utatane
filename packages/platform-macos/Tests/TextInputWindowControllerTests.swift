@@ -1,7 +1,9 @@
 import AppKit
 import Testing
 import UtataneBalloon
+import UtataneCore
 @testable import UtatanePlatformMacOS
+import UtataneSakuraScript
 
 @MainActor
 struct TextInputWindowControllerTests {
@@ -188,6 +190,98 @@ struct TextInputWindowControllerTests {
         }
         controller.close()
         #expect(cancelled)
+    }
+
+    @Test
+    func `textarea keeps draft on close and never falls back to a timeout submission`() async {
+        let controller = TextInputWindowController()
+        var events: [GhostEvent] = []
+        let command = SakuraScriptInputCommand(kind: .textArea, id: "memo", timeoutMilliseconds: 10,
+                                               initialValue: "draft\u{1}line", references: ["extra"])
+        _ = await controller.showTextArea(command: command, appearance: nil, sendEvent: { events.append($0); return nil }, playResponse: { _ in })
+        #expect(events == [SHIORIEventFactory.textAreaInputCancel(id: "memo", timedOut: true, value: "draft\nline", additionalReferences: ["extra"])])
+        let input = Task { @MainActor in
+            await controller.showInput(id: "draft", title: "Input", initialValue: "", inputKind: .textArea,
+                                       maximumLength: nil, autocompleteValues: [], appearance: nil, timeoutMilliseconds: nil)
+        }
+        while controller.window == nil {
+            await Task.yield()
+        }
+        controller.updateCurrentText("edited\ntext")
+        controller.close(id: "draft")
+        #expect(await input.value == .cancelled(timedOut: false, value: "edited\ntext"))
+    }
+
+    @Test
+    func `textarea normalizes line breaks and counts them toward the limit`() {
+        #expect(TextInputWindowController.editableValue("a\r\nb\u{1}c", kind: .textArea, maximumLength: 4) == "a\nb\n")
+        #expect(TextInputWindowController.editableValue("a\u{1}b", kind: .text, maximumLength: nil) == "a\u{1}b")
+        #expect(TextInputWindowController.panelSize(for: nil, backgroundImageSize: nil, isTextArea: true).height > 180)
+    }
+
+    @Test
+    func `textarea editor inserts newline with Enter and submits only with Control Enter`() throws {
+        let editor = TextAreaEditor(frame: NSRect(x: 0, y: 0, width: 300, height: 120))
+        editor.isRichText = false
+        editor.string = "draft"
+        editor.setSelectedRange(NSRange(location: 5, length: 0))
+        var submissions = 0
+        editor.onCommit = { submissions += 1 }
+        editor.insertNewline(nil)
+        #expect(editor.string == "draft\n")
+        let key = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.control], timestamp: 0,
+                                                windowNumber: 0, context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36))
+        editor.keyDown(with: key)
+        #expect(submissions == 1)
+        #expect(editor.string == "draft\n")
+    }
+
+    @Test
+    func `textarea selects its skin and falls back to the current speakers body region`() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pixels = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 320, pixelsHigh: 200,
+                                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB,
+                                                   bitmapFormat: [], bytesPerRow: 1280, bitsPerPixel: 32))
+        let png = try #require(pixels.representation(using: .png, properties: [:]))
+        try png.write(to: directory.appending(path: "balloonp2def3.png"))
+        try "type,balloon\nname,test\nfont.height,17\nvalidrect.left,22\nvalidrect.top,26\nvalidrect.right,290\nvalidrect.bottom,170\n".write(to: directory.appending(path: "descript.txt"), atomically: true, encoding: .utf8)
+        try "font.height,19\n".write(to: directory.appending(path: "balloonp2def3s.txt"), atomically: true, encoding: .utf8)
+        let balloon = try BalloonLoader().load(from: directory)
+        let fallback = TextInputWindowController.Appearance.textArea(balloon: balloon, balloonID: nil, scope: 2, surfaceID: 3)
+        #expect(fallback.backgroundImageURL?.lastPathComponent == "balloonp2def3.png")
+        #expect(fallback.fontHeight == 19)
+        #expect(fallback.inputX == 22)
+        #expect(fallback.inputY == 26)
+        #expect(fallback.inputWidth == 268)
+        #expect(fallback.inputHeight == 144)
+        try png.write(to: directory.appending(path: "balloonc5.png"))
+        try png.write(to: directory.appending(path: "balloonc7.png"))
+        try "communicatebox.height,100\n".write(to: directory.appending(path: "balloonc7s.txt"), atomically: true, encoding: .utf8)
+        #expect(TextInputWindowController.Appearance.textArea(balloon: balloon, balloonID: nil, scope: 2, surfaceID: 3).backgroundImageURL?.lastPathComponent == "balloonc5.png")
+        let explicit = TextInputWindowController.Appearance.textArea(balloon: balloon, balloonID: 7, scope: 2, surfaceID: 3)
+        #expect(explicit.backgroundImageURL?.lastPathComponent == "balloonc7.png")
+        #expect(explicit.inputHeight == 100)
+    }
+
+    @Test
+    func `textarea renders a multiline panel and restores the current draft`() throws {
+        let controller = TextInputWindowController()
+        controller.show(.init(id: "area", title: "Input", initialValue: "first\u{1}second", inputKind: .textArea,
+                              placeholder: "placeholder", onCommit: { _ in }))
+        defer { controller.close() }
+        let window = try #require(controller.window)
+        #expect(window.frame.height > 180)
+        #expect(controller.currentValue == "first\nsecond")
+        let view = try #require(window.contentView)
+        view.layoutSubtreeIfNeeded()
+        view.display()
+        if let path = ProcessInfo.processInfo.environment["UTATANE_TEXTAREA_PREVIEW"] {
+            let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            try #require(bitmap.representation(using: .png, properties: [:])).write(to: URL(filePath: path))
+        }
     }
 
     @Test

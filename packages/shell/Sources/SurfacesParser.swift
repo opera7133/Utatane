@@ -62,18 +62,36 @@ public struct SurfacesParser: Sendable {
             var fileAnimationSort: SurfaceSortOrder?
 
             for rawLine in text.components(separatedBy: .newlines) {
-                let line = rawLine
+                var line = rawLine
                     .replacingOccurrences(of: #"\s+//.*$"#, with: "", options: .regularExpression)
                     .trimmingCharacters(in: .whitespaces)
                 guard !line.isEmpty, !line.hasPrefix("//") else { continue }
 
+                // Some distributed shells put the opening brace on the header
+                // line, although UKADOC documents braces on separate lines.
+                let inlineBraces = line.hasSuffix("{}") ? "{}" : "{"
+                if line.hasSuffix(inlineBraces),
+                   let block = parseBlockHeader(String(line.dropLast(inlineBraces.count))
+                       .trimmingCharacters(in: .whitespaces))
+                {
+                    pendingBlock = block
+                    line = inlineBraces
+                }
                 if let block = parseBlockHeader(line) {
                     pendingBlock = block
                     continue
                 }
-                if line == "{" {
+                if line == "{" || line == "{}" {
                     currentBlock = pendingBlock
                     pendingBlock = nil
+                    if case let .surfaces(surfaceIDs, appendOnly) = currentBlock, !appendOnly {
+                        for surfaceID in surfaceIDs where builders[surfaceID] == nil {
+                            builders[surfaceID] = SurfaceBuilder(id: surfaceID)
+                        }
+                    }
+                    if line == "{}" {
+                        currentBlock = nil
+                    }
                     continue
                 }
                 if line == "}" {

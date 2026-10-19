@@ -96,6 +96,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
     case otherSurfaceChange(target: String, scope: Int, surfaceID: Int)
     case stayOnTop(Bool)
     case closeInputBox(id: String)
+    case closeTextAreaBox(id: String)
     case otherTimerEvent(target: String, milliseconds: Int, repeats: Bool, reflectsResponse: Bool, id: String, arguments: [String])
     case archive(SakuraScriptArchiveCommand)
     case cancelHTTP(url: String?)
@@ -169,6 +170,7 @@ public struct SakuraScriptInputCommand: Sendable, Equatable {
     public enum Kind: Sendable, Equatable {
         case text
         case password
+        case textArea
         case date
         case slider(minimum: Int, maximum: Int)
         case time
@@ -183,6 +185,7 @@ public struct SakuraScriptInputCommand: Sendable, Equatable {
     public let references: [String]
     public let options: [String]
     public let balloonID: Int?
+    public let placeholder: String?
 
     public init(
         kind: Kind,
@@ -192,7 +195,8 @@ public struct SakuraScriptInputCommand: Sendable, Equatable {
         maximumLength: Int? = nil,
         references: [String] = [],
         options: [String] = [],
-        balloonID: Int? = nil
+        balloonID: Int? = nil,
+        placeholder: String? = nil
     ) {
         self.kind = kind
         self.id = id
@@ -202,10 +206,11 @@ public struct SakuraScriptInputCommand: Sendable, Equatable {
         self.references = references
         self.options = options
         self.balloonID = balloonID
+        self.placeholder = placeholder
     }
 
     public var keepsOpenAfterSubmit: Bool {
-        kind == .text && options.contains { $0.caseInsensitiveCompare("noclose") == .orderedSame }
+        (kind == .text || kind == .textArea) && options.contains { $0.caseInsensitiveCompare("noclose") == .orderedSame }
     }
 
     public var keepsValueAfterSubmit: Bool {
@@ -220,6 +225,7 @@ public struct SakuraScriptInputCommand: Sendable, Equatable {
     public var inputTypeName: String {
         switch kind {
         case .text: "inputbox"
+        case .textArea: "textareabox"
         case .password: "passwordinput"
         case .date: "dateinput"
         case .slider: "sliderinput"

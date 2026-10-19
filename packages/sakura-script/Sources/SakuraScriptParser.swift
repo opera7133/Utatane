@@ -1155,9 +1155,11 @@ public struct SakuraScriptParser: Sendable {
                         tokens.append(.cancelHTTP(url: arguments.count >= 3 && !arguments[2].isEmpty ? arguments[2] : nil))
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "close",
-                              arguments[1].lowercased() == "inputbox"
+                              ["inputbox", "textareabox"].contains(arguments[1].lowercased())
                     {
-                        tokens.append(.closeInputBox(id: arguments[2]))
+                        tokens.append(arguments[1].lowercased() == "textareabox"
+                            ? .closeTextAreaBox(id: arguments[2])
+                            : .closeInputBox(id: arguments[2]))
                     } else if arguments.count >= 5,
                               ["timerraiseother", "timernotifyother"].contains(arguments[0].lowercased()),
                               let milliseconds = Int(arguments[1]),
@@ -1482,7 +1484,7 @@ public struct SakuraScriptParser: Sendable {
                         }
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "open",
-                              ["inputbox", "passwordinput", "dateinput", "sliderinput", "timeinput", "ipinput"].contains(arguments[1].lowercased())
+                              ["inputbox", "textareabox", "passwordinput", "dateinput", "sliderinput", "timeinput", "ipinput"].contains(arguments[1].lowercased())
                     {
                         tokens.append(.inputBox(Self.inputCommand(arguments: arguments)))
                     } else if arguments.count >= 3,
@@ -1718,6 +1720,9 @@ public struct SakuraScriptParser: Sendable {
         let kind: SakuraScriptInputCommand.Kind
         let initialValue: String
         switch type {
+        case "textareabox":
+            kind = .textArea
+            initialValue = optionText ?? positional.dropFirst(4).first ?? ""
         case "passwordinput":
             kind = .password
             initialValue = optionText ?? positional.dropFirst(4).first ?? ""
@@ -1752,7 +1757,8 @@ public struct SakuraScriptParser: Sendable {
             maximumLength: optionValue("limit", in: options).flatMap(Int.init),
             references: optionValues("reference", in: options),
             options: options.compactMap { optionValue("option", in: [$0]) },
-            balloonID: optionValue("balloon", in: options).flatMap(Int.init)
+            balloonID: optionValue("balloon", in: options).flatMap(Int.init),
+            placeholder: optionValue("placeholder", in: options)
         )
     }
 

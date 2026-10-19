@@ -1,6 +1,37 @@
 import Foundation
 import Testing
+import UtataneCore
 @testable import UtatanePlatformMacOS
+import UtataneRuntime
+import UtataneSakuraScript
+
+@MainActor
+@Test(arguments: ["OnFileDrop2", "OnFileDropEx", "OnFileDrop", "unhandled"])
+func `file drop falls back to legacy events without importing twice`(handledID: String) async throws {
+    let urls = [URL(filePath: "/tmp/first song.mp3"), URL(filePath: "/tmp/二曲目.wav")]
+    var events: [GhostEvent] = []
+    let responses = try await FileDropEventRouter.responses(scope: 1, urls: urls) { event in
+        events.append(event)
+        guard case let .shiori(id, _) = event, id == handledID else {
+            return PersonalityResponse(script: nil)
+        }
+        return PersonalityResponse(script: SakuraScript(rawValue: #"\e"#))
+    }
+    let expectedIDs: [String] = switch handledID {
+    case "OnFileDrop2": ["OnFileDrop2"]
+    case "OnFileDropEx": ["OnFileDrop2", "OnFileDropEx"]
+    default: ["OnFileDrop2", "OnFileDropEx", "OnFileDrop", "OnFileDrop"]
+    }
+    #expect(events.compactMap { event -> String? in
+        guard case let .shiori(id, _) = event else { return nil }
+        return id
+    } == expectedIDs)
+    #expect(responses.count == (handledID == "unhandled" ? 0 : handledID == "OnFileDrop" ? 2 : 1))
+    if handledID == "OnFileDrop" {
+        #expect(events[2] == .shiori(id: "OnFileDrop", references: [0: urls[0].path, 1: "1", 2: "audio/mpeg"]))
+        #expect(events[3] == .shiori(id: "OnFileDrop", references: [0: urls[1].path, 1: "1", 2: FileDropEventRouter.mimeType(urls[1])]))
+    }
+}
 
 @Test func `file drop events preserve path scope and MIME order`() {
     let image = URL(fileURLWithPath: "/tmp/picture.png")

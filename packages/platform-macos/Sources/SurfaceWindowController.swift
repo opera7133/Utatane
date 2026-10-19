@@ -78,6 +78,26 @@ public final class SurfaceWindowController {
     private let presentationHost: any PresentationHosting
     private let interactionHoverDelay: TimeInterval
     private var defaultSurfaceIDs: [Int: Int] = [:]
+    private var zOrderGroups: [[Int]] = []
+    private var renderingBatchID: UUID?
+
+    func beginRenderingBatch() -> UUID {
+        let id = UUID()
+        renderingBatchID = id
+        for character in characters.values {
+            character.setRenderingBatched(true)
+        }
+        return id
+    }
+
+    func endRenderingBatch(_ id: UUID) {
+        guard renderingBatchID == id else { return }
+        renderingBatchID = nil
+        for character in characters.values {
+            character.setRenderingBatched(false)
+        }
+    }
+
     private var enabledBindGroups: [Int: Set<Int>] = [:]
     private var isSuspended = false
     private var presentationHidden = false
@@ -216,6 +236,9 @@ public final class SurfaceWindowController {
         }
         for character in characters.values {
             character.setPresentationHidden(hidden || startupPresentationHidden)
+        }
+        if !hidden {
+            applyZOrder()
         }
     }
 
@@ -551,12 +574,14 @@ public final class SurfaceWindowController {
     public struct ReloadPresentation {
         fileprivate let surfaces: [Int: Int]
         fileprivate let bindings: [Int: Set<Int>]
+        fileprivate let zOrderGroups: [[Int]]
     }
 
     public func captureReloadPresentation() -> ReloadPresentation {
         ReloadPresentation(
             surfaces: characters.compactMapValues { $0.visibleWindowFrame == nil ? -1 : $0.currentSurfaceID },
-            bindings: enabledBindGroups
+            bindings: enabledBindGroups,
+            zOrderGroups: zOrderGroups
         )
     }
 
@@ -565,6 +590,7 @@ public final class SurfaceWindowController {
         self.shell = shell
         stickyGroups = shell.stickyWindowScopes.isEmpty ? [] : [Set(shell.stickyWindowScopes)]
         self.defaultSurfaceIDs = defaultSurfaceIDs
+        zOrderGroups = presentation?.zOrderGroups ?? []
         enabledBindGroups = presentation?.bindings
             ?? dressupSelectionStore.restore(for: shell)
             ?? shell.defaultBindGroups
@@ -589,6 +615,7 @@ public final class SurfaceWindowController {
         if !shell.zOrder.isEmpty {
             setZOrder(shell.zOrder.map(String.init))
         }
+        applyZOrder()
     }
 
     public func show(shell: ShellDefinition, scope: Int, surfaceID: Int) throws {
@@ -604,6 +631,7 @@ public final class SurfaceWindowController {
         character.setBindGroups(enabledBindGroups[scope] ?? [], redraw: false)
         try character.show(shell: shell, surfaceID: surfaceID)
         placeInitialWindow(for: scope)
+        applyZOrder()
     }
 
     public func playAnimation(
@@ -741,9 +769,15 @@ public final class SurfaceWindowController {
         options: [String] = []
     ) async {
         guard let character = characters[scope], let currentFrame = character.windowFrame else { return }
-        let targetX = x.map { CGFloat($0) } ?? currentFrame.minX
-        let targetY = y.map { CGFloat($0) } ?? currentFrame.minY
-        let targetOrigin = NSPoint(x: targetX, y: targetY)
+        let targetOrigin: NSPoint
+        if options.isEmpty {
+            // Native callers use presentation coordinates directly.
+            targetOrigin = NSPoint(x: x.map(CGFloat.init) ?? currentFrame.minX,
+                                   y: y.map(CGFloat.init) ?? currentFrame.minY)
+        } else {
+            guard let origin = scriptMoveOrigin(scope: scope, x: x, y: y, options: options) else { return }
+            targetOrigin = origin
+        }
 
         if isAsync {
             Task { @MainActor in
@@ -752,6 +786,65 @@ public final class SurfaceWindowController {
         } else {
             await character.moveOrigin(to: targetOrigin, durationMilliseconds: time)
         }
+    }
+
+    private func scriptMoveOrigin(scope: Int, x: Int?, y: Int?, options: [String]) -> NSPoint? {
+        guard let character = characters[scope], let frame = character.windowFrame else { return nil }
+        let positional = options.filter { !$0.hasPrefix("--") }
+        func option(_ name: String, position: Int) -> String? {
+            let prefix = "--\(name)="
+            if let value = options.last(where: { $0.lowercased().hasPrefix(prefix) }) {
+                return String(value.dropFirst(prefix.count)).lowercased()
+            }
+            return positional.indices.contains(position) ? positional[position].lowercased() : nil
+        }
+        let base = option("base", position: 3) ?? "screen"
+        let baseFrame: NSRect
+        let basePoint: NSPoint?
+        if let baseScope = Int(base), let other = characters[baseScope], let otherFrame = other.windowFrame {
+            baseFrame = otherFrame
+            basePoint = other.basePositionOffset
+        } else if base == "me" {
+            baseFrame = frame
+            basePoint = character.basePositionOffset
+        } else if ["screen", "primaryscreen", "global"].contains(base) {
+            let screen = base == "screen"
+                ? geometryProvider.screens.first(where: { $0.frame.contains(NSPoint(x: frame.midX, y: frame.midY)) })
+                ?? geometryProvider.mainScreen
+                : geometryProvider.mainScreen
+            guard let screen else { return nil }
+            baseFrame = screen.frame
+            basePoint = nil
+        } else {
+            return nil
+        }
+        func anchor(_ name: String, in rect: NSRect, base: NSPoint?) -> NSPoint? {
+            let components = name.split(separator: ".")
+            guard components.count == 2 else { return nil }
+            let anchorX: CGFloat? = switch components[0] {
+            case "left": rect.minX
+            case "right": rect.maxX
+            case "center": rect.midX
+            case "base": base.map { rect.minX + $0.x }
+            default: nil
+            }
+            let anchorY: CGFloat? = switch components[1] {
+            case "top": rect.maxY
+            case "bottom": rect.minY
+            case "center": rect.midY
+            case "base": base.map { rect.minY + $0.y }
+            default: nil
+            }
+            guard let anchorX, let anchorY else { return nil }
+            return NSPoint(x: anchorX, y: anchorY)
+        }
+        guard let origin = anchor(option("base-offset", position: 4) ?? "left.top", in: baseFrame, base: basePoint),
+              let moving = anchor(option("move-offset", position: 5) ?? "left.top", in: frame, base: character.basePositionOffset)
+        else { return nil }
+        return NSPoint(
+            x: x.map { origin.x + CGFloat($0) - (moving.x - frame.minX) } ?? frame.minX,
+            y: y.map { origin.y - CGFloat($0) - (moving.y - frame.minY) } ?? frame.minY
+        )
     }
 
     public func setFixedPosition(x: Int, y: Int, scope: Int) async {
@@ -818,18 +911,27 @@ public final class SurfaceWindowController {
     }
 
     public func setZOrder(_ order: [String]) {
-        var previousCharacter: CharacterSurfaceController?
-        for item in order {
-            let scope: Int?
+        let scopes = order.compactMap { item -> Int? in
             if let directScope = Int(item) {
-                scope = directScope
+                return directScope
             } else if item.lowercased().hasPrefix("s") || item.lowercased().hasPrefix("surface") {
                 let suffix = item.lowercased().replacingOccurrences(of: "surface", with: "").replacingOccurrences(of: "s", with: "")
-                scope = Int(suffix)
-            } else {
-                scope = nil
+                return Int(suffix)
             }
-            if let scope, let character = characters[scope] {
+            return nil
+        }
+        guard scopes.count >= 2, scopes.allSatisfy({ $0 >= 0 }), Set(scopes).count == scopes.count,
+              !zOrderGroups.contains(where: { !Set($0).isDisjoint(with: scopes) }) else { return }
+        zOrderGroups.append(scopes)
+        applyZOrder()
+    }
+
+    private func applyZOrder() {
+        for group in zOrderGroups {
+            var previousCharacter: CharacterSurfaceController?
+            // SSP lists the frontmost scope first.
+            for scope in group.reversed() {
+                guard let character = characters[scope], character.visibleWindowFrame != nil else { continue }
                 if let previousCharacter {
                     character.orderAbove(previousCharacter)
                 }
@@ -839,6 +941,7 @@ public final class SurfaceWindowController {
     }
 
     public func resetZOrder() {
+        zOrderGroups.removeAll()
         for (_, character) in characters.sorted(by: { $0.key < $1.key }) {
             character.setStayOnTop(stayOnTop)
         }
@@ -855,6 +958,7 @@ public final class SurfaceWindowController {
         let previousSurfaceID = characters[scope]?.currentSurfaceID
         if let character = characters[scope] {
             try character.changeSurface(to: resolvedSurfaceID)
+            applyZOrder()
             if previousSurfaceID != resolvedSurfaceID {
                 onSurfaceChange?(scope, previousSurfaceID, resolvedSurfaceID)
             }
@@ -866,6 +970,7 @@ public final class SurfaceWindowController {
         character.setDesktopAlignment(desktopAlignment(for: scope, in: shell))
         try character.show(shell: shell, surfaceID: resolvedSurfaceID)
         placeInitialWindow(for: scope)
+        applyZOrder()
         onSurfaceChange?(scope, previousSurfaceID, resolvedSurfaceID)
     }
 
@@ -883,6 +988,7 @@ public final class SurfaceWindowController {
     }
 
     public func resetContent() {
+        zOrderGroups.removeAll()
         for character in characters.values {
             character.discard()
         }
@@ -989,6 +1095,7 @@ public final class SurfaceWindowController {
             keepsOnScreen: keepsOnScreen,
             interactionHoverDelay: interactionHoverDelay
         )
+        character.setRenderingBatched(renderingBatchID != nil)
         character.setPresentationHidden(presentationHidden || startupPresentationHidden)
         character.setSuspended(isSuspended)
         character.onMouseClick = { [weak self] region in
@@ -1140,6 +1247,31 @@ private final class CharacterSurfaceController {
     }
 
     private var persistentAnimationLayers: [Int: PersistentAnimationLayer] = [:]
+    private var isRenderingBatched = false
+    private var needsAnimationRedraw = false
+    private var pendingAnimationRedraw: Task<Void, Never>?
+    private var needsBaseComposition = false
+    private var needsViewPresentation = false
+    private var pendingSurfaceView: SurfaceImageView?
+
+    func setRenderingBatched(_ batched: Bool) {
+        isRenderingBatched = batched
+        guard !batched else { return }
+        if needsAnimationRedraw {
+            redrawActiveAnimationFrames()
+        }
+        if needsViewPresentation, let imageView, let item {
+            let anchor = presentationAnchor
+            item.contentView = imageView
+            if let image = imageView.image {
+                item.setContentSize(displaySize(for: image))
+            }
+            restorePresentationAnchor(anchor)
+            needsViewPresentation = false
+            pendingSurfaceView = nil
+        }
+    }
+
     private var enabledBindGroups: Set<Int> = []
     private var animationTasks: [Int: Task<Void, Never>] = [:]
     private var animationGenerations: [Int: Int] = [:]
@@ -1376,6 +1508,8 @@ private final class CharacterSurfaceController {
     }
 
     func show(shell: ShellDefinition, surfaceID: Int) throws {
+        pendingSurfaceView = nil
+        needsViewPresentation = false
         cancelAllAnimations()
         schedulerTask?.cancel()
         nijigenerateReactionTask?.cancel()
@@ -1819,7 +1953,9 @@ private final class CharacterSurfaceController {
                     for: shell.surfaces[surfaceID],
                     shell: shell
                 )
-                item.show(activating: false)
+                if !item.isVisible {
+                    item.show(activating: false)
+                }
             }
             return
         }
@@ -1836,9 +1972,16 @@ private final class CharacterSurfaceController {
         } else {
             try render(surfaceID: surfaceID, shell: shell)
         }
-        item.contentView = rendered.view
-        item.setContentSize(displaySize(for: rendered.image))
-        item.show(activating: false)
+        if isRenderingBatched {
+            needsViewPresentation = true
+            pendingSurfaceView = rendered.view
+        } else {
+            item.contentView = rendered.view
+            item.setContentSize(displaySize(for: rendered.image))
+        }
+        if !item.isVisible {
+            item.show(activating: false)
+        }
         imageView = rendered.view
         baseSurfaceID = surfaceID
         surfaceBaseImage = rendered.image
@@ -1866,7 +2009,7 @@ private final class CharacterSurfaceController {
 
     private func applyInstantPersistentAnimation(id: Int) -> Bool {
         guard let shell,
-              let surfaceBaseImage,
+              surfaceBaseImage != nil,
               let animation = currentSurfaceDefinition?.animations.first(where: { $0.id == id }),
               animation.patterns.count == 1,
               let pattern = animation.patterns.first,
@@ -1888,21 +2031,20 @@ private final class CharacterSurfaceController {
             operation: operation,
             clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(pattern.method)
         )
-        let order = currentSurfaceDefinition?.animations.map(\.id) ?? []
-        let result = order.reversed().reduce(surfaceBaseImage) { image, animationID in
-            guard let layer = persistentAnimationLayers[animationID] else { return image }
-            return imageLoader.composite(
-                base: image,
-                overlay: layer.image,
-                x: layer.x,
-                y: layer.y,
-                operation: layer.operation,
-                clipsToBaseAlpha: layer.clipsToBaseAlpha
-            )
-        }
-        baseImage = result
+        needsBaseComposition = true
         redrawActiveAnimationFrames()
         return true
+    }
+
+    private func composePersistentLayers() {
+        guard let surfaceBaseImage else { return }
+        let order = currentSurfaceDefinition?.animations.map(\.id) ?? []
+        baseImage = imageLoader.composite(base: surfaceBaseImage, layers: order.reversed().compactMap { animationID in
+            guard let layer = persistentAnimationLayers[animationID] else { return nil }
+            return SurfaceImageLoader.CompositeLayer(image: layer.image, x: layer.x, y: layer.y,
+                                                     operation: layer.operation, clipsToBaseAlpha: layer.clipsToBaseAlpha)
+        })
+        needsBaseComposition = false
     }
 
     private struct PersistentAnimationLayer {
@@ -1920,6 +2062,8 @@ private final class CharacterSurfaceController {
     }
 
     private func cancelAllAnimations() {
+        pendingAnimationRedraw?.cancel()
+        pendingAnimationRedraw = nil
         for task in animationTasks.values {
             task.cancel()
         }
@@ -1942,7 +2086,29 @@ private final class CharacterSurfaceController {
         refreshAnimationScale()
     }
 
+    private func scheduleAnimationRedraw() {
+        if activeAnimationFrames.count < 8 {
+            redrawActiveAnimationFrames()
+            return
+        }
+        guard !isRenderingBatched else { needsAnimationRedraw = true; return }
+        guard pendingAnimationRedraw == nil else { return }
+        pendingAnimationRedraw = Task { [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled, let self else { return }
+            pendingAnimationRedraw = nil
+            redrawActiveAnimationFrames()
+        }
+    }
+
     private func redrawActiveAnimationFrames() {
+        pendingAnimationRedraw?.cancel()
+        pendingAnimationRedraw = nil
+        guard !isRenderingBatched else { needsAnimationRedraw = true; return }
+        needsAnimationRedraw = false
+        if needsBaseComposition {
+            composePersistentLayers()
+        }
         guard let shell, let baseSurfaceID, let baseImage else { return }
         let excludedAnimationIDs = animationBaseExclusions.values.reduce(into: Set<Int>()) {
             $0.formUnion($1)
@@ -1972,28 +2138,31 @@ private final class CharacterSurfaceController {
             result = imageLoader.translated(result, x: scriptTranslation.x, y: scriptTranslation.y)
         }
         let animations = currentSurfaceDefinition?.animations ?? []
+        var layers: [SurfaceImageLoader.CompositeLayer] = []
+        func flushLayers() {
+            result = imageLoader.composite(base: result, layers: layers)
+            layers.removeAll(keepingCapacity: true)
+        }
         for animation in animations.reversed() {
             guard let frame = activeAnimationFrames[animation.id] else { continue }
             switch frame {
             case let .overlay(layer):
-                result = imageLoader.composite(
-                    base: result,
-                    overlay: layer.image,
-                    x: layer.x,
-                    y: layer.y,
-                    operation: animation.options.contains("background") ? .destinationOver : layer.operation,
-                    clipsToBaseAlpha: animation.options.contains("background") ? false : layer.clipsToBaseAlpha
-                )
+                layers.append(.init(image: layer.image, x: layer.x, y: layer.y,
+                                    operation: animation.options.contains("background") ? .destinationOver : layer.operation,
+                                    clipsToBaseAlpha: animation.options.contains("background") ? false : layer.clipsToBaseAlpha))
             case let .base(image):
+                flushLayers()
                 if animation.options.contains("background") {
                     result = imageLoader.composite(base: result, overlay: image, x: 0, y: 0, operation: .destinationOver)
                 } else {
                     result = image
                 }
             case let .move(x, y):
+                flushLayers()
                 result = imageLoader.translated(result, x: x, y: y)
             }
         }
+        flushLayers()
         let activeIDs = Set(activeAnimationFrames.keys)
         let collisions = animations
             .filter { activeIDs.contains($0.id) }
@@ -2024,6 +2193,7 @@ private final class CharacterSurfaceController {
         item?.discard()
         item = nil
         imageView = nil
+        pendingSurfaceView = nil
         nijigenerateView = nil
         nijigenerateBaseSize = nil
         renderedLayerCache.removeAll()
@@ -2688,16 +2858,16 @@ private final class CharacterSurfaceController {
                     y: element.y,
                     operation: operation,
                     clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(element.method),
-                    expands: expands, loader: imageLoader
+                    expands: true, loader: imageLoader
                 )
             } else {
-                result = SurfaceImageCanvas(image: overlay)
+                result = SurfaceImageCanvas(image: overlay, origin: NSPoint(x: element.x, y: element.y))
             }
         }
         guard let result else {
             throw ShellError.missingSurface(id: -1, directory: shell.directory)
         }
-        return result
+        return expands ? result : SurfaceImageCanvas(image: result.croppedFromZero(loader: imageLoader))
     }
 
     private func applyInitialAnimations(
@@ -3021,13 +3191,13 @@ private final class CharacterSurfaceController {
                         operation: .sourceOver,
                         clipsToBaseAlpha: false
                     ))
-                    redrawActiveAnimationFrames()
+                    scheduleAnimationRedraw()
                     guard await waitForAnimationFrame(
                         milliseconds: imported.durationMilliseconds,
                         animationID: animation.id
                     ) else { return }
                     activeAnimationFrames[animation.id] = nil
-                    redrawActiveAnimationFrames()
+                    scheduleAnimationRedraw()
                 } catch {
                     continue
                 }
@@ -3060,10 +3230,10 @@ private final class CharacterSurfaceController {
                     x: pattern.x + offset.x,
                     y: pattern.y + offset.y
                 )
-                redrawActiveAnimationFrames()
+                scheduleAnimationRedraw()
             } else if pattern.surfaceID < 0 {
                 activeAnimationFrames[animation.id] = nil
-                redrawActiveAnimationFrames()
+                scheduleAnimationRedraw()
             } else if pattern.method.lowercased() == "base" {
                 do {
                     let frameBase = try render(
@@ -3072,7 +3242,7 @@ private final class CharacterSurfaceController {
                         excludingInitialAnimations: excludedAnimationIDs
                     ).image
                     activeAnimationFrames[animation.id] = .base(frameBase)
-                    redrawActiveAnimationFrames()
+                    scheduleAnimationRedraw()
                 } catch {
                     continue
                 }
@@ -3091,7 +3261,7 @@ private final class CharacterSurfaceController {
                         operation: operation,
                         clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(pattern.method)
                     ))
-                    redrawActiveAnimationFrames()
+                    scheduleAnimationRedraw()
                 } catch {
                     continue
                 }

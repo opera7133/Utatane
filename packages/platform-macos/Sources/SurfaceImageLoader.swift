@@ -112,6 +112,36 @@ struct SurfaceImageLoader {
         return (image, durationMilliseconds)
     }
 
+    struct CompositeLayer {
+        let image: NSImage
+        let x: Int
+        let y: Int
+        let operation: NSCompositingOperation
+        let clipsToBaseAlpha: Bool
+    }
+
+    /// Composite ordinary static overlays into one bitmap, rather than allocating
+    /// another full surface for every meter, digit or animation layer.
+    func composite(base: NSImage, layers: [CompositeLayer]) -> NSImage {
+        guard !layers.isEmpty else { return base }
+        guard frameCount(of: base) == 1, layers.allSatisfy({
+            !$0.clipsToBaseAlpha && [.sourceOver, .destinationOver, .copy].contains($0.operation) && frameCount(of: $0.image) == 1
+        }) else {
+            return layers.reduce(base) { image, layer in
+                composite(base: image, overlay: layer.image, x: layer.x, y: layer.y,
+                          operation: layer.operation, clipsToBaseAlpha: layer.clipsToBaseAlpha)
+            }
+        }
+        return rasterizedImage(size: base.size) {
+            base.draw(in: NSRect(origin: .zero, size: base.size))
+            for layer in layers {
+                layer.image.draw(in: NSRect(x: CGFloat(layer.x), y: base.size.height - CGFloat(layer.y) - layer.image.size.height,
+                                            width: layer.image.size.width, height: layer.image.size.height),
+                                 from: .zero, operation: layer.operation, fraction: 1)
+            }
+        }
+    }
+
     func composite(
         base: NSImage,
         overlay: NSImage,
