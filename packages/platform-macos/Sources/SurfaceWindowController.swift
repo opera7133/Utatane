@@ -109,6 +109,7 @@ public final class SurfaceWindowController {
     private var keepsOnScreen = true
     private var stayOnTop = true
     private var stickyGroups: [Set<Int>] = []
+    private var scriptMoves: [Int: (id: UUID, scopes: Set<Int>, task: Task<Void, Never>)] = [:]
     private var collisionMode = (enabled: false, showsNames: true)
     private var displayHandoverTracker = DisplayHandoverTracker()
 
@@ -187,6 +188,9 @@ public final class SurfaceWindowController {
 
     deinit {
         MainActor.assumeIsolated {
+            for move in scriptMoves.values {
+                move.task.cancel()
+            }
             for character in characters.values {
                 character.discard()
             }
@@ -768,6 +772,10 @@ public final class SurfaceWindowController {
         isAsync: Bool,
         options: [String] = []
     ) async {
+        if isAsync, options.first?.lowercased() == "cancel" {
+            cancelScriptMove(scope: scope)
+            return
+        }
         guard let character = characters[scope], let currentFrame = character.windowFrame else { return }
         let targetOrigin: NSPoint
         if options.isEmpty {
@@ -779,13 +787,76 @@ public final class SurfaceWindowController {
             targetOrigin = origin
         }
 
-        if isAsync {
-            Task { @MainActor in
-                await character.moveOrigin(to: targetOrigin, durationMilliseconds: time)
+        let ignoresSticky = options.contains { $0.lowercased() == "--option=ignore-sticky-window" }
+        let scopes = ignoresSticky ? Set([scope]) : stickyMoveScopes(for: scope)
+        for movingScope in Array(scriptMoves.keys) {
+            if let move = scriptMoves[movingScope], !move.scopes.isDisjoint(with: scopes) {
+                cancelScriptMove(scope: movingScope)
             }
-        } else {
-            await character.moveOrigin(to: targetOrigin, durationMilliseconds: time)
         }
+        if time <= 0 {
+            setScriptMoveOrigin(targetOrigin, scope: scope, followers: scopes.subtracting([scope]))
+            return
+        }
+        let id = UUID()
+        let task = Task { @MainActor [weak self] in
+            let start = ContinuousClock.now
+            let duration = Double(time) / 1000
+            while !Task.isCancelled {
+                let elapsed = start.duration(to: .now).components
+                let seconds = Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
+                let progress = min(1, seconds / duration)
+                self?.setScriptMoveOrigin(NSPoint(
+                    x: currentFrame.minX + (targetOrigin.x - currentFrame.minX) * progress,
+                    y: currentFrame.minY + (targetOrigin.y - currentFrame.minY) * progress
+                ), scope: scope, followers: scopes.subtracting([scope]))
+                if progress >= 1 {
+                    break
+                }
+                do { try await Task.sleep(for: .milliseconds(16)) } catch { break }
+            }
+            if self?.scriptMoves[scope]?.id == id {
+                self?.scriptMoves[scope] = nil
+            }
+        }
+        scriptMoves[scope] = (id, scopes, task)
+        if !isAsync {
+            await withTaskCancellationHandler {
+                await task.value
+            } onCancel: {
+                task.cancel()
+            }
+        }
+    }
+
+    private func cancelScriptMove(scope: Int) {
+        scriptMoves.removeValue(forKey: scope)?.task.cancel()
+    }
+
+    private func stickyMoveScopes(for scope: Int) -> Set<Int> {
+        var scopes: Set<Int> = [scope]
+        var previous: Set<Int> = []
+        while scopes != previous {
+            previous = scopes
+            for group in stickyGroups where !group.isDisjoint(with: scopes) {
+                scopes.formUnion(group)
+            }
+        }
+        return scopes
+    }
+
+    private func setScriptMoveOrigin(_ origin: NSPoint, scope: Int, followers: Set<Int>) {
+        guard let character = characters[scope], let old = character.windowFrame else { return }
+        character.setOrigin(origin)
+        guard let updated = character.windowFrame else { return }
+        let delta = NSPoint(x: updated.minX - old.minX, y: updated.minY - old.minY)
+        for follower in followers {
+            characters[follower]?.moveBy(delta: delta, reason: .programmatic)
+        }
+    }
+
+    var activeScriptMoveScopes: Set<Int> {
+        Set(scriptMoves.keys)
     }
 
     private func scriptMoveOrigin(scope: Int, x: Int?, y: Int?, options: [String]) -> NSPoint? {
@@ -988,6 +1059,10 @@ public final class SurfaceWindowController {
     }
 
     public func resetContent() {
+        for move in scriptMoves.values {
+            move.task.cancel()
+        }
+        scriptMoves.removeAll()
         zOrderGroups.removeAll()
         for character in characters.values {
             character.discard()

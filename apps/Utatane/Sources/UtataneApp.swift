@@ -7454,6 +7454,37 @@ private struct UtataneRootView: View {
     }
 
     private func selectAndImportSSPDirectory() {
+        Task {
+            let candidates = await Task.detached { SSPInstallationLocator().locate() }.value
+            guard !candidates.isEmpty else {
+                selectSSPDirectoryManually()
+                return
+            }
+            let alert = NSAlert()
+            alert.messageText = String(localized: "SSPが見つかった")
+            alert.informativeText = String(localized: "取り込み元を選んで。ゴーストとバルーンをコピーする。同名のコンテンツは上書きしない。")
+            let selection = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 520, height: 28))
+            for candidate in candidates {
+                selection.addItem(withTitle: "\(candidate.environment) — \(candidate.directory.path)")
+            }
+            alert.accessoryView = selection
+            alert.addButton(withTitle: String(localized: "取り込む"))
+            alert.addButton(withTitle: String(localized: "別のフォルダを選ぶ…"))
+            alert.addButton(withTitle: String(localized: "キャンセル"))
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:
+                let index = selection.indexOfSelectedItem
+                if candidates.indices.contains(index) {
+                    importSSPContents(from: candidates[index].directory)
+                }
+            case .alertSecondButtonReturn:
+                selectSSPDirectoryManually()
+            default: break
+            }
+        }
+    }
+
+    private func selectSSPDirectoryManually() {
         let panel = NSOpenPanel()
         panel.canChooseFiles = false
         panel.canChooseDirectories = true
@@ -7563,6 +7594,7 @@ private struct UtataneRootView: View {
         }
         let options = Set((request.value(for: "Option") ?? "").lowercased().split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) })
         let owned = request.value(for: "ID") == target.ghost.rootDirectory.lastPathComponent
+            || request.value(for: "ID") == SSTPFMORecord.identifier(for: target.ghost.rootDirectory)
         guard target.player.acceptsSSTP(owned: owned, queues: ["SEND", "NOTIFY"].contains(request.method) && options.contains("nobreak")) else {
             return SSTPResponse(statusCode: 409, reason: "Conflict")
         }
@@ -7716,6 +7748,25 @@ private struct UtataneRootView: View {
         let target = sstpTarget(for: request)
         let data: String?
         switch parsed.name.lowercased() {
+        case "getfmo":
+            var targets: [(InstalledGhost, InstalledShell?, SakuraScriptPlayer)] = []
+            if let currentGhost, session != nil {
+                targets.append((currentGhost, selectedShell, scriptPlayer))
+            }
+            targets.append(contentsOf: calledGhosts.values.map { ($0.ghost, $0.shell, $0.player) })
+            data = SSTPFMORecord.serialize(targets.sorted { $0.0.rootDirectory.path < $1.0.rootDirectory.path }.map { ghost, shell, player in
+                SSTPFMORecord(
+                    ghostDirectory: ghost.rootDirectory,
+                    basewareDirectory: ContentRoot.contentDirectory,
+                    name: ghost.characterName(for: 0, shell: shell) ?? ghost.name,
+                    partnerName: ghost.characterName(for: 1, shell: shell) ?? "",
+                    fullName: ghost.name,
+                    surfaces: Dictionary(uniqueKeysWithValues: [0, 1].compactMap { scope in
+                        player.runtimePropertyValue(for: "currentghost.scope(\(scope)).surface.num")
+                            .flatMap(Int.init).map { (scope, $0) }
+                    })
+                )
+            })
         case "getname":
             guard let target else { return SSTPResponse(statusCode: 503, reason: "Service Unavailable") }
             data = [

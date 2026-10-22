@@ -5,7 +5,7 @@
 UtataneはSocket SSTPとSSTP over HTTPを扱います。Windowsの`WM_COPYDATA`を使うDirect SSTPは、macOSでは対象外です。
 
 調査日: 2026-10-07（状態取得・割り込み制御・表示プロパティを追記）
-調査結果: ✅ 19 / 🟡 3 / ❌ 0 / ➖ 3
+調査結果: ✅ 19 / 🟡 4 / ❌ 0 / ➖ 3
 
 ## 通信と共通仕様
 
@@ -52,7 +52,10 @@ SEND／NOTIFYは`Ghost`または`ReceiverGhostName`で起動中ゴーストを�
 | CompressArchive／ExtractArchive | 🟡 | ghost/master配下に限定した安全なZIP操作。SSP管理下全フォルダや暗号化ZIP完全互換は未対応 |
 | DumpSurface | 🟡 | scope・surface指定・crop・prefix・eventの位置／名前付き引数からPNGを出力。対象ゴーストを選択できる。animation指定で基本パターンを連番出力。別アニメーションの開始・停止、動画・拡縮パターンは未対応 |
 | DumpBalloon | 🟡 | 対象ゴースト・scopeの保持中バルーンをPNGへ出力。位置／名前付き引数、prefix、event、hideを受理。実バルーンとの画素照合は未確認 |
-| GetFMO／ReceiverGhostHWnd | ➖ | WindowsのFMO／HWND依存のためmacOS対象外 |
+| GetFMO | 🟡 | 起動中のメイン・呼び出しゴーストの32文字ID、name、keroname、fullname、path、ghostpathと現在のsakura.surface／kero.surfaceをSOH・CRLF区切りで返す。IDはOwned SSTPでも受理。Windows共有メモリ、HWNDとmodulestateは未提供。実アプリと外部クライアントでの往復確認は未実施 |
+| ReceiverGhostHWnd | ➖ | WindowsのHWND依存のためmacOS対象外 |
 | MoveAsync／SetTrayIcon／SetTrayBalloon | ➖ | macOSに同等のSSP tray／HWND機構がないため対象外 |
 
 `Command[param1,param2]`と`Reference0`以降の両方の引数形式を受理します。レスポンス追加データはUKADOCどおりヘッダー後の空行に続けて返します。
+
+`GetFMO`のIDはゴーストの配置パスから生成するため、移動すると変わります。`path`はUtataneのコンテンツルート、`ghostpath`はゴーストのルートです。起動中のゴーストがない場合は空の追加データを返します。受信口は引き続きloopback限定です。

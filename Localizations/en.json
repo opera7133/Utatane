@@ -1,4 +1,8 @@
 {
+  "SSPが見つかった" : "SSP Found",
+  "取り込み元を選んで。ゴーストとバルーンをコピーする。同名のコンテンツは上書きしない。" : "Choose an SSP folder. Ghosts and balloons will be copied. Existing content with the same name will not be overwritten.",
+  "取り込む" : "Import",
+  "別のフォルダを選ぶ…" : "Choose Another Folder…",
   "このゴーストに必要なモジュールがありません" : "Modules Required by This Ghost Are Missing",
   "状態" : "Status",
   "未導入" : "Not Installed",

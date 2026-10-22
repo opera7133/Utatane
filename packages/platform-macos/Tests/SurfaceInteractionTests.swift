@@ -9,6 +9,69 @@ import UtataneSakuraScript
 import UtataneShell
 
 @Test @MainActor
+func `script moves follow sticky groups unless explicitly ignored and replace active moves`() async throws {
+    let (defaults, positions) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try makePNG(width: 40, height: 60).write(to: root.appending(path: "surface0.png"))
+    let surfaces = SurfaceWindowController(positionStore: positions)
+    surfaces.setPlacement(locksToDesktopBottom: false, keepsOnScreen: false)
+    try surfaces.show(shell: ShellDefinition(directory: root, surfaces: [:]), defaultSurfaceIDs: [0: 0, 1: 0, 2: 0])
+    defer { surfaces.resetContent() }
+    await surfaces.moveSurface(scope: 0, x: 100, y: 300, time: 0, isAsync: false)
+    await surfaces.moveSurface(scope: 1, x: 200, y: 300, time: 0, isAsync: false)
+    await surfaces.moveSurface(scope: 2, x: 300, y: 300, time: 0, isAsync: false)
+    surfaces.setStickyWindows(scopes: [0, 1])
+    surfaces.setStickyWindows(scopes: [1, 2])
+    await surfaces.moveSurface(x: 120, y: 320, time: 0, isAsync: false)
+    #expect(surfaces.windowFrame(for: 1)?.origin == NSPoint(x: 220, y: 320))
+    #expect(surfaces.windowFrame(for: 2)?.origin == NSPoint(x: 320, y: 320))
+    await surfaces.moveSurface(x: 50, y: 0, time: 0, isAsync: false, options: ["--base=me", "--option=ignore-sticky-window"])
+    #expect(surfaces.windowFrame(for: 0)?.minX == 170)
+    #expect(surfaces.windowFrame(for: 1)?.minX == 220)
+
+    await surfaces.moveSurface(x: 900, y: nil, time: 10000, isAsync: true)
+    try await requireEventually { (surfaces.windowFrame(for: 0)?.minX ?? 0) > 170 }
+    // A new move in the same linked group replaces the whole old movement.
+    await surfaces.moveSurface(scope: 1, x: 400, y: nil, time: 30, isAsync: false)
+    #expect(surfaces.activeScriptMoveScopes.isEmpty)
+    #expect(surfaces.windowFrame(for: 1)?.minX == 400)
+    #expect(abs((surfaces.windowFrame(for: 0)?.minX ?? 0) - 350) < 0.001)
+    #expect(abs((surfaces.windowFrame(for: 2)?.minX ?? 0) - 500) < 0.001)
+}
+
+@Test @MainActor
+func `moveasync cancel from a later script stops only the current scope and reset stops all moves`() async throws {
+    let (defaults, positions) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try makePNG(width: 40, height: 60).write(to: root.appending(path: "surface0.png"))
+    let surfaces = SurfaceWindowController(positionStore: positions)
+    surfaces.setPlacement(locksToDesktopBottom: false, keepsOnScreen: false)
+    try surfaces.show(shell: ShellDefinition(directory: root, surfaces: [:]), defaultSurfaceIDs: [0: 0, 1: 0])
+    let player = SakuraScriptPlayer(surfaceWindowController: surfaces, balloonWindowController: BalloonWindowController(positionStore: positions))
+    defer { player.cancel(); surfaces.resetContent() }
+    await surfaces.moveSurface(x: 100, y: 300, time: 0, isAsync: false)
+    await surfaces.moveSurface(scope: 1, x: 200, y: 300, time: 0, isAsync: false)
+    await player.playAndWait(SakuraScript(rawValue: #"\0\![moveasync,--X=1000,--time=10000,--base=me]\e"#), balloon: makeBalloon(directory: root))
+    try await requireEventually { (surfaces.windowFrame(for: 0)?.minX ?? 0) > 100 }
+    await surfaces.moveSurface(scope: 1, x: 500, y: nil, time: 10000, isAsync: true)
+    await player.playAndWait(SakuraScript(rawValue: #"\0\![moveasync,cancel]\e"#), balloon: makeBalloon(directory: root))
+    let stopped = surfaces.windowFrame(for: 0)
+    try await requireEventually { surfaces.activeScriptMoveScopes == [1] }
+    // Wait for a separate real movement to finish, rather than sleeping for a fixed interval.
+    await surfaces.moveSurface(scope: 1, x: 250, y: nil, time: 30, isAsync: false)
+    #expect(surfaces.windowFrame(for: 0) == stopped)
+    await surfaces.moveSurface(scope: 1, x: 500, y: nil, time: 10000, isAsync: true)
+    surfaces.resetContent()
+    #expect(surfaces.activeScriptMoveScopes.isEmpty)
+}
+
+@Test @MainActor
 func `script movement aligns panels to a scope and converts top left coordinates`() async throws {
     let (defaults, positions) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }

@@ -2611,6 +2611,35 @@
         }
       }
     },
+    "SSPが見つかった" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSP Found"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SSP를 찾았어"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找到 SSP"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "找到 SSP"
+          }
+        }
+      }
+    },
     "SSPフォルダから取り込む…" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10412,6 +10441,35 @@
         }
       }
     },
+    "別のフォルダを選ぶ…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose Another Folder…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "다른 폴더 선택…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择其他文件夹…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇其他資料夾…"
+          }
+        }
+      }
+    },
     "別の配布元を使う場合は、HTTPSのURLと、その配布元が公開した署名鍵を両方指定する。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10611,6 +10669,64 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "原作／發佈者"
+          }
+        }
+      }
+    },
+    "取り込み元を選んで。ゴーストとバルーンをコピーする。同名のコンテンツは上書きしない。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose an SSP folder. Ghosts and balloons will be copied. Existing content with the same name will not be overwritten."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가져올 SSP 폴더를 골라. 고스트와 벌룬을 복사하고 같은 이름의 콘텐츠는 덮어쓰지 않아."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择导入来源。将复制 Ghost 和气球，不会覆盖同名内容。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇匯入來源。將複製 Ghost 和氣球，不會覆寫同名內容。"
+          }
+        }
+      }
+    },
+    "取り込む" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Import"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "가져오기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "导入"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "匯入"
           }
         }
       }

@@ -60,7 +60,7 @@ UKADOC分類行数: 150
 | `\![set,alpha,...]` | ✅ | scope別の0〜100指定、上限クランプ、負値で値を維持した再描画、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
 | effect / effect2 / filter | ➖ | SSPのWindows用サーフェスエフェクトプラグインを呼ぶ命令。互換プラグイン実行基盤がmacOSにないため対象外 |
 | `\4`, `\5` | ✅ | `\4`（他キャラから離れる方向への一定移動）と `\5`（他キャラとの隣接位置への接近移動）に対応 |
-| `\![move]`, `\![moveasync]` | 🟡 | 同期・非同期移動、スコープ番号・me・screen・primaryscreen・globalの基準、base-offset／move-offsetのleft・right・top・bottom・center・baseに対応。新旧引数、Y下向き座標とfixをテスト済み。他ゴーストの名前による基準、非同期移動のcancel、moveによるsticky-window追従とoption群は未対応 |
+| `\![move]`, `\![moveasync]` | 🟡 | 同期・非同期移動、スコープ番号・me・screen・primaryscreen・globalの基準、base-offset／move-offsetのleft・right・top・bottom・center・baseに対応。新旧引数、Y下向き座標とfixをテスト済み。非同期移動の`cancel`、sticky-window追従、`--option=ignore-sticky-window`を自動テスト済み。実画面での再確認と他ゴーストの名前による基準は未対応 |
 | `\![set/reset,position...]` | ✅ | `set,position,x,y,scope`で指定scopeをスクリーン座標へ移動してドラッグ固定し、`reset,position`で全scopeの固定を解除 |
 | `\![set/reset,zorder...]` | 🟡 | surfaceスコープの前後関係を左から手前の順として保持。複数グループ、サーフェス更新・再表示・シェル再読み込み後の維持とresetによる解除をテスト済み。balloonを含む個別ウィンドウ指定は未対応 |
 | `\![set/reset,sticky-window...]` | ✅ | `\![set,sticky-window,スコープ...]` による複数キャラクターウィンドウの連動ドラッグ移動と、`\![reset,sticky-window]` による解除に対応 |
@@ -256,7 +256,7 @@ SakuraScript以外の仕様について、対応を進める領域をまとめ�
 | SAORI/1.0 | 🟡 | SSU等の限定ネイティブ互換。任意SAORI、Windows DLL汎用実行は対象外 |
 | HEADLINE/2.0 | 🟡 | native `config.txt` とWine DLL fallback。全応答差異は未照合 |
 | DLL規格 | 🟡 | SHIORIはnative実装と限定Wine経路。一般Windows DLLは対象外 |
-| FMO / MUTEX | ❌ | Windows固有FMOは対象外。macOS向け互換公開方式も未設計 |
+| FMO / MUTEX | 🟡 | SSTP `GetFMO`で起動中ゴーストの名前・パス・サーフェスを公開。Windows共有メモリ・MUTEX・HWND互換は対象外 |
 | Web関連 | 🟡 | homeurl更新、RSS/Atom、SSTP over HTTP中心。全仕様未照合 |
 | Property System | 🟡 | 大文字小文字を無視する値解決、組み込みsystem/baseware値、動的な値登録、書込可否管理をコアに実装。SakuraScript・ゴースト一覧・UI状態との接続は未完 |
 
