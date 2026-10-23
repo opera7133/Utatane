@@ -116,6 +116,18 @@ swift run --package-path packages utatane-validate --json "/path/to/ghost"
 
 開発用パレットには、SHIORI Requestの手動送信・ログからの再送、表示中ログのコピー・保存、時計イベントと予定通知を確認する仮想時刻があります。仮想時刻は指定した瞬間から実時間と同じ速さで進み、無効にするとシステム時刻へ戻ります。
 
+開発用パレットの「内蔵SAORI」には、関数の単体テストと、実際のホストから呼ばれた内蔵SAORIのメタデータ記録があります。応答や制限は[SHIORI・SAORIの利用](../Support/Native-SHIORI.md#日時計算と開発用の確認)を参照してください。「更新チェックのみ」と仮想時刻は既存の開発ツールから使えます。仮想時刻が変更するのは時計イベント・予定通知で、SHIORI自身の時計やinternal_timeのnowはOSの時刻のままです。
+
+実ゴーストの辞書を通す検証は、ローカル導入済みのria・momochi・CLDSP2+と、改修版のYAYA 5/6・里々・華和梨のuniversal dylibを指定して実行します。元ファイルを変更せず、一時コピーへ検証用イベントを追加します。配布素材はテストfixtureとしてリポジトリへ追加しません。
+
+```sh
+UTATANE_REAL_SAORI_GHOST_ROOT="$PWD/Content/Local/Ghosts" \
+UTATANE_INTERNAL_SAORI_TEST_ROOT=/path/to/rebuilt/libraries \
+swift test --package-path packages --filter RealGhostInternalSaori
+```
+
+ライブラリの名前はlibyaya.dylib・libyaya-6.dylib・libsatori.dylib・libkawari.dylibです。テストはarm64とx86_64を実行するため、Apple SiliconではRosettaも必要です。実際の画面操作は、改修版の本体とModulesを組み合わせて別途確認してください。パレットで日時変換の応答を確認し、実ゴーストの会話・切替・再読み込みと、仮想時刻で時計イベントを進めた後の表示を確認します。仮想時刻は確認後に「実時間に戻す」で解除してください。
+
 ## 同梱コンテンツとローカル検証データ
 
 再配布条件を確認済みの同梱コンテンツは`Content/Bundled`で管理します。riaの会話、シェル、専用バルーンを変更するときはこちらだけを編集してください。

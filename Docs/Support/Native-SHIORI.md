@@ -27,19 +27,39 @@ YAYAは6系を既定で使います。`yaya.dll`・`aya.dll`・`aya5.dll`のバ�
 | モジュール | 対応関数 | 制限 |
 | --- | --- | --- |
 | `internal_system` | `ListModules`、`ListFunctions` | 対応しているモジュール・関数だけを返す |
+| `internal_time` | `Format`、`Add`、`Diff` | エポック秒、ISO日時、HTTP IMF-fixdate。local・UTC・±18時間以内のオフセット・macOSのIANAゾーンに対応。Windows名は未対応 |
 | `internal_text` | `Normalize` | NFC、NFD、NFKC、NFKD |
 | `internal_random` | `Bytes`、`Number`、`UUID` | Bytesは1〜1024バイト、NumberはInt64の閉区間、UUIDはv4/v7 |
 | `internal_data` | `Convert` | text（UTF-8）、hex、base64、base64url。圧縮・展開、他の形式は未対応 |
 | `internal_crypto` | `Digest`、`HMAC` | Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。ファイル入力、暗号化・鍵生成等は未対応 |
 
-引数・返却値の基準は[UKADOCのSAORI over DirectSSTP](https://ssp.shillest.net/ukadoc/manual/spec_saori_ex.html)です。YAYAでは`LOADLIB`／`REQUESTLIB`、里々では`＠SAORI`による登録または`（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）`のようなモジュール名の呼び出し、華和梨では`$(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)`を使えます。通常のSAORIでは、引き続きmacOS用モジュールが必要です。
+引数・返却値の基準は[UKADOCのSAORI over DirectSSTP](https://ssp.shillest.net/ukadoc/manual/spec_saori_ex.html)です。YAYAでは`FUNCTIONEX`または`LOADLIB`／`REQUESTLIB`、里々では`＠SAORI`による登録または`（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）`のようなモジュール名の呼び出し、華和梨では`$(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)`を使えます。通常のSAORIでは、引き続きmacOS用モジュールが必要です。
 
 `--async=識別子`をオプションに加えると即座に204を返し、結果を`OnInternalSaoriComplete`／`OnInternalSaoriFailure`へGETで通知します。識別子が`On`で始まる場合は、その名前／末尾に`Failure`を加えた名前を使います。Reference0は識別子、1は結果または失敗理由、2はモジュール名、3は関数名、成功時の4以降はValue0以降です。終了・SHIORI再読み込み後には配送しません。同時処理は2〜4件、保留はセッションあたり64件までです。
 
 macOSでは、SHIORIの専用ホストと本体を結ぶ非公開の親子プロセス通信を使用します。WindowsのHWND／WM_COPYDATA、外部XPC、Socket／HTTP経由のSAORI実行には対応していません。UTF-8とShift_JIS（CP932）、最大256引数、8MiBの要求・応答を扱います。未対応の方式や不正な引数は400、処理失敗は500を返します。表示できないバイト列や改行はbase64等で渡してください。
 
-合成辞書と実SHIORIを使用した自動テストで検証しています。配布ゴーストの画面・会話を使った利用者の実機確認は未実施です。
+合成辞書に加え、手元のりあ・ももち・CLDSP2+の一時コピーへ検証用イベントを追加し、実際のフレームワークから同期呼び出し、非同期通知、結果イベントの利用をテストします。元の辞書・保存データは変更しません。画面・会話を使った利用者の実機確認とは別の検証です。
 
 ## 共通SAORIブリッジ
 
 Utataneが提供するSAORIと対応する命令は、[共通SAORIブリッジの一覧](https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md#共通saoriブリッジ)を参照してください。独自の外部SHIORIが読み込むSAORIは、そのSHIORI側で管理します。
+
+## 日時計算と開発用の確認
+
+`internal_time`の`Format`は日時と書式、`Add`は日時・整数の量・単位、`Diff`は日時1・日時2・単位を取ります。`--tz=`は位置引数の後に置きます。Formatの書式を省略してオプションを渡す場合、空の位置引数を置いてください。
+
+```text
+Format / 0 / %Y/%m/%d %H:%M (%a) / --tz=+09:00
+→ 1970/01/01 09:00 (Thu)
+Add / 2024-01-31T12:00Z / 1 / month / --tz=UTC
+→ 1709208000
+Diff / 2026-12-20T10:00 / 2026-12-24 / day / --tz=UTC
+→ 3
+```
+
+書式はiso8601・rfc3339・http・epoch・epochmsとUKADOCの%書式です。HTTP入力はIMF-fixdate形式に限ります。秒・分・時間は経過時間、日・週・月・年は指定ゾーンの暦で計算し、月末を丸めます。整数はUTCの西暦1〜9999年、文字列は1601年以降です。存在しない日付や夏時間開始時の存在しない時刻は400です。夏時間終了時の重複時刻はmacOSのCalendarが選ぶ時刻を使います。明確に指定する場合はUTCオフセットを付けてください。名前付きゾーンの過去の規則はmacOSの情報を使うため、Windowsと一致するとは限りません。`now`はOSの現在時刻で、開発用パレットの仮想時刻には連動しません。
+
+開発用パレットの「内蔵SAORI」で、モジュールと1行1引数を入力して単体テストできます。空行は空引数です。応答全文と所要時間を画面へ表示しますが、要求や結果本文を自動ログには保存しません。この単体テストは本体を直接呼び、SHIORI接続の検証やゴーストへのイベント送信は行いません。`--async`はghost requiredになります。
+
+「内蔵SAORIの呼び出しを記録」をオンにすると、その後の呼び出しをInternalSAORIカテゴリへ記録します。同期応答・非同期受付・非同期処理結果について、セッション識別子、モジュール、関数、状態コード、所要時間、応答バイト数を確認できます。引数、結果本文、非同期識別子は記録しません。記録は初期状態でオフです。従来のSAORI dylibとWindows DLLの呼び出しは記録対象外です。

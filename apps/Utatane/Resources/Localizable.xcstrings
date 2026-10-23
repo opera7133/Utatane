@@ -494,6 +494,35 @@
         }
       }
     },
+    "1行目を関数名、2行目以降を引数として入力する。空行も空の引数になる。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter the function name on the first line, followed by one argument per line. Blank lines count as empty arguments."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "첫 줄에 함수 이름을, 다음 줄부터 인수를 한 줄씩 입력해. 빈 줄도 빈 인수로 처리돼."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第一行输入函数名，后续每行输入一个参数。空行也会作为空参数。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "第一行輸入函式名稱，後續每行輸入一個引數。空行也會作為空引數。"
+          }
+        }
+      }
+    },
     "20秒" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2404,6 +2433,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "SAORI"
+          }
+        }
+      }
+    },
+    "SAORIを試す" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Run SAORI Test"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SAORI 테스트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "测试 SAORI"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "測試 SAORI"
           }
         }
       }
@@ -6903,6 +6961,35 @@
         }
       }
     },
+    "セッション・モジュール・関数・状態コード・所要時間のみ記録する。引数と結果本文は記録しない。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Records only session, module, function, status code and duration. Argument values and result bodies are omitted."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "세션, 모듈, 함수, 상태 코드와 소요 시간만 기록해. 인수와 결과 본문은 기록하지 않아."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅记录会话、模块、函数、状态码和耗时。不记录参数值和结果正文。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "僅記錄工作階段、模組、函式、狀態碼與耗時。不記錄引數值和結果本文。"
+          }
+        }
+      }
+    },
     "ソースコード" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10064,6 +10151,93 @@
         }
       }
     },
+    "内蔵SAORI" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Internal SAORI"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내장 SAORI"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内置 SAORI"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "內建 SAORI"
+          }
+        }
+      }
+    },
+    "内蔵SAORIの呼び出しを記録" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Record Internal SAORI Calls"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내장 SAORI 호출 기록"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记录内置 SAORI 调用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記錄內建 SAORI 呼叫"
+          }
+        }
+      }
+    },
+    "内蔵SAORI単体テスト" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Test Internal SAORI"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내장 SAORI 단독 테스트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内置 SAORI 单独测试"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "內建 SAORI 單獨測試"
+          }
+        }
+      }
+    },
     "再導入" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10988,6 +11162,64 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "重新命名"
+          }
+        }
+      }
+    },
+    "呼び出しログを見る" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Show Call Log"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "호출 로그 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看调用日志"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看呼叫記錄"
+          }
+        }
+      }
+    },
+    "呼び出し診断" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Call Diagnostics"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "호출 진단"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "调用诊断"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "呼叫診斷"
           }
         }
       }
@@ -13337,6 +13569,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "未選取"
+          }
+        }
+      }
+    },
+    "本体の機能だけを実行する。SHIORI接続やゴーストへの非同期通知はこのテストの対象外。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Runs baseware functions only. This test does not verify SHIORI connections or asynchronous events sent to ghosts."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "본체 기능만 실행해. SHIORI 연결과 고스트에 대한 비동기 알림은 이 테스트에서 확인하지 않아."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "仅运行本体功能。此测试不验证 SHIORI 连接或发送给 Ghost 的异步通知。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "僅執行本體功能。此測試不驗證 SHIORI 連線或傳送給 Ghost 的非同步通知。"
           }
         }
       }

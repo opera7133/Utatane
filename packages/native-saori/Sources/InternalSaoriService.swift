@@ -10,12 +10,17 @@ public struct InternalSaoriService: Sendable {
     private static let functions = [
         "internal_system": ["ListModules", "ListFunctions"],
         "internal_text": ["Normalize"],
+        "internal_time": ["Format", "Add", "Diff"],
         "internal_random": ["Bytes", "Number", "UUID"],
         "internal_data": ["Convert"],
         "internal_crypto": ["Digest", "HMAC"]
     ]
 
-    public init() {}
+    private let now: @Sendable () -> Date
+
+    public init(now: @escaping @Sendable () -> Date = Date.init) {
+        self.now = now
+    }
 
     public static func moduleName(_ path: String) -> String? {
         var name = path.replacingOccurrences(of: "\\", with: "/").split(separator: "/").last.map(String.init)?.lowercased() ?? ""
@@ -75,6 +80,8 @@ public struct InternalSaoriService: Sendable {
             guard let function = available.first(where: { $0.caseInsensitiveCompare(values[0]) == .orderedSame }) else { throw Failure("unknown function") }
             let result = try execute(module: module, function: function, arguments: Array(values.dropFirst()), validatesOnly: validatesOnly)
             return encode(status: result.0.isEmpty ? 204 : 200, result: result.0, values: result.1, charset: charset)
+        } catch let failure as InternalSaoriTime.Failure {
+            return encode(status: 400, error: failure.message, charset: charset)
         } catch let failure as Failure {
             return encode(status: failure.status, error: failure.message, charset: charset)
         } catch { return encode(status: 500, error: "internal error", charset: charset) }
@@ -114,7 +121,7 @@ public struct InternalSaoriService: Sendable {
         switch (module, function) {
         case ("internal_system", "ListModules"), ("internal_random", "UUID"): return 0
         case ("internal_system", "ListFunctions"), ("internal_random", "Bytes"), ("internal_data", _): return 1
-        case ("internal_text", _), ("internal_random", "Number"), ("internal_crypto", "Digest"): return 2
+        case ("internal_time", "Format"), ("internal_text", _), ("internal_random", "Number"), ("internal_crypto", "Digest"): return 2
         default: return 3
         }
     }
@@ -125,13 +132,19 @@ public struct InternalSaoriService: Sendable {
         switch (module, function) {
         case ("internal_system", "ListModules"): count = 0; allowed = []
         case ("internal_system", "ListFunctions"): count = 1; allowed = []
+        case ("internal_time", "Format"): count = 2; allowed = ["tz"]
+        case ("internal_time", _): count = 3; allowed = ["tz"]
         case ("internal_text", _): count = 2; allowed = []
         case ("internal_random", "Bytes"): count = 1; allowed = ["out"]
         case ("internal_random", "Number"): count = 2; allowed = []
         case ("internal_random", "UUID"): count = 0; allowed = ["version"]
-        case ("internal_data", _): count = 1; allowed = ["in", "out"]
+        case ("internal_data", _): count = 1; allowed = ["in", "data-in", "out"]
         case ("internal_crypto", "Digest"): count = 2; allowed = ["data-in", "out"]
         default: count = 3; allowed = ["key-in", "data-in", "out"]
+        }
+        var arguments = arguments
+        if module == "internal_time", function == "Format", arguments.count == 1 {
+            arguments.append("")
         }
         guard arguments.count >= count else { throw Failure("invalid parameter") }
         let positional = Array(arguments.prefix(count))
@@ -146,6 +159,8 @@ public struct InternalSaoriService: Sendable {
             return ("", [])
         }
         switch module {
+        case "internal_time":
+            return try (InternalSaoriTime.execute(function, arguments: arguments, now: now()), [])
         case "internal_system":
             let list: [String]
             if function == "ListModules" {
@@ -189,7 +204,7 @@ public struct InternalSaoriService: Sendable {
             guard let size = Int(positional[0]), (1 ... 1024).contains(size) else { throw Failure("out of range") }
             return try (format(Data(randomBytes(size)), as: options["out"] ?? "hex"), [])
         case "internal_data":
-            return try (format(decode(positional[0], as: options["in"] ?? "text"), as: options["out"] ?? "text"), [])
+            return try (format(decode(positional[0], as: options["data-in"] ?? options["in"] ?? "text"), as: options["out"] ?? "text"), [])
         default:
             let algorithm = positional[0].lowercased()
             let data = try decode(positional[function == "Digest" ? 1 : 2], as: options["data-in"] ?? "text")

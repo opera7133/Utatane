@@ -5,7 +5,7 @@ import UtataneModuleHost
 import UtataneNativeSaori
 import UtataneShiori
 
-private final class CompletionBox: @unchecked Sendable {
+final class InternalSaoriCompletionBox: @unchecked Sendable {
     private let lock = NSLock()
     private var event: InternalSaoriEvent?
     private var waiter: CheckedContinuation<InternalSaoriEvent?, Never>?
@@ -84,7 +84,7 @@ struct InternalSaoriIntegrationTests {
             try #require(LegacyTextDecoder.encode(dictionary, charset: "Shift_JIS")).write(to: master.appending(path: "kawarirc.kis"))
         }
         let library = modules.appending(path: "lib\(kind).dylib")
-        let box = CompletionBox()
+        let box = InternalSaoriCompletionBox()
         let session = try NativeShioriSession(directoryURL: master, moduleURL: library, onInternalSaoriEvent: box.receive, hostURL: helper)
         if kind == "kawari" {
             _ = try session.request("NOTIFY SHIORI/3.0\r\nCharset: UTF-8\r\nSecurityLevel: Local\r\nID: hwnd\r\nReference0: 1\r\n\r\n")

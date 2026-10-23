@@ -25,6 +25,7 @@ public final class InternalSaoriSession: @unchecked Sendable {
         return queue
     }()
 
+    private let diagnosticID = UUID()
     private let lock = NSLock()
     private var closed = false
     private var pending = 0
@@ -51,6 +52,13 @@ public final class InternalSaoriSession: @unchecked Sendable {
     }
 
     public func response(to data: Data) -> Data {
+        let started = DispatchTime.now().uptimeNanoseconds
+        let result = process(data)
+        InternalSaoriDiagnostics.shared.record(request: data, response: result, started: started, session: diagnosticID)
+        return result
+    }
+
+    private func process(_ data: Data) -> Data {
         guard isCurrent else { return error("ghost required") }
         guard data.count <= InternalSaoriService.maximumBytes,
               !data.contains(0), data.suffix(4) == Data("\r\n\r\n".utf8),
@@ -103,7 +111,9 @@ public final class InternalSaoriSession: @unchecked Sendable {
             guard let self else { return }
             defer { lock.withLock { pending -= 1 } }
             guard isCurrent else { return }
+            let started = DispatchTime.now().uptimeNanoseconds
             let data = service.response(to: encoded)
+            InternalSaoriDiagnostics.shared.record(request: encoded, response: data, started: started, session: diagnosticID, completion: true)
             guard let result = LegacyTextDecoder.decode(data, strictlyUsing: charset.lowercased() == "shift_jis" ? "CP932" : charset) else { return }
             var fields: [String: String] = [:]
             for line in result.components(separatedBy: "\r\n").dropFirst() {

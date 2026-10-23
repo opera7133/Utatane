@@ -82,7 +82,7 @@
 
 ![「詳細」の設定内容（画面の一部）](../../website/public/assets/screenshots/settings-advanced.png)
 
-「開発用パレットを表示」でログ、当たり判定、バルーンテスト、SakuraScript入力、再生操作を表示します。通常は非表示で構いません。
+「開発用パレットを表示」でログ、当たり判定、バルーンテスト、SakuraScript入力、再生操作、内蔵SAORIの単体テスト・呼び出し診断を表示します。通常は非表示で構いません。
 
 「Wine実行ファイル」「WINEPREFIX」はWindows互換モジュール用です。Wineがなくても動くゴーストがあります。まず対応範囲を確認し、必要な場合に設定します。Wineを設定してもすべてのWindows DLL・EXEが動くことを保証するものではありません。
 

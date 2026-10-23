@@ -127,6 +127,7 @@ let package = Package(
             name: "UtatanePlatformMacOS",
             dependencies: [
                 "CNicxliveRenderer",
+                "UtataneNativeSaori",
                 "UtataneBalloon",
                 "UtataneContentValidator",
                 "UtataneCore",

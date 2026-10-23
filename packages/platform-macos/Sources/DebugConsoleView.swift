@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import UtataneCore
+import UtataneNativeSaori
 
 public struct DeveloperSurfaceTestItem: Identifiable, Sendable, Equatable {
     public struct Animation: Identifiable, Sendable, Equatable {
@@ -101,6 +102,7 @@ public struct DebugConsoleView: View {
         case logs = "ログ"
         case tools = "開発ツール"
         case shioriRequest = "SHIORI Request"
+        case saori = "内蔵SAORI"
 
         public var id: String {
             rawValue
@@ -168,6 +170,11 @@ public struct DebugConsoleView: View {
     @State private var shioriResponse: DeveloperSHIORIResponse?
     @State private var isSendingSHIORIRequest = false
     @State private var executesSHIORIResponse = false
+    @State private var capturesSAORI = InternalSaoriDiagnostics.shared.isEnabled
+    @State private var saoriModule = "internal_time"
+    @State private var saoriArguments = "Format\n0\n%Y/%m/%d %H:%M (%a)\n--tz=+09:00"
+    @State private var saoriResult: InternalSaoriProbeResult?
+    @State private var isRunningSAORI = false
 
     public init(
         model: GhostListModel,
@@ -283,6 +290,8 @@ public struct DebugConsoleView: View {
                 logContentArea
             case .tools:
                 developerTools
+            case .saori:
+                saoriPane
             case .shioriRequest:
                 shioriRequestTool
             }
@@ -453,6 +462,43 @@ public struct DebugConsoleView: View {
     private var selectedSurface: DeveloperSurfaceTestItem? {
         guard let selectedSurfaceID else { return nil }
         return surfaces.first { $0.id == selectedSurfaceID }
+    }
+
+    private var saoriPane: some View {
+        Form {
+            Section("内蔵SAORI単体テスト") {
+                Picker("モジュール", selection: $saoriModule) {
+                    ForEach(["internal_system", "internal_time", "internal_text", "internal_random", "internal_data", "internal_crypto"], id: \.self) { Text($0).tag($0) }
+                }
+                Text("1行目を関数名、2行目以降を引数として入力する。空行も空の引数になる。")
+                    .font(.caption).foregroundStyle(.secondary)
+                TextEditor(text: $saoriArguments).font(.body.monospaced()).frame(minHeight: 110)
+                Button("SAORIを試す") {
+                    let module = saoriModule
+                    let arguments = saoriArguments.components(separatedBy: "\n")
+                    isRunningSAORI = true
+                    saoriResult = nil
+                    Task {
+                        let result = await Task.detached { InternalSaoriProbe.run(module: module, arguments: arguments) }.value
+                        saoriResult = result
+                        isRunningSAORI = false
+                    }
+                }.disabled(isRunningSAORI)
+                Text("本体の機能だけを実行する。SHIORI接続やゴーストへの非同期通知はこのテストの対象外。")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let result = saoriResult {
+                    Text("\(result.elapsedMilliseconds.formatted(.number.precision(.fractionLength(3)))) ms").font(.caption.monospaced())
+                    ScrollView { Text(result.response).font(.body.monospaced()).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }.frame(minHeight: 100, maxHeight: 220)
+                }
+            }
+            Section("呼び出し診断") {
+                Toggle("内蔵SAORIの呼び出しを記録", isOn: $capturesSAORI)
+                    .onChange(of: capturesSAORI) { _, enabled in InternalSaoriDiagnostics.shared.isEnabled = enabled }
+                Text("セッション・モジュール・関数・状態コード・所要時間のみ記録する。引数と結果本文は記録しない。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("呼び出しログを見る") { selectedCategory = "InternalSAORI"; levelFilter = .all; pane = .logs }
+            }
+        }.formStyle(.grouped)
     }
 
     private var virtualTimeEnabled: Binding<Bool> {

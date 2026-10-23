@@ -12,7 +12,7 @@ private func internalResponse(_ module: String, _ arguments: [String], method: S
 @Test func `internal SAORI lists only callable modules and negotiates failures`() throws {
     let modules = try internalResponse("INTERNAL_SYSTEM", ["ListModules"])
     #expect(modules.contains("Value0: internal_crypto\r\n"))
-    #expect(!modules.contains("internal_time"))
+    #expect(modules.contains("internal_time"))
     let functions = try internalResponse("internal_system", ["ListFunctions", "internal_random"])
     #expect(functions.contains("Result: Bytes,Number,UUID\r\n"))
     #expect(try internalResponse("internal_unknown", [], method: "GET Version").contains("ErrorDescription: unknown module"))
@@ -42,7 +42,7 @@ private func internalResponse(_ module: String, _ arguments: [String], method: S
 }
 
 @Test func `internal data converts strictly without accepting malformed bytes`() throws {
-    #expect(try internalResponse("internal_data", ["Convert", "48656c6c6f", "--in=hex", "--out=base64"]).contains("Result: SGVsbG8=\r\n"))
+    #expect(try internalResponse("internal_data", ["Convert", "48656c6c6f", "--data-in=hex", "--out=base64"]).contains("Result: SGVsbG8=\r\n"))
     #expect(try internalResponse("internal_data", ["Convert", "_w", "--in=base64url", "--out=hex"]).contains("Result: ff\r\n"))
     #expect(try internalResponse("internal_data", ["Convert", "ff", "--in=hex"]).contains("not text"))
     #expect(try internalResponse("internal_data", ["Convert", "aaZ0", "--in=hex"]).contains("invalid encoding"))

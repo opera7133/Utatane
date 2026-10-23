@@ -624,5 +624,14 @@
   "非表示にしても、MenuBarのUtataneアイコンから設定や終了操作を開ける。" : "Even when hidden, you can open settings or quit from the Utatane icon in the menu bar.",
   "このバルーンは別のゴースト向けです" : "This Balloon Is Intended for Another Ghost",
   "「%@」は「%@」向けに作られています。現在のゴースト「%@」で使うと、表示が崩れることがあります。" : "“%@” was made for “%@”. It may not display correctly with the current ghost “%@”.",
-  "このまま使う" : "Use Anyway"
+  "このまま使う" : "Use Anyway",
+  "内蔵SAORI" : "Internal SAORI",
+  "内蔵SAORI単体テスト" : "Test Internal SAORI",
+  "1行目を関数名、2行目以降を引数として入力する。空行も空の引数になる。" : "Enter the function name on the first line, followed by one argument per line. Blank lines count as empty arguments.",
+  "SAORIを試す" : "Run SAORI Test",
+  "本体の機能だけを実行する。SHIORI接続やゴーストへの非同期通知はこのテストの対象外。" : "Runs baseware functions only. This test does not verify SHIORI connections or asynchronous events sent to ghosts.",
+  "呼び出し診断" : "Call Diagnostics",
+  "内蔵SAORIの呼び出しを記録" : "Record Internal SAORI Calls",
+  "セッション・モジュール・関数・状態コード・所要時間のみ記録する。引数と結果本文は記録しない。" : "Records only session, module, function, status code and duration. Argument values and result bodies are omitted.",
+  "呼び出しログを見る" : "Show Call Log"
 }
