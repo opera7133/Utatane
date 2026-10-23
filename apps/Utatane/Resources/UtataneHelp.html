@@ -898,6 +898,46 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 <p>5系は互換用として導入できます。使う場合は5系の<code>libyaya.dylib</code>を<code>ghost/master/</code>へ置き、<code>descript.txt</code>に<code>shiori.macos,libyaya.dylib</code>を指定してください。6系でハッシュや入れ子の変数を保存した後に5系へ戻すと、保存内容が崩れることがあります。Utataneを終了して、切り替え前の<code>*_variable.cfg</code>をバックアップから戻してから5系を使ってください。復元するとバックアップ後の進行状況は失われます。</p>
 <p>同梱する側の配置・指定方法は<a href="https://dl.wmsci.com/utatane/docs/create/shiori/">SHIORI開発ガイド</a>、各配布物の導入手順は<a href="https://github.com/opera7133/utatane-modules">Utatane Modules</a>にあります。</p>
 <p>通常のmacOS用SHIORIは、ゴースト・プラグインごとに別プロセスで実行します。応答停止や異常終了を検出した場合、実行済みの処理を重複させないため、自動で要求を再送しません。</p>
+<h3 id="support-engines-内蔵saori開発版">内蔵SAORI（開発版）</h3>
+<p>本体と、内蔵SAORI接続を追加した改修版のYAYA・里々・華和梨を組み合わせると、ゴーストへDLLを置かずに次の機能を呼べます。現在の公開版Utatane 0.2.16および従来のModules配布物にはこの接続はありません。カタログの公開・更新前は、ローカルでビルドした両方を使う必要があります。</p>
+<table>
+<thead>
+<tr>
+<th>モジュール</th>
+<th>対応関数</th>
+<th>制限</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>internal_system</code></td>
+<td><code>ListModules</code>、<code>ListFunctions</code></td>
+<td>対応しているモジュール・関数だけを返す</td>
+</tr>
+<tr>
+<td><code>internal_text</code></td>
+<td><code>Normalize</code></td>
+<td>NFC、NFD、NFKC、NFKD</td>
+</tr>
+<tr>
+<td><code>internal_random</code></td>
+<td><code>Bytes</code>、<code>Number</code>、<code>UUID</code></td>
+<td>Bytesは1〜1024バイト、NumberはInt64の閉区間、UUIDはv4/v7</td>
+</tr>
+<tr>
+<td><code>internal_data</code></td>
+<td><code>Convert</code></td>
+<td>text（UTF-8）、hex、base64、base64url。圧縮・展開、他の形式は未対応</td>
+</tr>
+<tr>
+<td><code>internal_crypto</code></td>
+<td><code>Digest</code>、<code>HMAC</code></td>
+<td>Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。ファイル入力、暗号化・鍵生成等は未対応</td>
+</tr>
+</tbody></table>
+<p>引数・返却値の基準は<a href="https://ssp.shillest.net/ukadoc/manual/spec_saori_ex.html">UKADOCのSAORI over DirectSSTP</a>です。YAYAでは<code>LOADLIB</code>／<code>REQUESTLIB</code>、里々では<code>＠SAORI</code>による登録または<code>（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）</code>のようなモジュール名の呼び出し、華和梨では<code>$(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)</code>を使えます。通常のSAORIでは、引き続きmacOS用モジュールが必要です。</p>
+<p><code>--async=識別子</code>をオプションに加えると即座に204を返し、結果を<code>OnInternalSaoriComplete</code>／<code>OnInternalSaoriFailure</code>へGETで通知します。識別子が<code>On</code>で始まる場合は、その名前／末尾に<code>Failure</code>を加えた名前を使います。Reference0は識別子、1は結果または失敗理由、2はモジュール名、3は関数名、成功時の4以降はValue0以降です。終了・SHIORI再読み込み後には配送しません。同時処理は2〜4件、保留はセッションあたり64件までです。</p>
+<p>macOSでは、SHIORIの専用ホストと本体を結ぶ非公開の親子プロセス通信を使用します。WindowsのHWND／WM_COPYDATA、外部XPC、Socket／HTTP経由のSAORI実行には対応していません。UTF-8とShift_JIS（CP932）、最大256引数、8MiBの要求・応答を扱います。未対応の方式や不正な引数は400、処理失敗は500を返します。表示できないバイト列や改行はbase64等で渡してください。</p>
+<p>合成辞書と実SHIORIを使用した自動テストで検証しています。配布ゴーストの画面・会話を使った利用者の実機確認は未実施です。</p>
 <h3 id="support-engines-共通saoriブリッジ">共通SAORIブリッジ</h3>
 <p>Utataneが提供するSAORIと対応する命令は、<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md#%E5%85%B1%E9%80%9Asaori%E3%83%96%E3%83%AA%E3%83%83%E3%82%B8">共通SAORIブリッジの一覧</a>を参照してください。独自の外部SHIORIが読み込むSAORIは、そのSHIORI側で管理します。</p>
 </section>

@@ -20,6 +20,26 @@ YAYAは6系を既定で使います。`yaya.dll`・`aya.dll`・`aya5.dll`のバ�
 
 通常のmacOS用SHIORIは、ゴースト・プラグインごとに別プロセスで実行します。応答停止や異常終了を検出した場合、実行済みの処理を重複させないため、自動で要求を再送しません。
 
+## 内蔵SAORI（開発版）
+
+本体と、内蔵SAORI接続を追加した改修版のYAYA・里々・華和梨を組み合わせると、ゴーストへDLLを置かずに次の機能を呼べます。現在の公開版Utatane 0.2.16および従来のModules配布物にはこの接続はありません。カタログの公開・更新前は、ローカルでビルドした両方を使う必要があります。
+
+| モジュール | 対応関数 | 制限 |
+| --- | --- | --- |
+| `internal_system` | `ListModules`、`ListFunctions` | 対応しているモジュール・関数だけを返す |
+| `internal_text` | `Normalize` | NFC、NFD、NFKC、NFKD |
+| `internal_random` | `Bytes`、`Number`、`UUID` | Bytesは1〜1024バイト、NumberはInt64の閉区間、UUIDはv4/v7 |
+| `internal_data` | `Convert` | text（UTF-8）、hex、base64、base64url。圧縮・展開、他の形式は未対応 |
+| `internal_crypto` | `Digest`、`HMAC` | Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。ファイル入力、暗号化・鍵生成等は未対応 |
+
+引数・返却値の基準は[UKADOCのSAORI over DirectSSTP](https://ssp.shillest.net/ukadoc/manual/spec_saori_ex.html)です。YAYAでは`LOADLIB`／`REQUESTLIB`、里々では`＠SAORI`による登録または`（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）`のようなモジュール名の呼び出し、華和梨では`$(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)`を使えます。通常のSAORIでは、引き続きmacOS用モジュールが必要です。
+
+`--async=識別子`をオプションに加えると即座に204を返し、結果を`OnInternalSaoriComplete`／`OnInternalSaoriFailure`へGETで通知します。識別子が`On`で始まる場合は、その名前／末尾に`Failure`を加えた名前を使います。Reference0は識別子、1は結果または失敗理由、2はモジュール名、3は関数名、成功時の4以降はValue0以降です。終了・SHIORI再読み込み後には配送しません。同時処理は2〜4件、保留はセッションあたり64件までです。
+
+macOSでは、SHIORIの専用ホストと本体を結ぶ非公開の親子プロセス通信を使用します。WindowsのHWND／WM_COPYDATA、外部XPC、Socket／HTTP経由のSAORI実行には対応していません。UTF-8とShift_JIS（CP932）、最大256引数、8MiBの要求・応答を扱います。未対応の方式や不正な引数は400、処理失敗は500を返します。表示できないバイト列や改行はbase64等で渡してください。
+
+合成辞書と実SHIORIを使用した自動テストで検証しています。配布ゴーストの画面・会話を使った利用者の実機確認は未実施です。
+
 ## 共通SAORIブリッジ
 
 Utataneが提供するSAORIと対応する命令は、[共通SAORIブリッジの一覧](https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md#共通saoriブリッジ)を参照してください。独自の外部SHIORIが読み込むSAORIは、そのSHIORI側で管理します。

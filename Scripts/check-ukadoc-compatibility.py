@@ -58,8 +58,8 @@ def main() -> int:
         flags=re.MULTILINE,
     )
     event_ids = [event_id for event_id, _ in event_rows]
-    if len(event_rows) != 307:
-        failures.append(f"SHIORI Event inventory has {len(event_rows)} rows; expected 307")
+    if len(event_rows) != 309:
+        failures.append(f"SHIORI Event inventory has {len(event_rows)} rows; expected 309")
     if len(event_ids) != len(set(event_ids)):
         failures.append("SHIORI Event inventory contains duplicate event IDs")
     counts = {status: sum(row_status == status for _, row_status in event_rows) for status in ("✅", "🟡", "❌", "➖")}
@@ -67,8 +67,8 @@ def main() -> int:
         f"調査結果: ✅ {counts['✅']} / 🟡 {counts['🟡']} / "
         f"❌ {counts['❌']} / ➖ {counts['➖']}"
     )
-    if "UKADOC掲載イベント数: 307" not in event_document:
-        failures.append("SHIORI Event inventory does not declare the current 307-event UKADOC baseline")
+    if "UKADOC掲載イベント数: 309" not in event_document:
+        failures.append("SHIORI Event inventory does not declare the current 309-event UKADOC baseline")
     if expected_summary not in event_document:
         failures.append("SHIORI Event inventory summary does not match its rows")
 

@@ -5,9 +5,9 @@
 
 基準: [SHIORI Eventリスト](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html)
 
-UKADOC掲載イベント数: 307
+UKADOC掲載イベント数: 309
 調査日: 2026-09-20
-調査結果: ✅ 252 / 🟡 46 / ❌ 2 / ➖ 7
+調査結果: ✅ 254 / 🟡 46 / ❌ 2 / ➖ 7
 
 ## 判定
 
@@ -486,3 +486,6 @@ UKADOC掲載イベント数: 307
 - ✅へ変更する場合は、テストまたは実機確認の根拠を備考に残します。
 - UKADOC側の増減確認には生成スクリプトを使い、既存の手動判定を上書きしないよう差分を確認します。
 - 外部からのSHIORI EventとSHIORI Resourceは、この表とは分けて管理します。
+
+| [`OnInternalSaoriComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInternalSaoriComplete) | ✅ | 改修版SHIORIから内蔵SAORIを非同期実行した時、識別子・結果・モジュール・関数・Value列を呼び出し元へGET通知。Onで始まる識別子はその名前を使用。終了・再読込後の配送を抑止。自動テスト済み、実ゴーストの画面操作は未確認 |
+| [`OnInternalSaoriFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInternalSaoriFailure) | ✅ | 内蔵SAORIの非同期失敗を識別子・失敗理由・モジュール・関数でGET通知。Onで始まる識別子はFailureを付けた名前を使用。入力個数・オプション名の誤りは受付時に拒否。自動テスト済み、実ゴーストは未確認 |

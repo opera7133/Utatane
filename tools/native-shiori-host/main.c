@@ -14,7 +14,10 @@ typedef void *(*Request)(void *, int32_t *);
 typedef int32_t (*Unload)(void);
 typedef int32_t (*WindowCallback)(int32_t, int32_t, int32_t, int32_t, int32_t *);
 typedef int32_t (*SetWindowCallback)(WindowCallback);
+typedef void *(*InternalSaoriCallback)(const void *, int32_t, int32_t *);
+typedef int32_t (*SetInternalSaoriCallback)(InternalSaoriCallback);
 static int window_channel = -1;
+static int saori_channel = -1;
 
 static void put32(uint8_t *bytes, int32_t value) {
     uint32_t bits = (uint32_t)value;
@@ -60,6 +63,23 @@ static int32_t window_callback(int32_t operation, int32_t scope, int32_t x, int3
     return get32(frame + 5);
 }
 
+static void *internal_saori_callback(const void *request, int32_t count, int32_t *length) {
+    if (!length) return NULL;
+    *length = 0;
+    if (!request || count < 0 || count > (int32_t)MAX_BYTES || saori_channel < 0) return NULL;
+    if (!reply(saori_channel, 7, request, (uint32_t)count)) return NULL;
+    uint8_t header[5];
+    if (!transfer(STDIN_FILENO, header, sizeof(header), 0)) return NULL;
+    int32_t size = get32(header);
+    if (size < 1 || size > (int32_t)MAX_BYTES + 1 || header[4] != 4) return NULL;
+    char *response = malloc((size_t)size);
+    if (!response) return NULL;
+    if (!transfer(STDIN_FILENO, response, (size_t)size - 1, 0)) { free(response); return NULL; }
+    response[size - 1] = 0;
+    *length = size - 1;
+    return response;
+}
+
 int main(int argc, char **argv) {
     if (argc != 3) return 64;
     signal(SIGPIPE, SIG_IGN);
@@ -87,6 +107,13 @@ int main(int argc, char **argv) {
         window_channel = channel;
         if (!set_window_callback(window_callback)) {
             error_reply(channel, 3, "Cannot connect SAORI windows"); return 1;
+        }
+    }
+    SetInternalSaoriCallback set_internal_saori = (SetInternalSaoriCallback)dlsym(image, "utatane_internal_saori_set_callback");
+    if (set_internal_saori) {
+        saori_channel = channel;
+        if (!set_internal_saori(internal_saori_callback)) {
+            error_reply(channel, 3, "Cannot connect internal SAORI"); return 1;
         }
     }
     size_t length = strlen(argv[2]);

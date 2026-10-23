@@ -3,6 +3,12 @@ import Foundation
 import UtataneLegacyTextCodec
 
 public enum LegacyTextDecoder {
+    /// Protocol messages must honor the declared charset, without file-oriented fallbacks.
+    public static func decode(_ data: Data, strictlyUsing charset: String) -> String? {
+        guard let converted = transcode(data, from: charset, to: "UTF-8") else { return nil }
+        return String(data: converted, encoding: .utf8)
+    }
+
     public static func decode(_ data: Data, preferredCharset: String? = nil) -> String? {
         let declaredCharset = preferredCharset ?? charsetDeclaration(in: data)
         let encodings = candidateEncodings(preferredCharset: declaredCharset)

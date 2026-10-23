@@ -38,6 +38,8 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
     private let output: FileHandle
     private let timeout: TimeInterval
     private let windowController: (any NativeSaoriWindowControlling)?
+    private let internalSaoriHandler: @Sendable (Data) -> Data
+    private let internalSaoriSession: InternalSaoriSession
     private var closed = false
     private static let maximumBytes = 8 * 1024 * 1024
 
@@ -51,6 +53,8 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
     public init(directoryURL: URL, moduleURL: URL, hostURL: URL = NativeShioriProcessSession.defaultHostURL,
                 timeout: TimeInterval = 30, startupTimeout: TimeInterval = 30,
                 windowController: (any NativeSaoriWindowControlling)? = nil,
+                internalSaoriHandler: (@Sendable (Data) -> Data)? = nil,
+                onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)? = nil,
                 additionalEnvironment: [String: String] = [:]) throws
     {
         guard timeout.isFinite, timeout > 0, startupTimeout.isFinite, startupTimeout > 0 else {
@@ -76,6 +80,9 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
         output = outputPipe.fileHandleForReading
         self.timeout = timeout
         self.windowController = windowController
+        let internalSession = InternalSaoriSession(onEvent: onInternalSaoriEvent)
+        internalSaoriSession = internalSession
+        self.internalSaoriHandler = internalSaoriHandler ?? { internalSession.response(to: $0) }
         do {
             try process.run()
             try inputPipe.fileHandleForReading.close()
@@ -98,6 +105,7 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
     }
 
     deinit {
+        internalSaoriSession.close()
         // Normal shutdown calls close(). An abandoned live session gets a bounded
         // save attempt off the UI thread before its process is reaped.
         if !closed {
@@ -174,6 +182,7 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
     }
 
     private func stop() {
+        internalSaoriSession.close()
         guard !closed else { return }
         closed = true
         try? input.close()
@@ -213,6 +222,13 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
             let body = try readExact(Int(size), deadline: deadline)
             let status = body[0]
             let payload = body.dropFirst()
+            if status == 7 {
+                callbackCount += 1
+                guard callbackCount <= 1024 else { throw NativeShioriProcessError.invalidFrame }
+                let response = internalSaoriHandler(Data(payload))
+                try send(command: 4, payload: response, deadline: deadline)
+                continue
+            }
             if status != 6 {
                 guard status == 0 else {
                     throw NativeShioriProcessError.hostFailure(status, String(data: payload, encoding: .utf8) ?? "Invalid error message")

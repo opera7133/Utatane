@@ -183,6 +183,7 @@ let package = Package(
         ),
         .target(
             name: "UtataneNativeSaori",
+            dependencies: ["UtataneCore"],
             path: "native-saori/Sources"
         ),
         .target(

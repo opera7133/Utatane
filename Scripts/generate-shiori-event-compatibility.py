@@ -322,6 +322,8 @@ INAPPLICABLE_EVENTS = {
 }
 
 ONLINE_ADDITIONAL_EVENTS = [
+    "OnInternalSaoriComplete",
+    "OnInternalSaoriFailure",
     "OnSoundSpectrum",
     "OnTextAreaInput",
     "OnTextAreaInputCancel",

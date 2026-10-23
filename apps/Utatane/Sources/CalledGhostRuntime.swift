@@ -3,6 +3,7 @@ import UniformTypeIdentifiers
 import UtataneBalloon
 import UtataneContent
 import UtataneCore
+import UtataneNativeSaori
 import UtataneNetwork
 import UtatanePlatformMacOS
 import UtataneRuntime
@@ -509,6 +510,16 @@ final class CalledGhostRuntime {
             player.play(script, balloon: balloon)
         }
         return response
+    }
+
+    func handleInternalSaoriEvent(_ event: InternalSaoriEvent) async {
+        guard event.isCurrent else { return }
+        let request = GhostEvent.shiori(id: event.id, references: event.references)
+        let script = try? await eventDelivery.handle(event: request)
+        guard event.isCurrent else { return }
+        if let script, !script.rawValue.isEmpty {
+            player.play(script, balloon: balloon, context: request.playbackContext)
+        }
     }
 
     @discardableResult

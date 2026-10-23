@@ -12,11 +12,24 @@ public final class NativeShioriSession: Sendable {
     private let backend: Backend
     private let queue = DispatchQueue(label: "dev.utatane.native-shiori")
 
+    public convenience init(directoryURL: URL, moduleURL: URL,
+                            stateDirectoryURL: URL? = nil,
+                            saoriCaller: (any NativeSaoriCalling)? = nil,
+                            saoriRootURL: URL? = nil,
+                            moduleResolver: UtataneModuleResolver = .init(),
+                            hostURL: URL = NativeShioriProcessSession.defaultHostURL) throws
+    {
+        try self.init(directoryURL: directoryURL, moduleURL: moduleURL, stateDirectoryURL: stateDirectoryURL,
+                      saoriCaller: saoriCaller, saoriRootURL: saoriRootURL, moduleResolver: moduleResolver,
+                      onInternalSaoriEvent: nil, hostURL: hostURL)
+    }
+
     public init(directoryURL: URL, moduleURL: URL,
                 stateDirectoryURL: URL? = nil,
                 saoriCaller: (any NativeSaoriCalling)? = nil,
                 saoriRootURL: URL? = nil,
                 moduleResolver: UtataneModuleResolver = .init(),
+                onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)?,
                 hostURL: URL = NativeShioriProcessSession.defaultHostURL) throws
     {
         if let stateDirectoryURL, UtataneModuleImage.usesModuleBridge(moduleURL) {
@@ -48,6 +61,7 @@ public final class NativeShioriSession: Sendable {
             ) { url in
                 try NativeShioriProcessSession(
                     directoryURL: directoryURL, moduleURL: url, hostURL: hostURL,
+                    onInternalSaoriEvent: onInternalSaoriEvent,
                     additionalEnvironment: environment
                 )
             })

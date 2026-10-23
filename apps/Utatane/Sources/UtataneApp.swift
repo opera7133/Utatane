@@ -3046,7 +3046,8 @@ private struct UtataneRootView: View {
                     stateDirectoryURL: stateDirectory,
                     saoriCaller: nativeSaoriRegistry(for: masterDirectory),
                     saoriRootURL: saoriRoot,
-                    moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback)
+                    moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback),
+                    onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id)
                 )
             ))
         }
@@ -3065,7 +3066,8 @@ private struct UtataneRootView: View {
                         stateDirectoryURL: stateDirectory,
                         saoriCaller: nativeSaoriRegistry(for: masterDirectory),
                         saoriRootURL: saoriRoot,
-                        moduleResolver: resolver
+                        moduleResolver: resolver,
+                        onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id)
                     )
                 ))
             }
@@ -3117,7 +3119,8 @@ private struct UtataneRootView: View {
                         stateDirectoryURL: stateDirectory,
                         saoriCaller: nativeSaoriRegistry(for: masterDirectory),
                         saoriRootURL: saoriRoot,
-                        moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback)
+                        moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback),
+                        onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id)
                     )
                 ))
             case "dll":
@@ -3140,6 +3143,32 @@ private struct UtataneRootView: View {
         }
         let catalog = try DialogueCatalogLoader().load(from: dialogueURL)
         return DialoguePersonalityEngine(catalog: catalog)
+    }
+
+    private func internalSaoriEventHandler(for ghostID: URL) -> @Sendable (InternalSaoriEvent) -> Void {
+        { event in
+            Task { @MainActor in
+                guard event.isCurrent else { return }
+                if currentGhost?.id != ghostID {
+                    await calledGhosts[ghostID]?.handleInternalSaoriEvent(event)
+                    return
+                }
+                guard !isTransitioningGhost, let session, let balloon else { return }
+                let request = GhostEvent.shiori(id: event.id, references: event.references)
+                do {
+                    let response = try await session.response(for: request)
+                    guard event.isCurrent, currentGhost?.id == ghostID else { return }
+                    if let script = response?.script, !script.rawValue.isEmpty {
+                        scriptPlayer.play(script, balloon: balloon, context: request.playbackContext)
+                    }
+                    if let response {
+                        forwardCommunication(from: currentGhost, response: response)
+                    }
+                } catch {
+                    AppLogStore.shared.error("内蔵SAORIの完了イベント処理に失敗: \(error.localizedDescription)", category: "SAORI")
+                }
+            }
+        }
     }
 
     private func nativeSaoriRegistry(for masterDirectory: URL) -> NativeSaoriRegistry {

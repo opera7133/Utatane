@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- 改修版YAYA・里々・華和梨から、DLL不要の内蔵SAORIを呼び出す共通経路を追加した。機能一覧、Unicode正規化、乱数・UUID、データ変換、ハッシュ・HMACに対応する。通常のTCP／HTTP SSTPやWindowsのDirect SSTPを置き換えるものではない
+- 内蔵SAORIの`--async`と完了・失敗イベントを追加し、呼び出したゴーストだけへ結果を届け、終了・SHIORI再読み込み後の古い結果を破棄するようにした
+
 - SSPからの取り込みでWine・CrossOver・Whisky内のSSPを自動検出し、取り込み元を選べるようにした
 - `moveasync,cancel`による移動の中断、移動時のsticky-window追従、`--option=ignore-sticky-window`による単独移動に対応した
 - SSTPの`EXECUTE GetFMO`で、起動中ゴーストの名前・パス・サーフェス番号を取得できるようにした。Windows共有メモリやHWNDの互換ではない
