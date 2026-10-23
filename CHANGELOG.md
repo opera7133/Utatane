@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## [0.2.17] - 2026-10-23
+
+内蔵SAORIには、本体に加えて共通SHIORIの更新が必要です。YAYA 5 Tc574-11-r2、YAYA 6 Tc607-2-r2、里々 Mc205-4-r2、華和梨9.1.0-r4以降へ更新し、起動中のゴーストを再読み込みしてください。Apple Developer ID署名・公証は未対応です。
+
 - 内蔵SAORIに日時のFormat・Add・Diffを追加。月末・夏時間を含む計算と、日時・タイムゾーンの入力検証に対応しました。Convertは正本の`--data-in=`も受け付けます。
 - 開発用パレットに内蔵SAORIの単体テストと呼び出し診断を追加。応答・所要時間を確認でき、診断ログには引数・結果本文を記録しません。
 - 実ゴーストのフレームワークを通す検証を追加。YAYA 6の拡張子なし内蔵SAORI呼び出しには、Modules側の判定修正も必要です。
@@ -851,7 +855,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.16...HEAD
+[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.17...HEAD
+[0.2.17]: https://github.com/opera7133/Utatane/compare/v0.2.16...v0.2.17
 [0.2.16]: https://github.com/opera7133/Utatane/compare/v0.2.15...v0.2.16
 [0.2.15]: https://github.com/opera7133/Utatane/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/opera7133/Utatane/compare/v0.2.13...v0.2.14
