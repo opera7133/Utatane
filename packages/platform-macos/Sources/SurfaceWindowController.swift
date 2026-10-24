@@ -2017,11 +2017,13 @@ private final class CharacterSurfaceController {
         nextAnimationGeneration &+= 1
         let generation = nextAnimationGeneration
         animationGenerations[id] = generation
+        let excludedAnimationIDs = prepareAnimationBase(animation)
         let task = Task<Void, Never> { [weak self] in
             guard let self else { return }
             await run(
                 animation,
-                minimumFrameDurationMilliseconds: minimumFrameDurationMilliseconds
+                minimumFrameDurationMilliseconds: minimumFrameDurationMilliseconds,
+                excludedAnimationIDs: excludedAnimationIDs
             )
             guard animationGenerations[id] == generation else { return }
             activeAnimationFrames[id] = nil
@@ -2038,7 +2040,27 @@ private final class CharacterSurfaceController {
             refreshAnimationScale()
         }
         animationTasks[id] = task
+        publishImmediateAnimationFrame(animation)
         return task
+    }
+
+    /// Include a zero-wait first frame in the same render transaction as its
+    /// surface reset and static effects, before the asynchronous player starts.
+    private func publishImmediateAnimationFrame(_ animation: SurfaceAnimation) {
+        guard !animationClock.isSuspended, let shell,
+              let pattern = sharedAnimationStartOrders[animation.id].flatMap({ order in animation.patterns.first { $0.order == order } }) ?? animation.patterns.first,
+              pattern.waitMilliseconds == 0, pattern.surfaceID >= 0,
+              let operation = animationCompositingOperation(for: pattern.method),
+              let overlay = try? renderLayer(surfaceID: pattern.surfaceID, shell: shell, visited: [],
+                                             ignoresTransparency: pattern.method.caseInsensitiveCompare("asis") == .orderedSame)
+        else { return }
+        let offset = animationOffsets[animation.id] ?? SurfacePoint(x: 0, y: 0)
+        activeAnimationFrames[animation.id] = .overlay(PersistentAnimationLayer(
+            image: overlay, x: pattern.x + offset.x, y: pattern.y + offset.y,
+            operation: operation, clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(pattern.method)
+        ))
+        activeAnimationPatternOrders[animation.id] = pattern.order
+        scheduleAnimationRedraw()
     }
 
     func changeSurface(to surfaceID: Int) throws {
@@ -3287,14 +3309,7 @@ private final class CharacterSurfaceController {
         }
     }
 
-    private func run(
-        _ animation: SurfaceAnimation,
-        minimumFrameDurationMilliseconds: Int = 0
-    ) async {
-        guard let shell,
-              imageView != nil
-        else { return }
-
+    private func prepareAnimationBase(_ animation: SurfaceAnimation) -> Set<Int> {
         let stoppedAnimationIDs = Set(animation.patterns.flatMap { pattern in
             ["stop", "alternativestop", "parallelstop"].contains(pattern.method.lowercased())
                 ? pattern.targetAnimationIDs
@@ -3305,6 +3320,18 @@ private final class CharacterSurfaceController {
         animationBaseExclusions[animation.id] = stoppedAnimationIDs.isEmpty && !isInitiallyComposited
             ? []
             : excludedAnimationIDs
+        return excludedAnimationIDs
+    }
+
+    private func run(
+        _ animation: SurfaceAnimation,
+        minimumFrameDurationMilliseconds: Int = 0,
+        excludedAnimationIDs: Set<Int>
+    ) async {
+        guard !Task.isCancelled, let shell,
+              imageView != nil
+        else { return }
+
         let startOrder = sharedAnimationStartOrders.removeValue(forKey: animation.id)
         let patterns = if let startOrder,
                           let startIndex = animation.patterns.firstIndex(where: { $0.order == startOrder })

@@ -38,6 +38,17 @@ import UtataneShell
     #expect(colored.colorAt(x: 48, y: 200)?.alphaComponent ?? 1 < 0.1)
     #expect(colored.colorAt(x: 48, y: 260)?.usingColorSpace(.deviceRGB)?.redComponent ?? 0 > 0.4)
     #expect(colored.colorAt(x: 99, y: 295)?.alphaComponent ?? 0 > 0.9)
+    // Reproduce the reset/restart sequence in a periodic colored display update.
+    let batch = surfaces.beginRenderingBatch()
+    try surfaces.changeSurface(scope: 1, to: 9)
+    surfaces.setAnimationOffset(identifier: "100", x: 0, y: 40, scope: 1)
+    surfaces.playAnimation(identifier: "100", scope: 1)
+    surfaces.playAnimation(identifier: "201", scope: 1)
+    surfaces.playAnimation(identifier: "202", scope: 1)
+    surfaces.endRenderingBatch(batch)
+    let committed = try bitmap()
+    #expect(committed.colorAt(x: 48, y: 260)?.alphaComponent ?? 0 > 0.9)
+    #expect(committed.colorAt(x: 48, y: 260)?.usingColorSpace(.deviceRGB)?.redComponent ?? 0 > 0.4)
     let dumps = FileManager.default.temporaryDirectory.appending(path: "cldsp-meters-\(UUID())")
     defer { try? FileManager.default.removeItem(at: dumps) }
     #expect(try surfaces.dumpSurfaceImages(to: dumps, scope: 1, surfaceList: "3400,3448") == 2)

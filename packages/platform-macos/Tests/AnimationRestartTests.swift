@@ -111,3 +111,24 @@ import UtataneShell
     surfaces.playAnimation(identifier: "7")
     try await requireEventually(timeout: .seconds(2)) { surfaces.renderedImage()?.containsColor { ($0.usingColorSpace(.deviceRGB)?.blueComponent ?? 0) > 0.9 } == true }
 }
+
+@Test @MainActor func `surface reset and zero wait meter start publish one complete frame`() async throws {
+    let (root, surfaces, _, defaults) = try animationRestartFixture()
+    defer { surfaces.resetContent(); defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)); try? FileManager.default.removeItem(at: root) }
+    try """
+    surface0 {
+    animation7.interval,never
+    animation7.pattern0,overlay,1,0,0,0
+    animation7.pattern1,overlay,1,5000,0,0
+    }
+    """.write(to: root.appending(path: "surfaces.txt"), atomically: true, encoding: .utf8)
+    try surfaces.show(shell: ShellLoader().load(from: root), surfaceID: 0)
+    surfaces.playAnimation(identifier: "7")
+    try await requireEventually { surfaces.renderedImage()?.containsColor { ($0.usingColorSpace(.deviceRGB)?.blueComponent ?? 0) > 0.9 } == true }
+    let batch = surfaces.beginRenderingBatch()
+    try surfaces.changeSurface(to: 0)
+    surfaces.playAnimation(identifier: "7")
+    surfaces.endRenderingBatch(batch)
+    // Inspect the frame published at commit, before the animation task can run.
+    #expect(surfaces.renderedImage()?.containsColor { ($0.usingColorSpace(.deviceRGB)?.blueComponent ?? 0) > 0.9 } == true)
+}
