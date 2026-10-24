@@ -10,6 +10,7 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         case error
     }
 
+    var onSpectrumEnd: (() -> Void)?
     var onSpectrum: (([Int: String]) async -> Void)?
     var onStop: ((String, String) -> Void)?
     var onLoop: ((String) -> Void)?
@@ -40,6 +41,7 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
     private var spectrumBands = 10
     private var spectrumHold = 500
     private var spectrumTask: Task<Void, Never>?
+    private var spectrumCompletionTask: Task<Void, Never>?
     private var spectrumGeneration = UUID()
     private var spectrumAnalyzer: SoundSpectrumAnalyzer?
     private var spectrumEnvelope = SoundSpectrumEnvelope()
@@ -64,8 +66,11 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
     }
 
     func discard() {
+        let wasAnalyzing = spectrumInterval > 0 || spectrumTask != nil
         spectrumTask?.cancel()
         spectrumTask = nil
+        spectrumCompletionTask?.cancel()
+        spectrumCompletionTask = nil
         spectrumGeneration = UUID()
         spectrumAnalyzer = nil
         spectrumEnvelope = .init()
@@ -82,6 +87,9 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         isLooping = false
         resumesAfterSuspension = false
         pendingCompletion = nil
+        if wasAnalyzing {
+            onSpectrumEnd?()
+        }
     }
 
     func execute(_ command: SakuraScriptSoundCommand) async throws {
@@ -146,11 +154,16 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         case let .option(file, options):
             guard file == nil || file == loadedFile, let audioPlayer else { return }
             let wasEnabled = spectrumInterval > 0
+            let zero = spectrumZeroReferences()
             apply(options: options, to: audioPlayer)
-            if wasEnabled, spectrumInterval == 0 {
-                await emitSpectrumZero()
-            }
             updateSpectrumTimer()
+            if wasEnabled, spectrumInterval == 0 {
+                spectrumEnvelope = .init()
+                onSpectrumEnd?()
+                if let zero {
+                    await onSpectrum?(zero)
+                }
+            }
         case .wait:
             while !isLooping, audioPlayer?.isPlaying == true {
                 try await Task.sleep(for: .milliseconds(50))
@@ -166,8 +179,12 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
             isPaused = false
             updateSpectrumTimer()
         case .stop:
-            await emitSpectrumZero()
+            let zero = spectrumZeroReferences()
+            // Stop the audio and invalidate its old visual work before awaiting SHIORI.
             discard()
+            if let zero {
+                await onSpectrum?(zero)
+            }
         }
     }
 
@@ -193,24 +210,27 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
             audioPlayer.prepareToPlay()
             audioPlayer.play()
             return
-        case .stop:
-            if spectrumInterval > 0 {
-                spectrumTask?.cancel()
-                let generation = spectrumGeneration
-                Task { [weak self] in
-                    guard let self else { return }
-                    await emitSpectrumZero()
-                    guard generation == spectrumGeneration else { return }
-                    discard()
-                    onStop?(loadedFile, "end")
-                }
-            } else {
-                discard()
-                onStop?(loadedFile, "end")
-            }
-        case .error:
+        case .stop, .error:
+            let zero = spectrumZeroReferences()
+            let successfully = flag
             discard()
-            onError?(loadedFile, CocoaError(.fileReadCorruptFile))
+            let generation = spectrumGeneration
+            if let zero {
+                spectrumCompletionTask = Task { [weak self] in
+                    guard let self else { return }
+                    await onSpectrum?(zero)
+                    guard generation == spectrumGeneration else { return }
+                    if successfully {
+                        onStop?(loadedFile, "end")
+                    } else {
+                        onError?(loadedFile, CocoaError(.fileReadCorruptFile))
+                    }
+                }
+            } else if successfully {
+                onStop?(loadedFile, "end")
+            } else {
+                onError?(loadedFile, CocoaError(.fileReadCorruptFile))
+            }
         }
     }
 
@@ -297,12 +317,11 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         await onSpectrum?(spectrumReferences(file: loadedFile, channels: channels, levels: result.levels, peaks: result.peaks))
     }
 
-    private func emitSpectrumZero() async {
-        guard spectrumInterval > 0 || spectrumTask != nil, let loadedFile else { return }
+    private func spectrumZeroReferences() -> [Int: String]? {
+        guard spectrumInterval > 0 || spectrumTask != nil, let loadedFile else { return nil }
         let channels = spectrumAnalyzer?.channelCount ?? max(1, min(8, audioPlayer?.numberOfChannels ?? 1))
         let zeros = [Int](repeating: 0, count: channels + spectrumBands)
-        await onSpectrum?(spectrumReferences(file: loadedFile, channels: channels, levels: zeros, peaks: zeros))
-        spectrumEnvelope = .init()
+        return spectrumReferences(file: loadedFile, channels: channels, levels: zeros, peaks: zeros)
     }
 
     private func spectrumReferences(file: String, channels: Int, levels: [Int], peaks: [Int]) -> [Int: String] {

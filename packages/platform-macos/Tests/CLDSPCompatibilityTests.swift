@@ -2,6 +2,7 @@ import AppKit
 import Testing
 import UtataneCore
 import UtataneModuleHost
+import UtataneNativeSaori
 @testable import UtatanePlatformMacOS
 import UtataneRuntime
 import UtataneSakuraScript
@@ -12,6 +13,8 @@ import UtataneShiori
 private final class CLDSPClockTestState {
     var tick = 0
     var completions = 0
+    var internalEvent: ((InternalSaoriEvent) -> Void)?
+    var metadataCompletions = 0
 }
 
 @MainActor
@@ -47,13 +50,16 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
     OnUtataneTestTiming : ${tc.i}|${tc.is}|${tc.p}|${rate}
     """.data(using: .shiftJIS)))
     try config.close()
+    let clock = CLDSPClockTestState()
     let session = try NativeShioriSession(
         directoryURL: master,
         moduleURL: moduleURL,
-        saoriRootURL: environment["UTATANE_TEST_SAORI_ROOT"].map { URL(filePath: $0) }
+        saoriRootURL: environment["UTATANE_TEST_SAORI_ROOT"].map { URL(filePath: $0) },
+        onInternalSaoriEvent: { event in Task { @MainActor in clock.internalEvent?(event) } },
+        internalSaoriMediaReader: MacOSMediaInfoReader()
     )
     @MainActor func request(_ id: String, _ references: [Int: String] = [:], method: String = "GET") async throws -> SakuraScript? {
-        let headers = [ShioriHeader(name: "Charset", value: "UTF-8"), .init(name: "ID", value: id)]
+        let headers = [ShioriHeader(name: "Charset", value: "UTF-8"), .init(name: "SecurityLevel", value: "Local"), .init(name: "ID", value: id)]
             + references.sorted { $0.key < $1.key }.map { ShioriHeader(name: "Reference\($0.key)", value: $0.value) }
         let response = try await ShioriMessageParser.parseResponse(session.requestAsync(
             ShioriRequest(method: method, headers: .init(headers)).serialized()
@@ -97,6 +103,7 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
     player.onEmbeddedEvent = { id, arguments in
         try? await request(id, Dictionary(uniqueKeysWithValues: arguments.enumerated().map { ($0.offset, $0.element) }))
     }
+    _ = try await request("hwnd", [0: surfaces.windowNumbers.map(String.init).joined(separator: "\u{1}")], method: "NOTIFY")
     let startup = try #require(try await request("OnBoot"))
     await player.playAndWait(startup, balloon: balloon, characterDelayMilliseconds: 0)
     let main = try #require(surfaces.windowFrame(for: 0))
@@ -104,7 +111,18 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
         #expect(surfaces.windowFrame(for: scope)?.minX == main.minX)
         #expect(surfaces.windowFrame(for: scope)?.maxY == main.maxY)
     }
-    let clock = CLDSPClockTestState()
+    clock.internalEvent = { event in
+        Task { @MainActor in
+            guard event.isCurrent else { return }
+            do {
+                if let script = try await request(event.id, event.references) {
+                    player.play(script, balloon: balloon, context: .init(eventID: event.id))
+                }
+                clock.metadataCompletions += 1
+            } catch { Issue.record(error) }
+        }
+    }
+    defer { clock.internalEvent = nil }
     player.onGetProperties = { event, properties in
         #expect(event == (usesSpectrum ? "OnMainDispRefresh" : "OnMainSyncMaster"))
         var values = ["2026", "10", "19", "1", "14", "23", String(clock.tick), "0", "0", "1024",
@@ -124,6 +142,7 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
         spectrumFrames += 1
         nonzeroSpectrum = nonzeroSpectrum || (references[4]?.split(separator: "\u{1}").contains { (Int($0) ?? 0) > 0 } == true)
         if let script = try? await request("OnSoundSpectrum", references) {
+            guard !Task.isCancelled else { return }
             player.enqueuePeriodic(script, balloon: balloon, eventID: "OnSoundSpectrum")
         }
         spectrumTimings.append("\(references[6] ?? "?"):\(Int((ProcessInfo.processInfo.systemUptime - started) * 1000))")
@@ -185,6 +204,7 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
         let state = try #require(try await request("OnUtataneTestPlaybackState"))
         #expect(state.rawValue.hasPrefix("1|1|"))
     }
+    var previousMetadataCompletions = 0
     @MainActor func finishImport() async throws {
         if usesSpectrum, let script = try await request("click.1tag_ready") {
             await player.playAndWait(script, balloon: balloon, characterDelayMilliseconds: 0)
@@ -193,6 +213,10 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
             if let script = try await request("OnSecondChange", [3: "1"]) {
                 await player.playAndWait(script, balloon: balloon, characterDelayMilliseconds: 0)
             }
+        }
+        if usesSpectrum {
+            try await requireEventually { clock.metadataCompletions > previousMetadataCompletions }
+            previousMetadataCompletions = clock.metadataCompletions
         }
     }
     let importScript = try #require(try await request("OnPlaylistImport", [0: "open", 1: "OnPlaylistImport", 2: selected.path]))
@@ -214,7 +238,7 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
         try Data(contentsOf: root.appending(path: "shell/master/surfaces_0gen.txt"))
             .write(to: URL(filePath: output + ".txt"))
     }
-    if environment["UTATANE_TEST_SAORI_ROOT"] != nil {
+    if usesSpectrum || environment["UTATANE_TEST_SAORI_ROOT"] != nil {
         let metadata = try #require(try await request("OnUtataneTestMetadata"))
         let fields = metadata.rawValue.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         #expect(fields.count == 2)
@@ -278,8 +302,17 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
         let counter = try #require(Int(timing.rawValue.split(separator: "|").first ?? ""))
         let position = try #require(Int(player.runtimePropertyValue(for: "currentghost.sound.index(0).position") ?? ""))
         #expect(abs(position - counter * (usesSpectrum ? 10 : 250)) < 750)
+        let secondsDigit = 1150 + counter / (usesSpectrum ? 100 : 4) % 10
+        // The dictionary can advance while its latest periodic display is still queued.
+        try await requireEventually(timeout: .seconds(2)) {
+            surfaces.serikoInspectorSnapshots.first { $0.scope == 2 }?.persistentAnimationIDs.contains(secondsDigit) == true
+        }
         let animations = try #require(surfaces.serikoInspectorSnapshots.first { $0.scope == 2 }).persistentAnimationIDs
-        #expect(animations.contains(1150 + counter / (usesSpectrum ? 100 : 4) % 10))
+        if usesSpectrum {
+            #expect(animations.contains(2107), "Seek bar background must load after asynchronous metadata")
+            #expect(animations.contains { (2120 ... 2185).contains($0) }, "Seek position must be rendered")
+            #expect(!animations.contains(2108), "Metadata loading indicator must disappear")
+        }
         let numbers = surfaces.windowNumbers
         let ordered = NSApplication.shared.orderedWindows.map(\.windowNumber)
         for (front, back) in [(4, 0), (0, 3), (3, 1), (1, 2)] {
@@ -293,6 +326,14 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
     if usesSpectrum {
         #expect(spectrumFrames >= 30)
         #expect(nonzeroSpectrum)
+    }
+    if usesSpectrum {
+        let stop = try #require(try await request("click.3sound_stop"))
+        await player.playAndWait(stop, balloon: balloon, characterDelayMilliseconds: 0)
+        #expect(player.runtimePropertyValue(for: "currentghost.sound.count") == "0")
+        let panel = try #require(surfaces.serikoInspectorSnapshots.first { $0.scope == 1 })
+        #expect(panel.currentAnimationID.map { !(50 ... 180).contains($0) } ?? true,
+                "Spectrum decay animations must stop with playback instead of lingering")
     }
     try await session.closeAsync()
 }

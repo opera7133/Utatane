@@ -32,7 +32,9 @@ final class SoundSpectrumAnalyzer {
     func levels(at seconds: Double, bands: Int) throws -> [Double] {
         let cursor = min(file.length, max(0, AVAudioFramePosition(seconds * file.processingFormat.sampleRate)))
         file.framePosition = max(0, cursor - AVAudioFramePosition(size))
-        try file.read(into: buffer, frameCount: AVAudioFrameCount(min(Int64(size), file.length - file.framePosition)))
+        let available = min(Int64(size), cursor - file.framePosition)
+        guard available > 0 else { return [Double](repeating: 0, count: channelCount + bands) }
+        try file.read(into: buffer, frameCount: AVAudioFrameCount(available))
         guard let channels = buffer.floatChannelData else { return [Double](repeating: 0, count: channelCount + bands) }
         let count = Int(buffer.frameLength)
         var mix = [Float](repeating: 0, count: size)
@@ -43,7 +45,7 @@ final class SoundSpectrumAnalyzer {
             for sample in 0 ..< count {
                 let value = channels[channel][sample]
                 power += Double(value * value)
-                mix[sample] += value / Float(allChannels)
+                mix[size - count + sample] += value / Float(allChannels)
             }
             if channel < channelCount {
                 levels.append(Self.level(power: 2 * power / Double(max(1, count))))

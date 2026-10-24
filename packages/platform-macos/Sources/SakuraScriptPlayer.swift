@@ -358,6 +358,7 @@ public final class SakuraScriptPlayer {
         }
         self.postDialogueDismissalMilliseconds = postDialogueDismissalMilliseconds
         self.surfaceRestoreDelayMilliseconds = max(0, surfaceRestoreDelayMilliseconds)
+        soundPlayer.onSpectrumEnd = { [weak self] in self?.finishPeriodicDisplay(eventID: "OnSoundSpectrum") }
         soundPlayer.onSpectrum = { [weak self] references in await self?.onSoundSpectrum?(references) }
         soundPlayer.onStop = { [weak self] file, reason in self?.onSoundStop?(file, reason) }
         soundPlayer.onLoop = { [weak self] file in self?.onSoundLoop?(file) }
@@ -644,6 +645,26 @@ public final class SakuraScriptPlayer {
         guard canTalk else { return }
         queuedPlaybacks.removeAll { $0.context.eventID == eventID }
         enqueue(script, balloon: balloon, context: .init(eventID: eventID))
+    }
+
+    private func finishPeriodicDisplay(eventID: String) {
+        queuedPlaybacks.removeAll { $0.context.eventID == eventID }
+        if currentPlaybackContext.eventID == eventID, playbackTask != nil {
+            playbackGeneration &+= 1
+            playbackTask?.cancel()
+            playbackTask = nil
+            isPlaybackComplete = false
+            isTimeCritical = false
+            statusActivities.removeAll()
+            isWaitingForClick = false
+            preventsUserBreak = false
+            balloonWindowController.setWaitingForClick(false)
+            finishPlaybackWait()
+        }
+        surfaceWindowController.stopTransientAnimations(owner: eventID)
+        if playbackTask == nil, !queuedPlaybacks.isEmpty {
+            playQueued(queuedPlaybacks.removeFirst())
+        }
     }
 
     private static func isDisplayUpdate(_ token: SakuraScriptToken) -> Bool {
@@ -1171,7 +1192,7 @@ public final class SakuraScriptPlayer {
                             scope: scope
                         )
                     } else {
-                        surfaceWindowController.playAnimation(identifier: identifier, scope: scope)
+                        surfaceWindowController.playAnimation(identifier: identifier, scope: scope, owner: currentPlaybackContext.eventID)
                     }
                 case let .stopAnimation(identifier):
                     surfaceWindowController.stopAnimation(identifier: identifier, scope: scope)

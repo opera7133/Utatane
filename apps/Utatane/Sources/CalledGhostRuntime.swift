@@ -1016,6 +1016,7 @@ final class CalledGhostRuntime {
             guard let self, !isStopping, !eventDelivery.isSuspended else { return }
             do {
                 guard let response = try await eventDelivery.response(for: .shiori(id: "OnSoundSpectrum", references: references)) else { return }
+                guard !Task.isCancelled else { return }
                 if let script = response.script {
                     player.enqueuePeriodic(script, balloon: balloon, eventID: "OnSoundSpectrum")
                 }

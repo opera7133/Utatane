@@ -2352,6 +2352,7 @@ private struct UtataneRootView: View {
                 guard !isTransitioningGhost, let session, let balloon else { return }
                 do {
                     guard let response = try await session.response(for: .shiori(id: "OnSoundSpectrum", references: references)) else { return }
+                    guard !Task.isCancelled else { return }
                     if let script = response.script {
                         scriptPlayer.enqueuePeriodic(script, balloon: balloon, eventID: "OnSoundSpectrum")
                     }

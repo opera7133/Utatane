@@ -660,8 +660,15 @@ public final class SurfaceWindowController {
         )
     }
 
-    public func playAnimation(identifier: String, scope: Int = 0) {
-        characters[scope]?.playAnimation(identifier: identifier)
+    public func playAnimation(identifier: String, scope: Int = 0, owner: String? = nil) {
+        characters[scope]?.playAnimation(identifier: identifier, owner: owner)
+    }
+
+    /// Remove timed effects from a finished display event, preserving static UI layers.
+    public func stopTransientAnimations(owner: String) {
+        for character in characters.values {
+            character.stopTransientAnimations(owner: owner)
+        }
     }
 
     @discardableResult
@@ -1349,7 +1356,9 @@ private final class CharacterSurfaceController {
 
     private var enabledBindGroups: Set<Int> = []
     private var animationTasks: [Int: Task<Void, Never>] = [:]
-    private var animationGenerations: [Int: Int] = [:]
+    private var animationGenerations: [Int: UInt64] = [:]
+    private var nextAnimationGeneration: UInt64 = 0
+    private var animationOwners: [Int: String] = [:]
     private var activeAnimationFrames: [Int: ActiveAnimationFrame] = [:]
     private var animationBaseExclusions: [Int: Set<Int>] = [:]
     private var activeAnimationScales: [Int: (x: CGFloat, y: CGFloat)] = [:]
@@ -1752,9 +1761,32 @@ private final class CharacterSurfaceController {
         )
     }
 
-    func playAnimation(identifier: String) {
+    func playAnimation(identifier: String, owner: String? = nil) {
         guard let id = animationID(for: identifier) else { return }
         playAnimation(id: id)
+        if animationTasks[id] != nil {
+            animationOwners[id] = owner
+        }
+    }
+
+    func stopTransientAnimations(owner: String) {
+        let ids = animationOwners.keys.filter { animationOwners[$0] == owner }
+        guard !ids.isEmpty else { return }
+        for id in ids {
+            animationTasks[id]?.cancel()
+            animationTasks[id] = nil
+            animationGenerations[id] = nil
+            animationOwners[id] = nil
+            activeAnimationFrames[id] = nil
+            animationBaseExclusions[id] = nil
+            activeAnimationScales[id] = nil
+            activeAnimationPatternOrders[id] = nil
+        }
+        if let currentAnimationID, animationTasks[currentAnimationID] == nil {
+            self.currentAnimationID = animationTasks.keys.sorted().last
+        }
+        redrawActiveAnimationFrames()
+        refreshAnimationScale()
     }
 
     @discardableResult
@@ -1819,6 +1851,7 @@ private final class CharacterSurfaceController {
 
     func stopAnimation(id: Int) {
         animationTasks[id]?.cancel()
+        animationOwners[id] = nil
     }
 
     func pauseAnimation(id: Int) {
@@ -1974,11 +2007,14 @@ private final class CharacterSurfaceController {
             }
         }
         animationTasks[id]?.cancel()
-        activeAnimationFrames[id] = nil
+        animationOwners[id] = nil
         animationBaseExclusions[id] = nil
         activeAnimationScales[id] = nil
+        // Keep the last published frame until the replacement produces its
+        // first frame. Other layers can redraw while this task is starting.
         currentAnimationID = id
-        let generation = animationGenerations[id, default: 0] + 1
+        nextAnimationGeneration &+= 1
+        let generation = nextAnimationGeneration
         animationGenerations[id] = generation
         let task = Task<Void, Never> { [weak self] in
             guard let self else { return }
@@ -1992,6 +2028,7 @@ private final class CharacterSurfaceController {
             activeAnimationScales[id] = nil
             activeAnimationPatternOrders[id] = nil
             animationTasks[id] = nil
+            animationOwners[id] = nil
             animationGenerations[id] = nil
             if currentAnimationID == id {
                 currentAnimationID = animationTasks.keys.sorted().last
@@ -2144,6 +2181,7 @@ private final class CharacterSurfaceController {
         }
         animationTasks.removeAll()
         animationGenerations.removeAll()
+        animationOwners.removeAll()
         activeAnimationFrames.removeAll()
         animationBaseExclusions.removeAll()
         activeAnimationScales.removeAll()
