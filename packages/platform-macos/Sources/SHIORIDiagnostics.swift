@@ -8,10 +8,11 @@ public struct SHIORIDiagnosticTarget: Identifiable, Sendable {
     public let macOSOverride: String?
     public let moduleURL: URL?
     public let runtimeResult: String
+    public let moduleRequirementsReport: String
 
     public init(
         id: String, name: String, selectedFilename: String?, macOSOverride: String?,
-        moduleURL: URL?, runtimeResult: String
+        moduleURL: URL?, runtimeResult: String, moduleRequirementsReport: String = ""
     ) {
         self.id = id
         self.name = name
@@ -19,6 +20,7 @@ public struct SHIORIDiagnosticTarget: Identifiable, Sendable {
         self.macOSOverride = macOSOverride
         self.moduleURL = moduleURL
         self.runtimeResult = runtimeResult
+        self.moduleRequirementsReport = moduleRequirementsReport
     }
 }
 
@@ -40,6 +42,7 @@ public enum SHIORIModuleInspector {
             "shiori.macos: \(target.macOSOverride ?? "(none; automatic selection)")",
             "App CPU: \(architecture)",
             "Last load / initialization: \(target.runtimeResult)",
+            target.moduleRequirementsReport,
             ""
         ]
         guard let url = target.moduleURL else {
@@ -96,7 +99,7 @@ public enum SHIORIModuleInspector {
 
 @MainActor
 public final class SHIORIDiagnosticsWindowController: NSWindowController {
-    public init(targets: [SHIORIDiagnosticTarget], selectedID: String?, refresh: @escaping () -> [SHIORIDiagnosticTarget]) {
+    public init(targets: [SHIORIDiagnosticTarget], selectedID: String?, refresh: @escaping () async -> [SHIORIDiagnosticTarget]) {
         let view = SHIORIDiagnosticsView(targets: targets, selectedID: selectedID ?? targets.first?.id ?? "", refresh: refresh)
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
@@ -118,7 +121,7 @@ public final class SHIORIDiagnosticsWindowController: NSWindowController {
 private struct SHIORIDiagnosticsView: View {
     @State var targets: [SHIORIDiagnosticTarget]
     @State var selectedID: String
-    let refresh: () -> [SHIORIDiagnosticTarget]
+    let refresh: () async -> [SHIORIDiagnosticTarget]
     @State private var report = ""
     @State private var revision = 0
 
@@ -129,8 +132,10 @@ private struct SHIORIDiagnosticsView: View {
                     ForEach(targets) { target in Text(verbatim: target.name).tag(target.id) }
                 }
                 Button("再診断") {
-                    targets = refresh()
-                    revision += 1
+                    Task {
+                        targets = await refresh()
+                        revision += 1
+                    }
                 }
                 Button("コピー") {
                     NSPasteboard.general.clearContents()

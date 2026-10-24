@@ -4757,6 +4757,64 @@
         }
       }
     },
+    "まとめてダウンロード" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Download All Available"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모두 다운로드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批量下载"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批次下載"
+          }
+        }
+      }
+    },
+    "まとめて導入できる" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Available for batch installation"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "한 번에 설치 가능"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可批量安装"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可批次安裝"
+          }
+        }
+      }
+    },
     "ゆっくり再生" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5424,6 +5482,35 @@
         }
       }
     },
+    "カタログに掲載がない" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not listed in the catalog"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카탈로그에 없음"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目录中未收录"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "目錄中未收錄"
+          }
+        }
+      }
+    },
     "カタログの接続先（上級者向け）" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -5536,6 +5623,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "目錄無法使用"
+          }
+        }
+      }
+    },
+    "カタログを未確認" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Catalog not checked"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "카탈로그 미확인"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未检查目录"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "尚未檢查目錄"
           }
         }
       }
@@ -8349,6 +8465,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "無法安裝模組：%@"
+          }
+        }
+      }
+    },
+    "モジュールを導入中…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Installing modules…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모듈 설치 중…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在安装模块…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在安裝模組…"
           }
         }
       }
@@ -12409,6 +12554,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所需模組"
+          }
+        }
+      }
+    },
+    "必要モジュールの設定を読み込めない。utatane-modules.jsonを確認して。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cannot read the required modules configuration. Check utatane-modules.json."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "필요 모듈 설정을 읽을 수 없어. utatane-modules.json을 확인해."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法读取所需模块配置。请检查 utatane-modules.json。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "無法讀取所需模組設定。請檢查 utatane-modules.json。"
           }
         }
       }
@@ -17078,6 +17252,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "記錄一般 SAORI 呼叫"
+          }
+        }
+      }
+    },
+    "通常SAORIの診断には %@ 以降が必要。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ordinary SAORI diagnostics require %@ or later."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일반 SAORI 진단에는 %@ 이상이 필요해."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "普通 SAORI 诊断需要 %@ 或更高版本。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一般 SAORI 診斷需要 %@ 或更新版本。"
           }
         }
       }

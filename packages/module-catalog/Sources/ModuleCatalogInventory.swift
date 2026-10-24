@@ -81,6 +81,14 @@ public struct ModuleCatalogInventory: Sendable {
         return required
     }
 
+    public func saoriDiagnosticsUpdateRequired(moduleID: String) -> InternalSaoriModuleRequirement? {
+        guard let required = InternalSaoriModuleRequirement.minimumForDiagnostics(for: moduleID),
+              let installed = installedManifest(moduleID: moduleID, kind: "shiori"),
+              versionKey(installed.version, revision: installed.revision)
+              .lexicographicallyPrecedes(versionKey(required.version, revision: required.revision)) else { return nil }
+        return required
+    }
+
     /// Only inspect a manifest that actually declares the selected dylib.
     /// Bundled/manual libraries without a manifest have unknown capabilities.
     public func internalSaoriUpdateRequired(libraryURL: URL) -> InternalSaoriModuleRequirement? {
@@ -90,6 +98,17 @@ public struct ModuleCatalogInventory: Sendable {
               manifest.schemaVersion == 1,
               manifest.files.keys.contains(where: { root.appending(path: $0).standardizedFileURL == libraryURL.standardizedFileURL }),
               let required = InternalSaoriModuleRequirement.minimum(for: manifest.id),
+              versionKey(manifest.version, revision: manifest.revision)
+              .lexicographicallyPrecedes(versionKey(required.version, revision: required.revision)) else { return nil }
+        return required
+    }
+
+    public func saoriDiagnosticsUpdateRequired(libraryURL: URL) -> InternalSaoriModuleRequirement? {
+        let root = libraryURL.deletingLastPathComponent().deletingLastPathComponent()
+        guard let data = try? Data(contentsOf: root.appending(path: "module.json")),
+              let manifest = try? JSONDecoder().decode(InstalledModuleManifest.self, from: data), manifest.schemaVersion == 1,
+              manifest.files.keys.contains(where: { root.appending(path: $0).standardizedFileURL == libraryURL.standardizedFileURL }),
+              let required = InternalSaoriModuleRequirement.minimumForDiagnostics(for: manifest.id),
               versionKey(manifest.version, revision: manifest.revision)
               .lexicographicallyPrecedes(versionKey(required.version, revision: required.revision)) else { return nil }
         return required

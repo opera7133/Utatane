@@ -7,6 +7,11 @@ public enum ModuleCatalogInstallError: Error, Equatable {
     case unsupportedKind
 }
 
+public struct ModuleBatchInstallFailure: Error {
+    public let moduleID: String
+    public let underlying: any Error
+}
+
 /// Connects a signed HTTP catalog to Utatane's shared SHIORI and SAORI directories.
 public struct ModuleCatalogManager: Sendable {
     public let client: SignedModuleCatalogClient
@@ -33,9 +38,34 @@ public struct ModuleCatalogManager: Sendable {
         self.macOSVersion = macOSVersion
     }
 
+    /// Reuse one verified catalog for the whole batch. Completed modules stay
+    /// installed after a failure, and retries skip their verified manifests.
+    @discardableResult
+    public func install(moduleIDs: [String], catalog: SignedModuleCatalog, session: URLSession = .shared) async throws -> [URL] {
+        let inventory = ModuleCatalogInventory(applicationSupportURL: applicationSupportURL, architecture: architecture, macOSVersion: macOSVersion)
+        let plan = ModuleInstallPlan(moduleIDs: moduleIDs, catalog: catalog, inventory: inventory)
+        if let first = plan.unavailable.first {
+            throw ModuleBatchInstallFailure(moduleID: first.id, underlying: first.reason == .unsupportedPlatform
+                ? ModuleCatalogInstallError.unsupportedPlatform : ModuleCatalogInstallError.unavailable)
+        }
+        var installed: [URL] = []
+        for id in plan.moduleIDs {
+            try Task.checkCancellation()
+            do { try await installed.append(install(moduleID: id, catalog: catalog, session: session)) }
+            catch { throw ModuleBatchInstallFailure(moduleID: id, underlying: error) }
+        }
+        return installed
+    }
+
     @discardableResult
     public func install(moduleID: String, session: URLSession = .shared) async throws -> URL {
         let catalog = try await client.fetch(session: session)
+        return try await install(moduleID: moduleID, catalog: catalog, session: session)
+    }
+
+    @discardableResult
+    public func install(moduleID: String, catalog: SignedModuleCatalog, session: URLSession = .shared) async throws -> URL {
+        try Task.checkCancellation()
         guard let module = catalog.modules.first(where: { $0.id == moduleID && $0.availability == "candidate" }) else {
             throw ModuleCatalogInstallError.unavailable
         }
@@ -64,6 +94,7 @@ public struct ModuleCatalogManager: Sendable {
             to: archive,
             session: session
         )
+        try Task.checkCancellation()
         let root = applicationSupportURL.appending(path: rootName)
         return try ModulePackageInstaller().install(
             archiveURL: archive,

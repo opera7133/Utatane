@@ -2,7 +2,7 @@ import Foundation
 import UtataneCore
 import UtataneNetwork
 
-public struct GhostModuleRequirement: Sendable, Identifiable {
+public struct GhostModuleRequirement: Sendable, Identifiable, Equatable {
     public let id: String
     public let displayName: String
     public let kind: String
@@ -26,6 +26,15 @@ public struct GhostModuleRequirements: Sendable {
             macOSModuleFilename: ghost.shioriMacOSFilename
         )
         var result: [GhostModuleRequirement] = []
+        if let declaration = try? GhostModuleDeclaration.read(from: master) {
+            for entry in declaration.modules {
+                let module = catalog?.modules.first { $0.id == entry.id && $0.kinds.contains(entry.kind) }
+                if !managedLibraryExists(moduleID: entry.id, kind: entry.kind, root: applicationSupportURL) {
+                    result.append(.init(id: entry.id, displayName: module?.displayName ?? entry.id,
+                                        kind: entry.kind.uppercased(), sourceDLLURL: nil))
+                }
+            }
+        }
         if !hasMacOSOverride(ghost, master: master), descriptor?.provisioning != .included,
            descriptor?.execution != .externalProcess,
            let declaredURL, declaredURL.pathExtension.lowercased() == "dll"
@@ -53,31 +62,52 @@ public struct GhostModuleRequirements: Sendable {
             }
         }
 
-        guard let enumerator = FileManager.default.enumerator(
-            at: master, includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles, .skipsPackageDescendants]
-        ) else { return result }
+        let enumerator = FileManager.default.enumerator(at: master, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles, .skipsPackageDescendants])
+        var candidates = (enumerator?.allObjects as? [URL] ?? []).filter { url in
+            url.pathExtension.lowercased() == "dll" && (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true
+        }
+        // A registered conventional SAORI can be absent from the archive. Read
+        // only the known configuration section, never execute or scan scripts.
+        for name in ["satori_conf.txt", "saori_conf.txt"] {
+            let path = master.appending(path: name)
+            guard let data = try? Data(contentsOf: path, options: .mappedIfSafe), data.count <= 262_144,
+                  let text = LegacyTextDecoder.decode(data) else { continue }
+            var section = false
+            for raw in text.components(separatedBy: .newlines) {
+                let line = raw.trimmingCharacters(in: .whitespaces)
+                if line.hasPrefix("＠") {
+                    section = line == "＠SAORI"; continue
+                }
+                guard section, !line.hasPrefix("//") else { continue }
+                let values = line.split(separator: ",", omittingEmptySubsequences: false)
+                if values.count >= 2, let path = safeDeclaredURL(values[1].trimmingCharacters(in: .whitespaces), in: master),
+                   path.pathExtension.lowercased() == "dll"
+                {
+                    candidates.append(path)
+                }
+            }
+        }
         var seen = Set<String>()
-        for case let dll as URL in enumerator where dll.pathExtension.lowercased() == "dll" {
+        for dll in candidates {
             let stem = dll.deletingPathExtension().lastPathComponent.lowercased()
             let catalogModule = catalog?.modules.first(where: { module in
                 module.kinds.contains("saori") && windowsFilenames(for: module).contains(dll.lastPathComponent.lowercased())
             })
-            let moduleID = catalogModule?.id ?? (stem == "saori_cpuid" ? "saori-cpuid" : stem)
-            let knownSAORI = ["saori_cpuid", "kenonoke", "textcopy2", "mciaudior", "wmove", "httpc"].contains(stem)
+            let moduleID = catalogModule?.id ?? (["saori_cpuid": "saori-cpuid", "proxy_ex": "proxy-ex", "saori_ip": "saori-ip", "ip": "saori-ip"][stem] ?? stem)
+            let knownSAORI = ["saori_cpuid", "kenonoke", "textcopy2", "mciaudior", "wmove", "httpc", "proxy_ex", "clipcopy", "textcopy", "saori_ip", "ip"].contains(stem)
             guard dll.standardizedFileURL != declaredURL?.standardizedFileURL,
-                  (try? dll.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
                   knownSAORI || catalogModule != nil,
-                  seen.insert(dll.lastPathComponent.lowercased()).inserted,
+                  seen.insert(dll.standardizedFileURL.path).inserted,
                   !localLibraryExists(beside: dll, moduleID: moduleID),
                   !managedLibraryExists(moduleID: moduleID, kind: "saori", root: applicationSupportURL)
             else { continue }
             result.append(GhostModuleRequirement(
                 id: moduleID,
-                displayName: dll.lastPathComponent, kind: "SAORI", sourceDLLURL: dll
+                displayName: dll.lastPathComponent, kind: "SAORI", sourceDLLURL: FileManager.default.fileExists(atPath: dll.path) ? dll : nil
             ))
         }
-        return result
+        var unique = Set<String>()
+        return result.filter { unique.insert($0.kind + ":" + $0.id).inserted }
     }
 
     public func missing(
@@ -107,6 +137,23 @@ public struct GhostModuleRequirements: Sendable {
         }
     }
 
+    /// Unknown DLLs may become identifiable only after fetching a custom or
+    /// newer catalog. A fetch failure must not turn them into required SAORI.
+    public func needsCatalogDiscovery(for ghost: InstalledGhost, applicationSupportURL: URL) -> Bool {
+        let master = ghost.rootDirectory.appending(path: "ghost/master")
+        let declared = safeDeclaredURL(ghost.effectiveShioriFilename, in: master)?.standardizedFileURL
+        guard let files = FileManager.default.enumerator(at: master, includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return false }
+        for case let file as URL in files where file.pathExtension.lowercased() == "dll" && file.standardizedFileURL != declared {
+            let id = file.deletingPathExtension().lastPathComponent.lowercased().replacingOccurrences(of: "_", with: "-")
+            if (try? file.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
+               !localLibraryExists(beside: file, moduleID: id), !managedLibraryExists(moduleID: id, kind: "saori", root: applicationSupportURL)
+            {
+                return true
+            }
+        }
+        return false
+    }
+
     private func hasMacOSOverride(_ ghost: InstalledGhost, master: URL) -> Bool {
         guard let filename = ghost.shioriMacOSFilename,
               let candidate = safeDeclaredURL(filename, in: master),
@@ -126,7 +173,7 @@ public struct GhostModuleRequirements: Sendable {
         let stem = declared.deletingPathExtension().lastPathComponent
         let directory = declared.deletingLastPathComponent()
         let names = moduleID == "yaya-6" ? ["libyaya-6.dylib"]
-            : ["\(stem).dylib", "lib\(stem).dylib", "lib\(moduleID).dylib"]
+            : ["\(stem).dylib", "lib\(stem).dylib", "lib\(moduleID).dylib", "lib\(moduleID.replacingOccurrences(of: "-", with: "_")).dylib"]
         return names.contains { FileManager.default.fileExists(atPath: directory.appending(path: $0).path) }
     }
 

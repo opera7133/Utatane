@@ -116,3 +116,13 @@ Reference0は識別子、Reference1は`-`、Reference2は同期呼び出しの�
 華和梨は9.1.0-r5以降へ更新してください。古い版では、元のWindows DLLがないとhttpcなどを内蔵機能と誤認する場合があります。
 ダウンロードは32MB、文字列結果はUTF-8で2MBまで、同時受付はホストごとに64件までです。
 httpc 0.1.0-r5では、URLの前に`erase_tag`（タグ除去）・`translate_tag`（原作の簡易SakuraScript変換）を文字コード指定と並べられます。両方ある場合は変換が優先です。非同期の`bg`では識別子の後へ置きます。変換対象は改行・水平線・リンク・画像の代替テキストと一部の文字参照で、完全なHTML解析ではありません。変換結果は原作同様に半角48桁換算・120行を上限に切り詰めます。保存モードはタグ処理せず、元のバイト列を保存します。詳細は[ModulesのSAORI手順](https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md)を参照してください。
+
+### 追加の共通SAORI（次回版）
+
+Modulesに`clipcopy`・`textcopy`・`saori-ip`を追加しました。通常のmacOS実装はdylibです。
+
+- `clipcopy`: 全引数を改行で結合し、文字列中の`\n`も改行へ変換してコピーします。
+- `textcopy` / `textcopy2`: 第1引数をコピー。第2引数が数値で非ゼロなら元の文字列を返し、第3引数があればその区切りをコピー先で改行へ置換します。
+- `saori-ip`: `GetLocalIP`と`GetLocalHostname`。`saori_ip.dll`・原作配布名の`ip.dll`に対応します。`GetInternetIP`は非対応（501）です。ローカルIPは有効な非ループバックIPv4の先頭で、複数NICではWindowsと選択が異なる場合があります。
+
+共有配置の名前解決にはModulesのSHIORI側も更新してください。YAYA 5/6 r4、里々Mc205-5-r2、華和梨9.2.0-r2、忍・灯r4以降が対象です。原作の全機能との一致を示すものではありません。

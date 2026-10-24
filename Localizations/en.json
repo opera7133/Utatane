@@ -637,5 +637,12 @@
   "内蔵SAORIには %@ 以降が必要。更新後にゴーストを再読み込みして。" : "Internal SAORI requires %@ or later. Update the module, then reload the ghost.",
   "通常SAORIの呼び出しを記録" : "Record conventional SAORI calls",
   "dylibとWine DLLの読み込み先・状態・所要時間を記録する。引数と結果本文は記録しない。" : "Record the loaded dylib or Wine DLL, status and duration. Arguments and response bodies are not recorded.",
-  "通常SAORIのログを見る" : "View Conventional SAORI Logs"
+  "通常SAORIのログを見る" : "View Conventional SAORI Logs",
+  "必要モジュールの設定を読み込めない。utatane-modules.jsonを確認して。" : "Cannot read the required modules configuration. Check utatane-modules.json.",
+  "まとめて導入できる" : "Available for batch installation",
+  "まとめてダウンロード" : "Download All Available",
+  "モジュールを導入中…" : "Installing modules…",
+  "カタログに掲載がない" : "Not listed in the catalog",
+  "カタログを未確認" : "Catalog not checked",
+  "通常SAORIの診断には %@ 以降が必要。" : "Ordinary SAORI diagnostics require %@ or later."
 }

@@ -269,6 +269,10 @@ struct ModuleCatalogView: View {
                     Text(String(localized: "内蔵SAORIには \(required.label) 以降が必要。更新後にゴーストを再読み込みして。"))
                         .font(.caption).foregroundStyle(.orange)
                 }
+                if let required = ModuleCatalogInventory().saoriDiagnosticsUpdateRequired(moduleID: module.id) {
+                    Text(String(localized: "通常SAORIの診断には \(required.label) 以降が必要。"))
+                        .font(.caption).foregroundStyle(.orange)
+                }
             }
             Spacer()
             Text(stateTitle(ModuleCatalogInventory().state(for: module)))
@@ -406,6 +410,9 @@ extension Notification.Name {
 
 enum ModuleCatalogFailureMessage {
     static func describe(_ error: Error) -> String {
+        if let batch = error as? ModuleBatchInstallFailure {
+            return batch.moduleID + ": " + describe(batch.underlying)
+        }
         if let catalogError = error as? ModuleCatalogError {
             switch catalogError {
             case .invalidSignature:

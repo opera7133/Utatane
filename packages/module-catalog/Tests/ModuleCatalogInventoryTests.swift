@@ -125,3 +125,26 @@ func `internal SAORI minimum revisions work offline and follow selected librarie
     try write("1.0.0", 100)
     #expect(inventory.internalSaoriUpdateRequired(moduleID: id) != nil)
 }
+
+@Test(arguments: ["yaya", "yaya-6", "satori", "kawari", "shino", "akari"])
+func `ordinary SAORI tracing requirements inspect the selected manifest without blocking ordinary calls`(id: String) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let inventory = ModuleCatalogInventory(applicationSupportURL: root)
+    let required = try #require(InternalSaoriModuleRequirement.minimumForDiagnostics(for: id))
+    let directory = root.appending(path: "NativeShiori/\(id)")
+    let library = directory.appending(path: "lib/lib\(id).dylib")
+    try FileManager.default.createDirectory(at: library.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: library)
+    func write(_ revision: Int) throws {
+        let manifest: [String: Any] = ["schemaVersion": 1, "id": id, "version": required.version, "revision": revision, "abi": "shiori", "minimumOS": "14.0", "architectures": [inventory.architecture], "files": ["lib/lib\(id).dylib": "fixture"]]
+        try JSONSerialization.data(withJSONObject: manifest).write(to: directory.appending(path: "module.json"))
+    }
+    try write(required.revision - 1)
+    #expect(inventory.saoriDiagnosticsUpdateRequired(moduleID: id) == required)
+    #expect(inventory.saoriDiagnosticsUpdateRequired(libraryURL: library) == required)
+    #expect(inventory.saoriDiagnosticsUpdateRequired(libraryURL: directory.appending(path: "lib/custom.dylib")) == nil)
+    try write(required.revision)
+    #expect(inventory.saoriDiagnosticsUpdateRequired(moduleID: id) == nil)
+    #expect(inventory.saoriDiagnosticsUpdateRequired(libraryURL: library) == nil)
+}

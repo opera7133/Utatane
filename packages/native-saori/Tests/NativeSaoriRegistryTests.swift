@@ -136,3 +136,24 @@ private final class CandidateRecorder: @unchecked Sendable {
     registry.load("saori\\proxy_ex.dll")
     #expect(registry.call("proxy_ex.dll", arguments: ["test"]) == "external")
 }
+
+@Test(arguments: [("ip.dll", "saori-ip", "saori_ip"), ("saori_ip.dll", "saori-ip", "saori_ip"), ("proxy_ex.dll", "proxy-ex", "proxy_ex")])
+func `shared conventional SAORI names resolve catalog IDs and preserve ghost resource directories`(dll: String, id: String, product: String) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let master = root.appending(path: "master"), managed = root.appending(path: "managed")
+    let shared = managed.appending(path: "\(id)/lib/lib\(product).dylib")
+    try FileManager.default.createDirectory(at: master, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: shared.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: shared)
+    let recorder = CandidateRecorder()
+    let registry = NativeSaoriRegistry(baseDirectoryURL: master, managedModulesURL: managed, externalModuleFactory: { url, resource, _ in
+        guard url == shared else { return nil }
+        recorder.paths.append(url.path); recorder.resources.append(resource.path)
+        return RecordingExternalModule()
+    })
+    registry.load(dll)
+    #expect(registry.call(dll, arguments: []) == "external")
+    #expect(recorder.paths == [shared.path])
+    #expect(recorder.resources == [master.path])
+}

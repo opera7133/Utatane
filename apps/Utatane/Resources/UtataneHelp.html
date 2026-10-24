@@ -123,6 +123,10 @@ pre code { padding: 0; }
 </ol>
 <p>文字が小さければ「設定」→「喋り / バルーン」の文字サイズを、キャラクターが大きければ「設定」→「ゴーストごとの設定」の倍率を調整します。</p>
 <p>続きは<a href="#use-basics">ゴーストと遊ぶ</a>と<a href="#use-content">コンテンツを管理する</a>を読んでください。見えない・反応しない場合は<a href="#support-troubleshooting">困ったとき</a>を確認できます。</p>
+<h3 id="start-ゴースト切り替え時のモジュール導入次回版">ゴースト切り替え時のモジュール導入（次回版）</h3>
+<p>必要なSHIORI・既知のSAORIが未導入なら、切り替える前に一覧を表示します。カタログにこのMac用の配布物があるものは「まとめてダウンロード」で導入できます。カタログ未掲載・手動導入のみ・このMacでは利用不可の項目は、理由を分けて表示します。</p>
+<p>手動対応が必要なものが混ざっていても、導入できる分だけ先にダウンロードできます。途中で失敗した場合は、完了したものを残して、再試行時には不足分だけ取得します。導入と再確認が終わるまで、元のゴーストを終了しません。Wineが設定され、必要なWindows DLLが揃っている場合はWineでの起動も選べます。</p>
+<p>検出対象はSHIORIの指定、既知の同梱SAORI DLL、里々の<code>＠SAORI</code>登録、制作者による必要モジュール宣言です。プラグインはこの依存導入の対象に含めません。任意の辞書処理から動的に生成されるSAORI名までは検出できません。</p>
 </section>
 <section class="chapter" id="use-basics"><h2>ゴーストと遊ぶ</h2><h3 id="use-basics-会話とマウス操作">会話とマウス操作</h3>
 <p>まずはキャラクターをダブルクリックしてみてください。メニューを開いたり、話しかけてきたりするゴーストがあります。頭や手などを撫でると、場所によって反応が変わることもあります。</p>
@@ -1003,6 +1007,14 @@ Reference0は識別子、Reference1は<code>-</code>、Reference2は同期呼び
 華和梨は9.1.0-r5以降へ更新してください。古い版では、元のWindows DLLがないとhttpcなどを内蔵機能と誤認する場合があります。
 ダウンロードは32MB、文字列結果はUTF-8で2MBまで、同時受付はホストごとに64件までです。
 httpc 0.1.0-r5では、URLの前に<code>erase_tag</code>（タグ除去）・<code>translate_tag</code>（原作の簡易SakuraScript変換）を文字コード指定と並べられます。両方ある場合は変換が優先です。非同期の<code>bg</code>では識別子の後へ置きます。変換対象は改行・水平線・リンク・画像の代替テキストと一部の文字参照で、完全なHTML解析ではありません。変換結果は原作同様に半角48桁換算・120行を上限に切り詰めます。保存モードはタグ処理せず、元のバイト列を保存します。詳細は<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md">ModulesのSAORI手順</a>を参照してください。</p>
+<h4 id="support-engines-追加の共通saori次回版">追加の共通SAORI（次回版）</h4>
+<p>Modulesに<code>clipcopy</code>・<code>textcopy</code>・<code>saori-ip</code>を追加しました。通常のmacOS実装はdylibです。</p>
+<ul>
+<li><code>clipcopy</code>: 全引数を改行で結合し、文字列中の<code>\n</code>も改行へ変換してコピーします。</li>
+<li><code>textcopy</code> / <code>textcopy2</code>: 第1引数をコピー。第2引数が数値で非ゼロなら元の文字列を返し、第3引数があればその区切りをコピー先で改行へ置換します。</li>
+<li><code>saori-ip</code>: <code>GetLocalIP</code>と<code>GetLocalHostname</code>。<code>saori_ip.dll</code>・原作配布名の<code>ip.dll</code>に対応します。<code>GetInternetIP</code>は非対応（501）です。ローカルIPは有効な非ループバックIPv4の先頭で、複数NICではWindowsと選択が異なる場合があります。</li>
+</ul>
+<p>共有配置の名前解決にはModulesのSHIORI側も更新してください。YAYA 5/6 r4、里々Mc205-5-r2、華和梨9.2.0-r2、忍・灯r4以降が対象です。原作の全機能との一致を示すものではありません。</p>
 </section>
 </main></div>
 <script>
