@@ -3510,6 +3510,35 @@
         }
       }
     },
+    "dylibとWine DLLの読み込み先・状態・所要時間を記録する。引数と結果本文は記録しない。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Record the loaded dylib or Wine DLL, status and duration. Arguments and response bodies are not recorded."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dylib와 Wine DLL의 로드 경로·상태·소요 시간을 기록해. 인수와 응답 본문은 기록하지 않아."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记录 dylib 或 Wine DLL 的加载路径、状态和耗时。不记录参数和响应正文。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記錄 dylib 或 Wine DLL 的載入路徑、狀態與耗時。不記錄參數和回應內容。"
+          }
+        }
+      }
+    },
     "homeurlが設定されたゴーストとバルーンが対象。手動更新は右クリックメニューから実行できる。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16991,6 +17020,64 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "選擇收件者"
+          }
+        }
+      }
+    },
+    "通常SAORIのログを見る" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View Conventional SAORI Logs"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일반 SAORI 로그 보기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "查看常规 SAORI 日志"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "檢視一般 SAORI 記錄"
+          }
+        }
+      }
+    },
+    "通常SAORIの呼び出しを記録" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Record conventional SAORI calls"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일반 SAORI 호출 기록"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记录常规 SAORI 调用"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "記錄一般 SAORI 呼叫"
           }
         }
       }

@@ -32,15 +32,18 @@ public protocol NativeSaoriWindowControlling: Sendable {
 
 public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable {
     private let lock = NSLock()
+    private let diagnostics: SaoriDiagnostics
     private let baseDirectoryURL: URL
     private let windowController: (any NativeSaoriWindowControlling)?
     private let externalModuleFactory: (@Sendable (URL, URL, (any NativeSaoriWindowControlling)?) -> (any ExternalSaoriModule)?)?
     private let managedModulesURL: URL
     private let prefersExternalWindowsDLL: Bool
+    private var selectedModules: [String: URL] = [:]
     private var externalModules: [String: any ExternalSaoriModule] = [:]
 
     public init(
         baseDirectoryURL: URL,
+        diagnostics: SaoriDiagnostics = .shared,
         textCopyPasteboardName: String? = nil,
         textCopyHandler: (@Sendable (String) -> Void)? = nil,
         windowController: (any NativeSaoriWindowControlling)? = nil,
@@ -49,6 +52,7 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
             .appending(path: "Utatane/NativeSaori"),
         externalModuleFactory: (@Sendable (URL, URL, (any NativeSaoriWindowControlling)?) -> (any ExternalSaoriModule)?)? = nil
     ) {
+        self.diagnostics = diagnostics
         self.baseDirectoryURL = baseDirectoryURL
         self.windowController = windowController
         self.prefersExternalWindowsDLL = prefersExternalWindowsDLL
@@ -61,6 +65,7 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
     }
 
     private func loadUnlocked(_ path: String) {
+        let started = DispatchTime.now().uptimeNanoseconds
         let key = moduleKey(path)
         guard externalModules[key] == nil else { return }
         let declaredURL = safeExternalModuleURL(path)
@@ -68,6 +73,8 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
             for candidate in nativeCandidates(for: declaredURL) where FileManager.default.fileExists(atPath: candidate.path) {
                 if let module = factory(candidate, declaredURL.deletingLastPathComponent(), windowController) {
                     externalModules[key] = module
+                    selectedModules[key] = candidate
+                    trace("load", module: candidate, backend: "dylib", status: 1, started: started)
                     return
                 }
             }
@@ -77,26 +84,52 @@ public final class NativeSaoriRegistry: NativeSaoriCalling, @unchecked Sendable 
            let module = externalModuleFactory?(declaredURL, declaredURL.deletingLastPathComponent(), windowController)
         {
             externalModules[key] = module
+            selectedModules[key] = declaredURL
+            trace("load", module: declaredURL, backend: "Wine DLL", status: 1, started: started)
             return
         }
         if let declaredURL,
            let module = externalModuleFactory?(declaredURL, declaredURL.deletingLastPathComponent(), windowController)
         {
             externalModules[key] = module
+            selectedModules[key] = declaredURL
+            trace("load", module: declaredURL, backend: declaredURL.pathExtension.lowercased() == "dll" ? "Wine DLL" : "dylib", status: 1, started: started)
+            return
         }
+        trace("load", module: declaredURL ?? resolvedModuleURL(path), backend: "unresolved", status: 0, started: started)
     }
 
     public func unload(_ path: String) {
-        _ = lock.withLock {
-            externalModules.removeValue(forKey: moduleKey(path))
+        lock.withLock {
+            let key = moduleKey(path), started = DispatchTime.now().uptimeNanoseconds
+            let selected = selectedModules.removeValue(forKey: key)
+            let existed = externalModules.removeValue(forKey: key) != nil
+            trace("unload", module: selected ?? resolvedModuleURL(path), backend: selected.map { $0.pathExtension.lowercased() == "dll" ? "Wine DLL" : "dylib" } ?? "unresolved", status: existed ? nil : 0, started: started)
         }
     }
 
     public func call(_ path: String, arguments: [String]) -> String {
         lock.withLock {
-            let key = moduleKey(path)
-            return externalModules[key]?.call(arguments: arguments) ?? ""
+            let key = moduleKey(path), started = DispatchTime.now().uptimeNanoseconds
+            let selected = selectedModules[key]
+            let backend = selected.map { $0.pathExtension.lowercased() == "dll" ? "Wine DLL" : "dylib" } ?? "unresolved"
+            guard let module = externalModules[key] else {
+                trace("call", module: resolvedModuleURL(path), backend: backend, status: 0, started: started)
+                return ""
+            }
+            let report: NativeSaoriCallReport = if let reporting = module as? any ExternalSaoriStatusReporting {
+                reporting.callReport(arguments: arguments)
+            } else {
+                .init(output: module.call(arguments: arguments), status: nil, responseBytes: 0)
+            }
+            trace("call", module: selected ?? resolvedModuleURL(path), backend: backend, status: report.status, started: started, bytes: report.responseBytes)
+            return report.output
         }
+    }
+
+    private func trace(_ phase: String, module: URL, backend: String, status: Int?, started: UInt64, bytes: Int = 0) {
+        diagnostics.record(phase: phase, source: baseDirectoryURL, module: module, backend: backend, status: status,
+                           elapsedMicroseconds: (DispatchTime.now().uptimeNanoseconds &- started) / 1000, responseBytes: UInt64(max(0, bytes)))
     }
 
     public func response(path: String, request: String) -> String {

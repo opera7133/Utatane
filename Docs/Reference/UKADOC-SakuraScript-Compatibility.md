@@ -205,10 +205,10 @@ UKADOC分類行数: 150
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\![execute,http-get,URL,...]` | 🟡 | async／sync、param、主要header、timeout、no-cache、file／nofile、progress-notify、streaming、TLS情報通知に対応。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行います。同一URLの並行実行、multipart、入力ファイル、送信文字コード指定に対応。証明書検証無効化は未対応 |
+| `\![execute,http-get,URL,...]` | 🟡 | async／sync、param、主要header、timeout、no-cache、file／nofile、progress-notify、streaming、TLS情報通知に対応。fileはghost/master/varへ逐次保存し、進捗通知時点で読める。失敗・取消時は既存ファイルを復元。同一保存先への並行書き込みは失敗する。streamingの1行は最大1MB。nofileは文字コード指定・128KB制限・改行変換を行います。同一URLの並行実行、multipart、入力ファイル、送信文字コード指定に対応。証明書検証無効化は未対応 |
 | http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded body、multipart、入力ファイル、送信文字コードと主要共通オプションに対応。証明書検証無効化は未対応 |
 | `\![execute,rss-get/rss-post,URL,...]` | 🟡 | RSS/Atomの取得・基本パース、完了／失敗、TLS情報通知に対応。全オプションは未照合 |
-| `\![execute,ical-get/ical-post,URL,...]` | 🟡 | iCalendar取得・解析、完了／失敗／進捗／TLS情報通知に対応。from／to／expand／limitと日・週・月・年のRRULE（INTERVAL・COUNT・UNTIL・BYDAY・BYMONTHDAY・BYMONTH・WKST）、EXDATE・RDATE・TZID・DURATION・複数日予定を展開する。BYSETPOS、時・分・秒単位の繰り返し、RECURRENCE-IDによる個別変更、独自VTIMEZONE定義は未対応 |
+| `\![execute,ical-get/ical-post,URL,...]` | 🟡 | iCalendar取得・解析、完了／失敗／進捗／TLS情報通知に対応。from／to／expand／limitと日・週・月・年のRRULE（INTERVAL・COUNT・UNTIL・BYDAY・BYMONTHDAY・BYMONTH・BYSETPOS・WKST）、EXDATE・RDATE・TZID・DURATION・複数日予定を展開する。RECURRENCE-IDによる個別変更・取消と書き出しに対応。RANGE=THISANDFUTURE、時・分・秒単位の繰り返し、独自VTIMEZONE定義は未対応 |
 | `\![execute,schedule-add/delete/get,...]` | 🟡 | Utataneの共有予定表へ登録・削除・取得し、完了／失敗を通知。主要フィールド、期間指定とical-getと同じ範囲の繰り返し展開に対応。完全なRFC 5545互換ではない |
 | `\![execute,filewatch,...]` / `\![cancel,filewatch,...]` | ✅ | ファイル・ディレクトリを監視し、作成・更新・削除をdebounce後に通知。ゴースト終了時に監視を解除 |
 | websocket execute/send/close/cancel | 🟡 | ws/wss接続、Open、header・subprotocol、テキスト／バイナリ送受信、close／cancel、最大5回の自動再接続とTLS情報通知に対応。証明書subject／issuerは空欄 |

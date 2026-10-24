@@ -14,7 +14,8 @@
                     saoriCaller: (any NativeSaoriCalling)? = nil,
                     saoriRootURL: URL? = nil,
                     moduleResolver: UtataneModuleResolver = .init(),
-                    onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)? = nil) throws
+                    onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)? = nil,
+                    hostURL: URL = NativeShioriProcessSession.defaultHostURL) throws
         {
             let moduleURL: URL
             if let moduleURLOverride {
@@ -29,7 +30,7 @@
                                               stateDirectoryURL: state, saoriCaller: saoriCaller,
                                               saoriRootURL: saoriRootURL,
                                               moduleResolver: moduleResolver,
-                                              onInternalSaoriEvent: onInternalSaoriEvent)
+                                              onInternalSaoriEvent: onInternalSaoriEvent, hostURL: hostURL)
         }
 
         public func request(_ request: PluginRequest) async throws -> PluginResponse {

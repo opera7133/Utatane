@@ -3286,7 +3286,8 @@ private struct UtataneRootView: View {
                 request,
                 progress: progress,
                 streaming: streaming,
-                bodyFileURL: prepared.bodyFileURL
+                bodyFileURL: prepared.bodyFileURL,
+                outputFileURL: command.isFeed || command.isCalendar ? nil : destination
             )
             try Task.checkCancellation()
             let data = transfer.data
@@ -3385,10 +3386,7 @@ private struct UtataneRootView: View {
             let result: String
             switch command.output {
             case .file:
-                guard let destination else { throw CocoaError(.fileWriteInvalidFileName) }
-                try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
-                try Task.checkCancellation()
-                try data.write(to: destination, options: .atomic)
+                guard let destination = transfer.fileURL else { throw CocoaError(.fileWriteUnknown) }
                 result = destination.path
             case let .memory(characterEncoding):
                 result = Self.httpResponseText(data.prefix(128 * 1024), encoding: characterEncoding)

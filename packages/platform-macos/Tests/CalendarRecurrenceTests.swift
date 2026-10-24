@@ -46,3 +46,30 @@ private var recurrenceCalendar: Calendar {
     #expect(days == [start, start.addingTimeInterval(2 * 86400)])
     #expect(ICalendarDateParser.durationEnd(start: start, source: "garbage") == nil)
 }
+
+@Test func `BYSETPOS selects within complete periods before COUNT UNTIL and exclusions`() throws {
+    let start = recurrenceDate("2026-10-01T09:00:00Z")
+    let end = recurrenceDate("2027-01-01T00:00:00Z")
+    let rule = "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;COUNT=2"
+    let dates = try CalendarRecurrence.starts(start: start, end: start, rule: rule, in: DateInterval(start: start, end: end), calendar: recurrenceCalendar)
+    #expect(dates == [recurrenceDate("2026-10-30T09:00:00Z"), recurrenceDate("2026-11-30T09:00:00Z")])
+    let partial = try CalendarRecurrence.starts(start: start, end: start, rule: rule, in: DateInterval(start: start, end: recurrenceDate("2026-10-15T00:00:00Z")), calendar: recurrenceCalendar)
+    #expect(partial.isEmpty)
+    let limited = try CalendarRecurrence.starts(start: start, end: start, rule: "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1;UNTIL=20261015T090000Z", in: DateInterval(start: start, end: end), calendar: recurrenceCalendar)
+    #expect(limited.isEmpty)
+    let excluded = try CalendarRecurrence.starts(start: start, end: start, rule: rule, excludedDateTimes: [dates[0]], in: DateInterval(start: start, end: end), calendar: recurrenceCalendar)
+    #expect(excluded == [dates[1]])
+    for invalid in ["FREQ=MONTHLY;BYSETPOS=0;BYDAY=MO", "FREQ=MONTHLY;BYSETPOS=1", "FREQ=MONTHLY;BYDAY=-9223372036854775808MO"] {
+        #expect(throws: CalendarRecurrence.Failure.self) { try CalendarRecurrence.starts(start: start, end: start, rule: invalid, in: DateInterval(start: start, end: end), calendar: recurrenceCalendar) }
+    }
+}
+
+@Test func `recurrence preserves fractional starts and skips nonexistent local times`() throws {
+    let fractional = recurrenceDate("2026-10-01T09:00:00Z").addingTimeInterval(0.25)
+    #expect(try CalendarRecurrence.starts(start: fractional, end: fractional, rule: "FREQ=DAILY;COUNT=2", in: DateInterval(start: fractional, duration: 3 * 86400), calendar: recurrenceCalendar) == [fractional, fractional.addingTimeInterval(86400)])
+    var calendar = Calendar(identifier: .gregorian); calendar.timeZone = try #require(TimeZone(identifier: "America/New_York"))
+    let start = try #require(ICalendarDateParser.parse("20260307T023000", timeZoneIdentifier: calendar.timeZone.identifier))
+    let result = try CalendarRecurrence.starts(start: start, end: start, rule: "FREQ=DAILY;COUNT=2", in: DateInterval(start: start, duration: 4 * 86400), calendar: calendar)
+    #expect(result.map { calendar.component(.day, from: $0) } == [7, 9])
+    #expect(result.map { calendar.component(.hour, from: $0) } == [2, 2])
+}

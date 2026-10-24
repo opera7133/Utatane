@@ -43,7 +43,7 @@ public enum CalendarRecurrence {
         return days
     }
 
-    public static func starts(start: Date, end: Date, rule: String?, excluded: [Date] = [], additional: [Date] = [],
+    public static func starts(start: Date, end: Date, rule: String?, excluded: [Date] = [], excludedDateTimes: [Date] = [], additional: [Date] = [],
                               in range: DateInterval, calendar: Calendar = .current) throws -> [Date]
     {
         let duration = max(0, end.timeIntervalSince(start))
@@ -51,9 +51,10 @@ public enum CalendarRecurrence {
             date < range.end && (duration == 0 ? date >= range.start : date.addingTimeInterval(duration) > range.start)
         }
         let exclusions = Set(excluded.map { calendar.startOfDay(for: $0) })
-        var output = Set(additional.filter { overlaps($0) && !exclusions.contains(calendar.startOfDay(for: $0)) })
+        let exactExclusions = Set(excludedDateTimes)
+        var output = Set(additional.filter { overlaps($0) && !exactExclusions.contains($0) && !exclusions.contains(calendar.startOfDay(for: $0)) })
         guard let rule, !rule.isEmpty else {
-            if overlaps(start), !exclusions.contains(calendar.startOfDay(for: start)) {
+            if overlaps(start), !exactExclusions.contains(start), !exclusions.contains(calendar.startOfDay(for: start)) {
                 output.insert(start)
             }
             return output.sorted()
@@ -62,9 +63,10 @@ public enum CalendarRecurrence {
         for part in rule.uppercased().split(separator: ";") {
             let pair = part.split(separator: "=", maxSplits: 1)
             guard pair.count == 2 else { throw Failure.invalidRule }
+            guard fields[String(pair[0])] == nil else { throw Failure.invalidRule }
             fields[String(pair[0])] = String(pair[1])
         }
-        let supported: Set = ["FREQ", "INTERVAL", "COUNT", "UNTIL", "BYDAY", "BYMONTHDAY", "BYMONTH", "WKST"]
+        let supported: Set = ["FREQ", "INTERVAL", "COUNT", "UNTIL", "BYDAY", "BYMONTHDAY", "BYMONTH", "BYSETPOS", "WKST"]
         guard Set(fields.keys).isSubset(of: supported) else { throw Failure.unsupportedRule }
         guard let frequency = fields["FREQ"], ["DAILY", "WEEKLY", "MONTHLY", "YEARLY"].contains(frequency),
               let interval = Int(fields["INTERVAL"] ?? "1"), interval > 0,
@@ -82,6 +84,9 @@ public enum CalendarRecurrence {
         }
         let months = try integers("BYMONTH")
         let monthDays = try integers("BYMONTHDAY")
+        let positions = try integers("BYSETPOS")
+        guard positions.allSatisfy({ $0 != 0 && (-366 ... 366).contains($0) }),
+              positions.isEmpty || fields.keys.contains(where: { $0.hasPrefix("BY") && $0 != "BYSETPOS" }) else { throw Failure.invalidRule }
         guard months.allSatisfy({ (1 ... 12).contains($0) }), monthDays.allSatisfy({ $0 != 0 && (-31 ... 31).contains($0) }) else { throw Failure.invalidRule }
         let weekdays = ["SU": 1, "MO": 2, "TU": 3, "WE": 4, "TH": 5, "FR": 6, "SA": 7]
         var weekCalendar = calendar
@@ -95,22 +100,64 @@ public enum CalendarRecurrence {
             guard let day = weekdays[String(value.suffix(2))] else { throw Failure.invalidRule }
             let prefix = value.dropLast(2)
             let ordinal = prefix.isEmpty ? nil : Int(prefix)
-            guard prefix.isEmpty || (ordinal != nil && ordinal != 0 && abs(ordinal!) <= 53) else { throw Failure.invalidRule }
+            guard prefix.isEmpty || (ordinal != nil && ordinal != 0 && (-53 ... 53).contains(ordinal!)) else { throw Failure.invalidRule }
             return (day, ordinal)
         }
-        let origin = calendar.dateComponents([.year, .month, .day, .weekday], from: start)
+        let origin = calendar.dateComponents([.year, .month, .day, .weekday, .hour, .minute, .second], from: start)
+        let subsecond = start.timeIntervalSince1970 - floor(start.timeIntervalSince1970)
         let firstWeek = weekCalendar.dateInterval(of: .weekOfYear, for: start)!.start
-        var date = start
-        var matches = 0
-        var iterations = 0
-        while date < range.end, until.map({ date <= $0 }) ?? true, matches < count {
+        let periodComponent: Calendar.Component = switch frequency { case "DAILY": .day; case "WEEKLY": .weekOfYear; case "MONTHLY": .month; default: .year }
+        let periodCalendar = frequency == "WEEKLY" ? weekCalendar : calendar
+        let firstPeriod = periodCalendar.dateInterval(of: periodComponent, for: start)!
+        // Position selection must see the whole interval, even when the requested
+        // range or UNTIL ends in its middle. COUNT/EXDATE apply after selection.
+        let lastPeriod = periodCalendar.dateInterval(of: periodComponent, for: range.end.addingTimeInterval(-0.001))!
+        let upper = positions.isEmpty ? range.end : lastPeriod.end
+        var cursor = positions.isEmpty ? calendar.startOfDay(for: start) : firstPeriod.start
+        var matches = 0, iterations = 0
+        var bucket: [Date] = [], bucketStart: Date?
+        func accept(_ date: Date) {
+            guard date >= start, until.map({ date <= $0 }) ?? true, matches < count else { return }
+            matches += 1
+            if overlaps(date), !exactExclusions.contains(date), !exclusions.contains(calendar.startOfDay(for: date)) {
+                output.insert(date)
+            }
+        }
+        func flush() {
+            let selected = Set(positions.compactMap { position -> Date? in
+                let index = position > 0 ? position - 1 : bucket.count + position
+                return bucket.indices.contains(index) ? bucket[index] : nil
+            })
+            for date in selected.sorted() {
+                accept(date)
+            }
+            bucket.removeAll(keepingCapacity: true)
+        }
+        while cursor < upper, matches < count {
             iterations += 1
             guard iterations <= 100_000, output.count <= 10000 else { throw Failure.expansionLimit }
+            let dayCursor = cursor
+            guard let next = calendar.date(byAdding: .day, value: 1, to: cursor) else { break }
+            cursor = next
+            let period = periodCalendar.dateInterval(of: periodComponent, for: dayCursor)!
+            if !positions.isEmpty, period.start != bucketStart {
+                flush(); bucketStart = period.start
+                if matches >= count {
+                    break
+                }
+            }
+            if let until, period.start > until {
+                break
+            }
+            guard let wholeDate = calendar.date(bySettingHour: origin.hour!, minute: origin.minute!, second: origin.second!, of: dayCursor,
+                                                matchingPolicy: .strict, repeatedTimePolicy: .first),
+                calendar.isDate(wholeDate, inSameDayAs: dayCursor) else { continue }
+            let date = wholeDate.addingTimeInterval(subsecond)
             let components = calendar.dateComponents([.year, .month, .day, .weekday], from: date)
             let day = components.day!
             let daysInMonth = calendar.range(of: .day, in: .month, for: date)!.count
             let elapsed: Int = switch frequency {
-            case "DAILY": calendar.dateComponents([.day], from: start, to: date).day ?? 0
+            case "DAILY": calendar.dateComponents([.day], from: calendar.startOfDay(for: start), to: dayCursor).day ?? 0
             case "WEEKLY": (calendar.dateComponents([.day], from: firstWeek, to: weekCalendar.dateInterval(of: .weekOfYear, for: date)!.start).day ?? 0) / 7
             case "MONTHLY": (components.year! - origin.year!) * 12 + components.month! - origin.month!
             default: components.year! - origin.year!
@@ -121,7 +168,6 @@ public enum CalendarRecurrence {
             let matchesDay = byDays.isEmpty || byDays.contains { requirement in
                 guard requirement.day == components.weekday else { return false }
                 guard let ordinal = requirement.ordinal else { return true }
-                // Numbered weekdays refer to the month when BYMONTH is present, or for MONTHLY rules.
                 if frequency == "YEARLY", months.isEmpty {
                     let dayOfYear = calendar.ordinality(of: .day, in: .year, for: date)!
                     let daysInYear = calendar.range(of: .day, in: .year, for: date)!.count
@@ -130,16 +176,18 @@ public enum CalendarRecurrence {
                 return ordinal > 0 ? (day - 1) / 7 + 1 == ordinal : -((daysInMonth - day) / 7 + 1) == ordinal
             }
             let matchesMonthDay = monthDays.isEmpty || monthDays.contains { $0 > 0 ? $0 == day : daysInMonth + $0 + 1 == day }
-            if elapsed % interval == 0, defaultMonth, defaultDay, defaultWeekday, matchesDay, matchesMonthDay,
+            if elapsed >= 0, elapsed % interval == 0, defaultMonth, defaultDay, defaultWeekday, matchesDay, matchesMonthDay,
                months.isEmpty || months.contains(components.month!)
             {
-                matches += 1
-                if overlaps(date), !exclusions.contains(calendar.startOfDay(for: date)) {
-                    output.insert(date)
+                if positions.isEmpty {
+                    accept(date)
+                } else {
+                    bucket.append(date)
                 }
             }
-            guard let next = calendar.date(byAdding: .day, value: 1, to: date) else { break }
-            date = next
+        }
+        if !positions.isEmpty {
+            flush()
         }
         guard output.count <= 10000 else { throw Failure.expansionLimit }
         return output.sorted()

@@ -40,29 +40,48 @@ struct UtataneSchedule: Codable, Identifiable, Equatable {
     var status: String?
     var recurrenceRule: String?
     var excludedDates: [Date]?
+    var excludedDateTimes: [Date]?
+    var recurrenceOverrides: [ICalendarEvent]?
+    var recurrenceID: Date?
+    var recurrenceIsDate: Bool?
+    var recurrenceTimeZoneIdentifier: String?
     var additionalDates: [Date]?
     var timeZoneIdentifier: String?
     var subscriptionURL: String?
 }
 
 extension UtataneSchedule {
-    func occurrences(in range: DateInterval, calendar: Calendar = .current) -> [Self] {
-        var calendar = calendar
-        if let zone = timeZoneIdentifier.flatMap(TimeZone.init(identifier:)) {
-            calendar.timeZone = zone
+    var calendarEvent: ICalendarEvent {
+        var fields = ["SUMMARY": caption, "DESCRIPTION": subtitle, "CATEGORIES": type]
+        if let location {
+            fields["LOCATION"] = location
         }
-        let rule = recurrenceRule ?? (repetition == .none ? nil : "FREQ=" + repetition.rawValue.uppercased())
-        guard let starts = try? CalendarRecurrence.starts(start: start, end: end, rule: rule,
-                                                          excluded: excludedDates ?? [], additional: additionalDates ?? [], in: range, calendar: calendar) else { return [] }
-        return starts.map { date in
+        if let url {
+            fields["URL"] = url
+        }
+        if let status {
+            fields["STATUS"] = status
+        }
+        return ICalendarEvent(uid: uid ?? id.uuidString, start: start, end: end, isAllDay: isAllDay,
+                              timeZoneIdentifier: timeZoneIdentifier, fields: fields,
+                              rule: recurrenceRule ?? (repetition == .none ? nil : "FREQ=" + repetition.rawValue.uppercased()),
+                              excludedDays: excludedDates ?? [], excludedDateTimes: excludedDateTimes ?? [], additionalDates: additionalDates ?? [],
+                              recurrenceID: recurrenceID, recurrenceIsDate: recurrenceIsDate ?? isAllDay,
+                              recurrenceTimeZoneIdentifier: recurrenceTimeZoneIdentifier, overrides: recurrenceOverrides ?? [])
+    }
+
+    func occurrences(in range: DateInterval, calendar: Calendar = .current) -> [Self] {
+        guard let values = try? calendarEvent.occurrences(in: range, calendar: calendar) else { return [] }
+        return values.map { value in
             var occurrence = self
-            occurrence.start = date
-            if isAllDay {
-                let days = calendar.dateComponents([.day], from: start, to: end).day ?? 1
-                occurrence.end = calendar.date(byAdding: .day, value: days, to: date) ?? date
-            } else {
-                occurrence.end = date.addingTimeInterval(end.timeIntervalSince(start))
-            }
+            occurrence.start = value.start; occurrence.end = value.end; occurrence.isAllDay = value.isAllDay
+            occurrence.type = value.fields["CATEGORIES"]?.lowercased() ?? type
+            occurrence.caption = value.fields["SUMMARY"] ?? caption
+            occurrence.subtitle = value.fields["DESCRIPTION"] ?? subtitle
+            occurrence.location = value.fields["LOCATION"]
+            occurrence.url = value.fields["URL"]
+            occurrence.status = value.fields["STATUS"]
+            occurrence.timeZoneIdentifier = value.timeZoneIdentifier
             return occurrence
         }
     }
@@ -555,133 +574,22 @@ struct ICalendarDocument: FileDocument {
 
 struct ICalendarCodec {
     func decode(_ source: String) throws -> [UtataneSchedule] {
-        let lines = unfoldedLines(source)
-        guard lines.contains("BEGIN:VCALENDAR"), lines.contains("END:VCALENDAR") else { throw CocoaError(.fileReadCorruptFile) }
-        var schedules: [UtataneSchedule] = []
-        var fields: [String: String] = [:]
-        var isEvent = false
-        for line in lines {
-            if line == "BEGIN:VEVENT" {
-                fields = [:]
-                isEvent = true
-            } else if line == "END:VEVENT", isEvent {
-                guard let startSource = fields["DTSTART"], let start = ICalendarDateParser.parse(startSource, timeZoneIdentifier: fields["DTSTART.TZID"]) else {
-                    throw CocoaError(.fileReadCorruptFile)
-                }
-                let allDay = startSource.count == 8
-                var calendar = Calendar.current
-                if let zone = fields["DTSTART.TZID"].flatMap(TimeZone.init(identifier:)) {
-                    calendar.timeZone = zone
-                }
-                let durationEnd = fields["DURATION"].flatMap { ICalendarDateParser.durationEnd(start: start, source: $0, calendar: calendar) }
-                if fields["DURATION"] != nil, durationEnd == nil {
-                    throw CocoaError(.fileReadCorruptFile)
-                }
-                let end = fields["DTEND"].flatMap { ICalendarDateParser.parse($0, timeZoneIdentifier: fields["DTEND.TZID"] ?? fields["DTSTART.TZID"]) }
-                    ?? durationEnd ?? (allDay ? calendar.date(byAdding: .day, value: 1, to: start)! : start.addingTimeInterval(3600))
-                schedules.append(UtataneSchedule(
-                    uid: fields["UID"],
-                    type: fields["CATEGORIES"]?.lowercased() ?? "event",
-                    caption: unescape(fields["SUMMARY"] ?? ""),
-                    subtitle: unescape(fields["DESCRIPTION"] ?? ""),
-                    start: start,
-                    end: end,
-                    isAllDay: allDay,
-                    repetition: repetition(fields["RRULE"]),
-                    location: unescape(fields["LOCATION"] ?? ""),
-                    url: fields["URL"],
-                    status: fields["STATUS"],
-                    recurrenceRule: fields["RRULE"],
-                    excludedDates: fields["EXDATE"]?.split(separator: ",").compactMap { ICalendarDateParser.parse(String($0), timeZoneIdentifier: fields["EXDATE.TZID"] ?? fields["DTSTART.TZID"]) },
-                    additionalDates: fields["RDATE"]?.split(separator: ",").compactMap { ICalendarDateParser.parse(String($0), timeZoneIdentifier: fields["RDATE.TZID"] ?? fields["DTSTART.TZID"]) },
-                    timeZoneIdentifier: fields["DTSTART.TZID"]
-                ))
-                isEvent = false
-            } else if isEvent, let separator = line.firstIndex(of: ":") {
-                let rawKey = String(line[..<separator])
-                let key = rawKey.split(separator: ";", maxSplits: 1).first.map(String.init) ?? rawKey
-                let normalized = key.uppercased()
-                let value = String(line[line.index(after: separator)...])
-                fields[normalized] = ["EXDATE", "RDATE"].contains(normalized) && fields[normalized] != nil ? fields[normalized]! + "," + value : value
-                for parameter in rawKey.split(separator: ";").dropFirst() where parameter.hasPrefix("TZID=") {
-                    fields[normalized + ".TZID"] = String(parameter.dropFirst(5))
-                }
-            }
+        try ICalendarEventCodec.decode(source).map { event in
+            let frequency = event.rule?.uppercased().split(separator: ";").first { $0.hasPrefix("FREQ=") }?.dropFirst(5).lowercased()
+            return UtataneSchedule(uid: event.uid, type: event.fields["CATEGORIES"]?.lowercased() ?? "event",
+                                   caption: event.fields["SUMMARY"] ?? "", subtitle: event.fields["DESCRIPTION"] ?? "",
+                                   start: event.start, end: event.end, isAllDay: event.isAllDay,
+                                   repetition: frequency.flatMap(UtataneSchedule.Repetition.init(rawValue:)) ?? .none,
+                                   location: event.fields["LOCATION"], url: event.fields["URL"], status: event.fields["STATUS"],
+                                   recurrenceRule: event.rule, excludedDates: event.excludedDays, excludedDateTimes: event.excludedDateTimes,
+                                   recurrenceOverrides: event.overrides, recurrenceID: event.recurrenceID, recurrenceIsDate: event.recurrenceIsDate,
+                                   recurrenceTimeZoneIdentifier: event.recurrenceTimeZoneIdentifier, additionalDates: event.additionalDates,
+                                   timeZoneIdentifier: event.timeZoneIdentifier)
         }
-        return schedules
     }
 
     func encode(_ schedules: [UtataneSchedule]) -> String {
-        var lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Utatane//Calendar//JA"]
-        for schedule in schedules {
-            lines += [
-                "BEGIN:VEVENT",
-                "UID:\(schedule.uid ?? schedule.id.uuidString)",
-                schedule.isAllDay ? "DTSTART;VALUE=DATE:\(formatDate(schedule.start, allDay: true))" : "DTSTART\(schedule.timeZoneIdentifier.map { ";TZID=" + $0 } ?? ""):\(formatDate(schedule.start, allDay: false, timeZoneIdentifier: schedule.timeZoneIdentifier))",
-                schedule.isAllDay ? "DTEND;VALUE=DATE:\(formatDate(schedule.end, allDay: true))" : "DTEND\(schedule.timeZoneIdentifier.map { ";TZID=" + $0 } ?? ""):\(formatDate(schedule.end, allDay: false, timeZoneIdentifier: schedule.timeZoneIdentifier))",
-                "SUMMARY:\(escape(schedule.caption))",
-                "DESCRIPTION:\(escape(schedule.subtitle))",
-                "CATEGORIES:\(schedule.type)"
-            ]
-            if let location = schedule.location, !location.isEmpty {
-                lines.append("LOCATION:\(escape(location))")
-            }
-            if let url = schedule.url, !url.isEmpty {
-                lines.append("URL:\(url)")
-            }
-            if let status = schedule.status, !status.isEmpty {
-                lines.append("STATUS:\(status)")
-            }
-            if let recurrenceRule = schedule.recurrenceRule, !recurrenceRule.isEmpty {
-                lines.append("RRULE:\(recurrenceRule)")
-            } else if schedule.repetition != .none {
-                lines.append("RRULE:FREQ=\(schedule.repetition.rawValue.uppercased())")
-            }
-            for (key, dates) in [("EXDATE", schedule.excludedDates), ("RDATE", schedule.additionalDates)] {
-                if let dates, !dates.isEmpty {
-                    lines.append(key + ":" + dates.map { formatDate($0, allDay: schedule.isAllDay) }.joined(separator: ","))
-                }
-            }
-            lines.append("END:VEVENT")
-        }
-        lines.append("END:VCALENDAR")
-        return lines.joined(separator: "\r\n") + "\r\n"
-    }
-
-    private func unfoldedLines(_ source: String) -> [String] {
-        source.replacingOccurrences(of: "\r\n ", with: "").replacingOccurrences(of: "\r\n\t", with: "")
-            .components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .newlines) }
-    }
-
-    private func parseDate(_ source: String) -> Date? {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = source.hasSuffix("Z") ? TimeZone(secondsFromGMT: 0) : .current
-        formatter.dateFormat = source.count == 8 ? "yyyyMMdd" : source.hasSuffix("Z") ? "yyyyMMdd'T'HHmmss'Z'" : "yyyyMMdd'T'HHmmss"
-        return formatter.date(from: source)
-    }
-
-    private func formatDate(_ date: Date, allDay: Bool, timeZoneIdentifier: String? = nil) -> String {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = timeZoneIdentifier.flatMap(TimeZone.init(identifier:)) ?? (allDay ? .current : TimeZone(secondsFromGMT: 0)!)
-        formatter.dateFormat = allDay ? "yyyyMMdd" : timeZoneIdentifier == nil ? "yyyyMMdd'T'HHmmss'Z'" : "yyyyMMdd'T'HHmmss"
-        return formatter.string(from: date)
-    }
-
-    private func repetition(_ rule: String?) -> UtataneSchedule.Repetition {
-        guard let frequency = rule?.uppercased().split(separator: ";").first(where: { $0.hasPrefix("FREQ=") })?
-            .dropFirst("FREQ=".count)
-        else { return .none }
-        return UtataneSchedule.Repetition(rawValue: frequency.lowercased()) ?? .none
-    }
-
-    private func escape(_ source: String) -> String {
-        source.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\n", with: "\\n").replacingOccurrences(of: ",", with: "\\,")
-    }
-
-    private func unescape(_ source: String) -> String {
-        source.replacingOccurrences(of: "\\n", with: "\n").replacingOccurrences(of: "\\,", with: ",").replacingOccurrences(of: "\\\\", with: "\\")
+        ICalendarEventCodec.encode(schedules.map(\.calendarEvent))
     }
 }
 

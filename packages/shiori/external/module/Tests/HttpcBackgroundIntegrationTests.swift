@@ -86,12 +86,17 @@ struct HttpcBackgroundIntegrationTests {
         try compiler.run(); compiler.waitUntilExit()
         try #require(compiler.terminationStatus == 0)
         let events = HttpcEventBox()
-        let session = try NativeShioriSession(directoryURL: root, moduleURL: libraries.appending(path: "lib\(kind).dylib"), onInternalSaoriEvent: events.receive, hostURL: helper)
+        let traceStore = AppLogStore(), trace = SaoriDiagnostics(store: traceStore)
+        trace.isEnabled = true
+        let session = try NativeShioriSession(directoryURL: root, moduleURL: libraries.appending(path: "lib\(kind).dylib"), saoriDiagnostics: trace, onInternalSaoriEvent: events.receive, hostURL: helper)
         defer { try? session.close() }
         let initial = try session.request("GET SHIORI/3.0\r\nCharset: UTF-8\r\nID: OnProbe\r\nSecurityLevel: Local\r\n\r\n")
         let completion = try #require(await events.wait(count: 1).first, "Initial response: \(initial)")
         #expect(completion.references == [0: "dictionary", 1: "-", 2: "bg-日本語next"])
         #expect(completion.isCurrent)
+        #expect(traceStore.snapshot().contains { $0.message.contains("phase=load") && $0.message.contains("libhttpc.dylib") })
+        #expect(traceStore.snapshot().contains { $0.message.contains("phase=call backend=dylib status=204") })
+        #expect(traceStore.snapshot().allSatisfy { !$0.message.contains("Argument1:") && !$0.message.contains("bg-日本語") })
         let response = try session.request("GET SHIORI/3.0\r\nCharset: UTF-8\r\nID: OnHttpcNotify\r\nReference0: dictionary\r\nReference1: -\r\nReference2: bg-日本語next\r\n\r\n")
         #expect(try ShioriMessageParser.parseResponse(response).value?.contains("delivered") == true)
         try session.close()

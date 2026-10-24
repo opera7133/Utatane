@@ -50,7 +50,11 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
         return Bundle.main.bundleURL.appending(path: "Contents/Helpers/utatane-shiori-host")
     }
 
-    public init(directoryURL: URL, moduleURL: URL, hostURL: URL = NativeShioriProcessSession.defaultHostURL,
+    private let diagnostics: SaoriDiagnostics
+    private var diagnosticsEnabled: Bool
+    private let diagnosticDirectoryURL: URL
+
+    public init(directoryURL: URL, moduleURL: URL, diagnostics: SaoriDiagnostics = .shared, hostURL: URL = NativeShioriProcessSession.defaultHostURL,
                 timeout: TimeInterval = 30, startupTimeout: TimeInterval = 30,
                 windowController: (any NativeSaoriWindowControlling)? = nil,
                 internalSaoriHandler: (@Sendable (Data) -> Data)? = nil,
@@ -68,11 +72,14 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
         let inputPipe = Pipe()
         let outputPipe = Pipe()
         process.executableURL = hostURL
+        self.diagnostics = diagnostics
+        diagnosticsEnabled = diagnostics.isEnabled
+        diagnosticDirectoryURL = directoryURL
         process.arguments = [moduleURL.standardizedFileURL.path, directoryURL.standardizedFileURL.path]
         process.currentDirectoryURL = directoryURL
-        if !additionalEnvironment.isEmpty {
-            process.environment = ProcessInfo.processInfo.environment.merging(additionalEnvironment) { _, override in override }
-        }
+        var environment = ProcessInfo.processInfo.environment.merging(additionalEnvironment) { _, override in override }
+        environment["UTATANE_SAORI_DIAGNOSTICS"] = diagnostics.isEnabled ? "1" : "0"
+        process.environment = environment
         process.standardInput = inputPipe
         process.standardOutput = outputPipe
         process.standardError = FileHandle.standardError
@@ -126,20 +133,34 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
                     try Self.ready(input.fileDescriptor, events: Int16(POLLOUT), deadline: deadline)
                     let frame: [UInt8] = [1, 0, 0, 0, 2]
                     guard Darwin.write(input.fileDescriptor, frame, frame.count) == frame.count else { return }
-                    var response = [UInt8](repeating: 0, count: 5)
-                    var offset = 0
-                    let responseSize = response.count
-                    while offset < responseSize {
-                        try Self.ready(output.fileDescriptor, events: Int16(POLLIN), deadline: deadline)
-                        let count = response.withUnsafeMutableBytes {
-                            Darwin.read(output.fileDescriptor, $0.baseAddress!.advanced(by: offset), responseSize - offset)
+                    func read(_ size: Int) throws -> [UInt8] {
+                        var bytes = [UInt8](repeating: 0, count: size), offset = 0
+                        while offset < size {
+                            try Self.ready(output.fileDescriptor, events: Int16(POLLIN), deadline: deadline)
+                            let count = bytes.withUnsafeMutableBytes {
+                                Darwin.read(output.fileDescriptor, $0.baseAddress!.advanced(by: offset), size - offset)
+                            }
+                            guard count > 0 else { throw NativeShioriProcessError.invalidFrame }
+                            offset += count
                         }
-                        guard count > 0 else { return }
-                        offset += count
+                        return bytes
                     }
-                    if response != [1, 0, 0, 0, 0] {
+                    var completed = false
+                    for _ in 0 ..< 4096 {
+                        let header = try read(4)
+                        let size = header.enumerated().reduce(UInt32(0)) { $0 | UInt32($1.element) << ($1.offset * 8) }
+                        guard size >= 1, size <= Self.maximumBytes + 1 else { throw NativeShioriProcessError.invalidFrame }
+                        let body = try read(Int(size))
+                        if body[0] == 8 {
+                            continue
+                        } // Unload metadata precedes the completion frame.
+                        completed = body == [0]
+                        break
+                    }
+                    if !completed {
                         NSLog("SHIORI save failed during cleanup")
                     }
+
                 } catch { NSLog("SHIORI cleanup failed: %@", error.localizedDescription) }
             }
         }
@@ -153,6 +174,7 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
         guard payload.count <= Self.maximumBytes else { throw NativeShioriProcessError.invalidFrame }
         do {
             let deadline = ProcessInfo.processInfo.systemUptime + timeout
+            try configureDiagnostics(deadline: deadline)
             try send(command: 1, payload: payload, deadline: deadline)
             let result = try receive(deadline: deadline)
             guard let text = String(data: result, encoding: .utf8) else { throw NativeShioriProcessError.invalidFrame }
@@ -169,6 +191,7 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
         guard !closed else { return }
         do {
             let deadline = ProcessInfo.processInfo.systemUptime + timeout
+            try configureDiagnostics(deadline: deadline)
             try send(command: 2, payload: Data(), deadline: deadline)
             guard try receive(deadline: deadline).isEmpty else { throw NativeShioriProcessError.invalidFrame }
             stop()
@@ -214,7 +237,16 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
         }
     }
 
+    private func configureDiagnostics(deadline: TimeInterval) throws {
+        let enabled = diagnostics.isEnabled
+        if enabled != diagnosticsEnabled {
+            try send(command: 5, payload: Data([enabled ? 1 : 0]), deadline: deadline)
+            diagnosticsEnabled = enabled
+        }
+    }
+
     private func receive(deadline: TimeInterval) throws -> Data {
+        var diagnosticCount = 0
         var callbackCount = 0
         while true {
             let header = try readExact(4, deadline: deadline)
@@ -223,6 +255,14 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
             let body = try readExact(Int(size), deadline: deadline)
             let status = body[0]
             let payload = body.dropFirst()
+            if status == 8 {
+                guard payload.count <= 4120 else { throw NativeShioriProcessError.invalidFrame }
+                if diagnosticCount < 4096 {
+                    diagnosticCount += 1
+                    diagnostics.receive(Data(payload), source: diagnosticDirectoryURL)
+                }
+                continue
+            }
             if status == 7 {
                 callbackCount += 1
                 guard callbackCount <= 1024 else { throw NativeShioriProcessError.invalidFrame }

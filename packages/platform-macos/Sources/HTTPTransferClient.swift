@@ -11,6 +11,7 @@ public struct HTTPTransferTLSInfo: Sendable, Equatable {
 
 public struct HTTPTransferResult: @unchecked Sendable {
     public let data: Data
+    public let fileURL: URL?
     public let response: URLResponse
     public let tlsInfo: HTTPTransferTLSInfo?
 }
@@ -24,14 +25,23 @@ public enum HTTPTransferClient {
         progress: ProgressHandler? = nil,
         streaming: StreamingHandler? = nil,
         bodyFileURL: URL? = nil,
+        outputFileURL: URL? = nil,
         session: URLSession = .shared
     ) async throws -> HTTPTransferResult {
         let delegate = TransferDelegate(bodyFileURL: bodyFileURL)
         let (bytes, response) = try await session.bytes(for: request, delegate: delegate)
         defer { bytes.task.cancel() }
         return try await withTaskCancellationHandler {
-            let data = try await consume(bytes, response: response, progress: progress, streaming: streaming)
-            return HTTPTransferResult(data: data, response: response, tlsInfo: delegate.snapshot())
+            let successful = (response as? HTTPURLResponse).map { (200 ..< 300).contains($0.statusCode) } ?? false
+            // Error responses never replace an existing destination.
+            if outputFileURL != nil, !successful {
+                return HTTPTransferResult(data: Data(), fileURL: nil, response: response, tlsInfo: delegate.snapshot())
+            }
+            let output = try outputFileURL.map(HTTPFileOutput.init)
+            let data = try await consume(bytes, response: response, progress: progress, streaming: streaming, output: output)
+            try Task.checkCancellation()
+            try output?.commit()
+            return HTTPTransferResult(data: data, fileURL: outputFileURL, response: response, tlsInfo: delegate.snapshot())
         } onCancel: {
             bytes.task.cancel()
         }
@@ -43,37 +53,57 @@ public enum HTTPTransferClient {
         _ bytes: Bytes,
         response: URLResponse,
         progress: ProgressHandler?,
-        streaming: StreamingHandler?
+        streaming: StreamingHandler?,
+        output: HTTPFileOutput? = nil
     ) async throws -> Data where Bytes.Element == UInt8 {
         var data = Data()
         var lineBuffer = Data()
+        var writeBuffer = Data()
+        var receivedCount = 0
+        func flush() throws {
+            if !writeBuffer.isEmpty {
+                try output?.write(writeBuffer); writeBuffer.removeAll(keepingCapacity: true)
+            }
+        }
         let http = response as? HTTPURLResponse
         var lastProgressCount = 0
         for try await byte in bytes {
             try Task.checkCancellation()
-            data.append(byte)
+            receivedCount += 1
+            if output != nil {
+                writeBuffer.append(byte)
+            } else {
+                data.append(byte)
+            }
+            if writeBuffer.count >= 64 * 1024 {
+                try flush()
+            }
             if let http, let streaming {
                 if byte == 0x0A {
                     if lineBuffer.last == 0x0D {
                         lineBuffer.removeLast()
                     }
+                    try flush()
                     await streaming(String(decoding: lineBuffer, as: UTF8.self), http)
                     lineBuffer.removeAll(keepingCapacity: true)
                 } else {
+                    guard lineBuffer.count < 1024 * 1024 else { throw URLError(.dataLengthExceedsMaximum) }
                     lineBuffer.append(byte)
                 }
             }
-            if let http, let progress, data.count - lastProgressCount >= 64 * 1024 {
+            if let http, let progress, receivedCount - lastProgressCount >= 64 * 1024 {
+                try flush()
                 await progress(data, http)
-                lastProgressCount = data.count
+                lastProgressCount = receivedCount
             }
         }
         try Task.checkCancellation()
+        try flush()
         if let http, let streaming, !lineBuffer.isEmpty {
             await streaming(String(decoding: lineBuffer, as: UTF8.self), http)
         }
         try Task.checkCancellation()
-        if let http, let progress, data.count != lastProgressCount {
+        if let http, let progress, receivedCount != lastProgressCount {
             await progress(data, http)
         }
         try Task.checkCancellation()

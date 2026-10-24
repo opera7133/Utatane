@@ -29,6 +29,7 @@ public final class NativeShioriSession: Sendable {
                 saoriCaller: (any NativeSaoriCalling)? = nil,
                 saoriRootURL: URL? = nil,
                 moduleResolver: UtataneModuleResolver = .init(),
+                saoriDiagnostics: SaoriDiagnostics = .shared,
                 onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)?,
                 internalSaoriMediaReader: (any InternalSaoriMediaReading)? = nil,
                 hostURL: URL = NativeShioriProcessSession.defaultHostURL) throws
@@ -61,7 +62,7 @@ public final class NativeShioriSession: Sendable {
                 canRecover: { ($0 as? NativeShioriProcessError)?.canRecoverByLoadingAnotherModule == true }
             ) { url in
                 try NativeShioriProcessSession(
-                    directoryURL: directoryURL, moduleURL: url, hostURL: hostURL,
+                    directoryURL: directoryURL, moduleURL: url, diagnostics: saoriDiagnostics, hostURL: hostURL,
                     internalSaoriMediaReader: internalSaoriMediaReader,
                     onInternalSaoriEvent: onInternalSaoriEvent,
                     additionalEnvironment: environment

@@ -18,6 +18,7 @@ typedef void *(*InternalSaoriCallback)(const void *, int32_t, int32_t *);
 typedef int32_t (*SetInternalSaoriCallback)(InternalSaoriCallback);
 static int window_channel = -1;
 static int saori_channel = -1;
+static int saori_diagnostics_enabled = 0;
 
 static void put32(uint8_t *bytes, int32_t value) {
     uint32_t bits = (uint32_t)value;
@@ -87,6 +88,19 @@ void *utatane_host_saori_request(const void *request, int32_t count, int32_t *le
     return internal_saori_callback(request, count, length);
 }
 
+// Synchronous metadata-only sideband; the requesting library thread owns the pipe.
+__attribute__((visibility("default"), used))
+void utatane_host_saori_diagnostic(int32_t phase, int32_t status, uint64_t elapsed, uint64_t bytes, const char *path) {
+    if (!saori_diagnostics_enabled || saori_channel < 0 || !path) return;
+    size_t count = strnlen(path, 4097);
+    if (count == 0 || count > 4096) return;
+    uint8_t payload[4120];
+    put32(payload, phase); put32(payload + 4, status);
+    for (int i = 0; i < 8; i++) { payload[8+i] = (uint8_t)(elapsed >> (8*i)); payload[16+i] = (uint8_t)(bytes >> (8*i)); }
+    memcpy(payload + 24, path, count);
+    reply(saori_channel, 8, payload, (uint32_t)(24 + count));
+}
+
 int main(int argc, char **argv) {
     if (argc != 3) return 64;
     signal(SIGPIPE, SIG_IGN);
@@ -117,6 +131,8 @@ int main(int argc, char **argv) {
         }
     }
     saori_channel = channel;
+    const char *diagnostics = getenv("UTATANE_SAORI_DIAGNOSTICS");
+    saori_diagnostics_enabled = diagnostics && strcmp(diagnostics, "1") == 0;
     SetInternalSaoriCallback set_internal_saori = (SetInternalSaoriCallback)dlsym(image, "utatane_internal_saori_set_callback");
     if (set_internal_saori) {
         saori_channel = channel;
@@ -144,6 +160,12 @@ int main(int argc, char **argv) {
         uint8_t command;
         if (!transfer(STDIN_FILENO, &command, 1, 0)) break;
         size--;
+        if (command == 5 && size == 1) {
+            uint8_t enabled;
+            if (!transfer(STDIN_FILENO, &enabled, 1, 0) || enabled > 1) break;
+            saori_diagnostics_enabled = enabled;
+            continue;
+        }
         if (command == 2 && size == 0) {
             if (!unload()) {
                 if (!error_reply(channel, 5, "SHIORI unload/save failed")) break;

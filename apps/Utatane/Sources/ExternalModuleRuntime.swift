@@ -119,7 +119,7 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
     }
 }
 
-final class ExternalSaoriModuleSession: ExternalSaoriModule, @unchecked Sendable {
+final class ExternalSaoriModuleSession: ExternalSaoriStatusReporting, @unchecked Sendable {
     enum Backend: Sendable {
         case nativeProcess(NativeShioriProcessSession)
         case windowsDLL(WindowsDLLModuleProcessSession)
@@ -146,6 +146,11 @@ final class ExternalSaoriModuleSession: ExternalSaoriModule, @unchecked Sendable
     }
 
     func call(arguments: [String]) -> String {
+        callReport(arguments: arguments).output
+    }
+
+    func callReport(arguments: [String]) -> NativeSaoriCallReport {
+        guard arguments.allSatisfy({ !$0.utf8.contains(0) && !$0.utf8.contains(13) && !$0.utf8.contains(10) }) else { return .init(output: "", status: 400, responseBytes: 0) }
         var lines = [
             "EXECUTE SAORI/1.0",
             "Charset: \(backend.charset)",
@@ -153,10 +158,9 @@ final class ExternalSaoriModuleSession: ExternalSaoriModule, @unchecked Sendable
             "SecurityLevel: local"
         ]
         lines += arguments.enumerated().map { "Argument\($0.offset): \($0.element)" }
-        guard let rawResponse = try? backend.request(lines.joined(separator: "\r\n") + "\r\n\r\n"),
-              let response = try? ShioriMessageParser.parseResponse(rawResponse),
-              (200 ..< 300).contains(response.statusCode)
-        else { return "" }
+        guard let rawResponse = try? backend.request(lines.joined(separator: "\r\n") + "\r\n\r\n") else { return .init(output: "", status: 0, responseBytes: 0) }
+        guard let response = try? ShioriMessageParser.parseResponse(rawResponse) else { return .init(output: "", status: 0, responseBytes: rawResponse.utf8.count) }
+        guard (200 ..< 300).contains(response.statusCode) else { return .init(output: "", status: response.statusCode, responseBytes: rawResponse.utf8.count) }
 
         var values = [response.headers["Result"] ?? ""]
         var index = 0
@@ -164,6 +168,6 @@ final class ExternalSaoriModuleSession: ExternalSaoriModule, @unchecked Sendable
             values.append(value)
             index += 1
         }
-        return values.joined(separator: "\u{1}")
+        return .init(output: values.joined(separator: "\u{1}"), status: response.statusCode, responseBytes: rawResponse.utf8.count)
     }
 }

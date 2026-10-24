@@ -67,11 +67,7 @@ final class LegacyHttpcSession: @unchecked Sendable {
         guard args.count >= 3, args[0] == "bg", !args[1].isEmpty else { return reply(400, "invalid parameter") }
         guard let onEvent else { return reply(400, "ghost required") }
         var parameters = Array(args.dropFirst(2))
-        var charsetOverride: String?
-        let encodings = ["euc": "EUC-JP", "jis": "ISO-2022-JP", "sjis": "CP932", "utf-8": "UTF-8", "utf8": "UTF-8", "utf-16be": "UTF-16BE", "utf-16le": "UTF-16LE"]
-        if let first = parameters.first, let encoding = encodings[first.lowercased()] {
-            charsetOverride = encoding; parameters.removeFirst()
-        }
+        let options = HttpcTextOptions(arguments: &parameters)
         guard (1 ... 3).contains(parameters.count), let url = URL(string: parameters[0]),
               ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.host != nil else { return reply(400, "invalid parameter") }
         let job = Job(), id = UUID()
@@ -83,7 +79,7 @@ final class LegacyHttpcSession: @unchecked Sendable {
             return lifetime
         }
         guard let lifetime else { return reply(400, "too many requests") }
-        let requestParameters = parameters, encoding = charsetOverride, identifier = args[1]
+        let requestParameters = parameters, encoding = options.charset, identifier = args[1]
         operationQueue.addOperation { [weak self] in
             guard let self else { return }
             defer { _ = lock.withLock { jobs.removeValue(forKey: id) } }
@@ -105,7 +101,7 @@ final class LegacyHttpcSession: @unchecked Sendable {
                     LegacyTextDecoder.decode(data, preferredCharset: charset)
                 }
                 guard let text else { return [""] }
-                let clean = text.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "").replacingOccurrences(of: "\0", with: "")
+                let clean = options.process(text)
                 guard clean.utf8.count <= 2 * 1024 * 1024 else { return [""] }
                 guard requestParameters.count == 3 else { return [clean] }
                 let left = requestParameters[1], right = requestParameters[2]

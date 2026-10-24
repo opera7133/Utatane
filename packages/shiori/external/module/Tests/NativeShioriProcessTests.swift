@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UtataneCore
 import UtataneModuleHost
 import UtataneNativeSaori
 
@@ -17,26 +18,35 @@ private struct NativeProcessFixture {
             .appending(path: "../../../../..").standardizedFileURL
         let source = root.appending(path: "test.c")
         try #"""
+        #include <dlfcn.h>
         #include <stdint.h>
         #include <stdio.h>
         #include <stdlib.h>
         #include <string.h>
         #include <unistd.h>
         static int count;
+        static void metadata(int32_t phase) {
+            typedef void (*Reporter)(int32_t,int32_t,uint64_t,uint64_t,const char *);
+            Reporter reporter = (Reporter)dlsym(RTLD_DEFAULT, "utatane_host_saori_diagnostic");
+            if (reporter) reporter(phase, phase == 2 ? 200 : 1, 42, 123, "/fixture/libecho.dylib");
+        }
         int32_t loadu(void *p, int32_t n) {
             free(p); (void)n;
             FILE *f = fopen("count.txt", "r");
             if (f) { fscanf(f, "%d", &count); fclose(f); }
+            metadata(1);
             puts("diagnostic on stdout"); fflush(stdout);
             return 1;
         }
         int32_t unload(void) {
+            metadata(3);
             if (access("reject-save", F_OK) == 0) return 0;
             FILE *f = fopen("count.txt", "w");
             if (!f) return 0;
             fprintf(f, "%d", count); fclose(f); return 1;
         }
         void *request(void *p, int32_t *n) {
+            metadata(2);
             char *text = malloc((size_t)*n + 1); memcpy(text, p, *n); text[*n] = 0; free(p);
             if (strstr(text, "CRASH")) _exit(77);
             if (strstr(text, "WAIT")) sleep(60);
@@ -203,4 +213,24 @@ private final class ProcessWindowController: NativeSaoriWindowControlling, @unch
     func move(scope: Int, x: Int, speed: Int) {
         moves.append("\(scope),\(x),\(speed)")
     }
+}
+
+@Test func `SAORI metadata toggles on a live helper without changing responses`() throws {
+    let fixture = try NativeProcessFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let store = AppLogStore(), diagnostics = SaoriDiagnostics(store: store)
+    let session = try NativeShioriProcessSession(directoryURL: fixture.root, moduleURL: fixture.module, diagnostics: diagnostics, hostURL: fixture.host)
+    defer { try? session.close() }
+    #expect(try session.request("GET SHIORI/3.0\r\n\r\n").contains("Value: 1"))
+    #expect(store.snapshot().isEmpty)
+    diagnostics.isEnabled = true
+    #expect(try session.request("GET SHIORI/3.0\r\n\r\n").contains("Value: 2"))
+    #expect(store.snapshot().count == 1)
+    #expect(store.snapshot().first?.message.contains("phase=call backend=dylib status=200") == true)
+    diagnostics.isEnabled = false
+    _ = try session.request("GET SHIORI/3.0\r\n\r\n")
+    #expect(store.snapshot().count == 1)
+    diagnostics.isEnabled = true
+    try session.close()
+    #expect(store.snapshot().last?.message.contains("phase=unload") == true)
 }

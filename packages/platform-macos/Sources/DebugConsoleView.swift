@@ -170,6 +170,7 @@ public struct DebugConsoleView: View {
     @State private var shioriResponse: DeveloperSHIORIResponse?
     @State private var isSendingSHIORIRequest = false
     @State private var executesSHIORIResponse = false
+    @State private var capturesOrdinarySAORI = SaoriDiagnostics.shared.isEnabled
     @State private var capturesSAORI = InternalSaoriDiagnostics.shared.isEnabled
     @State private var saoriModule = "internal_time"
     @State private var saoriArguments = "Format\n0\n%Y/%m/%d %H:%M (%a)\n--tz=+09:00"
@@ -497,6 +498,11 @@ public struct DebugConsoleView: View {
                 Text("セッション・モジュール・関数・状態コード・所要時間のみ記録する。引数と結果本文は記録しない。")
                     .font(.caption).foregroundStyle(.secondary)
                 Button("呼び出しログを見る") { selectedCategory = "InternalSAORI"; levelFilter = .all; pane = .logs }
+                Toggle("通常SAORIの呼び出しを記録", isOn: $capturesOrdinarySAORI)
+                    .onChange(of: capturesOrdinarySAORI) { _, enabled in SaoriDiagnostics.shared.isEnabled = enabled }
+                Text("dylibとWine DLLの読み込み先・状態・所要時間を記録する。引数と結果本文は記録しない。")
+                    .font(.caption).foregroundStyle(.secondary)
+                Button("通常SAORIのログを見る") { selectedCategory = "SAORI"; levelFilter = .all; pane = .logs }
             }
         }.formStyle(.grouped)
     }
