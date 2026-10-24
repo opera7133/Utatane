@@ -75,7 +75,7 @@ import UtataneNativeSaori
         kCVPixelBufferWidthKey as String: 32, kCVPixelBufferHeightKey as String: 16
     ])
     writer.add(input)
-    #expect(writer.startWriting())
+    try #require(writer.startWriting())
     writer.startSession(atSourceTime: .zero)
     var pixel: CVPixelBuffer?
     #expect(CVPixelBufferCreate(nil, 32, 16, kCVPixelFormatType_32ARGB, nil, &pixel) == kCVReturnSuccess)
@@ -85,14 +85,19 @@ import UtataneNativeSaori
     CVPixelBufferUnlockBaseAddress(frame, [])
     // Completion is driven by the writer's readiness callback, not a sleep.
     let appended: Bool = await withCheckedContinuation { continuation in
-        input.requestMediaDataWhenReady(on: DispatchQueue(label: "utatane.test.video-writer")) {
-            guard input.isReadyForMoreMediaData else { return }
+        let completion = VideoFrameCompletion(continuation)
+        let queue = DispatchQueue(label: "utatane.test.video-writer")
+        queue.asyncAfter(deadline: .now() + 20) {
+            completion.finish(false)
+        }
+        input.requestMediaDataWhenReady(on: queue) {
+            guard input.isReadyForMoreMediaData, completion.isPending else { return }
             let success = adaptor.append(frame, withPresentationTime: .zero)
             input.markAsFinished()
-            continuation.resume(returning: success)
+            completion.finish(success)
         }
     }
-    #expect(appended)
+    try #require(appended)
     writer.endSession(atSourceTime: CMTime(seconds: 1, preferredTimescale: 30))
     await writer.finishWriting()
     #expect(writer.status == .completed)
@@ -100,4 +105,26 @@ import UtataneNativeSaori
     #expect(video.kind == "video")
     #expect(video.values["width"] == "32")
     #expect(video.values["height"] == "16")
+}
+
+/// A writer that fails to become ready must fail the test, not hang CI.
+private final class VideoFrameCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Bool, Never>?
+    init(_ continuation: CheckedContinuation<Bool, Never>) {
+        self.continuation = continuation
+    }
+
+    var isPending: Bool {
+        lock.withLock { continuation != nil }
+    }
+
+    func finish(_ success: Bool) {
+        let waiting = lock.withLock {
+            let value = continuation
+            continuation = nil
+            return value
+        }
+        waiting?.resume(returning: success)
+    }
 }
