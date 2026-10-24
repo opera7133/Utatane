@@ -118,7 +118,7 @@ swift run --package-path packages utatane-validate --json "/path/to/ghost"
 
 開発用パレットの「内蔵SAORI」には、関数の単体テストと、実際のホストから呼ばれた内蔵SAORIのメタデータ記録があります。応答や制限は[SHIORI・SAORIの利用](../Support/Native-SHIORI.md#日時計算と開発用の確認)を参照してください。「更新チェックのみ」と仮想時刻は既存の開発ツールから使えます。仮想時刻が変更するのは時計イベント・予定通知で、SHIORI自身の時計やinternal_timeのnowはOSの時刻のままです。
 
-実ゴーストの辞書を通す検証は、ローカル導入済みのria・momochi・CLDSP2+と、改修版のYAYA 5/6・里々・華和梨のuniversal dylibを指定して実行します。元ファイルを変更せず、一時コピーへ検証用イベントを追加します。配布素材はテストfixtureとしてリポジトリへ追加しません。
+実ゴーストの辞書を通す検証は、ローカル導入済みのゴーストと、改修版のYAYA 5/6・里々・華和梨のuniversal dylibを指定して実行します。元ファイルを変更せず、一時コピーへ検証用イベントを追加します。配布素材はテストfixtureとしてリポジトリへ追加しません。
 
 ```sh
 UTATANE_REAL_SAORI_GHOST_ROOT="$PWD/Content/Local/Ghosts" \

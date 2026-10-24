@@ -138,7 +138,7 @@ NARには一般的な`install.txt`を入れ、少なくとも`charset`、`type`�
 Web上のNAR検査は静的な構成確認です。実際の表示、会話、SakuraScript、SERIKO、SAORIや外部プログラムの動作を保証するものではないため、配布前にはUtatane本体でも確認してください。
 
 
-## 祝日の通知（次回版）
+## 祝日の通知（0.2.18以降）
 
 起動時、今日が表に載っている祝日なら`OnNotifyUserInfo`の直後に`OnNotifyHolidayInfo`をNOTIFYします。
 Reference0は祝日名、1は`2026,01,01`形式の日付、2は国コードです。戻り値は表示しません。
@@ -155,7 +155,7 @@ macOSの地域の2文字国コードを使い、国別の表がない場合は`h
 UTF-8の`YYYY-MM-DD,祝日名`または`YYYY/M/D,祝日名`を1行ずつ記載します。
 `#`で始まる行と空行は無視します。国別でない既定表を使った場合、Reference2は空です。
 
-## 必要な共通モジュールを明示する（次回版）
+## 必要な共通モジュールを明示する（0.2.18以降）
 
 DLLを同梱しないSAORIなど、ファイルの存在から判定できない依存は、`ghost/master/utatane-modules.json`へ宣言できます。Utatane独自の補助ファイルで、既存のSHIORI・SAORI登録を置き換えるものではありません。
 
