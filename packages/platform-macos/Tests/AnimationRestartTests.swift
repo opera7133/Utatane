@@ -78,3 +78,36 @@ import UtataneShell
     #expect(surfaces.serikoInspectorSnapshots.first?.isAnimating == true)
     #expect(surfaces.renderedImage()?.containsColor { ($0.usingColorSpace(.deviceRGB)?.blueComponent ?? 0) > 0.9 } == true)
 }
+
+@Test @MainActor func `static and timed animations share SERIKO layer order`() async throws {
+    let (root, surfaces, _, defaults) = try animationRestartFixture()
+    defer { surfaces.resetContent(); defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)); try? FileManager.default.removeItem(at: root) }
+    let definition = root.appending(path: "surfaces.txt")
+    let source = try String(contentsOf: definition, encoding: .utf8).replacingOccurrences(of: "overlay,2,0,2,0", with: "overlay,2,0,0,0")
+    try source.write(to: definition, atomically: true, encoding: .utf8)
+    try surfaces.show(shell: ShellLoader().load(from: root), surfaceID: 0)
+    surfaces.playAnimation(identifier: "7")
+    try await requireEventually { surfaces.renderedImage()?.containsColor { ($0.usingColorSpace(.deviceRGB)?.blueComponent ?? 0) > 0.9 } == true }
+    surfaces.playAnimation(identifier: "8")
+    let image = try #require(surfaces.renderedImage()?.tiffRepresentation)
+    let bitmap = try #require(NSBitmapImageRep(data: image))
+    #expect(bitmap.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB)?.greenComponent ?? 0 > 0.9)
+}
+
+@Test @MainActor func `runonce interpolate layers remain above lower numbered timed meters`() async throws {
+    let (root, surfaces, _, defaults) = try animationRestartFixture()
+    defer { surfaces.resetContent(); defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)); try? FileManager.default.removeItem(at: root) }
+    try makePNG(width: 4, height: 4, color: .clear).write(to: root.appending(path: "surface0.png"))
+    try """
+    surface0 {
+    animation7.interval,never
+    animation7.pattern0,interpolate,1,5000,0,0
+    animation8.interval,runonce
+    animation8.pattern0,interpolate,2,0,0,0
+    }
+    """.write(to: root.appending(path: "surfaces.txt"), atomically: true, encoding: .utf8)
+    try surfaces.show(shell: ShellLoader().load(from: root), surfaceID: 0)
+    #expect(surfaces.renderedImage()?.containsColor { ($0.usingColorSpace(.deviceRGB)?.greenComponent ?? 0) > 0.9 } == true)
+    surfaces.playAnimation(identifier: "7")
+    try await requireEventually(timeout: .seconds(2)) { surfaces.renderedImage()?.containsColor { ($0.usingColorSpace(.deviceRGB)?.blueComponent ?? 0) > 0.9 } == true }
+}

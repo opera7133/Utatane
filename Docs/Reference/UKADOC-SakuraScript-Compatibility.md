@@ -198,7 +198,7 @@ UKADOC分類行数: 150
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\![set,property,...]` | 🟡 | scope別surface.num・animation.num・seriko.defaultsurfaceとseriko.sticky-windowを表示へ反映。sticky-windowはグループを置換し、不正・重複グループを無視。メニュー・カーソル・サウンド等のsetterは未実装 |
-| `\![get,property,...]` | 🟡 | 複数プロパティを指定イベントのReferenceへ通知。プラグイン由来のスクリプトは発信元プラグインへ完了を返す。`currentghost.balloon.scope(N).validwidth`／`validheight`も取得できる。日時、OS／locale／timezone／uptime、CPU、メモリ、ディスク、カーソル、モニター、テーマ、baseware、currentghost.status、scope座標・surface・実行中animation・既定surface・balloon、activeghostlist、ghost／shell／balloon／headline／plugin一覧に対応。`currentghost.sound.count`とindex(0)／要素名指定のname・path・id・position・duration・playing・pause・loop・preload・errorは現在保持する単一音声から取得する。複数音声、メタデータとサウンドのsetterは未対応。UKADOC全プロパティとの照合は継続中 |
+| `\![get,property,...]` | 🟡 | 複数プロパティを指定イベントのReferenceへ通知。プラグイン由来のスクリプトは発信元プラグインへ完了を返す。`currentghost.balloon.scope(N).validwidth`／`validheight`も取得できる。日時、OS／locale／timezone／uptime、CPU／メモリ使用率（`system.cpu.load`／`system.memory.load`）、空き物理メモリ（`system.memory.phya`、アクティブ・固定・圧縮メモリを差し引いた概算、MB）、ディスク、カーソル、モニター、テーマ、baseware、currentghost.status、scope座標・surface・実行中animation・既定surface・balloon、activeghostlist、ghost／shell／balloon／headline／plugin一覧に対応。`currentghost.sound.count`とindex(0)／要素名指定のname・path・id・position・duration・playing・pause・loop・preload・errorは現在保持する単一音声から取得する。複数音声、メタデータとサウンドのsetterは未対応。UKADOC全プロパティとの照合は継続中 |
 | `%property[...]` | 🟡 | `get,property`と共通の値を再生中に展開。未登録値の拡充と、変動するAppKit値の取得時更新は継続中 |
 
 ### HTTP、WebSocket、アーカイブなど

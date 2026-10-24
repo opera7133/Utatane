@@ -333,7 +333,9 @@ public struct SurfacesParser: Sendable {
                 method: values[0],
                 filename: values[1],
                 x: x,
-                y: y
+                y: y,
+                clipping: clippingOption(values),
+                alpha: alphaOption(values)
             )
             return
         }
@@ -596,6 +598,19 @@ public struct SurfacesParser: Sendable {
             )
         }
         builder.animations[animationID] = animation
+    }
+
+    private func clippingOption(_ values: [String]) -> SurfaceRect? {
+        guard let index = values.firstIndex(where: { $0.lowercased() == "--clipping" }), values.count > index + 4,
+              let left = Int(values[index + 1]), let top = Int(values[index + 2]),
+              let right = Int(values[index + 3]), let bottom = Int(values[index + 4]) else { return nil }
+        return SurfaceRect(left: left, top: top, right: right, bottom: bottom)
+    }
+
+    private func alphaOption(_ values: [String]) -> Int {
+        guard let index = values.firstIndex(where: { $0.lowercased() == "--alpha" }), values.count > index + 1,
+              let alpha = Int(values[index + 1]) else { return 255 }
+        return min(255, max(0, alpha))
     }
 
     private func parseAnimationIDs(_ value: String) -> [Int] {

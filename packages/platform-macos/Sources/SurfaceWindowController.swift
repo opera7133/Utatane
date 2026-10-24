@@ -1333,6 +1333,7 @@ private final class CharacterSurfaceController {
     private var needsAnimationRedraw = false
     private var pendingAnimationRedraw: Task<Void, Never>?
     private var needsBaseComposition = false
+    private var rawAnimationBase: (source: NSImage, image: NSImage)?
     private var needsViewPresentation = false
     private var pendingSurfaceView: SurfaceImageView?
 
@@ -2174,6 +2175,7 @@ private final class CharacterSurfaceController {
     }
 
     private func cancelAllAnimations() {
+        rawAnimationBase = nil
         pendingAnimationRedraw?.cancel()
         pendingAnimationRedraw = nil
         for task in animationTasks.values {
@@ -2226,10 +2228,24 @@ private final class CharacterSurfaceController {
         let excludedAnimationIDs = animationBaseExclusions.values.reduce(into: Set<Int>()) {
             $0.formUnion($1)
         }
-        var result = if let scriptBaseImage {
+        let animations = currentSurfaceDefinition?.animations ?? []
+        let enabled = shell.effectiveBindGroups(scope: scope, enabled: enabledBindGroups)
+        let initialIDs = Set(animations.filter { animation in
+            let interval = (animation.interval ?? "").lowercased()
+            return interval.contains("bind") ? enabled.contains(animation.id) : interval.contains("runonce")
+        }.map(\.id))
+        let interleavesPersistentLayers = scriptBaseImage == nil && !activeAnimationFrames.isEmpty
+            && (!persistentAnimationLayers.isEmpty || !initialIDs.isEmpty)
+        if interleavesPersistentLayers, let surfaceBaseImage, rawAnimationBase?.source !== surfaceBaseImage {
+            let raw = (try? render(surfaceID: baseSurfaceID, shell: shell, excludingInitialAnimations: initialIDs).image) ?? surfaceBaseImage
+            rawAnimationBase = (source: surfaceBaseImage, image: raw)
+        }
+        var result = if interleavesPersistentLayers, let raw = rawAnimationBase?.image {
+            raw
+        } else if let scriptBaseImage {
             scriptBaseImage
         } else if excludedAnimationIDs.isEmpty {
-            baseImage
+            interleavesPersistentLayers ? (surfaceBaseImage ?? baseImage) : baseImage
         } else {
             (try? render(
                 surfaceID: baseSurfaceID,
@@ -2250,14 +2266,23 @@ private final class CharacterSurfaceController {
         if scriptTranslation.x != 0 || scriptTranslation.y != 0 {
             result = imageLoader.translated(result, x: scriptTranslation.x, y: scriptTranslation.y)
         }
-        let animations = currentSurfaceDefinition?.animations ?? []
         var layers: [SurfaceImageLoader.CompositeLayer] = []
         func flushLayers() {
             result = imageLoader.composite(base: result, layers: layers)
             layers.removeAll(keepingCapacity: true)
         }
         for animation in animations.reversed() {
-            guard let frame = activeAnimationFrames[animation.id] else { continue }
+            let retainedFrame = interleavesPersistentLayers ? persistentAnimationLayers[animation.id].map(ActiveAnimationFrame.overlay) : nil
+            guard let frame = activeAnimationFrames[animation.id] ?? retainedFrame else {
+                if interleavesPersistentLayers, initialIDs.contains(animation.id), !excludedAnimationIDs.contains(animation.id) {
+                    flushLayers()
+                    result = (try? applyInitialAnimationCanvas(
+                        to: SurfaceImageCanvas(image: result), definition: currentSurfaceDefinition, shell: shell,
+                        excludedAnimationIDs: excludedAnimationIDs, includedAnimationIDs: [animation.id], expands: false
+                    ).image) ?? result
+                }
+                continue
+            }
             switch frame {
             case let .overlay(layer):
                 layers.append(.init(image: layer.image, x: layer.x, y: layer.y,
@@ -2327,6 +2352,7 @@ private final class CharacterSurfaceController {
         if suspended {
             imageView?.cancelDrag()
             renderedLayerCache.removeAll()
+            rawAnimationBase = nil
         }
         updateAnimatedImagePlayback()
         NijigenerateViewFactory.setSuspended(suspended, on: nijigenerateView)
@@ -2954,12 +2980,13 @@ private final class CharacterSurfaceController {
             let operation = surfaceCompositingOperation(for: element.method) ?? .sourceOver
             let overlay: NSImage
             do {
-                overlay = try imageLoader.load(
+                let source = try imageLoader.load(
                     shellLoader.loadElement(filename: element.filename, from: shell.directory),
                     usesSelfAlpha: shell.usesSelfAlpha,
                     usesFullSelfAlpha: shell.usesFullSelfAlpha,
                     ignoresTransparency: ignoresTransparency
                 )
+                overlay = imageLoader.applyingDrawingOptions(to: source, clipping: element.clipping, alpha: element.alpha)
             } catch let error as ShellError {
                 guard case .missingElement = error else { throw error }
                 continue
@@ -3001,6 +3028,7 @@ private final class CharacterSurfaceController {
         shell: ShellDefinition,
         visited: Set<Int> = [],
         excludedAnimationIDs: Set<Int> = [],
+        includedAnimationIDs: Set<Int>? = nil,
         expands: Bool
     ) throws -> SurfaceImageCanvas {
         guard let definition else { return base }
@@ -3081,7 +3109,9 @@ private final class CharacterSurfaceController {
         var result = base
         // `definition.animations` is ordered from front to back according to
         // animation-sort. Compositing must paint the backmost layer first.
-        for animation in eligibleAnimations.reversed() where !insertedAnimationIDs.contains(animation.id) {
+        for animation in eligibleAnimations.reversed() where !insertedAnimationIDs.contains(animation.id)
+            && (includedAnimationIDs?.contains(animation.id) ?? true)
+        {
             result = try composite(animation: animation, onto: result, ancestry: [])
         }
         return result
@@ -3515,7 +3545,7 @@ func animationCompositingOperation(for method: String) -> NSCompositingOperation
 
 func surfaceCompositingClipsToBaseAlpha(_ method: String) -> Bool {
     let method = method.lowercased()
-    return method == "overlaymultiply" || method == "blend-multiply-fast"
+    return method == "overlaymultiply" || (method.hasPrefix("blend-") && method.hasSuffix("-fast"))
 }
 
 private final class NijigenerateSurfaceContainerView: NSView {

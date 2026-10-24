@@ -88,8 +88,20 @@ public final class MacOSSystemLoadSampler: @unchecked Sendable {
     public init() {}
 
     public func sample() -> SystemLoadPercentages? {
-        guard let cpu = cpuPercentage(), let memory = memoryPercentage() else { return nil }
-        return SystemLoadPercentages(cpu: cpu, memory: memory)
+        guard let cpu = cpuPercentage(), let memory = memoryUsage() else { return nil }
+        return SystemLoadPercentages(cpu: cpu, memory: memory.load)
+    }
+
+    public func propertyValues() -> [String: String] {
+        var values: [String: String] = [:]
+        if let cpu = cpuPercentage() {
+            values["system.cpu.load"] = String(cpu)
+        }
+        if let memory = memoryUsage() {
+            values["system.memory.load"] = String(memory.load)
+            values["system.memory.phya"] = String(memory.availableBytes / 1_048_576)
+        }
+        return values
     }
 
     private func cpuPercentage() -> Int? {
@@ -106,13 +118,13 @@ public final class MacOSSystemLoadSampler: @unchecked Sendable {
         let busy = UInt64(info.cpu_ticks.0) + UInt64(info.cpu_ticks.1) + UInt64(info.cpu_ticks.3)
         let total = busy + UInt64(info.cpu_ticks.2)
         defer { previousCPUTicks = (busy, total) }
-        guard let previousCPUTicks, total > previousCPUTicks.total else { return 0 }
+        guard let previousCPUTicks, total > previousCPUTicks.total, busy >= previousCPUTicks.busy else { return 0 }
         let busyDelta = busy - previousCPUTicks.busy
         let totalDelta = total - previousCPUTicks.total
-        return Int((Double(busyDelta) * 100 / Double(totalDelta)).rounded())
+        return min(100, Int((Double(busyDelta) * 100 / Double(totalDelta)).rounded()))
     }
 
-    private func memoryPercentage() -> Int? {
+    private func memoryUsage() -> SystemMemoryUsage? {
         var info = vm_statistics64()
         var count = mach_msg_type_number_t(
             MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size
@@ -123,12 +135,24 @@ public final class MacOSSystemLoadSampler: @unchecked Sendable {
             }
         }
         guard result == KERN_SUCCESS else { return nil }
-        let usedPages = UInt64(info.active_count)
-            + UInt64(info.wire_count)
-            + UInt64(info.compressor_page_count)
-        let usedBytes = usedPages * UInt64(getpagesize())
-        let totalBytes = ProcessInfo.processInfo.physicalMemory
+        return SystemMemoryUsage(
+            totalBytes: ProcessInfo.processInfo.physicalMemory,
+            activePages: UInt64(info.active_count), wiredPages: UInt64(info.wire_count),
+            compressedPages: UInt64(info.compressor_page_count), pageSize: UInt64(getpagesize())
+        )
+    }
+}
+
+struct SystemMemoryUsage {
+    let availableBytes: UInt64
+    let load: Int
+
+    init?(totalBytes: UInt64, activePages: UInt64, wiredPages: UInt64, compressedPages: UInt64, pageSize: UInt64) {
         guard totalBytes > 0 else { return nil }
-        return Int((Double(usedBytes) * 100 / Double(totalBytes)).rounded())
+        // Inactive/cache pages are reclaimable. Match the sampler's used-memory
+        // definition and derive available memory from that same measurement.
+        let usedBytes = min(totalBytes, (activePages + wiredPages + compressedPages) * pageSize)
+        availableBytes = totalBytes - usedBytes
+        load = Int((Double(usedBytes) * 100 / Double(totalBytes)).rounded())
     }
 }

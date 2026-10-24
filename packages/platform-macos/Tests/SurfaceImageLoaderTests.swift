@@ -4,6 +4,7 @@ import ImageIO
 import Testing
 import UtataneCore
 @testable import UtatanePlatformMacOS
+import UtataneShell
 
 @Test
 @MainActor
@@ -552,3 +553,38 @@ private extension NSBitmapImageRep {
 
 let animatedPNGBase64 = "iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAACXBIWXMAAAAAAAAAAQCEeRdzAAAACGFjVEwAAAACAAAAAPONk3AAAAAaZmNUTAAAAAAAAAAEAAAABAAAAAAAAAAAAAEABQAAXC5E3AAAACRJREFUeJxjfMPF8J8BCKLc7BlBNAsDGmCJcIfI8PzgYcCqAgDqiATS2a3PlwAAABpmY1RMAAAAAQAAAAQAAAAEAAAAAAAAAAAAAQAFAADHXa4IAAAAJGZkQVQAAAACeJxj1BVUZACBt7zfwTQLAxpggcm8fvTkP1YVAB/oB//52BKiAAAAAElFTkSuQmCC"
 let webPBase64 = "UklGRjwAAABXRUJQVlA4IDAAAADQAQCdASoCAAIAAgA0JaACdLoB+AADsAD+8MQL/yC5YXXI1/8gP+QH/ID/+PIAAAA="
+
+@Test @MainActor
+func `fast color effects preserve the holes used by interpolated meters`() throws {
+    let base = try makeTestImage(colors: [
+        NSColor(deviceRed: 0.3, green: 0.6, blue: 0.9, alpha: 1),
+        NSColor(deviceRed: 0, green: 0, blue: 0, alpha: 0)
+    ])
+    let red = NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)
+    let overlay = try makeTestImage(colors: [red, red])
+    for method in ["blend-hue-fast", "blend-darken-fast", "blend-screen-fast", "blend-color-fast"] {
+        let image = try SurfaceImageLoader().composite(base: base, overlay: overlay, x: 0, y: 0,
+                                                       operation: #require(surfaceCompositingOperation(for: method)), clipsToBaseAlpha: surfaceCompositingClipsToBaseAlpha(method))
+        let data = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: data))
+        #expect(bitmap.colorAt(x: 0, y: 0)?.alphaComponent ?? 0 > 0.9, "\(method)")
+        #expect(bitmap.colorAt(x: 1, y: 0)?.alphaComponent ?? 1 < 0.1, "\(method)")
+    }
+}
+
+@Test @MainActor func `surface element clipping and opacity crop the image without mutating the source`() throws {
+    let source = try makeTestImage(colors: [
+        NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1),
+        NSColor(deviceRed: 0, green: 1, blue: 0, alpha: 1),
+        NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
+    ])
+    let loader = SurfaceImageLoader()
+    let clipped = loader.applyingDrawingOptions(to: source, clipping: SurfaceRect(left: 1, top: 0, right: 2, bottom: 1), alpha: 128)
+    #expect(clipped.size == NSSize(width: 1, height: 1))
+    let color = try #require(clipped.colorAtCenter())
+    #expect(color.greenComponent > 0.9)
+    #expect(abs(color.alphaComponent - 128.0 / 255) < 0.01)
+    #expect(source.size == NSSize(width: 3, height: 1))
+    let empty = loader.applyingDrawingOptions(to: source, clipping: SurfaceRect(left: 5, top: 0, right: 6, bottom: 1), alpha: 255)
+    #expect(empty.colorAtCenter()?.alphaComponent == 0)
+}

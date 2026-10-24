@@ -444,3 +444,18 @@ func `parses scoped cursor and tooltip braces`() {
     #expect(document.tooltips[2]?["Head"] == "頭です。")
     #expect(document.tooltips[2]?["Bust"] == "カンマ,も保持します。")
 }
+
+@Test func `parses element clipping rectangles and opacity without dropping offsets`() throws {
+    let surfaces = SurfacesParser().parse("""
+    surface0 {
+    element0,base,part.png,10,20,--clipping,1,2,30,40,--alpha,128
+    element1,overlay,part.png,-4,3,--alpha,999
+    }
+    """)
+    let elements = try #require(surfaces[0]?.elements)
+    #expect(elements[0].clipping == SurfaceRect(left: 1, top: 2, right: 30, bottom: 40))
+    #expect(elements[0].alpha == 128)
+    #expect(elements[0].x == 10 && elements[0].y == 20)
+    #expect(elements[1].alpha == 255)
+    #expect(elements[1].clipping == nil)
+}

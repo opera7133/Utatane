@@ -3,6 +3,7 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import ImageIO
 import UtataneCore
+import UtataneShell
 
 struct SurfaceImageLoader {
     /// Only the two Core Image blend paths need a context. Share it lazily;
@@ -178,8 +179,8 @@ struct SurfaceImageLoader {
         operation: NSCompositingOperation,
         clipsToBaseAlpha: Bool
     ) -> NSImage {
-        if operation == .multiply, clipsToBaseAlpha,
-           let composited = compositeMultiplySourceAtop(base: base, overlay: overlay, x: x, y: y)
+        if clipsToBaseAlpha,
+           let composited = compositeBlendSourceAtop(base: base, overlay: overlay, x: x, y: y, operation: operation)
         {
             return composited
         }
@@ -205,11 +206,40 @@ struct SurfaceImageLoader {
         }
     }
 
-    private func compositeMultiplySourceAtop(
+    func applyingDrawingOptions(to image: NSImage, clipping: SurfaceRect?, alpha: Int) -> NSImage {
+        guard clipping != nil || alpha != 255 else { return image }
+        if clipping == nil, let animation = imageAnimation(from: image),
+           let result = makeAnimatedImage(
+               frames: animation.frames.map { applyingDrawingOptions(to: $0, clipping: nil, alpha: alpha) },
+               durations: animation.durations, loopCount: animation.loopCount
+           )
+        {
+            return result
+        }
+        let bounds = NSRect(origin: .zero, size: image.size)
+        let rect: NSRect
+        if let clipping {
+            let left = max(0, min(image.size.width, CGFloat(clipping.left)))
+            let top = max(0, min(image.size.height, CGFloat(clipping.top)))
+            let right = max(left, min(image.size.width, CGFloat(clipping.right)))
+            let bottom = max(top, min(image.size.height, CGFloat(clipping.bottom)))
+            rect = NSRect(x: left, y: image.size.height - bottom, width: right - left, height: bottom - top)
+        } else {
+            rect = bounds
+        }
+        guard !rect.isEmpty else { return rasterizedImage(size: NSSize(width: 1, height: 1)) {} }
+        return rasterizedImage(size: rect.size) {
+            image.draw(in: NSRect(origin: .zero, size: rect.size), from: rect, operation: .sourceOver,
+                       fraction: CGFloat(min(255, max(0, alpha))) / 255)
+        }
+    }
+
+    private func compositeBlendSourceAtop(
         base: NSImage,
         overlay: NSImage,
         x: Int,
-        y: Int
+        y: Int,
+        operation: NSCompositingOperation
     ) -> NSImage? {
         guard let baseImage = ciImage(from: base),
               let overlayImage = ciImage(from: overlay)
@@ -219,13 +249,32 @@ struct SurfaceImageLoader {
             translationX: CGFloat(x),
             y: baseImage.extent.height - CGFloat(y) - overlayImage.extent.height
         ))
-        let multiply = CIFilter.multiplyBlendMode()
-        multiply.inputImage = translatedOverlay
-        multiply.backgroundImage = baseImage
-        guard let multiplied = multiply.outputImage else { return nil }
-
+        let name: String
+        switch operation {
+        case .multiply: name = "CIMultiplyBlendMode"
+        case .screen: name = "CIScreenBlendMode"
+        case .overlay: name = "CIOverlayBlendMode"
+        case .plusLighter: name = "CIAdditionCompositing"
+        case .softLight: name = "CISoftLightBlendMode"
+        case .hardLight: name = "CIHardLightBlendMode"
+        case .colorDodge: name = "CIColorDodgeBlendMode"
+        case .colorBurn: name = "CIColorBurnBlendMode"
+        case .color: name = "CIColorBlendMode"
+        case .luminosity: name = "CILuminosityBlendMode"
+        case .hue: name = "CIHueBlendMode"
+        case .saturation: name = "CISaturationBlendMode"
+        case .darken: name = "CIDarkenBlendMode"
+        case .lighten: name = "CILightenBlendMode"
+        case .difference: name = "CIDifferenceBlendMode"
+        case .exclusion: name = "CIExclusionBlendMode"
+        default: return nil
+        }
+        guard let blend = CIFilter(name: name) else { return nil }
+        blend.setValue(translatedOverlay, forKey: kCIInputImageKey)
+        blend.setValue(baseImage, forKey: kCIInputBackgroundImageKey)
+        guard let blended = blend.outputImage else { return nil }
         let clip = CIFilter.sourceAtopCompositing()
-        clip.inputImage = multiplied
+        clip.inputImage = blended
         clip.backgroundImage = baseImage
         guard let outputImage = clip.outputImage?.cropped(to: baseImage.extent),
               let output = Self.context.createCGImage(outputImage, from: baseImage.extent)

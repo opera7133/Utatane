@@ -2,6 +2,19 @@ import AppKit
 
 @MainActor
 public enum MacOSPropertySnapshot {
+    private static let loadSampler = MacOSSystemLoadSampler()
+    private static var lastLoadSampleTime: TimeInterval = -.infinity
+    private static var loadValues: [String: String] = [:]
+
+    private static func systemLoadValues() -> [String: String] {
+        let now = ProcessInfo.processInfo.systemUptime
+        if now - lastLoadSampleTime >= 1 {
+            loadValues = loadSampler.propertyValues()
+            lastLoadSampleTime = now
+        }
+        return loadValues
+    }
+
     public static func values(
         geometryProvider: any PresentationGeometryProviding = SystemPresentationGeometryProvider()
     ) -> [String: String] {
@@ -34,6 +47,8 @@ public enum MacOSPropertySnapshot {
             "system.memory.phyt": String(ProcessInfo.processInfo.physicalMemory / 1_048_576),
             "system.dnd.mode": "normal"
         ]
+
+        values.merge(systemLoadValues()) { _, new in new }
 
         let volumes = FileManager.default.mountedVolumeURLs(
             includingResourceValuesForKeys: [.volumeTotalCapacityKey, .volumeAvailableCapacityKey],

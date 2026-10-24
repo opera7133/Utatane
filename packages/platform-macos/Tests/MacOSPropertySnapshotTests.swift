@@ -42,3 +42,14 @@ func `uses injected virtual presentation geometry`() {
     #expect(values["system.monitor.index(0).primary"] == "1")
     #expect(values["system.cursor.pos"] == "120,80")
 }
+
+@Test @MainActor func `system snapshot publishes live CPU and memory properties`() throws {
+    let values = MacOSPropertySnapshot.values()
+    for key in ["system.cpu.load", "system.memory.load"] {
+        let value = try #require(Int(values[key] ?? ""))
+        #expect((0 ... 100).contains(value))
+    }
+    let available = try #require(UInt64(values["system.memory.phya"] ?? ""))
+    let total = try #require(UInt64(values["system.memory.phyt"] ?? ""))
+    #expect(available <= total)
+}

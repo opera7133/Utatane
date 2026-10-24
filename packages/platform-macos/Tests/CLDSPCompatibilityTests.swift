@@ -15,6 +15,7 @@ private final class CLDSPClockTestState {
     var completions = 0
     var internalEvent: ((InternalSaoriEvent) -> Void)?
     var metadataCompletions = 0
+    var lastPropertyValues: [String: String] = [:]
 }
 
 @MainActor
@@ -38,6 +39,11 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
     for name in ["savedata_main.txt", "savedata_stocker.txt"] {
         try? FileManager.default.removeItem(at: master.appending(path: name))
     }
+    if environment["UTATANE_TEST_NAOJ_LIVE"] == "1" {
+        for name in ["naoj_sun_2026_10.txt", "naoj_moon_2026_10.txt"] {
+            try? FileManager.default.removeItem(at: master.appending(path: "var/" + name))
+        }
+    }
     let usesSpectrum = try String(contentsOf: master.appending(path: "kawari_main.txt"), encoding: .shiftJIS).contains("OnSoundSpectrum :")
     let config = try FileHandle(forWritingTo: master.appending(path: "kawarirc.kis"))
     try config.seekToEnd()
@@ -48,6 +54,7 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
     OnUtataneTestMetadata : $(set @testid $[ $(size playlist.p)-1 ]; echo $playlist.t[${@testid}] "|" $playlist.l[${@testid}];)
     OnUtataneTestEnableSpectrum : $(set spectrum_mode 1; set fullmode_sw 1;)
     OnUtataneTestTiming : ${tc.i}|${tc.is}|${tc.p}|${rate}
+    OnUtataneTestAlmanac : ${sunrise.t}|${sunset.t}|${moonrise.t}|${moonset.t}|${moonphase.a}
     """.data(using: .shiftJIS)))
     try config.close()
     let clock = CLDSPClockTestState()
@@ -123,17 +130,53 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
         }
     }
     defer { clock.internalEvent = nil }
+    let propertySystem = PropertySystem(configuration: .init(basewareName: "Utatane", basewareVersion: "test"))
     player.onGetProperties = { event, properties in
         #expect(event == (usesSpectrum ? "OnMainDispRefresh" : "OnMainSyncMaster"))
-        var values = ["2026", "10", "19", "1", "14", "23", String(clock.tick), "0", "0", "1024",
-                      player.runtimePropertyValue(for: "currentghost.sound.index(0).position") ?? "-1"]
-        if usesSpectrum {
-            values.append(String(surfaces.serikoInspectorSnapshots.first { $0.scope == 1 }?.surfaceID ?? 1))
+        var snapshot = MacOSPropertySnapshot.values()
+        for (key, value) in ["system.year": "2026", "system.month": "10", "system.day": "19", "system.dayofweek": "1",
+                             "system.hour": "14", "system.minute": "23", "system.second": String(clock.tick)]
+        {
+            snapshot[key] = value
         }
-        #expect(properties.count == values.count)
+        await propertySystem.register(values: snapshot)
+        let stored = await propertySystem.values(for: properties)
+        let values = properties.enumerated().map { index, property in
+            player.runtimePropertyValue(for: property) ?? stored[index]
+        }
+        clock.lastPropertyValues = Dictionary(uniqueKeysWithValues: properties.enumerated().map { ($0.element, values[$0.offset]) })
+        #expect(values.prefix(10).allSatisfy { !$0.isEmpty })
+        #expect(values[7 ... 8].allSatisfy { (0 ... 100).contains(Int($0) ?? -1) })
+        #expect(UInt64(values[9]) != nil)
         clock.completions += 1
         return try? await request(event, Dictionary(uniqueKeysWithValues: values.enumerated().map { ($0.offset, $0.element) }))
     }
+    var httpCompletions: Set<String> = []
+    var httpTasks: [Task<Void, Never>] = []
+    if environment["UTATANE_TEST_NAOJ_LIVE"] == "1" {
+        player.onHTTP = { command in
+            let task = Task { @MainActor in
+                do {
+                    #expect(URL(string: command.url)?.host == "eco.mtk.nao.ac.jp")
+                    var prepared = try SakuraScriptHTTPRequestBuilder.prepare(command, masterDirectory: master, allowedRoots: [root]).request
+                    prepared.timeoutInterval = 20
+                    let destination = try #require(SakuraScriptHTTPRequestBuilder.destination(command, masterDirectory: master, invocationID: UUID()))
+                    let transfer = try await HTTPTransferClient.perform(prepared, outputFileURL: destination)
+                    let status = try #require((transfer.response as? HTTPURLResponse)?.statusCode)
+                    #expect(status == 200)
+                    let event = SHIORIEventFactory.executeHTTPComplete(eventID: command.eventID ?? "", method: command.method,
+                                                                       url: command.url, result: destination.path, statusCode: String(status), cookie: "", headers: "")
+                    if case let .shiori(id, references) = event {
+                        _ = try await request(id, references)
+                        httpCompletions.insert(id)
+                    }
+                } catch { Issue.record(error) }
+            }
+            httpTasks.append(task)
+            return nil
+        }
+    }
+    defer { httpTasks.forEach { $0.cancel() }; player.onHTTP = nil }
     var spectrumFrames = 0
     var spectrumTimings: [String] = []
     var nonzeroSpectrum = false
@@ -168,7 +211,42 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
         }
         previousImage = image
     }
+    if let output = environment["UTATANE_TEST_MAIN_PREVIEW"] {
+        let data = try #require(surfaces.renderedImage(for: 0)?.tiffRepresentation)
+        let image = try #require(NSBitmapImageRep(data: data))
+        try #require(image.representation(using: .png, properties: [:])).write(to: URL(filePath: output))
+    }
+    // Check the actual glyph pixels, not just the dictionary's state or animation IDs.
+    let mainData = try #require(surfaces.renderedImage(for: 0)?.tiffRepresentation)
+    let mainBitmap = try #require(NSBitmapImageRep(data: mainData))
+    func expectDigit(_ digit: Character, x: Int, y: Int) throws {
+        let data = try Data(contentsOf: root.appending(path: "shell/master/add_font/n\(digit).png"))
+        let glyph = try #require(NSBitmapImageRep(data: data))
+        var lit = 0
+        for dy in 0 ..< glyph.pixelsHigh {
+            for dx in 0 ..< glyph.pixelsWide where (glyph.colorAt(x: dx, y: dy)?.alphaComponent ?? 0) > 0.9 {
+                lit += 1
+                #expect(mainBitmap.colorAt(x: x + dx, y: y + dy)?.usingColorSpace(.deviceRGB)?.blueComponent ?? 0 > 0.7)
+            }
+        }
+        #expect(lit > 0)
+    }
+    try expectDigit("1", x: 376, y: 27)
+    try expectDigit("4", x: 384, y: 27)
+    try expectDigit("2", x: 376, y: 46)
+    for (key, x, y) in [("system.cpu.load", 451, 65), ("system.memory.load", 451, 84), ("system.memory.phya", 451, 103)] {
+        let digit = try #require(clock.lastPropertyValues[key]?.last)
+        try expectDigit(digit, x: x, y: y)
+    }
     #expect(clock.completions == 3)
+    if environment["UTATANE_TEST_NAOJ_LIVE"] == "1" {
+        try await requireEventually { httpCompletions.contains("OnGetTimeSun") && httpCompletions.contains("OnGetTimeMoon") }
+        if let script = try await request("OnSecondChange", [3: "1"]) {
+            await player.playAndWait(script, balloon: balloon, characterDelayMilliseconds: 0)
+        }
+        let almanac = try #require(try await request("OnUtataneTestAlmanac"))
+        #expect(almanac.rawValue == "550|1701|1316|2322|85", "Tokyo 2026-10-19, read by the original dictionary: \(almanac.rawValue)")
+    }
 
     // Register real MP3 data through the original importer, then decode the
     // original playback command without playing music through the speakers.

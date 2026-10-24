@@ -348,12 +348,17 @@ public struct SurfaceElement: Sendable, Equatable {
     public let x: Int
     public let y: Int
 
-    public init(id: Int, method: String, filename: String, x: Int, y: Int) {
+    public let clipping: SurfaceRect?
+    public let alpha: Int
+
+    public init(id: Int, method: String, filename: String, x: Int, y: Int, clipping: SurfaceRect? = nil, alpha: Int = 255) {
         self.id = id
         self.method = method
         self.filename = filename
         self.x = x
         self.y = y
+        self.clipping = clipping
+        self.alpha = min(255, max(0, alpha))
     }
 }
 
