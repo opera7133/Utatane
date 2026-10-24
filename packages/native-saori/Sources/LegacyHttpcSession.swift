@@ -18,7 +18,6 @@ final class LegacyHttpcSession: @unchecked Sendable {
     private let onEvent: (@Sendable (InternalSaoriEvent) -> Void)?
     private let fetch: @Sendable (URL, Job) -> (Data, String?)?
     private let operationQueue: OperationQueue
-    private var cursors: [URL: (key: [String], text: String, offset: Int)] = [:]
 
     init(onEvent: (@Sendable (InternalSaoriEvent) -> Void)?, queue: OperationQueue? = nil,
          fetch: @escaping @Sendable (URL, Job) -> (Data, String?)? = LegacyHttpcSession.fetchURL)
@@ -60,7 +59,6 @@ final class LegacyHttpcSession: @unchecked Sendable {
         if args == ["cancel"] {
             let tasks = lock.withLock {
                 lifetimes.removeValue(forKey: resourceDirectory)?.invalidate()
-                cursors.removeValue(forKey: resourceDirectory)
                 return jobs.values.filter { $0.2 == resourceDirectory }.map(\.0)
             }
             tasks.forEach { $0.cancel() }
@@ -70,7 +68,7 @@ final class LegacyHttpcSession: @unchecked Sendable {
         guard let onEvent else { return reply(400, "ghost required") }
         var parameters = Array(args.dropFirst(2))
         var charsetOverride: String?
-        let encodings = ["euc": "EUC-JP", "jis": "ISO-2022-JP", "sjis": "CP932", "utf-8": "UTF-8", "utf-16be": "UTF-16BE", "utf-16le": "UTF-16LE"]
+        let encodings = ["euc": "EUC-JP", "jis": "ISO-2022-JP", "sjis": "CP932", "utf-8": "UTF-8", "utf8": "UTF-8", "utf-16be": "UTF-16BE", "utf-16le": "UTF-16LE"]
         if let first = parameters.first, let encoding = encodings[first.lowercased()] {
             charsetOverride = encoding; parameters.removeFirst()
         }
@@ -92,41 +90,40 @@ final class LegacyHttpcSession: @unchecked Sendable {
             guard isCurrent, job.isCurrent, lifetime.isCurrent else { return }
             let response = fetch(url, job)
             guard isCurrent, job.isCurrent, lifetime.isCurrent else { return }
-            let result = lock.withLock { () -> String in
-                guard !closed, job.isCurrent, lifetime.isCurrent else { return "" }
-                guard let (data, charset) = response else { return requestParameters.count == 2 ? "0" : "" }
+            let results = lock.withLock { () -> [String] in
+                guard !closed, job.isCurrent, lifetime.isCurrent else { return [""] }
+                guard let (data, charset) = response else { return [requestParameters.count == 2 ? "0" : ""] }
                 if requestParameters.count == 2 {
                     let path = requestParameters[1].replacingOccurrences(of: "\\", with: "/")
-                    guard !path.isEmpty else { return "0" }
+                    guard !path.isEmpty else { return ["0"] }
                     let file = path.hasPrefix("/") ? URL(filePath: path) : resourceDirectory.appending(path: path)
-                    do { try data.write(to: file, options: .atomic); return "1" } catch { return "0" }
+                    do { try data.write(to: file, options: .atomic); return ["1"] } catch { return ["0"] }
                 }
                 let text: String? = if let encoding {
                     LegacyTextDecoder.decode(data, strictlyUsing: encoding)
                 } else {
                     LegacyTextDecoder.decode(data, preferredCharset: charset)
                 }
-                guard let text else { return "" }
+                guard let text else { return [""] }
                 let clean = text.replacingOccurrences(of: "\r", with: "").replacingOccurrences(of: "\n", with: "").replacingOccurrences(of: "\0", with: "")
-                guard clean.utf8.count <= 2 * 1024 * 1024 else { return "" }
-                let value: String
-                if requestParameters.count == 3 {
-                    guard !requestParameters[1].isEmpty, !requestParameters[2].isEmpty else { return "" }
-                    let previous = cursors[resourceDirectory]
-                    let offset = previous?.key == requestParameters && previous?.text == clean ? previous!.offset : 0
-                    let start = clean.index(clean.startIndex, offsetBy: offset)
-                    guard let left = clean.range(of: requestParameters[1], range: start ..< clean.endIndex),
-                          let right = clean.range(of: requestParameters[2], range: left.upperBound ..< clean.endIndex) else { return "" }
-                    cursors[resourceDirectory] = (requestParameters, clean, clean.distance(from: clean.startIndex, to: right.upperBound))
-                    value = String(clean[left.upperBound ..< right.lowerBound])
-                } else {
-                    value = clean
+                guard clean.utf8.count <= 2 * 1024 * 1024 else { return [""] }
+                guard requestParameters.count == 3 else { return [clean] }
+                let left = requestParameters[1], right = requestParameters[2]
+                guard !left.isEmpty, !right.isEmpty else { return [""] }
+                var values: [String] = [], start = clean.startIndex
+                while values.count < 254, let begin = clean.range(of: left, range: start ..< clean.endIndex),
+                      let end = clean.range(of: right, range: begin.upperBound ..< clean.endIndex)
+                {
+                    values.append(String(clean[begin.upperBound ..< end.lowerBound])); start = end.upperBound
                 }
-                // Leave room for SHIORI wire encoding and event headers.
-                return value.utf8.count <= 2 * 1024 * 1024 ? value : ""
+                return values.isEmpty ? [""] : values
             }
             guard isCurrent, job.isCurrent, lifetime.isCurrent else { return }
-            onEvent(InternalSaoriEvent(id: "OnHttpcNotify", references: [0: identifier, 1: "", 2: result], validity: { [weak self, lifetime] in
+            var references = [0: identifier, 1: "-"]
+            for (index, value) in results.enumerated() {
+                references[index + 2] = value
+            }
+            onEvent(InternalSaoriEvent(id: "OnHttpcNotify", references: references, validity: { [weak self, lifetime] in
                 self?.isCurrent == true && lifetime.isCurrent
             }))
         }

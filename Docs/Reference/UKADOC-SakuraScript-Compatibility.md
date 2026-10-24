@@ -253,7 +253,7 @@ SakuraScript以外の仕様について、対応を進める領域をまとめ�
 | SHIORI Resource | 🟡 | 主要なシステム・ゴースト・シェル・バルーン・メニュー・サイト情報を実装。完全な照会表は未作成 |
 | SHIORI/3.0 | 🟡 | GET/NOTIFY、Reference、Charset、Valueなど基本モデルあり。全ヘッダー・ステータス未照合 |
 | SSTP/1.x | ✅ | localhost Socket／HTTPのportable coreを実装。SEND、NOTIFY、COMMUNICATE、EXECUTE、GIVE、ゴースト指定、IfGhost、nobreak、情報取得・Cookie・Property・Archive系commandに対応。詳細は[UKADOC-SSTP-Compatibility.md](UKADOC-SSTP-Compatibility.md) |
-| SAORI/1.0 | 🟡 | 改修版SHIORI経由の内蔵SAORI（機能一覧・正規化・乱数・日時計算・データ変換・Digest/HMAC）と非同期イベントを実装。圧縮、Windows名のタイムゾーン、暗号化等は未対応。SSU等の既存ネイティブ互換も維持。Windows Direct SSTP互換ではない |
+| SAORI/1.0 | 🟡 | 改修版SHIORI経由の内蔵SAORI（機能一覧・正規化・乱数・日時計算・データ変換・gzip/zlib/deflate・MediaInfo・ファイルのDigest/HMAC・Compare）と非同期イベントを実装。Windows名のタイムゾーン、暗号化等は未対応。SSU等の既存ネイティブ互換も維持。Windows Direct SSTP互換ではない |
 | HEADLINE/2.0 | 🟡 | native `config.txt` とWine DLL fallback。全応答差異は未照合 |
 | DLL規格 | 🟡 | SHIORIはnative実装と限定Wine経路。一般Windows DLLは対象外 |
 | FMO / MUTEX | 🟡 | SSTP `GetFMO`で起動中ゴーストの名前・パス・サーフェスを公開。Windows共有メモリ・MUTEX・HWND互換は対象外 |

@@ -152,3 +152,11 @@ private func internalResponse(_ module: String, _ arguments: [String], method: S
     #expect(try InternalSaoriData.compress(member + member, algorithm: "gzip", decompress: true).count == InternalSaoriService.maximumBytes)
     #expect(throws: (any Error).self) { try InternalSaoriData.compress(member + member + member, algorithm: "gzip", decompress: true) }
 }
+
+@Test(arguments: ["0d0a", "610d0a496e6a65637465643a2074727565", "0d", "0a", "00"])
+func `converted line breaks cannot escape a SAORI result header`(_ hex: String) throws {
+    let response = try internalResponse("internal_data", ["Convert", hex, "--data-in=hex"])
+    #expect(response.hasPrefix("SAORI/1.0 500"))
+    #expect(response.contains("ErrorDescription: not text\r\n"))
+    #expect(!response.contains("Injected: true"))
+}

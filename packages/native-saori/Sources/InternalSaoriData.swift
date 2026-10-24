@@ -83,7 +83,7 @@ enum InternalSaoriData {
         switch encoding.lowercased() {
         case "text":
             guard let text = try LegacyTextDecoder.decode(data, strictlyUsing: self.charset(charset)),
-                  !text.contains("\0"), !text.contains("\r"), !text.contains("\n") else { throw Failure("not text", status: 500) }
+                  !text.utf8.contains(0), !text.utf8.contains(13), !text.utf8.contains(10) else { throw Failure("not text", status: 500) }
             return text
         case "hex": return data.map { String(format: "%02x", $0) }.joined()
         case "base64": return data.base64EncodedString()

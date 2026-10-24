@@ -108,7 +108,7 @@ public struct InternalSaoriService: Sendable {
         let reason = [200: "OK", 204: "No Content", 400: "Bad Request", 500: "Internal Server Error"][status] ?? "Bad Request"
         var lines = ["SAORI/1.0 \(status) \(reason)", "Charset: \(charset)"]
         func safe(_ text: String) -> Bool {
-            !text.contains("\r") && !text.contains("\n") && !text.contains("\0")
+            !text.utf8.contains(13) && !text.utf8.contains(10) && !text.utf8.contains(0)
         }
         guard result.map(safe) ?? true, values.allSatisfy(safe) else { return encode(status: 500, error: "not text", charset: charset) }
         if let result {

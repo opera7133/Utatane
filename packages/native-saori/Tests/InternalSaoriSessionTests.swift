@@ -151,7 +151,7 @@ private func legacyHttpcHeaders(_ directory: URL, _ arguments: [String]) -> [Str
     return result
 }
 
-@Test func `httpc bg notifications preserve owners identifiers files and unload lifetime`() async throws {
+@Test func `httpc bg notifications preserve owners identifiers all matches and unload lifetime`() async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -165,8 +165,10 @@ private func legacyHttpcHeaders(_ directory: URL, _ arguments: [String]) -> [Str
     #expect(send(["bg", "text", "https://example.invalid/ok"]).hasPrefix("SAORI/1.0 204"))
     #expect(send(["bg", "save", "https://example.invalid/ok", "保存.bin"]).hasPrefix("SAORI/1.0 204"))
     #expect(send(["bg", "failed", "https://example.invalid/missing", "保存.bin"]).hasPrefix("SAORI/1.0 204"))
-    let events = await recorder.events(count: 3)
-    #expect(events.allSatisfy { $0.id == "OnHttpcNotify" && $0.references[1] == "" && $0.isCurrent })
+    #expect(send(["bg", "extract", "https://example.invalid/ok", "<a>", "</a>"]).hasPrefix("SAORI/1.0 204"))
+    let events = await recorder.events(count: 4)
+    #expect(events.first { $0.references[0] == "extract" }?.references == [0: "extract", 1: "-", 2: "日本語", 3: "次"])
+    #expect(events.allSatisfy { $0.id == "OnHttpcNotify" && $0.references[1] == "-" && $0.isCurrent })
     #expect(events.first { $0.references[0] == "text" }?.references[2] == "<a>日本語</a><a>次</a>")
     #expect(events.first { $0.references[0] == "save" }?.references[2] == "1")
     #expect(events.first { $0.references[0] == "failed" }?.references[2] == "0")
@@ -174,7 +176,7 @@ private func legacyHttpcHeaders(_ directory: URL, _ arguments: [String]) -> [Str
     _ = send(["cancel"])
     #expect(events.allSatisfy { !$0.isCurrent })
     _ = send(["bg", "new-lifetime", "https://example.invalid/ok"])
-    let newEvents = await recorder.events(count: 4)
+    let newEvents = await recorder.events(count: 5)
     #expect(newEvents.last?.isCurrent == true)
     legacy.close()
     #expect(newEvents.allSatisfy { !$0.isCurrent })
