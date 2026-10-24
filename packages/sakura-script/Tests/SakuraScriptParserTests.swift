@@ -115,6 +115,14 @@ func `parses all HTTP methods and common request options`() {
 }
 
 @Test
+func `preserves HTTP input file and parameter charset options`() {
+    #expect(SakuraScriptParser().parse(
+        #"\![execute,http-post,https://example.com/api,--async=OnUploaded,--param-input-file=送信.dat,--param-charset=Shift_JIS,--content-type=multipart/form-data]"#
+    ) == [.http(SakuraScriptHTTPRequest(method: "POST", url: "https://example.com/api", eventID: "OnUploaded", waitsForCompletion: false,
+                                        options: ["--param-input-file=送信.dat", "--param-charset=Shift_JIS"], headers: ["Content-Type: multipart/form-data"]))])
+}
+
+@Test
 func `parses ping and nslookup diagnostics`() {
     #expect(SakuraScriptParser().parse(
         #"\![execute,ping,--host=example.com,--event=OnChecked,--count=2,--size=64,--timeout=1000,--ttl=32,--df=true,--data=hello]\![execute,nslookup,--host=127.0.0.1,--event=lookup]"#

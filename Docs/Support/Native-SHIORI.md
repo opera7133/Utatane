@@ -102,4 +102,11 @@ Diff / 2026-12-20T10:00 / 2026-12-24 / day / --tz=UTC
 `httpc.dll`を使うゴースト・プラグイン向けに、Utatane Modulesの`httpc`を共通導入できます。
 引数なしの接続状態確認、URLからの同期文字列取得、URLと保存先を指定するバイナリ保存、
 開始・終了文字列による順次抽出に対応します。保存先はSAORIの配置フォルダ基準です。
-`bg`による`OnHttpcNotify`、HTMLタグ変換は未対応です。詳細は[ModulesのSAORI手順](https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md)を参照してください。
+次回版の本体とhttpc 0.1.0-r3以降では、先頭に`bg`、識別子を付けると非同期で実行します。
+受付時は空の結果を返し、完了時に呼び出したゴースト・プラグインへ`OnHttpcNotify`を送ります。
+Reference0は識別子、Reference1は空文字、Reference2は同期呼び出しと同じ結果です。
+ゴーストの終了・再読み込みやSAORIのアンロード後には通知しません。
+通常のUtataneネイティブホスト経由で利用でき、Windows DLLホスト経由は対象外です。
+華和梨は9.1.0-r5以降へ更新してください。古い版では、元のWindows DLLがないとhttpcなどを内蔵機能と誤認する場合があります。
+ダウンロードは32MB、文字列結果はUTF-8で2MBまで、同時受付はホストごとに64件までです。
+HTMLタグ変換は未対応です。詳細は[ModulesのSAORI手順](https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md)を参照してください。

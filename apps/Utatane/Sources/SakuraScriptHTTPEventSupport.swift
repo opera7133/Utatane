@@ -8,7 +8,8 @@ enum SakuraScriptHTTPEventSupport {
         command: SakuraScriptHTTPRequest,
         data: Data,
         response: HTTPURLResponse,
-        masterDirectory: URL
+        masterDirectory: URL,
+        destination: URL? = nil
     ) -> GhostEvent? {
         guard let eventID = command.eventID else { return nil }
         return .shiori(
@@ -20,7 +21,8 @@ enum SakuraScriptHTTPEventSupport {
                 data: data,
                 response: response,
                 masterDirectory: masterDirectory,
-                resultCode: String(response.statusCode)
+                resultCode: String(response.statusCode),
+                destination: destination
             )
         )
     }
@@ -29,7 +31,8 @@ enum SakuraScriptHTTPEventSupport {
         command: SakuraScriptHTTPRequest,
         value: String,
         response: HTTPURLResponse,
-        masterDirectory: URL
+        masterDirectory: URL,
+        destination: URL? = nil
     ) -> GhostEvent? {
         guard let eventID = command.eventID else { return nil }
         var references = resultReferences(
@@ -37,7 +40,8 @@ enum SakuraScriptHTTPEventSupport {
             data: Data(),
             response: response,
             masterDirectory: masterDirectory,
-            resultCode: value.replacingOccurrences(of: "\n", with: "\u{1}")
+            resultCode: value.replacingOccurrences(of: "\n", with: "\u{1}"),
+            destination: destination
         )
         references[4] = value.replacingOccurrences(of: "\n", with: "\u{1}")
         return .shiori(
@@ -76,13 +80,14 @@ enum SakuraScriptHTTPEventSupport {
         data: Data,
         response: HTTPURLResponse,
         masterDirectory: URL,
-        resultCode: String
+        resultCode: String,
+        destination: URL?
     ) -> [Int: String] {
         [
             0: command.method.lowercased(),
             1: command.eventID ?? "",
             2: command.url,
-            3: outputValue(command: command, data: data, masterDirectory: masterDirectory),
+            3: destination?.path ?? outputValue(command: command, data: data, masterDirectory: masterDirectory),
             4: resultCode,
             5: response.value(forHTTPHeaderField: "Set-Cookie") ?? "",
             6: response.allHeaderFields.map { "\($0.key): \($0.value)" }

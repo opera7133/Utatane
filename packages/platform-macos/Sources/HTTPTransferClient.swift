@@ -23,9 +23,10 @@ public enum HTTPTransferClient {
         _ request: URLRequest,
         progress: ProgressHandler? = nil,
         streaming: StreamingHandler? = nil,
+        bodyFileURL: URL? = nil,
         session: URLSession = .shared
     ) async throws -> HTTPTransferResult {
-        let delegate = TransferDelegate()
+        let delegate = TransferDelegate(bodyFileURL: bodyFileURL)
         let (bytes, response) = try await session.bytes(for: request, delegate: delegate)
         defer { bytes.task.cancel() }
         return try await withTaskCancellationHandler {
@@ -83,6 +84,14 @@ public enum HTTPTransferClient {
 private final class TransferDelegate: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private var tlsInfo: HTTPTransferTLSInfo?
+    private let bodyFileURL: URL?
+    init(bodyFileURL: URL?) {
+        self.bodyFileURL = bodyFileURL
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, needNewBodyStream completionHandler: @escaping (InputStream?) -> Void) {
+        completionHandler(bodyFileURL.flatMap { InputStream(url: $0) })
+    }
 
     func snapshot() -> HTTPTransferTLSInfo? {
         lock.lock()

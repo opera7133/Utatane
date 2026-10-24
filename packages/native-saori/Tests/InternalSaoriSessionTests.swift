@@ -142,3 +142,59 @@ private final class InternalEventRecorder: @unchecked Sendable {
     let failure = try #require(events.first { $0.id == "OnMissingFailure" })
     #expect(failure.references[1] == "file not found")
 }
+
+private func legacyHttpcHeaders(_ directory: URL, _ arguments: [String]) -> [String: String] {
+    var result = ["module": "utatane_httpc", "charset": "UTF-8", "directory": directory.path]
+    for (index, value) in arguments.enumerated() {
+        result["argument\(index)"] = value
+    }
+    return result
+}
+
+@Test func `httpc bg notifications preserve owners identifiers files and unload lifetime`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let recorder = InternalEventRecorder()
+    let body = Data("<a>日本語</a>\r\n<a>次</a>".utf8)
+    let legacy = LegacyHttpcSession(onEvent: recorder.record, queue: OperationQueue(), fetch: { url, _ in url.path == "/missing" ? nil : (body, "UTF-8") })
+    defer { legacy.close() }
+    func send(_ arguments: [String]) -> String {
+        String(decoding: legacy.response(headers: legacyHttpcHeaders(root, arguments), charset: "UTF-8"), as: UTF8.self)
+    }
+    #expect(send(["bg", "text", "https://example.invalid/ok"]).hasPrefix("SAORI/1.0 204"))
+    #expect(send(["bg", "save", "https://example.invalid/ok", "保存.bin"]).hasPrefix("SAORI/1.0 204"))
+    #expect(send(["bg", "failed", "https://example.invalid/missing", "保存.bin"]).hasPrefix("SAORI/1.0 204"))
+    let events = await recorder.events(count: 3)
+    #expect(events.allSatisfy { $0.id == "OnHttpcNotify" && $0.references[1] == "" && $0.isCurrent })
+    #expect(events.first { $0.references[0] == "text" }?.references[2] == "<a>日本語</a><a>次</a>")
+    #expect(events.first { $0.references[0] == "save" }?.references[2] == "1")
+    #expect(events.first { $0.references[0] == "failed" }?.references[2] == "0")
+    #expect(try Data(contentsOf: root.appending(path: "保存.bin")) == body)
+    _ = send(["cancel"])
+    #expect(events.allSatisfy { !$0.isCurrent })
+    _ = send(["bg", "new-lifetime", "https://example.invalid/ok"])
+    let newEvents = await recorder.events(count: 4)
+    #expect(newEvents.last?.isCurrent == true)
+    legacy.close()
+    #expect(newEvents.allSatisfy { !$0.isCurrent })
+}
+
+@Test func `private httpc bridge validates requests bounds queues and drops closed work`() async {
+    let root = FileManager.default.temporaryDirectory
+    let queue = OperationQueue()
+    queue.isSuspended = true
+    let legacy = LegacyHttpcSession(onEvent: { _ in Issue.record("closed httpc delivered a result") }, queue: queue,
+                                    fetch: { _, _ in Issue.record("closed httpc performed IO"); return nil })
+    for index in 0 ..< 64 {
+        let result = legacy.response(headers: legacyHttpcHeaders(root, ["bg", "id\(index)", "https://example.invalid/ok"]), charset: "UTF-8")
+        #expect(String(decoding: result, as: UTF8.self).hasPrefix("SAORI/1.0 204"))
+    }
+    let rejected = legacy.response(headers: legacyHttpcHeaders(root, ["bg", "overflow", "https://example.invalid/ok"]), charset: "UTF-8")
+    #expect(String(decoding: rejected, as: UTF8.self).contains("too many requests"))
+    legacy.close(); queue.isSuspended = false
+    await withCheckedContinuation { continuation in queue.addBarrierBlock { continuation.resume() } }
+    let noOwner = LegacyHttpcSession(onEvent: nil)
+    #expect(String(decoding: noOwner.response(headers: legacyHttpcHeaders(root, ["bg", "id", "https://example.invalid/ok"]), charset: "UTF-8"), as: UTF8.self).contains("ghost required"))
+    noOwner.close()
+}

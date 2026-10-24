@@ -32,21 +32,25 @@ public final class InternalSaoriSession: @unchecked Sendable {
     private let onEvent: (@Sendable (InternalSaoriEvent) -> Void)?
     private let service: InternalSaoriService
     private let operationQueue: OperationQueue
+    private let legacyHttpc: LegacyHttpcSession
 
     public init(onEvent: (@Sendable (InternalSaoriEvent) -> Void)? = nil, service: InternalSaoriService = .init()) {
         self.service = service
+        legacyHttpc = LegacyHttpcSession(onEvent: onEvent)
         self.onEvent = onEvent
         operationQueue = Self.queue
     }
 
-    init(onEvent: @escaping @Sendable (InternalSaoriEvent) -> Void, queue: OperationQueue) {
+    init(onEvent: @escaping @Sendable (InternalSaoriEvent) -> Void, queue: OperationQueue, legacyService: LegacyHttpcSession? = nil) {
         service = .init()
+        legacyHttpc = legacyService ?? LegacyHttpcSession(onEvent: onEvent, queue: queue)
         self.onEvent = onEvent
         operationQueue = queue
     }
 
     public func close() {
         lock.withLock { closed = true }
+        legacyHttpc.close()
     }
 
     private var isCurrent: Bool {
@@ -78,6 +82,9 @@ public final class InternalSaoriSession: @unchecked Sendable {
             let key = line[..<colon].lowercased()
             guard headers[key] == nil else { return service.response(to: data) }
             headers[key] = String(line[line.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+        }
+        if lines.first == "EXECUTE SAORI/1.0", headers["module"] == "utatane_httpc" {
+            return legacyHttpc.response(headers: headers, charset: charset)
         }
         guard lines.first == "EXECUTE SAORI/1.0", let module = headers["module"].flatMap(InternalSaoriService.moduleName),
               let function = headers["argument0"], let count = InternalSaoriService.positionalCount(module: module, function: function) else { return service.response(to: data) }

@@ -205,8 +205,8 @@ UKADOC分類行数: 150
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\![execute,http-get,URL,...]` | 🟡 | async／sync、param、主要header、timeout、no-cache、file／nofile、progress-notify、streaming、TLS情報通知に対応。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行います。同一URLの並行実行とmultipartは未対応 |
-| http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded bodyと主要共通オプションに対応。multipart、入力ファイル、証明書検証無効化は未対応 |
+| `\![execute,http-get,URL,...]` | 🟡 | async／sync、param、主要header、timeout、no-cache、file／nofile、progress-notify、streaming、TLS情報通知に対応。fileはghost/master/varへ保存し、nofileは文字コード指定・128KB制限・改行変換を行います。同一URLの並行実行、multipart、入力ファイル、送信文字コード指定に対応。証明書検証無効化は未対応 |
+| http-post/head/put/delete/patch/options | 🟡 | 全メソッドを共通HTTP実行基盤へ接続。URL encoded body、multipart、入力ファイル、送信文字コードと主要共通オプションに対応。証明書検証無効化は未対応 |
 | `\![execute,rss-get/rss-post,URL,...]` | 🟡 | RSS/Atomの取得・基本パース、完了／失敗、TLS情報通知に対応。全オプションは未照合 |
 | `\![execute,ical-get/ical-post,URL,...]` | 🟡 | iCalendar取得・解析、完了／失敗／進捗／TLS情報通知に対応。from／to／expand／limitと日・週・月・年のRRULE（INTERVAL・COUNT・UNTIL・BYDAY・BYMONTHDAY・BYMONTH・WKST）、EXDATE・RDATE・TZID・DURATION・複数日予定を展開する。BYSETPOS、時・分・秒単位の繰り返し、RECURRENCE-IDによる個別変更、独自VTIMEZONE定義は未対応 |
 | `\![execute,schedule-add/delete/get,...]` | 🟡 | Utataneの共有予定表へ登録・削除・取得し、完了／失敗を通知。主要フィールド、期間指定とical-getと同じ範囲の繰り返し展開に対応。完全なRFC 5545互換ではない |
@@ -273,3 +273,23 @@ SakuraScript以外の仕様について、対応を進める領域をまとめ�
 - 「✅」へ変更する時はテストまたは実機確認の根拠を書きます。
 - UKADOCの項目追加を定期的に確認し、確認日を冒頭で更新します。
 - SSPとの差異を意図的に残す場合は「未対応」ではなく理由付きの「対象外候補」とします。
+
+### HTTP要求の本文と並行実行（次回版）
+
+`--param=名前=値`を繰り返すと、標準の`application/x-www-form-urlencoded`では`&`で連結します。
+名前と値は必要に応じて呼び出し側でURLエンコードしてください。`名前=値`以外の引数を含む場合や
+別のContent-Typeでは、従来形式に合わせてCRLFで連結します。`--param-charset=Shift_JIS`などで
+本文の文字コードを指定できます。省略時はUTF-8です。
+
+`--header=Content-Type: multipart/form-data`では、各`--param=名前=値`を独立したフィールドとして送ります。
+ファイル添付を含む本文は、MIME形式を組み立てたファイルを`--param-input-file=送信.dat`で指定してください。
+この場合は先頭行の`--境界文字列`からboundaryを読み取ります。ファイル本文はバイナリのまま送信します。
+`--param-input-file`と`--param`は併用できません。
+相対パスはghost/master基準で、読み込み先はそのゴースト内またはUtataneのコンテンツ保存先に限ります。
+
+同じURLへの要求もそれぞれ実行します。ファイル名を省略した場合の保存先は
+`ghost/master/var/http-要求ごとの識別子-元のファイル名`です。完了・進捗・ストリーミング通知では
+同じ要求の保存先を通知します。`--file=名前`で同じ名前を指定した場合は上書きされるため、
+並行要求で結果を残すには別々の名前を指定してください。進捗通知中のファイル書き出しには未対応です。
+`\![cancel,http,URL]`は、そのURLに一致する実行中の要求をまとめて取り消します。
+ゴーストの終了・再読み込み・切り替え時にも要求を取り消し、終了したゴーストへの通知を破棄します。

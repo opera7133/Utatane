@@ -43,7 +43,7 @@ final class CalledGhostRuntime {
     private var speechHistoryTextScale: CGFloat = 1
     private var weatherTask: Task<Void, Never>?
     private var sntpCoordinator: SNTPEventCoordinator?
-    private var inFlightHTTPTasks: [String: Task<Void, Never>] = [:]
+    private let httpRequests = HTTPRequestTracker()
     private var teachHistory: [String] = []
     private var pendingHourTimeSignal = false
     private let periodicEventRunner = CoalescingTaskRunner()
@@ -711,7 +711,7 @@ final class CalledGhostRuntime {
         periodicEventRunner.cancel()
         mouseEventCoordinator.cancel()
         await webSocketManager.cancelAll()
-        cancelHTTP(url: nil)
+        httpRequests.cancel(reportFailure: false)
         fileWatchManager.cancelAll()
         player.cancel()
         player.discardSoundPlayback()
@@ -1251,18 +1251,17 @@ final class CalledGhostRuntime {
         }
         player.onHTTP = { [weak self] request in
             guard let self else { return nil }
-            if request.waitsForCompletion {
-                return await handleHTTP(request)
-            }
-            cancelHTTP(url: request.url)
-            inFlightHTTPTasks[request.url] = Task { [weak self] in
-                guard let self else { return }
-                let response = await handleHTTP(request)
-                guard !Task.isCancelled else { return }
-                inFlightHTTPTasks.removeValue(forKey: request.url)
-                if let response, !response.rawValue.isEmpty {
+            let task = httpRequests.start(url: request.url) { [weak self] lease -> SakuraScript? in
+                guard let self, lease.isActive, !Task.isCancelled else { return nil }
+                let response = await handleHTTP(request, lease: lease)
+                guard lease.isActive, !Task.isCancelled else { return nil }
+                if !request.waitsForCompletion, let response, !response.rawValue.isEmpty {
                     player.play(response, balloon: balloon)
                 }
+                return response
+            }
+            if request.waitsForCompletion {
+                return await withTaskCancellationHandler { await task.value } onCancel: { task.cancel() }
             }
             return nil
         }
@@ -1492,43 +1491,22 @@ final class CalledGhostRuntime {
         player.updateEnvironmentVariables(variables)
     }
 
-    private func handleHTTP(_ command: SakuraScriptHTTPRequest) async -> SakuraScript? {
-        guard var url = URL(string: command.url), ["http", "https"].contains(url.scheme?.lowercased()) else {
-            return nil
-        }
-        if command.method == "GET", !command.parameters.isEmpty,
-           var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
-        {
-            let suffix = command.parameters.joined(separator: "&")
-            components.percentEncodedQuery = [components.percentEncodedQuery, suffix]
-                .compactMap(\.self).filter { !$0.isEmpty }.joined(separator: "&")
-            url = components.url ?? url
-        }
+    private func handleHTTP(_ command: SakuraScriptHTTPRequest, lease: HTTPRequestTracker.Lease) async -> SakuraScript? {
+        let masterDirectory = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
+        let destination = SakuraScriptHTTPRequestBuilder.destination(command, masterDirectory: masterDirectory, invocationID: lease.id)
         do {
-            var request = URLRequest(url: url)
-            request.httpMethod = command.method
-            request.timeoutInterval = min(max(command.timeoutSeconds ?? 60, 0.1), 300)
-            for header in command.headers {
-                let fields = header.split(separator: ":", maxSplits: 1).map(String.init)
-                if fields.count == 2 {
-                    request.setValue(fields[1].trimmingCharacters(in: .whitespaces), forHTTPHeaderField: fields[0])
-                }
-            }
-            if !command.parameters.isEmpty, command.method != "GET" {
-                request.httpBody = Data(command.parameters.joined(separator: "&").utf8)
-                if request.value(forHTTPHeaderField: "Content-Type") == nil {
-                    request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
-                }
-            }
-            let masterDirectory = ghost.rootDirectory.appending(path: "ghost/master", directoryHint: .isDirectory)
+            let prepared = try SakuraScriptHTTPRequestBuilder.prepare(command, masterDirectory: masterDirectory,
+                                                                      allowedRoots: [ContentRoot.contentDirectory] + ContentRoot.ghostReadDirectories + ContentRoot.balloonReadDirectories)
+            let request = prepared.request
             let progress: HTTPTransferClient.ProgressHandler? = if command.notifiesProgress {
                 { [weak self] data, response in
-                    guard let self,
+                    guard let self, lease.isActive,
                           let event = SakuraScriptHTTPEventSupport.progressEvent(
                               command: command,
                               data: data,
                               response: response,
-                              masterDirectory: masterDirectory
+                              masterDirectory: masterDirectory,
+                              destination: destination
                           )
                     else { return }
                     _ = try? await eventDelivery.handle(event: event)
@@ -1538,12 +1516,13 @@ final class CalledGhostRuntime {
             }
             let streaming: HTTPTransferClient.StreamingHandler? = if command.streamingMode != nil {
                 { [weak self] value, response in
-                    guard let self,
+                    guard let self, lease.isActive,
                           let event = SakuraScriptHTTPEventSupport.streamingEvent(
                               command: command,
                               value: value,
                               response: response,
-                              masterDirectory: masterDirectory
+                              masterDirectory: masterDirectory,
+                              destination: destination
                           )
                     else { return }
                     _ = try? await eventDelivery.handle(event: event)
@@ -1554,8 +1533,10 @@ final class CalledGhostRuntime {
             let transfer = try await HTTPTransferClient.perform(
                 request,
                 progress: progress,
-                streaming: streaming
+                streaming: streaming,
+                bodyFileURL: prepared.bodyFileURL
             )
+            try Task.checkCancellation()
             let data = transfer.data
             let response = transfer.response
             let httpResponse = response as? HTTPURLResponse
@@ -1568,6 +1549,7 @@ final class CalledGhostRuntime {
             {
                 _ = try? await eventDelivery.handle(event: event)
             }
+            try Task.checkCancellation()
             let statusCode = httpResponse?.statusCode ?? 0
             let cookie = httpResponse?.value(forHTTPHeaderField: "Set-Cookie") ?? ""
             let headers = Self.httpResponseHeaders(httpResponse)
@@ -1650,12 +1632,10 @@ final class CalledGhostRuntime {
 
             let result: String
             switch command.output {
-            case let .file(requestedName):
-                let varDirectory = masterDirectory.appending(path: "var", directoryHint: .isDirectory)
-                try FileManager.default.createDirectory(at: varDirectory, withIntermediateDirectories: true)
-                let fallbackName = url.lastPathComponent.isEmpty ? "index.html" : url.lastPathComponent
-                let filename = URL(fileURLWithPath: requestedName ?? fallbackName).lastPathComponent
-                let destination = varDirectory.appending(path: filename, directoryHint: .notDirectory)
+            case .file:
+                guard let destination else { throw CocoaError(.fileWriteInvalidFileName) }
+                try FileManager.default.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try Task.checkCancellation()
                 try data.write(to: destination, options: .atomic)
                 result = destination.path
             case let .memory(characterEncoding):
@@ -1675,6 +1655,7 @@ final class CalledGhostRuntime {
                 headers: headers
             ))
         } catch {
+            guard lease.mayReportFailure else { return nil }
             if (error as NSError).domain == NSURLErrorDomain,
                (error as NSError).code == NSURLErrorTimedOut
             {
@@ -1684,7 +1665,7 @@ final class CalledGhostRuntime {
                 ]))
             }
             guard let eventID = command.eventID else { return nil }
-            let reason = Self.httpFailureReason(error)
+            let reason = Task.isCancelled || lease.wasCancelled ? "artificial" : Self.httpFailureReason(error)
             let event = if command.isCalendar {
                 SakuraScriptCalendarSupport.failureEvent(command: command, reason: reason)
             } else if command.isFeed {
@@ -1938,12 +1919,7 @@ final class CalledGhostRuntime {
     }
 
     private func cancelHTTP(url: String?) {
-        if let url {
-            inFlightHTTPTasks.removeValue(forKey: url)?.cancel()
-        } else {
-            inFlightHTTPTasks.values.forEach { $0.cancel() }
-            inFlightHTTPTasks.removeAll()
-        }
+        httpRequests.cancel(url: url)
     }
 
     private func handleNetworkDiagnostic(_ command: SakuraScriptNetworkDiagnostic) async -> SakuraScript? {

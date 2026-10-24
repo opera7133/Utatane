@@ -1532,7 +1532,9 @@ public struct SakuraScriptParser: Sendable {
                             parameters: options.compactMap { option in
                                 option.lowercased().hasPrefix("--param=") ? String(option.dropFirst(8)) : nil
                             } + (options.first?.hasPrefix("--") == false ? [options[0]] : []),
-                            options: isCalendar ? options : [],
+                            options: isCalendar ? options : options.filter {
+                                $0.lowercased().hasPrefix("--param-charset=") || $0.lowercased().hasPrefix("--param-input-file=")
+                            },
                             headers: headers,
                             timeoutSeconds: Self.optionValue("timeout", in: options).flatMap(Double.init),
                             output: nofileOption.map { option in

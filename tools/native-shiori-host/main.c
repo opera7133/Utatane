@@ -80,6 +80,13 @@ static void *internal_saori_callback(const void *request, int32_t count, int32_t
     return response;
 }
 
+// Called synchronously by a nested conventional SAORI. Background work belongs
+// to the parent; no worker thread may write unsolicited frames to this channel.
+__attribute__((visibility("default"), used))
+void *utatane_host_saori_request(const void *request, int32_t count, int32_t *length) {
+    return internal_saori_callback(request, count, length);
+}
+
 int main(int argc, char **argv) {
     if (argc != 3) return 64;
     signal(SIGPIPE, SIG_IGN);
@@ -109,6 +116,7 @@ int main(int argc, char **argv) {
             error_reply(channel, 3, "Cannot connect SAORI windows"); return 1;
         }
     }
+    saori_channel = channel;
     SetInternalSaoriCallback set_internal_saori = (SetInternalSaoriCallback)dlsym(image, "utatane_internal_saori_set_callback");
     if (set_internal_saori) {
         saori_channel = channel;

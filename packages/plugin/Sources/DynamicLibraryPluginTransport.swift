@@ -13,7 +13,8 @@
                     moduleURLOverride: URL? = nil,
                     saoriCaller: (any NativeSaoriCalling)? = nil,
                     saoriRootURL: URL? = nil,
-                    moduleResolver: UtataneModuleResolver = .init()) throws
+                    moduleResolver: UtataneModuleResolver = .init(),
+                    onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)? = nil) throws
         {
             let moduleURL: URL
             if let moduleURLOverride {
@@ -27,7 +28,8 @@
             session = try NativeShioriSession(directoryURL: plugin.directory, moduleURL: moduleURL,
                                               stateDirectoryURL: state, saoriCaller: saoriCaller,
                                               saoriRootURL: saoriRootURL,
-                                              moduleResolver: moduleResolver)
+                                              moduleResolver: moduleResolver,
+                                              onInternalSaoriEvent: onInternalSaoriEvent)
         }
 
         public func request(_ request: PluginRequest) async throws -> PluginResponse {
