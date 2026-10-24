@@ -39,6 +39,12 @@ final class InternalSaoriCompletionBox: @unchecked Sendable {
     }
 }
 
+private struct IntegrationMediaReader: InternalSaoriMediaReading {
+    func read(_ url: URL) throws -> InternalSaoriMediaInfo {
+        .init(kind: "audio", values: ["title": "metadata"])
+    }
+}
+
 /// Opt in with local, rebuilt modules. Never installs them into a user's catalog.
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_INTERNAL_SAORI_TEST_ROOT"] != nil))
 struct InternalSaoriIntegrationTests {
@@ -72,20 +78,35 @@ struct InternalSaoriIntegrationTests {
                 _response = REQUESTLIB("internal_text.dll", _wire)
                 _value = "failed"
                 if STRSTR(_response, "Result: ガイド", 0) >= 0 { _value = "ガイド" }
+                if STRSTR(_argv[0], "ID: OnData", 0) >= 0 {
+                    _loaded = LOADLIB("internal_data.dll")
+                    _wire = "EXECUTE SAORI/1.0%(CHR(13))%(CHR(10))Charset: UTF-8%(CHR(13))%(CHR(10))Argument0: Decompress%(CHR(13))%(CHR(10))Argument1: gzip%(CHR(13))%(CHR(10))Argument2: H4sIAAAAAAAACvNIzcnJBwCCidH3BQAAAA==%(CHR(13))%(CHR(10))%(CHR(13))%(CHR(10))"
+                    _response = REQUESTLIB("internal_data.dll", _wire)
+                    if STRSTR(_response, "Result: Hello", 0) >= 0 { _value = "Hello" }
+                    _unloaded = UNLOADLIB("internal_data.dll")
+                }
+                if STRSTR(_argv[0], "ID: OnMedia", 0) >= 0 {
+                    _loaded = LOADLIB("internal_file.dll")
+                    _wire = "EXECUTE SAORI/1.0%(CHR(13))%(CHR(10))Charset: UTF-8%(CHR(13))%(CHR(10))Argument0: MediaInfo%(CHR(13))%(CHR(10))Argument1: probe.bin%(CHR(13))%(CHR(10))Argument2: title%(CHR(13))%(CHR(10))%(CHR(13))%(CHR(10))"
+                    _response = REQUESTLIB("internal_file.dll", _wire)
+                    if STRSTR(_response, "Value0: metadata", 0) >= 0 { _value = "audio" }
+                    _unloaded = UNLOADLIB("internal_file.dll")
+                }
                 _unloaded = UNLOADLIB("internal_text.dll")
                 "SHIORI/3.0 200 OK%(CHR(13))%(CHR(10))Charset: UTF-8%(CHR(13))%(CHR(10))Value: %(_value)%(CHR(13))%(CHR(10))%(CHR(13))%(CHR(10))"
             }
             """#.write(to: master.appending(path: "probe.dic"), atomically: true, encoding: .utf8)
         } else if kind == "satori" {
             try "＠SAORI\r\n正規化,internal_text.dll,Normalize,NFKC\r\n".write(to: master.appending(path: "satori_conf.txt"), atomically: true, encoding: .utf8)
-            try "＊OnBoot\r\n：（正規化、ｶﾞｲﾄﾞ）。\r\n＊OnAuto\r\n：（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）。\r\n＊OnAsync\r\n：（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ、--async=OnNormalized）。\r\n".write(to: master.appending(path: "dic00.txt"), atomically: true, encoding: .utf8)
+            try "＊OnData\r\n：（internal_data、Decompress、gzip、H4sIAAAAAAAACvNIzcnJBwCCidH3BQAAAA==）。\r\n＊OnMedia\r\n：（internal_file、MediaInfo、probe.bin、title）。\r\n＊OnBoot\r\n：（正規化、ｶﾞｲﾄﾞ）。\r\n＊OnAuto\r\n：（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）。\r\n＊OnAsync\r\n：（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ、--async=OnNormalized）。\r\n".write(to: master.appending(path: "dic00.txt"), atomically: true, encoding: .utf8)
         } else {
-            let dictionary = "System.Callback.OnGET : $(entry ${System.Request.ID};)\nOnBoot : $(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)\nOnAsync : $(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ --async=OnNormalized)\n"
+            let dictionary = "OnData : $(callsaori internal_data Decompress gzip H4sIAAAAAAAACvNIzcnJBwCCidH3BQAAAA==)\nOnMedia : $(callsaori internal_file MediaInfo probe.bin title)\nSystem.Callback.OnGET : $(entry ${System.Request.ID};)\nOnBoot : $(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)\nOnAsync : $(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ --async=OnNormalized)\n"
             try #require(LegacyTextDecoder.encode(dictionary, charset: "Shift_JIS")).write(to: master.appending(path: "kawarirc.kis"))
         }
+        try Data([0]).write(to: master.appending(path: "probe.bin"))
         let library = modules.appending(path: "lib\(kind).dylib")
         let box = InternalSaoriCompletionBox()
-        let session = try NativeShioriSession(directoryURL: master, moduleURL: library, onInternalSaoriEvent: box.receive, hostURL: helper)
+        let session = try NativeShioriSession(directoryURL: master, moduleURL: library, onInternalSaoriEvent: box.receive, internalSaoriMediaReader: IntegrationMediaReader(), hostURL: helper)
         if kind == "kawari" {
             _ = try session.request("NOTIFY SHIORI/3.0\r\nCharset: UTF-8\r\nSecurityLevel: Local\r\nID: hwnd\r\nReference0: 1\r\n\r\n")
         }
@@ -95,6 +116,10 @@ struct InternalSaoriIntegrationTests {
         if kind == "satori" {
             let response = try session.request("GET SHIORI/3.0\r\nCharset: UTF-8\r\nSecurityLevel: Local\r\nID: OnAuto\r\n\r\n")
             #expect(try ShioriMessageParser.parseResponse(response).value?.contains("ガイド") == true)
+        }
+        for (eventID, expected) in [("OnData", "Hello"), ("OnMedia", "audio")] {
+            let result = try session.request("GET SHIORI/3.0\r\nCharset: UTF-8\r\nSecurityLevel: Local\r\nID: \(eventID)\r\n\r\n")
+            #expect(try ShioriMessageParser.parseResponse(result).value?.contains(expected) == true, "\(kind) \(architecture): \(result)")
         }
         _ = try session.request("GET SHIORI/3.0\r\nCharset: UTF-8\r\nSecurityLevel: Local\r\nID: OnAsync\r\n\r\n")
         let completion = try #require(await box.wait())

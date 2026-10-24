@@ -633,5 +633,6 @@
   "呼び出し診断" : "Call Diagnostics",
   "内蔵SAORIの呼び出しを記録" : "Record Internal SAORI Calls",
   "セッション・モジュール・関数・状態コード・所要時間のみ記録する。引数と結果本文は記録しない。" : "Records only session, module, function, status code and duration. Argument values and result bodies are omitted.",
-  "呼び出しログを見る" : "Show Call Log"
+  "呼び出しログを見る" : "Show Call Log",
+  "内蔵SAORIには %@ 以降が必要。更新後にゴーストを再読み込みして。" : "Internal SAORI requires %@ or later. Update the module, then reload the ghost."
 }

@@ -30,15 +30,17 @@ public final class InternalSaoriSession: @unchecked Sendable {
     private var closed = false
     private var pending = 0
     private let onEvent: (@Sendable (InternalSaoriEvent) -> Void)?
-    private let service = InternalSaoriService()
+    private let service: InternalSaoriService
     private let operationQueue: OperationQueue
 
-    public init(onEvent: (@Sendable (InternalSaoriEvent) -> Void)? = nil) {
+    public init(onEvent: (@Sendable (InternalSaoriEvent) -> Void)? = nil, service: InternalSaoriService = .init()) {
+        self.service = service
         self.onEvent = onEvent
         operationQueue = Self.queue
     }
 
     init(onEvent: @escaping @Sendable (InternalSaoriEvent) -> Void, queue: OperationQueue) {
+        service = .init()
         self.onEvent = onEvent
         operationQueue = queue
     }
@@ -85,7 +87,7 @@ public final class InternalSaoriSession: @unchecked Sendable {
             return (index, String(value.dropFirst(8)))
         }
         guard !asyncArguments.isEmpty else { return service.response(to: data) }
-        guard asyncArguments.count == 1, let (asyncIndex, identifier) = asyncArguments.first,
+        guard let (_, identifier) = asyncArguments.max(by: { $0.0 < $1.0 }),
               !identifier.isEmpty, !identifier.contains("\r"), !identifier.contains("\n") else { return error("invalid parameter", charset: charset) }
         guard onEvent != nil else { return error("ghost required", charset: charset) }
         let argumentKeys = headers.keys.filter { $0.hasPrefix("argument") }
@@ -96,7 +98,8 @@ public final class InternalSaoriSession: @unchecked Sendable {
             return error("invalid parameter", charset: charset)
         }
         guard let last = indices.max(), indices.count == last + 1, last < 256 else { return error("invalid parameter", charset: charset) }
-        let arguments = (0 ... last).filter { $0 != asyncIndex }.map { headers["argument\($0)"] ?? "" }
+        let asyncIndices = Set(asyncArguments.map(\.0))
+        let arguments = (0 ... last).filter { !asyncIndices.contains($0) }.map { headers["argument\($0)"] ?? "" }
         let request = (["EXECUTE SAORI/1.0", "Charset: \(charset)", "Module: \(module)"] + arguments.enumerated().map { "Argument\($0.offset): \($0.element)" }).joined(separator: "\r\n") + "\r\n\r\n"
         guard let encoded = LegacyTextDecoder.encode(request, charset: charset) else { return error("invalid encoding", charset: charset) }
         let validation = service.response(to: encoded, validatesOnly: true)

@@ -54,6 +54,7 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
                 timeout: TimeInterval = 30, startupTimeout: TimeInterval = 30,
                 windowController: (any NativeSaoriWindowControlling)? = nil,
                 internalSaoriHandler: (@Sendable (Data) -> Data)? = nil,
+                internalSaoriMediaReader: (any InternalSaoriMediaReading)? = nil,
                 onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)? = nil,
                 additionalEnvironment: [String: String] = [:]) throws
     {
@@ -80,7 +81,7 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
         output = outputPipe.fileHandleForReading
         self.timeout = timeout
         self.windowController = windowController
-        let internalSession = InternalSaoriSession(onEvent: onInternalSaoriEvent)
+        let internalSession = InternalSaoriSession(onEvent: onInternalSaoriEvent, service: .init(ghostDirectory: directoryURL, mediaReader: internalSaoriMediaReader))
         internalSaoriSession = internalSession
         self.internalSaoriHandler = internalSaoriHandler ?? { internalSession.response(to: $0) }
         do {

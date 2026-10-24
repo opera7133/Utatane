@@ -12,14 +12,24 @@ public struct InternalSaoriService: Sendable {
         "internal_text": ["Normalize"],
         "internal_time": ["Format", "Add", "Diff"],
         "internal_random": ["Bytes", "Number", "UUID"],
-        "internal_data": ["Convert"],
-        "internal_crypto": ["Digest", "HMAC"]
+        "internal_data": ["Convert", "Compress", "Decompress"],
+        "internal_crypto": ["Digest", "HMAC"],
+        "internal_file": ["MediaInfo"]
     ]
 
     private let now: @Sendable () -> Date
+    private let ghostDirectory: URL?
+    private let mediaReader: (any InternalSaoriMediaReading)?
+    private var availableFunctions: [String: [String]] {
+        Self.functions.filter { $0.key != "internal_file" || mediaReader != nil }
+    }
 
-    public init(now: @escaping @Sendable () -> Date = Date.init) {
+    public init(now: @escaping @Sendable () -> Date = Date.init, ghostDirectory: URL? = nil,
+                mediaReader: (any InternalSaoriMediaReading)? = nil)
+    {
         self.now = now
+        self.ghostDirectory = ghostDirectory
+        self.mediaReader = mediaReader
     }
 
     public static func moduleName(_ path: String) -> String? {
@@ -65,7 +75,7 @@ public struct InternalSaoriService: Sendable {
                 headers[key] = value
             }
             guard let rawModule = headers["module"], let module = Self.moduleName(rawModule) else { throw Failure("invalid parameter") }
-            guard let available = Self.functions[module] else { throw Failure("unknown module") }
+            guard let available = availableFunctions[module] else { throw Failure("unknown module") }
             if method.hasPrefix("GET Version") {
                 return encode(status: 200, result: "Utatane Internal", charset: charset)
             }
@@ -87,7 +97,7 @@ public struct InternalSaoriService: Sendable {
         } catch { return encode(status: 500, error: "internal error", charset: charset) }
     }
 
-    private struct Failure: Error {
+    struct Failure: Error {
         let message: String
         let status: Int
         init(_ message: String, status: Int = 400) {
@@ -101,7 +111,7 @@ public struct InternalSaoriService: Sendable {
         func safe(_ text: String) -> Bool {
             !text.contains("\r") && !text.contains("\n") && !text.contains("\0")
         }
-        guard result.map(safe) ?? true, values.allSatisfy(safe) else { return encode(status: 400, error: "not text", charset: charset) }
+        guard result.map(safe) ?? true, values.allSatisfy(safe) else { return encode(status: 500, error: "not text", charset: charset) }
         if let result {
             lines.append("Result: \(result)")
         }
@@ -120,8 +130,8 @@ public struct InternalSaoriService: Sendable {
         guard let function = functions[module]?.first(where: { $0.caseInsensitiveCompare(function) == .orderedSame }) else { return nil }
         switch (module, function) {
         case ("internal_system", "ListModules"), ("internal_random", "UUID"): return 0
-        case ("internal_system", "ListFunctions"), ("internal_random", "Bytes"), ("internal_data", _): return 1
-        case ("internal_time", "Format"), ("internal_text", _), ("internal_random", "Number"), ("internal_crypto", "Digest"): return 2
+        case ("internal_system", "ListFunctions"), ("internal_random", "Bytes"), ("internal_data", "Convert"): return 1
+        case ("internal_time", "Format"), ("internal_text", _), ("internal_random", "Number"), ("internal_crypto", "Digest"), ("internal_data", _), ("internal_file", _): return 2
         default: return 3
         }
     }
@@ -130,6 +140,7 @@ public struct InternalSaoriService: Sendable {
         let count: Int
         let allowed: Set<String>
         switch (module, function) {
+        case ("internal_file", _): count = 2 + arguments.dropFirst(2).prefix(while: { !$0.hasPrefix("--") }).count; allowed = []
         case ("internal_system", "ListModules"): count = 0; allowed = []
         case ("internal_system", "ListFunctions"): count = 1; allowed = []
         case ("internal_time", "Format"): count = 2; allowed = ["tz"]
@@ -138,9 +149,11 @@ public struct InternalSaoriService: Sendable {
         case ("internal_random", "Bytes"): count = 1; allowed = ["out"]
         case ("internal_random", "Number"): count = 2; allowed = []
         case ("internal_random", "UUID"): count = 0; allowed = ["version"]
-        case ("internal_data", _): count = 1; allowed = ["in", "data-in", "out"]
-        case ("internal_crypto", "Digest"): count = 2; allowed = ["data-in", "out"]
-        default: count = 3; allowed = ["key-in", "data-in", "out"]
+        case ("internal_data", "Convert"): count = 1; allowed = ["in", "data-in", "out", "charset", "hrp"]
+        case ("internal_data", "Compress"): count = 2; allowed = ["data-in", "out", "charset", "level"]
+        case ("internal_data", _): count = 2; allowed = ["data-in", "out", "charset"]
+        case ("internal_crypto", "Digest"): count = 2; allowed = ["data-in", "out", "charset"]
+        default: count = 3; allowed = ["key-in", "data-in", "out", "charset"]
         }
         var arguments = arguments
         if module == "internal_time", function == "Format", arguments.count == 1 {
@@ -151,22 +164,54 @@ public struct InternalSaoriService: Sendable {
         var options: [String: String] = [:]
         for value in arguments.dropFirst(count) {
             guard value.hasPrefix("--"), let separator = value.firstIndex(of: "=") else { throw Failure("invalid parameter") }
-            let key = String(value[value.index(value.startIndex, offsetBy: 2) ..< separator]).lowercased()
-            guard allowed.contains(key), options[key] == nil else { throw Failure("invalid parameter") }
+            var key = String(value[value.index(value.startIndex, offsetBy: 2) ..< separator]).lowercased()
+            if key == "in", module == "internal_data" {
+                key = "data-in"
+            }
+            guard allowed.contains(key) else { throw Failure("invalid parameter") }
             options[key] = String(value[value.index(after: separator)...])
+        }
+        if module == "internal_file", !(2 ... 12).contains(positional.count) {
+            throw Failure("invalid parameter")
         }
         if validatesOnly {
             return ("", [])
         }
+        let charset = try InternalSaoriData.charset(options["charset"] ?? "UTF-8")
+        func decode(_ text: String, as encoding: String) throws -> Data {
+            try InternalSaoriData.decode(text, as: encoding, charset: charset)
+        }
+        func format(_ data: Data, as encoding: String) throws -> String {
+            try InternalSaoriData.format(data, as: encoding, charset: charset, hrp: options["hrp"])
+        }
         switch module {
+        case "internal_file":
+            guard (2 ... 12).contains(positional.count), let mediaReader else { throw Failure("invalid parameter") }
+            let path = positional[0].replacingOccurrences(of: "\\", with: "/")
+            guard !path.isEmpty, !path.contains("://") else { throw Failure("file not found") }
+            let url: URL
+            if path.hasPrefix("/") {
+                url = URL(filePath: path)
+            } else if let ghostDirectory {
+                url = ghostDirectory.appending(path: path)
+            } else {
+                throw Failure("ghost required")
+            }
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { throw Failure("file not found") }
+            let info = try mediaReader.read(url)
+            let values = positional.dropFirst().map { info.values[$0.lowercased()] ?? "" }.map {
+                $0.replacingOccurrences(of: "\r\n", with: "\u{1}").replacingOccurrences(of: "\r", with: "\u{1}")
+                    .replacingOccurrences(of: "\n", with: "\u{1}").replacingOccurrences(of: "\0", with: "")
+            }
+            return (info.kind, values)
         case "internal_time":
             return try (InternalSaoriTime.execute(function, arguments: arguments, now: now()), [])
         case "internal_system":
             let list: [String]
             if function == "ListModules" {
-                list = Self.functions.keys.sorted()
+                list = availableFunctions.keys.sorted()
             } else {
-                guard let functions = Self.functions[positional[0].lowercased()] else { throw Failure("unknown module") }
+                guard let functions = availableFunctions[positional[0].lowercased()] else { throw Failure("unknown module") }
                 list = functions
             }
             return (list.joined(separator: ","), list)
@@ -204,9 +249,22 @@ public struct InternalSaoriService: Sendable {
             guard let size = Int(positional[0]), (1 ... 1024).contains(size) else { throw Failure("out of range") }
             return try (format(Data(randomBytes(size)), as: options["out"] ?? "hex"), [])
         case "internal_data":
-            return try (format(decode(positional[0], as: options["data-in"] ?? options["in"] ?? "text"), as: options["out"] ?? "text"), [])
+            if function == "Convert" {
+                return try (format(decode(positional[0], as: options["data-in"] ?? "text"), as: options["out"] ?? "text"), [])
+            }
+            let decompress = function == "Decompress"
+            let level: Int
+            if let value = options["level"] {
+                guard let parsed = Int(value), (0 ... 9).contains(parsed) else { throw Failure("invalid parameter") }
+                level = parsed
+            } else {
+                level = -1
+            }
+            let input = try decode(positional[1], as: options["data-in"] ?? (decompress ? "base64" : "text"))
+            let result = try InternalSaoriData.compress(input, algorithm: positional[0], level: level, decompress: decompress)
+            return try (format(result, as: options["out"] ?? (decompress ? "text" : "base64")), [])
         default:
-            let algorithm = positional[0].lowercased()
+            let algorithm = positional[0].lowercased().filter { $0 != "-" && $0 != "_" }
             let data = try decode(positional[function == "Digest" ? 1 : 2], as: options["data-in"] ?? "text")
             let key = function == "HMAC" ? try decode(positional[1], as: options["key-in"] ?? "text") : Data()
             let digest: Data
@@ -229,37 +287,5 @@ public struct InternalSaoriService: Sendable {
         var bytes = [UInt8](repeating: 0, count: count)
         guard SecRandomCopyBytes(kSecRandomDefault, count, &bytes) == errSecSuccess else { throw Failure("internal error", status: 500) }
         return bytes
-    }
-
-    private func decode(_ text: String, as encoding: String) throws -> Data {
-        guard text.utf8.count <= Self.maximumBytes else { throw Failure("too large") }
-        switch encoding.lowercased() {
-        case "text": return Data(text.utf8)
-        case "hex":
-            let bytes = Array(text.utf8)
-            guard bytes.count % 2 == 0, bytes.allSatisfy({ (48 ... 57).contains($0) || (65 ... 70).contains($0) || (97 ... 102).contains($0) }) else { throw Failure("invalid encoding") }
-            return Data(stride(from: 0, to: bytes.count, by: 2).map { UInt8(String(decoding: bytes[$0 ..< $0 + 2], as: UTF8.self), radix: 16)! })
-        case "base64", "base64url":
-            var source = text
-            if encoding.lowercased() == "base64url" {
-                source = source.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
-                source += String(repeating: "=", count: (4 - source.count % 4) % 4)
-            }
-            guard let data = Data(base64Encoded: source) else { throw Failure("invalid encoding") }
-            return data
-        default: throw Failure("unsupported algorithm")
-        }
-    }
-
-    private func format(_ data: Data, as encoding: String) throws -> String {
-        switch encoding.lowercased() {
-        case "text":
-            guard let text = String(data: data, encoding: .utf8) else { throw Failure("not text") }
-            return text
-        case "hex": return data.map { String(format: "%02x", $0) }.joined()
-        case "base64": return data.base64EncodedString()
-        case "base64url": return data.base64EncodedString().replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: "=", with: "")
-        default: throw Failure("unsupported algorithm")
-        }
     }
 }

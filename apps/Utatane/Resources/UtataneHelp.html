@@ -900,6 +900,8 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 <p>通常のmacOS用SHIORIは、ゴースト・プラグインごとに別プロセスで実行します。応答停止や異常終了を検出した場合、実行済みの処理を重複させないため、自動で要求を再送しません。</p>
 <h3 id="support-engines-内蔵saori">内蔵SAORI</h3>
 <p>Utatane 0.2.17以降と、YAYA 5 Tc574-11-r2・YAYA 6 Tc607-2-r2・里々 Mc205-4-r2・華和梨9.1.0-r4以降を組み合わせると、ゴーストへDLLを置かずに次の機能を呼べます。共通導入版を更新した後、起動中のゴーストを再読み込みしてください。以前の本体やModulesにはこの接続がありません。</p>
+<p>以下の表は開発中の次回版の追加分を含みます。0.2.17の<code>internal_data</code>はConvertのtext（UTF-8）・hex・base64・base64urlまでです。
+圧縮・追加形式・文字コード指定と<code>internal_file</code>は次回版で追加します。</p>
 <table>
 <thead>
 <tr>
@@ -930,8 +932,13 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 </tr>
 <tr>
 <td><code>internal_data</code></td>
-<td><code>Convert</code></td>
-<td>text（UTF-8）、hex、base64、base64url。圧縮・展開、他の形式は未対応</td>
+<td><code>Convert</code>、<code>Compress</code>、<code>Decompress</code></td>
+<td>text、hex/HEX、base64/base64url、base32、url、bech32。圧縮・展開はgzip/zlib/deflate。brotli/zstdは未対応</td>
+</tr>
+<tr>
+<td><code>internal_file</code></td>
+<td><code>MediaInfo</code></td>
+<td>音声・画像・動画の種類とメタデータ。取得できる項目はmacOSの対応形式による</td>
 </tr>
 <tr>
 <td><code>internal_crypto</code></td>
@@ -946,6 +953,20 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 <h3 id="support-engines-共通saoriブリッジ">共通SAORIブリッジ</h3>
 <p>Utataneが提供するSAORIと対応する命令は、<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md#%E5%85%B1%E9%80%9Asaori%E3%83%96%E3%83%AA%E3%83%83%E3%82%B8">共通SAORIブリッジの一覧</a>を参照してください。独自の外部SHIORIが読み込むSAORIは、そのSHIORI側で管理します。</p>
 <h3 id="support-engines-日時計算と開発用の確認">日時計算と開発用の確認</h3>
+<p>次回版では<code>--charset=</code>でデータの文字コードを指定できます（要求の<code>Charset</code>とは別）。
+<code>--out=HEX</code>は大文字、<code>--out=hex</code>は小文字です。同じオプションを複数指定した場合は最後の値を使います。
+Base64は通常形式・URL形式、パディングあり・なしを受け付けます。bech32出力はConvertの<code>--hrp=</code>が必要です。</p>
+<p><code>Compress</code>は方式とデータを位置引数に取り、既定ではBase64を返します。
+<code>Decompress</code>は方式と圧縮データを取り、既定ではBase64から文字列へ戻します。
+<code>--data-in=</code>と<code>--out=</code>で入出力形式を変えられます。gzipの連結メンバーを読み、
+壊れた入力・途中切れ・余分な末尾をエラーにします。展開後も合計8MBが上限です。</p>
+<p><code>internal_file</code>の<code>MediaInfo</code>はパス、その後に取得するキーを1〜11個渡します。
+<code>Result</code>は<code>audio</code>/<code>video</code>/<code>image</code>、<code>Value0</code>以降は指定した順の値です。
+キーは<code>title</code>、<code>artist</code>、<code>albumartist</code>、<code>album</code>、<code>genre</code>、<code>comment</code>、<code>year</code>、<code>track</code>、
+<code>duration</code>（ミリ秒）、<code>width</code>、<code>height</code>。取れない値や未知のキーは空になります。
+相対パスは呼び出したゴーストの<code>ghost/master</code>基準です。開発用パレットの単体テストでは絶対パスを使ってください。
+改行はバイト値1、NULは除去して返します。未対応形式は種類と値が空です。
+この関数の契約は<a href="https://github.com/eightman999/Ourin/pull/158">OurinのMediaInfo提案</a>も参照しています。</p>
 <p><code>internal_time</code>の<code>Format</code>は日時と書式、<code>Add</code>は日時・整数の量・単位、<code>Diff</code>は日時1・日時2・単位を取ります。<code>--tz=</code>は位置引数の後に置きます。Formatの書式を省略してオプションを渡す場合、空の位置引数を置いてください。</p>
 <pre><code class="language-text">Format / 0 / %Y/%m/%d %H:%M (%a) / --tz=+09:00
 → 1970/01/01 09:00 (Thu)
@@ -957,6 +978,11 @@ Diff / 2026-12-20T10:00 / 2026-12-24 / day / --tz=UTC
 <p>書式はiso8601・rfc3339・http・epoch・epochmsとUKADOCの%書式です。HTTP入力はIMF-fixdate形式に限ります。秒・分・時間は経過時間、日・週・月・年は指定ゾーンの暦で計算し、月末を丸めます。整数はUTCの西暦1〜9999年、文字列は1601年以降です。存在しない日付や夏時間開始時の存在しない時刻は400です。夏時間終了時の重複時刻はmacOSのCalendarが選ぶ時刻を使います。明確に指定する場合はUTCオフセットを付けてください。名前付きゾーンの過去の規則はmacOSの情報を使うため、Windowsと一致するとは限りません。<code>now</code>はOSの現在時刻で、開発用パレットの仮想時刻には連動しません。</p>
 <p>開発用パレットの「内蔵SAORI」で、モジュールと1行1引数を入力して単体テストできます。空行は空引数です。応答全文と所要時間を画面へ表示しますが、要求や結果本文を自動ログには保存しません。この単体テストは本体を直接呼び、SHIORI接続の検証やゴーストへのイベント送信は行いません。<code>--async</code>はghost requiredになります。</p>
 <p>「内蔵SAORIの呼び出しを記録」をオンにすると、その後の呼び出しをInternalSAORIカテゴリへ記録します。同期応答・非同期受付・非同期処理結果について、セッション識別子、モジュール、関数、状態コード、所要時間、応答バイト数を確認できます。引数、結果本文、非同期識別子は記録しません。記録は初期状態でオフです。従来のSAORI dylibとWindows DLLの呼び出しは記録対象外です。</p>
+<h4 id="support-engines-httpc互換モジュール次回版">httpc互換モジュール（次回版）</h4>
+<p><code>httpc.dll</code>を使うゴースト・プラグイン向けに、Utatane Modulesの<code>httpc</code>を共通導入できます。
+引数なしの接続状態確認、URLからの同期文字列取得、URLと保存先を指定するバイナリ保存、
+開始・終了文字列による順次抽出に対応します。保存先はSAORIの配置フォルダ基準です。
+<code>bg</code>による<code>OnHttpcNotify</code>、HTMLタグ変換は未対応です。詳細は<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md">ModulesのSAORI手順</a>を参照してください。</p>
 </section>
 </main></div>
 <script>

@@ -1,0 +1,18 @@
+日本の祝日・休日データ
+出典: 内閣府「国民の祝日について」
+https://www8.cao.go.jp/chosei/shukujitsu/gaiyou.html
+https://www8.cao.go.jp/chosei/shukujitsu/syukujitsu.csv
+取得日: 2026-10-24
+収録範囲: 1955〜2027年
+
+利用条件: 内閣府ホームページ利用規約 / 公共データ利用規約（第1.0版）
+https://www.cao.go.jp/notice/rule.html
+https://www.digital.go.jp/resources/open_data/public_data_license_v1.0
+
+内閣府のCSVをUtataneが加工して作成。文字コードをCP932からUTF-8へ、
+日付をYYYY-MM-DDへ変換し、見出しを出典コメントへ置き換えた。
+祝日の日付と名称は変更していない。
+
+更新: Scripts/update-holidays-jp.pyを実行し、差分を確認してアプリに同梱する。
+翌年のデータは例年2月に公表される。未公表の年は推測して補わない。
+ユーザーのcalendar/holidays-JP.txtによる差し替えも可能。

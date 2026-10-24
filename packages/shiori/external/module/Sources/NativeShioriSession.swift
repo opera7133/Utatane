@@ -30,6 +30,7 @@ public final class NativeShioriSession: Sendable {
                 saoriRootURL: URL? = nil,
                 moduleResolver: UtataneModuleResolver = .init(),
                 onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)?,
+                internalSaoriMediaReader: (any InternalSaoriMediaReading)? = nil,
                 hostURL: URL = NativeShioriProcessSession.defaultHostURL) throws
     {
         if let stateDirectoryURL, UtataneModuleImage.usesModuleBridge(moduleURL) {
@@ -61,6 +62,7 @@ public final class NativeShioriSession: Sendable {
             ) { url in
                 try NativeShioriProcessSession(
                     directoryURL: directoryURL, moduleURL: url, hostURL: hostURL,
+                    internalSaoriMediaReader: internalSaoriMediaReader,
                     onInternalSaoriEvent: onInternalSaoriEvent,
                     additionalEnvironment: environment
                 )

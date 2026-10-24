@@ -10180,6 +10180,35 @@
         }
       }
     },
+    "内蔵SAORIには %@ 以降が必要。更新後にゴーストを再読み込みして。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Internal SAORI requires %@ or later. Update the module, then reload the ghost."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내장 SAORI에는 %@ 이상이 필요해. 업데이트 후 고스트를 다시 불러와."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "内置 SAORI 需要 %@ 或更高版本。更新后请重新加载 Ghost。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "內建 SAORI 需要 %@ 或更新版本。更新後請重新載入 Ghost。"
+          }
+        }
+      }
+    },
     "内蔵SAORIの呼び出しを記録" : {
       "extractionState" : "manual",
       "localizations" : {

@@ -5,9 +5,9 @@
 
 基準: [SHIORI Eventリスト](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html)
 
-UKADOC掲載イベント数: 309
+UKADOC掲載イベント数: 310
 調査日: 2026-09-20
-調査結果: ✅ 254 / 🟡 46 / ❌ 2 / ➖ 7
+調査結果: ✅ 255 / 🟡 46 / ❌ 2 / ➖ 7
 
 ## 判定
 
@@ -476,6 +476,9 @@ UKADOC掲載イベント数: 309
 
 | イベント | 状況 | Utataneの挙動・差分 |
 | --- | --- | --- |
+| [`OnNotifyHolidayInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyHolidayInfo) | ✅ | 起動時にOnNotifyUserInfoの直後へNOTIFY。日本の1955〜2027年の祝日名・日付・国コードを通知。国別の独自表と仮想日付に対応。未掲載年や祝日以外は通知しない。実機トークは確認待ち |
+| [`OnInternalSaoriComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInternalSaoriComplete) | ✅ | 改修版SHIORIから内蔵SAORIを非同期実行した時、識別子・結果・モジュール・関数・Value列を呼び出し元へGET通知。Onで始まる識別子はその名前を使用。終了・再読込後の配送を抑止。自動テスト済み、実ゴーストの画面操作は未確認 |
+| [`OnInternalSaoriFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInternalSaoriFailure) | ✅ | 内蔵SAORIの非同期失敗を識別子・失敗理由・モジュール・関数でGET通知。Onで始まる識別子はFailureを付けた名前を使用。入力個数・オプション名の誤りは受付時に拒否。自動テスト済み、実ゴーストは未確認 |
 | [`OnSoundSpectrum`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundSpectrum) | 🟡 | AVFoundation対応音声の波形を解析し、指定間隔・0/5/10/15/31帯域・チャンネル別レベル・ピークホールド・再生位置をGET通知。停止時はゼロ、ポーズ中は通知しない。メイン・呼び出しゴーストに接続。MIDI/CD/動画やSSPとの数値の完全一致は未対応 |
 | [`OnTextAreaInput`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTextAreaInput) | ✅ | textareabox決定時にID・バイト値1区切りの内容・空欄・追加Referenceを通知。Onで始まるIDはそのイベントへ内容から通知。メイン・呼び出しゴーストに接続。実ゴースト操作は未確認 |
 | [`OnTextAreaInputCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTextAreaInputCancel) | ✅ | ID・timeout／close・編集中の内容・追加Referenceを通知。時間切れでも決定イベントへフォールバックしない。実ゴースト操作は未確認 |
@@ -486,6 +489,3 @@ UKADOC掲載イベント数: 309
 - ✅へ変更する場合は、テストまたは実機確認の根拠を備考に残します。
 - UKADOC側の増減確認には生成スクリプトを使い、既存の手動判定を上書きしないよう差分を確認します。
 - 外部からのSHIORI EventとSHIORI Resourceは、この表とは分けて管理します。
-
-| [`OnInternalSaoriComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInternalSaoriComplete) | ✅ | 改修版SHIORIから内蔵SAORIを非同期実行した時、識別子・結果・モジュール・関数・Value列を呼び出し元へGET通知。Onで始まる識別子はその名前を使用。終了・再読込後の配送を抑止。自動テスト済み、実ゴーストの画面操作は未確認 |
-| [`OnInternalSaoriFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInternalSaoriFailure) | ✅ | 内蔵SAORIの非同期失敗を識別子・失敗理由・モジュール・関数でGET通知。Onで始まる識別子はFailureを付けた名前を使用。入力個数・オプション名の誤りは受付時に拒否。自動テスト済み、実ゴーストは未確認 |

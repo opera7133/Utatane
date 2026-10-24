@@ -67,6 +67,7 @@ final class CalledGhostRuntime {
         didSet { surfaceController.contextMenuItems = { [weak self] scope in self?.contextMenuItems?(scope) ?? [] } }
     }
 
+    var currentDate: () -> Date = Date.init
     var installedGhosts: (() -> [InstalledGhost])?
     var onError: ((Error) -> Void)?
     var onCommunication: ((String, String) -> Void)?
@@ -283,7 +284,8 @@ final class CalledGhostRuntime {
                 windowMode: windowMode,
                 speechSynthesisEnabled: player.isSpeechSynthesisEnabled,
                 speechRecognitionEnabled: speechRecognitionEnabled,
-                configuredBiffNames: configuredBiffNames
+                configuredBiffNames: configuredBiffNames,
+                date: currentDate()
             ) {
                 _ = try? await eventDelivery.handle(event: .notification(
                     id: event.id,

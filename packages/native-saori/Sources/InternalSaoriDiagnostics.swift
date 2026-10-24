@@ -48,7 +48,7 @@ public struct InternalSaoriProbeResult: Sendable {
 
 public enum InternalSaoriProbe {
     /// Direct baseware-only probe. It does not send events to a running ghost.
-    public static func run(module: String, arguments: [String]) -> InternalSaoriProbeResult {
+    public static func run(module: String, arguments: [String], mediaReader: (any InternalSaoriMediaReading)? = nil) -> InternalSaoriProbeResult {
         let start = DispatchTime.now().uptimeNanoseconds
         guard InternalSaoriService.moduleName(module) == module, arguments.count <= 256,
               arguments.allSatisfy({ !$0.contains("\r") && !$0.contains("\n") && !$0.contains("\0") }),
@@ -57,7 +57,7 @@ public enum InternalSaoriProbe {
             return InternalSaoriProbeResult(response: "SAORI/1.0 400 Bad Request\r\nErrorDescription: invalid parameter\r\n\r\n", elapsedMilliseconds: 0)
         }
         let request = (["EXECUTE SAORI/1.0", "Charset: UTF-8", "Module: \(module)"] + arguments.enumerated().map { "Argument\($0.offset): \($0.element)" }).joined(separator: "\r\n") + "\r\n\r\n"
-        let session = InternalSaoriSession()
+        let session = InternalSaoriSession(service: .init(mediaReader: mediaReader))
         defer { session.close() }
         let response = session.response(to: Data(request.utf8))
         return InternalSaoriProbeResult(response: String(decoding: response, as: UTF8.self), elapsedMilliseconds: Double(DispatchTime.now().uptimeNanoseconds &- start) / 1_000_000)

@@ -80,5 +80,75 @@ private func internalResponse(_ module: String, _ arguments: [String], method: S
         #expect(String(decoding: InternalSaoriService().response(to: data), as: UTF8.self).hasPrefix("SAORI/1.0 400"))
     }
     #expect(try internalResponse("internal_random", ["UUID", "--bad=1"]).contains("invalid parameter"))
-    #expect(try internalResponse("internal_random", ["UUID", "--version=4", "--version=7"]).contains("invalid parameter"))
+    #expect(try internalResponse("internal_random", ["UUID", "--version=4", "--version=7"]).contains("-7"))
+}
+
+@Test func `data codec follows published vectors and separates data charset from wire`() throws {
+    #expect(try internalResponse("internal_data", ["Convert", "こんにちは", "--charset=Shift_JIS", "--out=HEX"]).contains("Result: 82B182F182C982BF82CD"))
+    #expect(try internalResponse("internal_data", ["Convert", "a4a2", "--data-in=hex", "--charset=EUC-JP"]).contains("Result: あ"))
+    #expect(try internalResponse("internal_data", ["Convert", "a", "--charset=UTF-16"]).contains("invalid parameter"))
+    #expect(try internalResponse("internal_crypto", ["Digest", "SHA-256", "abc", "--out=HEX"]).contains("BA7816BF"))
+    #expect(try internalResponse("internal_data", ["Convert", "0a", "--data-in=hex"]).hasPrefix("SAORI/1.0 500"))
+    #expect(try internalResponse("internal_data", ["Convert", "ff", "--data-in=hex", "--out=base64", "--OUT=HEX"]).contains("Result: FF"))
+    for encoded in ["/w==", "_w==", "/w", "_w"] {
+        for format in ["base64", "base64url"] {
+            #expect(try InternalSaoriData.decode(encoded, as: format) == Data([255]))
+        }
+    }
+    for encoded in ["a", "AA=", "AA===", "A=A=", "AA==x", "AA ", "\nAA=="] {
+        #expect(throws: (any Error).self) { try InternalSaoriData.decode(encoded, as: "base64") }
+    }
+    #expect(try InternalSaoriData.decode("%E3%81%82+%25", as: "url") == Data("あ+%".utf8))
+    #expect(try InternalSaoriData.format(Data("あ+%".utf8), as: "url") == "%E3%81%82%2B%25")
+    for invalid in ["%", "%0", "%GG"] {
+        #expect(throws: (any Error).self) { try InternalSaoriData.decode(invalid, as: "url") }
+    }
+    // RFC 4648 base32 test vectors.
+    for (plain, encoded) in [("", ""), ("f", "MY======"), ("fo", "MZXQ===="), ("foo", "MZXW6==="), ("foob", "MZXW6YQ="), ("fooba", "MZXW6YTB"), ("foobar", "MZXW6YTBOI======")] {
+        #expect(try InternalSaoriData.format(Data(plain.utf8), as: "base32") == encoded)
+        #expect(try InternalSaoriData.decode(encoded.lowercased(), as: "base32") == Data(plain.utf8))
+        #expect(try InternalSaoriData.decode(encoded.replacingOccurrences(of: "=", with: ""), as: "base32") == Data(plain.utf8))
+    }
+    for invalid in ["M", "MZ======", "MY=====", "MY======X", "M1======"] {
+        #expect(throws: (any Error).self) { try InternalSaoriData.decode(invalid, as: "base32") }
+    }
+    let bytes = try InternalSaoriData.decode("7e7e9c42a91bfef19fa929e5fda1b72e0ebc1a4c1141673e2794234d86addf4e", as: "hex")
+    let npub = "npub10elfcs4fr0l0r8af98jlmgdh9c8tcxjvz9qkw038js35mp4dma8qzvjptg"
+    #expect(try InternalSaoriData.format(bytes, as: "bech32", hrp: "npub") == npub)
+    #expect(try InternalSaoriData.decode(npub.uppercased(), as: "bech32") == bytes)
+    for invalid in [npub + "x", "N" + npub.dropFirst(), String(npub.dropLast()) + "q"] {
+        #expect(throws: (any Error).self) { try InternalSaoriData.decode(invalid, as: "bech32") }
+    }
+}
+
+@Test func `compression interoperates with external gzip zlib and raw deflate vectors`() throws {
+    // Python zlib/gzip encodings of Hello; these do not depend on our encoder.
+    let vectors = ["gzip": "H4sIAAAAAAAACvNIzcnJBwCCidH3BQAAAA==", "zlib": "eJzzSM3JyQcABYwB9Q==", "deflate": "80jNyckHAA=="]
+    for (algorithm, encoded) in vectors {
+        let input = try #require(Data(base64Encoded: encoded))
+        #expect(try InternalSaoriData.compress(input, algorithm: algorithm, decompress: true) == Data("Hello".utf8))
+        for bad in [Data(input.dropLast()), input + Data([0]), Data([0, 0, 0])] {
+            #expect(throws: (any Error).self) { try InternalSaoriData.compress(bad, algorithm: algorithm, decompress: true) }
+        }
+        for level in [0, 1, 9] {
+            for data in [Data(), Data("日本語".utf8), Data((0 ... 255).map(UInt8.init))] {
+                let compressed = try InternalSaoriData.compress(data, algorithm: algorithm, level: level)
+                #expect(try InternalSaoriData.compress(compressed, algorithm: algorithm, decompress: true) == data)
+            }
+        }
+    }
+    let gzipText = try #require(vectors["gzip"])
+    let gzip = try #require(Data(base64Encoded: gzipText))
+    #expect(try InternalSaoriData.compress(gzip + gzip, algorithm: "gzip", decompress: true) == Data("HelloHello".utf8))
+    var corrupt = gzip; corrupt[corrupt.count - 8] ^= 1
+    #expect(throws: (any Error).self) { try InternalSaoriData.compress(corrupt, algorithm: "gzip", decompress: true) }
+    #expect(try internalResponse("internal_data", ["Decompress", "gzip", #require(vectors["gzip"])]).contains("Result: Hello"))
+    #expect(try internalResponse("internal_data", ["Compress", "gzip", "Hello", "--level=10"]).contains("invalid parameter"))
+}
+
+@Test func `decompression applies one cumulative limit across gzip members`() throws {
+    let half = Data(repeating: 65, count: InternalSaoriService.maximumBytes / 2)
+    let member = try InternalSaoriData.compress(half, algorithm: "gzip")
+    #expect(try InternalSaoriData.compress(member + member, algorithm: "gzip", decompress: true).count == InternalSaoriService.maximumBytes)
+    #expect(throws: (any Error).self) { try InternalSaoriData.compress(member + member + member, algorithm: "gzip", decompress: true) }
 }

@@ -2828,6 +2828,7 @@ private struct UtataneRootView: View {
                 configuredBiffNames: networkSettings.mailHost.isEmpty ? [] : [networkSettings.mailAccountName],
                 surfaceWindowNumbers: surfaceWindowController.windowNumbers,
                 balloonWindowNumbers: balloonWindowController.windowNumbers,
+                date: DeveloperVirtualClock.date(realDate: Date(), offset: developerVirtualTimeOffset),
                 otherGhosts: calledGhosts.values.map { runtime in
                     [
                         runtime.ghost.characters.first(where: { $0.scope == 0 })?.name ?? runtime.ghost.name,
@@ -3014,6 +3015,14 @@ private struct UtataneRootView: View {
         }
     }
 
+    private func reportInternalSaoriCompatibility(_ library: URL) {
+        guard let required = ModuleCatalogInventory().internalSaoriUpdateRequired(libraryURL: library) else { return }
+        AppLogStore.shared.warning(
+            String(localized: "内蔵SAORIには \(required.label) 以降が必要。更新後にゴーストを再読み込みして。"),
+            category: "Modules", details: required.moduleID
+        )
+    }
+
     private func basePersonalityEngine(for ghost: InstalledGhost) throws -> any PersonalityEngine {
         let masterDirectory = ghost.rootDirectory.appending(
             path: "ghost/master",
@@ -3040,6 +3049,7 @@ private struct UtataneRootView: View {
             else {
                 throw AppError.unsupportedShiori(filename)
             }
+            reportInternalSaoriCompatibility(moduleURL)
             return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
                 NativeShioriSession(
                     directoryURL: masterDirectory, moduleURL: moduleURL,
@@ -3047,7 +3057,8 @@ private struct UtataneRootView: View {
                     saoriCaller: nativeSaoriRegistry(for: masterDirectory),
                     saoriRootURL: saoriRoot,
                     moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback),
-                    onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id)
+                    onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id),
+                    internalSaoriMediaReader: MacOSMediaInfoReader()
                 )
             ))
         }
@@ -3060,6 +3071,7 @@ private struct UtataneRootView: View {
         if let kind {
             let resolver = UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback)
             if let module = try resolver.moduleURL(for: kind, masterDirectoryURL: masterDirectory) {
+                reportInternalSaoriCompatibility(module)
                 return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
                     NativeShioriSession(
                         directoryURL: masterDirectory, moduleURL: module,
@@ -3067,7 +3079,8 @@ private struct UtataneRootView: View {
                         saoriCaller: nativeSaoriRegistry(for: masterDirectory),
                         saoriRootURL: saoriRoot,
                         moduleResolver: resolver,
-                        onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id)
+                        onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id),
+                        internalSaoriMediaReader: MacOSMediaInfoReader()
                     )
                 ))
             }
@@ -3113,6 +3126,7 @@ private struct UtataneRootView: View {
         if let moduleURL = ContentRoot.shioriModuleURL(for: ghost) {
             switch moduleURL.pathExtension.lowercased() {
             case "dylib", "so", "bundle":
+                reportInternalSaoriCompatibility(moduleURL)
                 return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
                     NativeShioriSession(
                         directoryURL: masterDirectory, moduleURL: moduleURL,
@@ -3120,7 +3134,8 @@ private struct UtataneRootView: View {
                         saoriCaller: nativeSaoriRegistry(for: masterDirectory),
                         saoriRootURL: saoriRoot,
                         moduleResolver: .init(allowsFallback: networkSettings.allowsShioriFallback),
-                        onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id)
+                        onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id),
+                        internalSaoriMediaReader: MacOSMediaInfoReader()
                     )
                 ))
             case "dll":
@@ -6123,6 +6138,7 @@ private struct UtataneRootView: View {
                 presentationSession: calledPresentationSession
             )
             runtime.installedGhosts = { model.ghosts }
+            runtime.currentDate = { DeveloperVirtualClock.date(realDate: Date(), offset: developerVirtualTimeOffset) }
             runtime.onError = { showError($0.localizedDescription) }
             runtime.onNarDrop = { installNars(from: $0) }
             runtime.onWallpaperDrop = { url in await changeDesktopWallpaper(to: url) }
@@ -9390,6 +9406,7 @@ func startupInformationEvents(
     configuredBiffNames: [String] = [],
     surfaceWindowNumbers: [Int] = [],
     balloonWindowNumbers: [Int] = [],
+    date: Date = Date(),
     otherGhosts: [String] = []
 ) -> [(id: String, references: [Int: String])] {
     let process = ProcessInfo.processInfo
@@ -9414,7 +9431,7 @@ func startupInformationEvents(
     let indexed: ([String]) -> [Int: String] = { values in
         Dictionary(uniqueKeysWithValues: values.enumerated().map { ($0.offset, $0.element) })
     }
-    return [
+    var events: [(id: String, references: [Int: String])] = [
         ("basewareversion", [0: version, 1: "Utatane", 2: build]),
         ("OnWindowModeChange", windowMode.startupChangeReferences),
         ("OnSpeechSynthesisStatus", [0: speechSynthesisEnabled ? "1" : "0"]),
@@ -9464,7 +9481,12 @@ func startupInformationEvents(
             2: BalloonLoader().surfaceList(in: balloon.directory)
         ]),
         ("OnNotifyShellInfo", [0: shell.name, 1: shell.directory.path, 2: surfaceList]),
-        ("OnNotifyUserInfo", [0: NSUserName(), 1: NSFullUserName(), 2: "", 3: "undef"]),
+        ("OnNotifyUserInfo", [0: NSUserName(), 1: NSFullUserName(), 2: "", 3: "undef"])
+    ]
+    if let holiday = HolidayInfo.today(at: date, countryCode: countryCode, userDirectory: ContentRoot.contentDirectory.appending(path: "calendar")) {
+        events.append((id: "OnNotifyHolidayInfo", references: holiday.references))
+    }
+    events += [
         ("OnNotifyOSInfo", [
             0: "macOS,\(process.operatingSystemVersionString),macOS",
             1: "\(process.processorCount)-core,0,\(process.activeProcessorCount) active cores",
@@ -9482,6 +9504,7 @@ func startupInformationEvents(
         ("OnDarkTheme", darkThemeReferences()),
         ("OnLanguageChange", [0: languageName, 1: locale.identifier, 2: "", 3: ""])
     ]
+    return events
 }
 
 @MainActor

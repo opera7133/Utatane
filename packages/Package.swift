@@ -36,7 +36,8 @@ let package = Package(
         .target(
             name: "UtataneCore",
             dependencies: ["UtataneLegacyTextCodec"],
-            path: "core/Sources"
+            path: "core/Sources",
+            resources: [.process("Resources")]
         ),
         .target(
             name: "UtataneLegacyTextCodec",
@@ -185,7 +186,8 @@ let package = Package(
         .target(
             name: "UtataneNativeSaori",
             dependencies: ["UtataneCore"],
-            path: "native-saori/Sources"
+            path: "native-saori/Sources",
+            linkerSettings: [.linkedLibrary("z")]
         ),
         .target(
             name: "CMisakaHostBridge",

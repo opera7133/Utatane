@@ -72,8 +72,7 @@ private final class InternalEventRecorder: @unchecked Sendable {
     defer { session.close() }
     for arguments in [
         ["Convert", "abc", "--bad=1", "--async=OnInvalid"],
-        ["Convert", "abc", "--async="],
-        ["Convert", "abc", "--async=a", "--async=b"]
+        ["Convert", "abc", "--async="]
     ] {
         #expect(String(decoding: session.response(to: asynchronousRequest("internal_data", arguments)), as: UTF8.self).hasPrefix("SAORI/1.0 400"))
     }
@@ -112,4 +111,15 @@ private final class InternalEventRecorder: @unchecked Sendable {
         queue.addBarrierBlock { continuation.resume() }
     }
     #expect(await recorder.events(count: 0).isEmpty)
+}
+
+@Test func `async option uses the last identifier without swallowing positional data`() async throws {
+    let recorder = InternalEventRecorder()
+    let session = InternalSaoriSession(onEvent: recorder.record)
+    defer { session.close() }
+    let result = session.response(to: asynchronousRequest("internal_data", ["Convert", "--async=literal", "--async=old", "--ASYNC=OnLast"]))
+    #expect(String(decoding: result, as: UTF8.self).hasPrefix("SAORI/1.0 204"))
+    let event = try #require(await recorder.events(count: 1).first)
+    #expect(event.id == "OnLast")
+    #expect(event.references[1] == "--async=literal")
 }

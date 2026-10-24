@@ -97,3 +97,31 @@ func `upstream versions sort and match previous numeric labels`(id: String, pref
     """.utf8))
     #expect(try inventory.state(for: #require(matchingCatalog.modules.first)) == .current)
 }
+
+@Test(arguments: [("yaya", "Tc574-11", 2), ("yaya-6", "Tc607-2", 2), ("satori", "Mc205-4", 2), ("kawari", "9.1.0", 4)])
+func `internal SAORI minimum revisions work offline and follow selected libraries`(id: String, version: String, revision: Int) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let inventory = ModuleCatalogInventory(applicationSupportURL: root)
+    #expect(inventory.internalSaoriUpdateRequired(moduleID: id) == nil)
+    let directory = root.appending(path: "NativeShiori/\(id)")
+    try FileManager.default.createDirectory(at: directory.appending(path: "lib"), withIntermediateDirectories: true)
+    let library = directory.appending(path: "lib/lib\(id).dylib")
+    try Data().write(to: library)
+    func write(_ release: String, _ build: Int) throws {
+        try Data("""
+        {"schemaVersion":1,"id":"\(id)","version":"\(release)","revision":\(build),"abi":"shiori","minimumOS":"14.0","architectures":["\(inventory.architecture)"],"files":{"lib/lib\(id).dylib":"test"}}
+        """.utf8).write(to: directory.appending(path: "module.json"))
+    }
+    try write(version, revision - 1)
+    #expect(inventory.internalSaoriUpdateRequired(moduleID: id)?.label == "\(version)-r\(revision)")
+    #expect(inventory.internalSaoriUpdateRequired(libraryURL: library)?.moduleID == id)
+    #expect(inventory.internalSaoriUpdateRequired(libraryURL: directory.appending(path: "lib/custom.dylib")) == nil)
+    try write(version, revision)
+    #expect(inventory.internalSaoriUpdateRequired(moduleID: id) == nil)
+    #expect(inventory.internalSaoriUpdateRequired(libraryURL: library) == nil)
+    try write(version, revision + 1)
+    #expect(inventory.internalSaoriUpdateRequired(moduleID: id) == nil)
+    try write("1.0.0", 100)
+    #expect(inventory.internalSaoriUpdateRequired(moduleID: id) != nil)
+}

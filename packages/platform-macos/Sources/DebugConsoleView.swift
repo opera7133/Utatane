@@ -479,7 +479,7 @@ public struct DebugConsoleView: View {
                     isRunningSAORI = true
                     saoriResult = nil
                     Task {
-                        let result = await Task.detached { InternalSaoriProbe.run(module: module, arguments: arguments) }.value
+                        let result = await Task.detached { InternalSaoriProbe.run(module: module, arguments: arguments, mediaReader: MacOSMediaInfoReader()) }.value
                         saoriResult = result
                         isRunningSAORI = false
                     }

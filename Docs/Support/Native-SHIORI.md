@@ -24,13 +24,17 @@ YAYAは6系を既定で使います。`yaya.dll`・`aya.dll`・`aya5.dll`のバ�
 
 Utatane 0.2.17以降と、YAYA 5 Tc574-11-r2・YAYA 6 Tc607-2-r2・里々 Mc205-4-r2・華和梨9.1.0-r4以降を組み合わせると、ゴーストへDLLを置かずに次の機能を呼べます。共通導入版を更新した後、起動中のゴーストを再読み込みしてください。以前の本体やModulesにはこの接続がありません。
 
+以下の表は開発中の次回版の追加分を含みます。0.2.17の`internal_data`はConvertのtext（UTF-8）・hex・base64・base64urlまでです。
+圧縮・追加形式・文字コード指定と`internal_file`は次回版で追加します。
+
 | モジュール | 対応関数 | 制限 |
 | --- | --- | --- |
 | `internal_system` | `ListModules`、`ListFunctions` | 対応しているモジュール・関数だけを返す |
 | `internal_time` | `Format`、`Add`、`Diff` | エポック秒、ISO日時、HTTP IMF-fixdate。local・UTC・±18時間以内のオフセット・macOSのIANAゾーンに対応。Windows名は未対応 |
 | `internal_text` | `Normalize` | NFC、NFD、NFKC、NFKD |
 | `internal_random` | `Bytes`、`Number`、`UUID` | Bytesは1〜1024バイト、NumberはInt64の閉区間、UUIDはv4/v7 |
-| `internal_data` | `Convert` | text（UTF-8）、hex、base64、base64url。圧縮・展開、他の形式は未対応 |
+| `internal_data` | `Convert`、`Compress`、`Decompress` | text、hex/HEX、base64/base64url、base32、url、bech32。圧縮・展開はgzip/zlib/deflate。brotli/zstdは未対応 |
+| `internal_file` | `MediaInfo` | 音声・画像・動画の種類とメタデータ。取得できる項目はmacOSの対応形式による |
 | `internal_crypto` | `Digest`、`HMAC` | Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。ファイル入力、暗号化・鍵生成等は未対応 |
 
 引数・返却値の基準は[UKADOCのSAORI over DirectSSTP](https://ssp.shillest.net/ukadoc/manual/spec_saori_ex.html)です。YAYAでは`FUNCTIONEX`または`LOADLIB`／`REQUESTLIB`、里々では`＠SAORI`による登録または`（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）`のようなモジュール名の呼び出し、華和梨では`$(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)`を使えます。通常のSAORIでは、引き続きmacOS用モジュールが必要です。
@@ -46,6 +50,23 @@ macOSでは、SHIORIの専用ホストと本体を結ぶ非公開の親子プロ
 Utataneが提供するSAORIと対応する命令は、[共通SAORIブリッジの一覧](https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md#共通saoriブリッジ)を参照してください。独自の外部SHIORIが読み込むSAORIは、そのSHIORI側で管理します。
 
 ## 日時計算と開発用の確認
+
+次回版では`--charset=`でデータの文字コードを指定できます（要求の`Charset`とは別）。
+`--out=HEX`は大文字、`--out=hex`は小文字です。同じオプションを複数指定した場合は最後の値を使います。
+Base64は通常形式・URL形式、パディングあり・なしを受け付けます。bech32出力はConvertの`--hrp=`が必要です。
+
+`Compress`は方式とデータを位置引数に取り、既定ではBase64を返します。
+`Decompress`は方式と圧縮データを取り、既定ではBase64から文字列へ戻します。
+`--data-in=`と`--out=`で入出力形式を変えられます。gzipの連結メンバーを読み、
+壊れた入力・途中切れ・余分な末尾をエラーにします。展開後も合計8MBが上限です。
+
+`internal_file`の`MediaInfo`はパス、その後に取得するキーを1〜11個渡します。
+`Result`は`audio`/`video`/`image`、`Value0`以降は指定した順の値です。
+キーは`title`、`artist`、`albumartist`、`album`、`genre`、`comment`、`year`、`track`、
+`duration`（ミリ秒）、`width`、`height`。取れない値や未知のキーは空になります。
+相対パスは呼び出したゴーストの`ghost/master`基準です。開発用パレットの単体テストでは絶対パスを使ってください。
+改行はバイト値1、NULは除去して返します。未対応形式は種類と値が空です。
+この関数の契約は[OurinのMediaInfo提案](https://github.com/eightman999/Ourin/pull/158)も参照しています。
 
 `internal_time`の`Format`は日時と書式、`Add`は日時・整数の量・単位、`Diff`は日時1・日時2・単位を取ります。`--tz=`は位置引数の後に置きます。Formatの書式を省略してオプションを渡す場合、空の位置引数を置いてください。
 
@@ -63,3 +84,11 @@ Diff / 2026-12-20T10:00 / 2026-12-24 / day / --tz=UTC
 開発用パレットの「内蔵SAORI」で、モジュールと1行1引数を入力して単体テストできます。空行は空引数です。応答全文と所要時間を画面へ表示しますが、要求や結果本文を自動ログには保存しません。この単体テストは本体を直接呼び、SHIORI接続の検証やゴーストへのイベント送信は行いません。`--async`はghost requiredになります。
 
 「内蔵SAORIの呼び出しを記録」をオンにすると、その後の呼び出しをInternalSAORIカテゴリへ記録します。同期応答・非同期受付・非同期処理結果について、セッション識別子、モジュール、関数、状態コード、所要時間、応答バイト数を確認できます。引数、結果本文、非同期識別子は記録しません。記録は初期状態でオフです。従来のSAORI dylibとWindows DLLの呼び出しは記録対象外です。
+
+
+### httpc互換モジュール（次回版）
+
+`httpc.dll`を使うゴースト・プラグイン向けに、Utatane Modulesの`httpc`を共通導入できます。
+引数なしの接続状態確認、URLからの同期文字列取得、URLと保存先を指定するバイナリ保存、
+開始・終了文字列による順次抽出に対応します。保存先はSAORIの配置フォルダ基準です。
+`bg`による`OnHttpcNotify`、HTMLタグ変換は未対応です。詳細は[ModulesのSAORI手順](https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md)を参照してください。

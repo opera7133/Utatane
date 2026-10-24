@@ -10,6 +10,7 @@ from pathlib import Path
 
 
 AUDITED_EVENTS = {
+    "OnNotifyHolidayInfo": ("✅", "起動時にOnNotifyUserInfoの直後へNOTIFY。日本の1955〜2027年の祝日名・日付・国コードを通知。国別の独自表と仮想日付に対応。未掲載年や祝日以外は通知しない。実機トークは確認待ち"),
     "OnTrayBalloonClick": ("✅", "set,trayballoonをmacOSのメニューバーポップオーバーとして表示し、ポップオーバーまたはステータスアイコンのクリック時にタイトルと本文を通知"),
     "OnTrayBalloonTimeout": ("✅", "メニューバーポップオーバーが指定時間で閉じた時にタイトルと本文を通知。指定時間はSSP互換で10〜30秒に制限"),
     "OnRaiseOtherFailure": ("✅", "raiseotherの宛先がない時はnotfound、宛先SHIORIが204の時は204をReference0へ入れ、宛先・イベントID・元Referenceとともに送信元へ通知。全ゴースト宛ての複数結果列挙は未対応"),
@@ -322,6 +323,7 @@ INAPPLICABLE_EVENTS = {
 }
 
 ONLINE_ADDITIONAL_EVENTS = [
+    "OnNotifyHolidayInfo",
     "OnInternalSaoriComplete",
     "OnInternalSaoriFailure",
     "OnSoundSpectrum",

@@ -265,6 +265,10 @@ struct ModuleCatalogView: View {
                     Text("\(artifact.version) · macOS \(artifact.minimumOS)以降")
                         .font(.caption2).foregroundStyle(.secondary)
                 }
+                if let required = ModuleCatalogInventory().internalSaoriUpdateRequired(moduleID: module.id) {
+                    Text(String(localized: "内蔵SAORIには \(required.label) 以降が必要。更新後にゴーストを再読み込みして。"))
+                        .font(.caption).foregroundStyle(.orange)
+                }
             }
             Spacer()
             Text(stateTitle(ModuleCatalogInventory().state(for: module)))
