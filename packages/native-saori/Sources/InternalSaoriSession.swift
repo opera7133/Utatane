@@ -115,7 +115,7 @@ public final class InternalSaoriSession: @unchecked Sendable {
             defer { lock.withLock { pending -= 1 } }
             guard isCurrent else { return }
             let started = DispatchTime.now().uptimeNanoseconds
-            let data = service.response(to: encoded)
+            let data = service.response(to: encoded, isCancelled: { [weak self] in self?.isCurrent != true })
             InternalSaoriDiagnostics.shared.record(request: encoded, response: data, started: started, session: diagnosticID, completion: true)
             guard let result = LegacyTextDecoder.decode(data, strictlyUsing: charset.lowercased() == "shift_jis" ? "CP932" : charset) else { return }
             var fields: [String: String] = [:]

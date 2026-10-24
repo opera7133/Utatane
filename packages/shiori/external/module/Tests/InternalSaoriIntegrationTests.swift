@@ -92,15 +92,22 @@ struct InternalSaoriIntegrationTests {
                     if STRSTR(_response, "Value0: metadata", 0) >= 0 { _value = "audio" }
                     _unloaded = UNLOADLIB("internal_file.dll")
                 }
+                if STRSTR(_argv[0], "ID: OnHash", 0) >= 0 {
+                    _loaded = LOADLIB("internal_crypto.dll")
+                    _wire = "EXECUTE SAORI/1.0%(CHR(13))%(CHR(10))Charset: UTF-8%(CHR(13))%(CHR(10))Argument0: Digest%(CHR(13))%(CHR(10))Argument1: sha256%(CHR(13))%(CHR(10))Argument2: probe.bin%(CHR(13))%(CHR(10))Argument3: --data-in=file%(CHR(13))%(CHR(10))%(CHR(13))%(CHR(10))"
+                    _response = REQUESTLIB("internal_crypto.dll", _wire)
+                    if STRSTR(_response, "Result: 6e340b9c", 0) >= 0 { _value = "6e340b9c" }
+                    _unloaded = UNLOADLIB("internal_crypto.dll")
+                }
                 _unloaded = UNLOADLIB("internal_text.dll")
                 "SHIORI/3.0 200 OK%(CHR(13))%(CHR(10))Charset: UTF-8%(CHR(13))%(CHR(10))Value: %(_value)%(CHR(13))%(CHR(10))%(CHR(13))%(CHR(10))"
             }
             """#.write(to: master.appending(path: "probe.dic"), atomically: true, encoding: .utf8)
         } else if kind == "satori" {
             try "＠SAORI\r\n正規化,internal_text.dll,Normalize,NFKC\r\n".write(to: master.appending(path: "satori_conf.txt"), atomically: true, encoding: .utf8)
-            try "＊OnData\r\n：（internal_data、Decompress、gzip、H4sIAAAAAAAACvNIzcnJBwCCidH3BQAAAA==）。\r\n＊OnMedia\r\n：（internal_file、MediaInfo、probe.bin、title）。\r\n＊OnBoot\r\n：（正規化、ｶﾞｲﾄﾞ）。\r\n＊OnAuto\r\n：（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）。\r\n＊OnAsync\r\n：（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ、--async=OnNormalized）。\r\n".write(to: master.appending(path: "dic00.txt"), atomically: true, encoding: .utf8)
+            try "＊OnHash\r\n：（internal_crypto、Digest、sha256、probe.bin、--data-in=file）。\r\n＊OnData\r\n：（internal_data、Decompress、gzip、H4sIAAAAAAAACvNIzcnJBwCCidH3BQAAAA==）。\r\n＊OnMedia\r\n：（internal_file、MediaInfo、probe.bin、title）。\r\n＊OnBoot\r\n：（正規化、ｶﾞｲﾄﾞ）。\r\n＊OnAuto\r\n：（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）。\r\n＊OnAsync\r\n：（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ、--async=OnNormalized）。\r\n".write(to: master.appending(path: "dic00.txt"), atomically: true, encoding: .utf8)
         } else {
-            let dictionary = "OnData : $(callsaori internal_data Decompress gzip H4sIAAAAAAAACvNIzcnJBwCCidH3BQAAAA==)\nOnMedia : $(callsaori internal_file MediaInfo probe.bin title)\nSystem.Callback.OnGET : $(entry ${System.Request.ID};)\nOnBoot : $(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)\nOnAsync : $(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ --async=OnNormalized)\n"
+            let dictionary = "OnHash : $(callsaori internal_crypto Digest sha256 probe.bin --data-in=file)\nOnData : $(callsaori internal_data Decompress gzip H4sIAAAAAAAACvNIzcnJBwCCidH3BQAAAA==)\nOnMedia : $(callsaori internal_file MediaInfo probe.bin title)\nSystem.Callback.OnGET : $(entry ${System.Request.ID};)\nOnBoot : $(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)\nOnAsync : $(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ --async=OnNormalized)\n"
             try #require(LegacyTextDecoder.encode(dictionary, charset: "Shift_JIS")).write(to: master.appending(path: "kawarirc.kis"))
         }
         try Data([0]).write(to: master.appending(path: "probe.bin"))
@@ -117,7 +124,7 @@ struct InternalSaoriIntegrationTests {
             let response = try session.request("GET SHIORI/3.0\r\nCharset: UTF-8\r\nSecurityLevel: Local\r\nID: OnAuto\r\n\r\n")
             #expect(try ShioriMessageParser.parseResponse(response).value?.contains("ガイド") == true)
         }
-        for (eventID, expected) in [("OnData", "Hello"), ("OnMedia", "audio")] {
+        for (eventID, expected) in [("OnData", "Hello"), ("OnMedia", "audio"), ("OnHash", "6e340b9c")] {
             let result = try session.request("GET SHIORI/3.0\r\nCharset: UTF-8\r\nSecurityLevel: Local\r\nID: \(eventID)\r\n\r\n")
             #expect(try ShioriMessageParser.parseResponse(result).value?.contains(expected) == true, "\(kind) \(architecture): \(result)")
         }

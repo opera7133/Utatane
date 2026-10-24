@@ -123,3 +123,22 @@ private final class InternalEventRecorder: @unchecked Sendable {
     #expect(event.id == "OnLast")
     #expect(event.references[1] == "--async=literal")
 }
+
+@Test func `asynchronous file hashes use ghost paths and deliver read failures as events`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data("abc".utf8).write(to: root.appending(path: "日本語.bin"))
+    let recorder = InternalEventRecorder()
+    let session = InternalSaoriSession(onEvent: recorder.record, service: .init(ghostDirectory: root))
+    defer { session.close() }
+    for (filename, identifier) in [("日本語.bin", "OnFileHash"), ("missing", "OnMissing")] {
+        let result = session.response(to: asynchronousRequest("internal_crypto", ["Digest", "sha256", filename, "--data-in=file", "--async=\(identifier)"]))
+        #expect(String(decoding: result, as: UTF8.self).hasPrefix("SAORI/1.0 204"))
+    }
+    let events = await recorder.events(count: 2)
+    let success = try #require(events.first { $0.id == "OnFileHash" })
+    #expect(success.references[1] == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    let failure = try #require(events.first { $0.id == "OnMissingFailure" })
+    #expect(failure.references[1] == "file not found")
+}

@@ -25,7 +25,7 @@ YAYAは6系を既定で使います。`yaya.dll`・`aya.dll`・`aya5.dll`のバ�
 Utatane 0.2.17以降と、YAYA 5 Tc574-11-r2・YAYA 6 Tc607-2-r2・里々 Mc205-4-r2・華和梨9.1.0-r4以降を組み合わせると、ゴーストへDLLを置かずに次の機能を呼べます。共通導入版を更新した後、起動中のゴーストを再読み込みしてください。以前の本体やModulesにはこの接続がありません。
 
 以下の表は開発中の次回版の追加分を含みます。0.2.17の`internal_data`はConvertのtext（UTF-8）・hex・base64・base64urlまでです。
-圧縮・追加形式・文字コード指定と`internal_file`は次回版で追加します。
+圧縮・追加形式・文字コード指定、ファイルハッシュ・Compareと`internal_file`は次回版で追加します。
 
 | モジュール | 対応関数 | 制限 |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ Utatane 0.2.17以降と、YAYA 5 Tc574-11-r2・YAYA 6 Tc607-2-r2・里々 Mc205-
 | `internal_random` | `Bytes`、`Number`、`UUID` | Bytesは1〜1024バイト、NumberはInt64の閉区間、UUIDはv4/v7 |
 | `internal_data` | `Convert`、`Compress`、`Decompress` | text、hex/HEX、base64/base64url、base32、url、bech32。圧縮・展開はgzip/zlib/deflate。brotli/zstdは未対応 |
 | `internal_file` | `MediaInfo` | 音声・画像・動画の種類とメタデータ。取得できる項目はmacOSの対応形式による |
-| `internal_crypto` | `Digest`、`HMAC` | Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。ファイル入力、暗号化・鍵生成等は未対応 |
+| `internal_crypto` | `Digest`、`HMAC`、`Compare` | Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。dataのfile入力に対応。暗号化・鍵生成等は未対応 |
 
 引数・返却値の基準は[UKADOCのSAORI over DirectSSTP](https://ssp.shillest.net/ukadoc/manual/spec_saori_ex.html)です。YAYAでは`FUNCTIONEX`または`LOADLIB`／`REQUESTLIB`、里々では`＠SAORI`による登録または`（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）`のようなモジュール名の呼び出し、華和梨では`$(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)`を使えます。通常のSAORIでは、引き続きmacOS用モジュールが必要です。
 
@@ -67,6 +67,17 @@ Base64は通常形式・URL形式、パディングあり・なしを受け付�
 相対パスは呼び出したゴーストの`ghost/master`基準です。開発用パレットの単体テストでは絶対パスを使ってください。
 改行はバイト値1、NULは除去して返します。未対応形式は種類と値が空です。
 この関数の契約は[OurinのMediaInfo提案](https://github.com/eightman999/Ourin/pull/158)も参照しています。
+
+`internal_crypto`のDigest/HMACで`--data-in=file`を指定すると、データ引数をファイルパスとして読みます。
+相対パスは呼び出したゴーストの`ghost/master`基準です。ゴーストなしの単体テストでは絶対パスを使ってください。
+ファイルは64KBずつ読み、通常のデータ引数の8MB上限は適用しません。大きなファイルには`--async=識別子`を付けてください。
+ファイルが存在しない場合は400 `file not found`、読み取りに失敗した場合は500 `file read failed`です。
+読み取り中の切り詰め・サイズや更新時刻の変更も失敗として扱います。
+非同期処理中にゴーストを終了・SHIORIを再読み込みすると、読み取りを中断して結果を配送しません。
+`file`を使えるのはDigest/HMACのデータ入力だけで、鍵の入力やConvert、Compareには使えません。
+
+`Compare`は2つのデータをOSの内容非依存の比較処理で照合し、一致なら`1`、不一致なら`0`を返します。
+`--a-in=hex --b-in=hex`などで入力形式を指定できます。例えば16進の署名は、文字の大小に左右されず照合できます。
 
 `internal_time`の`Format`は日時と書式、`Add`は日時・整数の量・単位、`Diff`は日時1・日時2・単位を取ります。`--tz=`は位置引数の後に置きます。Formatの書式を省略してオプションを渡す場合、空の位置引数を置いてください。
 

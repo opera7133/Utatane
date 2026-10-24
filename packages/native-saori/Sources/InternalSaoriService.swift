@@ -1,4 +1,3 @@
-import CryptoKit
 import Foundation
 import Security
 import UtataneCore
@@ -13,7 +12,7 @@ public struct InternalSaoriService: Sendable {
         "internal_time": ["Format", "Add", "Diff"],
         "internal_random": ["Bytes", "Number", "UUID"],
         "internal_data": ["Convert", "Compress", "Decompress"],
-        "internal_crypto": ["Digest", "HMAC"],
+        "internal_crypto": ["Digest", "HMAC", "Compare"],
         "internal_file": ["MediaInfo"]
     ]
 
@@ -41,7 +40,7 @@ public struct InternalSaoriService: Sendable {
         return name
     }
 
-    public func response(to data: Data, validatesOnly: Bool = false) -> Data {
+    public func response(to data: Data, validatesOnly: Bool = false, isCancelled: @Sendable () -> Bool = { false }) -> Data {
         var charset = "UTF-8"
         do {
             guard data.count <= Self.maximumBytes, !data.contains(0), data.suffix(4) == Data([13, 10, 13, 10]),
@@ -88,7 +87,7 @@ public struct InternalSaoriService: Sendable {
             guard let last = arguments.keys.max(), arguments.count == last + 1 else { throw Failure("invalid parameter") }
             let values = (0 ... last).map { arguments[$0]! }
             guard let function = available.first(where: { $0.caseInsensitiveCompare(values[0]) == .orderedSame }) else { throw Failure("unknown function") }
-            let result = try execute(module: module, function: function, arguments: Array(values.dropFirst()), validatesOnly: validatesOnly)
+            let result = try execute(module: module, function: function, arguments: Array(values.dropFirst()), validatesOnly: validatesOnly, isCancelled: isCancelled)
             return encode(status: result.0.isEmpty ? 204 : 200, result: result.0, values: result.1, charset: charset)
         } catch let failure as InternalSaoriTime.Failure {
             return encode(status: 400, error: failure.message, charset: charset)
@@ -131,12 +130,12 @@ public struct InternalSaoriService: Sendable {
         switch (module, function) {
         case ("internal_system", "ListModules"), ("internal_random", "UUID"): return 0
         case ("internal_system", "ListFunctions"), ("internal_random", "Bytes"), ("internal_data", "Convert"): return 1
-        case ("internal_time", "Format"), ("internal_text", _), ("internal_random", "Number"), ("internal_crypto", "Digest"), ("internal_data", _), ("internal_file", _): return 2
+        case ("internal_time", "Format"), ("internal_text", _), ("internal_random", "Number"), ("internal_crypto", "Digest"), ("internal_crypto", "Compare"), ("internal_data", _), ("internal_file", _): return 2
         default: return 3
         }
     }
 
-    private func execute(module: String, function: String, arguments: [String], validatesOnly: Bool) throws -> (String, [String]) {
+    private func execute(module: String, function: String, arguments: [String], validatesOnly: Bool, isCancelled: () -> Bool) throws -> (String, [String]) {
         let count: Int
         let allowed: Set<String>
         switch (module, function) {
@@ -152,6 +151,7 @@ public struct InternalSaoriService: Sendable {
         case ("internal_data", "Convert"): count = 1; allowed = ["in", "data-in", "out", "charset", "hrp"]
         case ("internal_data", "Compress"): count = 2; allowed = ["data-in", "out", "charset", "level"]
         case ("internal_data", _): count = 2; allowed = ["data-in", "out", "charset"]
+        case ("internal_crypto", "Compare"): count = 2; allowed = ["a-in", "b-in", "charset"]
         case ("internal_crypto", "Digest"): count = 2; allowed = ["data-in", "out", "charset"]
         default: count = 3; allowed = ["key-in", "data-in", "out", "charset"]
         }
@@ -187,16 +187,7 @@ public struct InternalSaoriService: Sendable {
         switch module {
         case "internal_file":
             guard (2 ... 12).contains(positional.count), let mediaReader else { throw Failure("invalid parameter") }
-            let path = positional[0].replacingOccurrences(of: "\\", with: "/")
-            guard !path.isEmpty, !path.contains("://") else { throw Failure("file not found") }
-            let url: URL
-            if path.hasPrefix("/") {
-                url = URL(filePath: path)
-            } else if let ghostDirectory {
-                url = ghostDirectory.appending(path: path)
-            } else {
-                throw Failure("ghost required")
-            }
+            let url = try resolveFile(positional[0])
             guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { throw Failure("file not found") }
             let info = try mediaReader.read(url)
             let values = positional.dropFirst().map { info.values[$0.lowercased()] ?? "" }.map {
@@ -264,23 +255,30 @@ public struct InternalSaoriService: Sendable {
             let result = try InternalSaoriData.compress(input, algorithm: positional[0], level: level, decompress: decompress)
             return try (format(result, as: options["out"] ?? (decompress ? "text" : "base64")), [])
         default:
-            let algorithm = positional[0].lowercased().filter { $0 != "-" && $0 != "_" }
-            let data = try decode(positional[function == "Digest" ? 1 : 2], as: options["data-in"] ?? "text")
-            let key = function == "HMAC" ? try decode(positional[1], as: options["key-in"] ?? "text") : Data()
-            let digest: Data
-            switch (function, algorithm) {
-            case ("Digest", "md5"): digest = Data(Insecure.MD5.hash(data: data))
-            case ("Digest", "sha1"): digest = Data(Insecure.SHA1.hash(data: data))
-            case ("Digest", "sha256"): digest = Data(SHA256.hash(data: data))
-            case ("Digest", "sha384"): digest = Data(SHA384.hash(data: data))
-            case ("Digest", "sha512"): digest = Data(SHA512.hash(data: data))
-            case ("HMAC", "sha256"): digest = Data(HMAC<SHA256>.authenticationCode(for: data, using: SymmetricKey(data: key)))
-            case ("HMAC", "sha384"): digest = Data(HMAC<SHA384>.authenticationCode(for: data, using: SymmetricKey(data: key)))
-            case ("HMAC", "sha512"): digest = Data(HMAC<SHA512>.authenticationCode(for: data, using: SymmetricKey(data: key)))
-            default: throw Failure("unsupported algorithm")
+            if function == "Compare" {
+                let a = try decode(positional[0], as: options["a-in"] ?? "text")
+                let b = try decode(positional[1], as: options["b-in"] ?? "text")
+                return (InternalSaoriCrypto.compare(a, b) ? "1" : "0", [])
             }
+            let algorithm = positional[0].lowercased().filter { $0 != "-" && $0 != "_" }
+            let source = positional[function == "Digest" ? 1 : 2]
+            let encoding = options["data-in"] ?? "text"
+            let input: InternalSaoriCrypto.Input = encoding.lowercased() == "file"
+                ? try .file(resolveFile(source)) : try .bytes(decode(source, as: encoding))
+            let key = function == "HMAC" ? try decode(positional[1], as: options["key-in"] ?? "text") : Data()
+            let digest = try InternalSaoriCrypto.calculate(function: function, algorithm: algorithm, input: input, key: key, isCancelled: isCancelled)
             return try (format(digest, as: options["out"] ?? "hex"), [])
         }
+    }
+
+    private func resolveFile(_ path: String) throws -> URL {
+        let path = path.replacingOccurrences(of: "\\", with: "/")
+        guard !path.isEmpty, !path.contains("://") else { throw Failure("file not found") }
+        if path.hasPrefix("/") {
+            return URL(filePath: path)
+        }
+        guard let ghostDirectory else { throw Failure("ghost required") }
+        return ghostDirectory.appending(path: path)
     }
 
     private func randomBytes(_ count: Int) throws -> [UInt8] {

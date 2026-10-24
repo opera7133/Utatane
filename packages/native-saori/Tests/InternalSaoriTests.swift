@@ -38,7 +38,7 @@ private func internalResponse(_ module: String, _ arguments: [String], method: S
     #expect(try internalResponse("internal_crypto", ["Digest", "sha256", "abc"]).contains("Result: ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad\r\n"))
     #expect(try internalResponse("internal_crypto", ["HMAC", "sha256", String(repeating: "0b", count: 20), "Hi There", "--key-in=hex"]).contains("Result: b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c2e32cff7\r\n"))
     #expect(try internalResponse("internal_crypto", ["Digest", "sha3", "abc"]).contains("unsupported algorithm"))
-    #expect(try internalResponse("internal_crypto", ["Digest", "sha256", "abc", "--data-in=file"]).contains("unsupported algorithm"))
+    #expect(try internalResponse("internal_crypto", ["Digest", "sha256", "abc", "--data-in=file"]).contains("ghost required"))
 }
 
 @Test func `internal data converts strictly without accepting malformed bytes`() throws {

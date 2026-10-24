@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- 内蔵SAORIで、大きなファイルのハッシュ・HMACを小分けに読みながら計算できるようにした。署名などのバイト列を照合する`Compare`も追加した
+
 - 内蔵SAORIにgzip・zlib・deflateの圧縮／展開と、Base32・URL・bech32変換を追加した。文字コード指定や既存の変換処理も改善した
 - 内蔵SAORIの利用に必要なSHIORIが古い場合、モジュールカタログと起動時のログに更新案内を表示するようにした
 - 音声・画像・動画の種類や曲名、再生時間、画像サイズなどを取得する内蔵SAORI `internal_file/MediaInfo`を追加した
