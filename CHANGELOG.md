@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-- Developer IDによる署名と公証の手順を追加した。外部SHIORI・SAORIの読み込みを維持するHardened Runtime設定と、同梱コードを内側から署名する処理を用意した
+- Developer ID署名用の処理を追加した。外部SHIORI・SAORIの読み込みを維持するHardened Runtime設定と、同梱コードを内側から署名する処理を用意した
+- 同梱ゴーストの自動保存バックアップをGitの追跡対象から除外した
 
 ## [0.2.18] - 2026-10-24
 

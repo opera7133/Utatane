@@ -66,54 +66,6 @@ mise run package
 
 kagariとLuaのビルド・配布検証はUtatane Modules側で行います。
 
-### Developer ID署名と公証
-
-直接配布版を公証する場合は、Apple Developer Programの有効なDeveloper ID Application証明書と、
-公証用の認証情報が必要です。App Store向けのApp Sandbox設定とは別の作業です。
-現在の`mise run package`とGitHub Actionsは仮署名でZIPを作成します。以下は、その後に手元で行う手順です。
-
-```sh
-# 使えるDeveloper ID Application証明書の名前とSHA-1を確認
-security find-identity -v -p codesigning
-
-# 完成したアプリのコピーを署名。値は自分の証明書のSHA-1へ置き換える
-python3 Scripts/sign-app.py /path/to/Utatane.app --identity YOUR_CERTIFICATE_SHA1
-
-# 初回のみ。実行後の入力欄にアプリ用パスワードを入力する
-xcrun notarytool store-credentials utatane-notary \
-  --apple-id YOUR_APPLE_ACCOUNT --team-id YOUR_TEAM_ID
-
-# 公証に送るZIPを作る
-ditto -c -k --keepParent /path/to/Utatane.app /path/to/Utatane-submission.zip
-xcrun notarytool submit /path/to/Utatane-submission.zip \
-  --keychain-profile utatane-notary --output-format json
-```
-
-署名スクリプトは、同梱ライブラリ・ヘルパー・SparkleのXPCサービスを内側から署名します。
-本体とSHIORIホストには外部dylibを読み込むためのLibrary Validation例外、本体にはApple Eventsの権限を設定します。
-Sparkle Downloaderのサンドボックスと外向き通信の設定を保持し、デバッグ用の`get-task-allow`は除去します。
-証明書や認証情報をリポジトリへ追加する必要はありません。
-
-アップロードで返された`id`を使い、状態とログを確認します。初回の公証は長くかかる場合があります。
-
-```sh
-xcrun notarytool info SUBMISSION_ID --keychain-profile utatane-notary
-xcrun notarytool log SUBMISSION_ID --keychain-profile utatane-notary /path/to/notary-log.json
-
-# Acceptedになり、ログに問題がないことを確認してから実行
-xcrun stapler staple /path/to/Utatane.app
-xcrun stapler validate /path/to/Utatane.app
-codesign --verify --deep --strict /path/to/Utatane.app
-spctl --assess --type execute --verbose=2 /path/to/Utatane.app
-ditto -c -k --keepParent /path/to/Utatane.app /path/to/Utatane-macOS.zip
-```
-
-ZIPには直接チケットを添付できません。アプリへ添付してから最終ZIPを作り、そのZIPに対してSparkleの更新署名を生成します。
-再署名・公証したZIPは以前の配布ZIPと内容・ハッシュ・更新署名が変わるため、公開済みのZIPだけを差し替えないでください。
-配布前には、署名したSHIORIホストと実際に配布するModulesを組み合わせ、読み込み・保存・再読み込みを確認してください。
-
-[Appleの公証手順](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow)も参照してください。
-
 ## コード構成
 
 ```text

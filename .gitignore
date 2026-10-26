@@ -26,6 +26,7 @@ website/.astro/
 website/src/content/docs/
 
 # Ghost local extensions
+Content/Bundled/Ghosts/*/ghost/master/Utatane-YAYA-backup/
 Content/Bundled/Ghosts/*/shell/master/*_local.*
 Content/Bundled/Ghosts/*/shell/master/surface[3-9]*.png
 Content/Bundled/Ghosts/*/ghost/master/dic/*_local.dic
