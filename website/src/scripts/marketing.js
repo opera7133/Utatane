@@ -92,6 +92,28 @@
     } catch { return null; }
   }
 
+  function compareReleaseVersions(a, b) {
+    const parse = tag => /^v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(tag);
+    const left = parse(a.tag_name), right = parse(b.tag_name);
+    if (!left || !right) return Number(!!right) - Number(!!left);
+    for (let i = 1; i <= 3; i++) {
+      const difference = Number(right[i]) - Number(left[i]);
+      if (difference) return difference;
+    }
+    if (!left[4] || !right[4]) return Number(!!left[4]) - Number(!!right[4]);
+    const l = left[4].split("."), r = right[4].split(".");
+    for (let i = 0; i < Math.max(l.length, r.length); i++) {
+      if (l[i] === r[i]) continue;
+      if (l[i] === undefined) return 1;
+      if (r[i] === undefined) return -1;
+      const ln = /^\d+$/.test(l[i]), rn = /^\d+$/.test(r[i]);
+      if (ln && rn) return Number(r[i]) - Number(l[i]);
+      if (ln !== rn) return ln ? 1 : -1;
+      return l[i] < r[i] ? 1 : -1;
+    }
+    return 0;
+  }
+
   function renderRelease() {
     const w = words[language];
     releaseLink.href = RELEASES;
@@ -127,7 +149,9 @@
       if (!Array.isArray(data)) throw new Error("Invalid release list");
       const releases = data.filter(r => r && !r.draft && typeof r.tag_name === "string" &&
         safeGitHubURL(r.html_url, "/opera7133/Utatane/releases/tag/"));
-      releases.sort((a,b) => (Date.parse(b.published_at) || 0) - (Date.parse(a.published_at) || 0));
+      // Notarization can finish out of order; publication time does not determine the newest version.
+      releases.sort((a,b) => compareReleaseVersions(a, b) ||
+        (Date.parse(b.published_at) || 0) - (Date.parse(a.published_at) || 0));
       const latest = releases[0];
       if (!latest) throw new Error("No published releases");
       const assets = Array.isArray(latest.assets) ? latest.assets : [];

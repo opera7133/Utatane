@@ -32,6 +32,17 @@ async function run(data, options={}) {
   assert.equal(r.ids['download-label'].textContent,'macOS版をダウンロード');
   assert.equal(r.ids['release-kind'].textContent,' / 開発版');
   console.log('PASS: newest non-draft prerelease, exact asset and size');
+  for (const [newer, older] of [
+    ['v0.2.20','v0.2.19'], ['v0.2.10','v0.2.9'], ['v0.3.0','v0.2.99'],
+    ['v0.2.20','v0.2.20-rc.10'], ['v0.2.20-rc.10','v0.2.20-rc.9'],
+    ['v0.2.20-rc.1','v0.2.20-beta.9'], ['v0.2.20-rc.1','v0.2.20-rc'],
+    ['v0.2.20-rc.a','v0.2.20-rc.9'], ['v0.2.20','unknown']
+  ]) {
+    r=await run([release(older,'2026-10-28'),release(newer,'2026-10-26')]);
+    assert.equal(r.ids['release-link'].textContent,newer);
+    assert.equal(r.ids['download-link'].href,base+'/download/'+newer+'/Utatane-macOS.zip');
+  }
+  console.log('PASS: delayed notarization never selects an older version, including numeric/prerelease ordering');
   for (const [label,data,options] of [
     ['HTTP failure',[],{httpError:true}],['network failure',[],{reject:true}],['timeout',[],{timeout:true}],['empty list',[],{}],['invalid response',{},{}],['unsafe URL',[release('bad','2026-08-01',{html_url:'https://evil.example/tag/x'})],{}]
   ]) {
