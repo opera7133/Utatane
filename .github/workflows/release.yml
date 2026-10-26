@@ -87,6 +87,11 @@ jobs:
       - name: Record rejected submission and stop repeated automatic checks
         if: steps.status.outputs.status == 'rejected'
         run: python3 Scripts/release-notarization.py terminal
+      - name: Use OpenSSL 3 for Ed25519 archive and feed verification
+        if: steps.status.outputs.status == 'accepted'
+        run: |
+          brew install openssl@3
+          echo "$(brew --prefix openssl@3)/bin" >> "$GITHUB_PATH"
       - name: Staple, verify Gatekeeper, and generate the final signed update
         id: final
         if: steps.status.outputs.status == 'accepted'
