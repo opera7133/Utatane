@@ -1,0 +1,168 @@
+name: Complete notarized release
+
+on:
+  workflow_run:
+    workflows: [Build]
+    types: [completed]
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: 'Original successful tagged Build run ID; blank checks pending releases'
+        required: false
+        type: string
+
+# A delayed older release must not race a newer release's appcast deployment.
+concurrency:
+  group: notarized-release-publication
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      runs: ${{ steps.discover.outputs.runs }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Find trusted tagged releases still waiting for notarization
+        id: discover
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id || github.event.workflow_run.id || '' }}
+        run: python3 Scripts/release-notarization.py discover
+
+  complete:
+    needs: discover
+    if: needs.discover.outputs.runs != '[]'
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        source: ${{ fromJSON(needs.discover.outputs.runs) }}
+    runs-on: macos-26
+    timeout-minutes: 25
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Load and verify the exact original signed candidate
+        id: candidate
+        env:
+          SOURCE_RUN_ID: ${{ matrix.source }}
+        run: python3 Scripts/release-notarization.py load --run-id "$SOURCE_RUN_ID"
+      - name: Configure notarization authentication
+        env:
+          UTATANE_NOTARY_ONLY: '1'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash Scripts/setup-apple-signing.sh
+      - name: Check the existing Apple submission without resubmitting
+        id: status
+        run: python3 Scripts/release-notarization.py check
+      - name: Save notarization diagnostics
+        if: ${{ always() && steps.status.outputs.status != 'pending' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Utatane-notary-diagnostics-${{ matrix.source }}
+          path: dist/notary-request
+          retention-days: 30
+          if-no-files-found: ignore
+      - name: Record rejected submission and stop repeated automatic checks
+        if: steps.status.outputs.status == 'rejected'
+        run: python3 Scripts/release-notarization.py terminal
+      - name: Staple, verify Gatekeeper, and generate the final signed update
+        id: final
+        if: steps.status.outputs.status == 'accepted'
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: python3 Scripts/release-notarization.py finalize
+      - name: Preserve the finalized bytes before attempting publication
+        if: ${{ steps.status.outputs.status == 'accepted' && steps.final.outputs.reused == 'false' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Utatane-notary-finalized-${{ matrix.source }}
+          path: dist/release
+          retention-days: 30
+          if-no-files-found: error
+      - name: Scan the final ZIP with VirusTotal
+        if: steps.status.outputs.status == 'accepted'
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: bash Scripts/scan-release-virustotal.sh dist/release/Utatane-macOS.zip
+      - name: Publish verified release assets without replacing different bytes
+        id: publish
+        if: steps.status.outputs.status == 'accepted'
+        run: python3 Scripts/release-notarization.py publish
+      - name: Install feed deployment tool
+        if: steps.publish.outputs.promote == 'true'
+        run: brew install lftp
+      - name: Publish updates to dl.wmsci.com
+        if: steps.publish.outputs.promote == 'true'
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USERNAME"
+          test -n "$DEPLOY_PASSWORD"
+          test -n "$DEPLOY_PATH"
+          [[ "$DEPLOY_PATH" == /* ]]
+          lftp -u "$DEPLOY_USERNAME","$DEPLOY_PASSWORD" "ftp://$DEPLOY_HOST" <<LFTP
+          set cmd:fail-exit true
+          set ftp:ssl-force true
+          set ftp:ssl-protect-data true
+          set ssl:verify-certificate true
+          set net:max-retries 3
+          set net:timeout 20
+          mirror --reverse --ignore-time --parallel=4 \
+            --exclude-glob updates2.dau \
+            dist/release/content/ria "$DEPLOY_PATH/content/ria"
+          mirror --reverse --ignore-time --parallel=4 \
+            --exclude-glob updates2.dau \
+            dist/release/content/balloon-ria "$DEPLOY_PATH/content/balloon-ria"
+          put -O "$DEPLOY_PATH/content/ria" dist/release/content/ria/updates2.dau
+          put -O "$DEPLOY_PATH/content/balloon-ria" dist/release/content/balloon-ria/updates2.dau
+          put -O "$DEPLOY_PATH" dist/release/update-feed/appcast.xml
+          bye
+          LFTP
+      - name: Verify the production feed and record publication completion
+        if: steps.status.outputs.status == 'accepted'
+        run: |
+          python3 Scripts/release-notarization.py verify-published
+          python3 Scripts/release-notarization.py terminal
+      - name: Preserve terminal state for future scheduled checks
+        if: ${{ always() && (steps.status.outputs.status == 'rejected' || (steps.status.outputs.status == 'accepted' && success())) }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Utatane-notary-terminal-${{ matrix.source }}
+          path: dist/notary-terminal
+          retention-days: 90
+          if-no-files-found: error
+      - name: Fail rejected notarization without publishing
+        if: steps.status.outputs.status == 'rejected'
+        run: exit 1
+      - name: Remove temporary authentication keychain
+        if: always()
+        run: |
+          if [[ -n "${UTATANE_SIGNING_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$UTATANE_SIGNING_KEYCHAIN"
+          fi

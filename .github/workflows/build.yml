@@ -28,16 +28,22 @@ on:
       - "Scripts/test-website.cjs"
       - ".vscode/**"
   workflow_dispatch:
+    inputs:
+      check_signing:
+        description: 'Only validate signing secrets on a fresh runner; do not build or publish a release'
+        type: boolean
+        default: false
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: build-${{ github.ref }}
+  group: build-${{ github.ref }}-${{ github.event_name == 'workflow_dispatch' && inputs.check_signing && 'signing-check' || 'normal' }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/v') }}
 
 jobs:
   test:
+    if: github.event_name != 'workflow_dispatch' || !inputs.check_signing
     runs-on: macos-26
     steps:
       - name: Checkout
@@ -48,10 +54,14 @@ jobs:
       - name: Test release note generation
         run: python3 Scripts/test-release-notes.py
 
+      - name: Test delayed notarization and publication guards
+        run: python3 Scripts/test-release-notarization.py
+
       - name: Test Swift packages
         run: swift test --package-path packages
 
   build:
+    if: github.event_name != 'workflow_dispatch' || !inputs.check_signing
     runs-on: macos-26
     steps:
       - name: Checkout
@@ -181,7 +191,7 @@ jobs:
         with:
           name: Utatane-release-build-inputs
           path: dist/release-inputs
-          retention-days: 1
+          retention-days: 7
 
   nicxlive:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -219,7 +229,7 @@ jobs:
         with:
           name: Utatane-nicxlive-runtime
           path: build/nicxlive-runtime
-          retention-days: 1
+          retention-days: 7
 
   package:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -241,7 +251,7 @@ jobs:
           name: Utatane-nicxlive-runtime
           path: build/nicxlive-runtime
 
-      - name: Assemble and package app
+      - name: Assemble app
         run: |
           mkdir -p build/Build/Products/Release dist
           ditto -x -k \
@@ -253,48 +263,6 @@ jobs:
             UTATANE_NICXLIVE_RUNTIME_LIBRARY="$GITHUB_WORKSPACE/build/nicxlive-runtime/libnicxlive.dylib" \
             UTATANE_NICXLIVE_RUNTIME_LICENSE="$GITHUB_WORKSPACE/build/nicxlive-runtime/LICENSE" \
             Scripts/embed-nicxlive-runtime.sh
-          codesign --force --sign - --identifier dev.utatane.mcp \
-            build/Build/Products/Release/Utatane.app/Contents/Helpers/utatane-mcp
-          codesign --force --deep --sign - --identifier dev.utatane.app \
-            build/Build/Products/Release/Utatane.app
-          codesign --verify --deep --strict \
-            build/Build/Products/Release/Utatane.app
-          ditto -c -k --keepParent \
-            build/Build/Products/Release/Utatane.app \
-            dist/Utatane-macOS.zip
-
-      - name: Upload build artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: Utatane-macOS
-          path: dist/Utatane-macOS.zip
-          retention-days: 14
-
-      - name: Generate signed appcast
-        env:
-          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
-        run: |
-          test -n "$SPARKLE_PRIVATE_KEY"
-          generator=dist/release-inputs/generate_appcast
-          chmod 755 "$generator"
-          test -x "$generator"
-          mkdir -p dist/update-feed
-          cp dist/Utatane-macOS.zip dist/update-feed/Utatane-macOS.zip
-          printf '%s' "$SPARKLE_PRIVATE_KEY" | "$generator" \
-            --ed-key-file - \
-            --download-url-prefix "https://github.com/opera7133/Utatane/releases/download/$GITHUB_REF_NAME/" \
-            --link "https://dl.wmsci.com/utatane.html" \
-            --maximum-deltas 0 \
-            -o dist/update-feed/appcast.xml \
-            dist/update-feed
-
-      - name: Upload update feed artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: Utatane-update-feed
-          path: dist/update-feed/appcast.xml
-          retention-days: 14
-
       - name: Prepare bundled content updates
         shell: bash
         run: |
@@ -302,11 +270,13 @@ jobs:
           rsync -a \
             --exclude '.DS_Store' \
             --exclude '*_variable.cfg' \
+            --exclude 'Utatane-YAYA-backup' \
             Content/Bundled/Ghosts/ria/ \
             dist/content/ria/
           rsync -a \
             --exclude '.DS_Store' \
             --exclude '*_variable.cfg' \
+            --exclude 'Utatane-YAYA-backup' \
             Content/Bundled/Balloons/ria/ \
             dist/content/balloon-ria/
           bash Scripts/generate-content-manifest.sh \
@@ -316,201 +286,117 @@ jobs:
             dist/content/balloon-ria \
             dist/content/balloon-ria/updates2.dau
 
-      - name: Upload content update artifact
+      - name: Import Developer ID and notarization credentials
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash Scripts/setup-apple-signing.sh
+
+      - name: Sign the complete app
+        run: python3 Scripts/sign-app.py build/Build/Products/Release/Utatane.app --identity "$UTATANE_SIGN_IDENTITY"
+
+      - name: Preserve the exact signed candidate
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          python3 Scripts/release-notarization.py prepare \
+            --app build/Build/Products/Release/Utatane.app \
+            --generator dist/release-inputs/generate_appcast --content dist/content
+
+      - name: Upload signed candidate for delayed notarization
         uses: actions/upload-artifact@v7
         with:
-          name: Utatane-bundled-content-updates
-          path: dist/content
-          retention-days: 14
+          name: Utatane-notary-candidate
+          path: dist/notary-candidate
+          retention-days: 30
+          if-no-files-found: error
 
-  release:
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          if [[ -n "${UTATANE_SIGNING_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$UTATANE_SIGNING_KEYCHAIN"
+          fi
+          rm -f "$RUNNER_TEMP/utatane-developer-id.p12"
+
+  signing-check:
+    if: github.event_name == 'workflow_dispatch' && inputs.check_signing
+    runs-on: macos-26
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Import and validate the configured credentials
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash Scripts/setup-apple-signing.sh
+      - name: Sign and execute an isolated test program
+        run: |
+          xcrun clang -x c -o "$RUNNER_TEMP/utatane-signing-check" - <<'C'
+          int main(void) { return 0; }
+          C
+          codesign --force --sign "$UTATANE_SIGN_IDENTITY" --timestamp --options runtime \
+            --identifier dev.utatane.signing-check "$RUNNER_TEMP/utatane-signing-check"
+          codesign --verify --strict "$RUNNER_TEMP/utatane-signing-check"
+          "$RUNNER_TEMP/utatane-signing-check"
+          echo 'Developer ID signing and notarization authentication succeeded. No release or notarization was submitted.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          if [[ -n "${UTATANE_SIGNING_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$UTATANE_SIGNING_KEYCHAIN"
+          fi
+          rm -f "$RUNNER_TEMP/utatane-developer-id.p12"
+
+  notarize:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [test, package]
     runs-on: macos-26
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
     env:
-      GH_REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Prepare changelog release notes
-        run: python3 Scripts/generate-release-notes.py --tag "$GITHUB_REF_NAME" > release_notes.md
-
-      - name: Install release tools
-        run: brew install lftp
-
-      - name: Download app artifact
-        uses: actions/download-artifact@v8
+      - uses: actions/checkout@v7
         with:
-          name: Utatane-macOS
-          path: dist
-
-      - name: Download update feed artifact
-        uses: actions/download-artifact@v8
+          persist-credentials: false
+      - uses: actions/download-artifact@v8
         with:
-          name: Utatane-update-feed
-          path: dist/update-feed
-
-      - name: Download content update artifact
-        uses: actions/download-artifact@v8
+          name: Utatane-notary-candidate
+          path: dist/notary-candidate
+      - name: Configure notarization credentials
+        env:
+          UTATANE_NOTARY_ONLY: '1'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash Scripts/setup-apple-signing.sh
+      - name: Submit once without holding a runner for Apple's processing
+        id: submit
+        run: python3 Scripts/release-notarization.py submit
+      - name: Preserve notarization request
+        if: ${{ always() && steps.submit.outputs.reused == 'false' }}
+        uses: actions/upload-artifact@v7
         with:
-          name: Utatane-bundled-content-updates
-          path: dist/content
-
-      - name: Scan with VirusTotal
-        env:
-          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+          name: Utatane-notary-request
+          path: dist/notary-request/request.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Remove temporary authentication keychain
+        if: always()
         run: |
-          file_path="dist/Utatane-macOS.zip"
-          if [ ! -f "$file_path" ]; then
-            echo "Error: $file_path not found"
-            exit 1
+          if [[ -n "${UTATANE_SIGNING_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$UTATANE_SIGNING_KEYCHAIN"
           fi
-
-          sha256=$(shasum -a 256 "$file_path" | awk '{print $1}')
-          vt_url="https://www.virustotal.com/gui/file/$sha256"
-          file_size=$(stat -f%z "$file_path" 2>/dev/null || stat -c%s "$file_path" 2>/dev/null || wc -c < "$file_path" | tr -d ' ')
-
-          echo "SHA-256: $sha256"
-          echo "File size: $file_size bytes"
-          echo "VT URL: $vt_url"
-
-          vt_status="Not scanned (VIRUSTOTAL_API_KEY not configured)"
-
-          if [ -n "$VT_API_KEY" ]; then
-            echo "VIRUSTOTAL_API_KEY is present. Requesting VirusTotal scan..."
-
-            # 32MB = 33554432 bytes
-            upload_target="https://www.virustotal.com/api/v3/files"
-            if [ "$file_size" -gt 33554432 ]; then
-              echo "File size exceeds 32MB. Fetching large file upload URL..."
-              upload_url_response=$(curl -s --request GET \
-                --url "https://www.virustotal.com/api/v3/files/upload_url" \
-                --header "x-apikey: $VT_API_KEY")
-              upload_target=$(echo "$upload_url_response" | jq -r '.data // empty')
-              if [ -z "$upload_target" ]; then
-                echo "Failed to get upload URL: $upload_url_response"
-                upload_target="https://www.virustotal.com/api/v3/files"
-              fi
-            fi
-
-            echo "Uploading file to VirusTotal..."
-            upload_res=$(curl -s --request POST \
-              --url "$upload_target" \
-              --header "x-apikey: $VT_API_KEY" \
-              --form "file=@$file_path")
-
-            analysis_id=$(echo "$upload_res" | jq -r '.data.id // empty')
-
-            if [ -n "$analysis_id" ]; then
-              echo "Analysis ID: $analysis_id"
-              echo "Waiting for scan completion (up to 360s)..."
-
-              completed=false
-              for i in {1..24}; do
-                sleep 15
-                analysis_res=$(curl -s --request GET \
-                  --url "https://www.virustotal.com/api/v3/analyses/$analysis_id" \
-                  --header "x-apikey: $VT_API_KEY")
-
-                status=$(echo "$analysis_res" | jq -r '.data.attributes.status // empty')
-                echo "Check $i (elapsed $((i * 15))s): status = $status"
-
-                if [ "$status" = "completed" ]; then
-                  completed=true
-                  malicious=$(echo "$analysis_res" | jq -r '.data.attributes.stats.malicious // 0')
-                  suspicious=$(echo "$analysis_res" | jq -r '.data.attributes.stats.suspicious // 0')
-                  undetected=$(echo "$analysis_res" | jq -r '.data.attributes.stats.undetected // 0')
-                  harmless=$(echo "$analysis_res" | jq -r '.data.attributes.stats.harmless // 0')
-                  total=$((malicious + suspicious + undetected + harmless))
-
-                  if [ "$malicious" -eq 0 ] && [ "$suspicious" -eq 0 ]; then
-                    vt_status="✅ Clean ($malicious / $total security vendors flagged as malicious)"
-                  else
-                    vt_status="⚠️ Flagged ($malicious / $total security vendors flagged as malicious)"
-                  fi
-                  break
-                fi
-              done
-
-              if [ "$completed" = false ]; then
-                vt_status="⏳ Scan queued / in progress (check report link)"
-              fi
-            else
-              echo "Upload failed or returned unexpected response: $upload_res"
-              vt_status="⚠️ Upload failed (check report link)"
-            fi
-          else
-            echo "VIRUSTOTAL_API_KEY secret not found. Skipping API upload."
-          fi
-
-          echo "VT_SHA256=$sha256" >> "$GITHUB_ENV"
-          echo "VT_URL=$vt_url" >> "$GITHUB_ENV"
-          echo "VT_STATUS=$vt_status" >> "$GITHUB_ENV"
-
-          {
-            echo "### 🛡️ VirusTotal Scan Results"
-            echo "- **File:** \`Utatane-macOS.zip\`"
-            echo "- **Status:** $vt_status"
-            echo "- **SHA-256:** \`$sha256\`"
-            echo "- **Report:** [$vt_url]($vt_url)"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" \
-              dist/Utatane-macOS.zip \
-              dist/update-feed/appcast.xml \
-              --clobber
-
-          else
-            gh release create "$GITHUB_REF_NAME" \
-              dist/Utatane-macOS.zip \
-              dist/update-feed/appcast.xml \
-              --title "$GITHUB_REF_NAME" \
-              --notes-file release_notes.md
-          fi
-
-          {
-            echo
-            echo "### 🛡️ VirusTotal Scan"
-            echo "- **Status:** $VT_STATUS"
-            echo "- **SHA-256:** \`$VT_SHA256\`"
-            echo "- **Report:** $VT_URL"
-          } >> release_notes.md
-
-          gh release edit "$GITHUB_REF_NAME" --notes-file release_notes.md
-
-      - name: Publish updates to dl.wmsci.com
-        env:
-          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
-          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
-          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
-          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-        run: |
-          test -n "$DEPLOY_HOST"
-          test -n "$DEPLOY_USERNAME"
-          test -n "$DEPLOY_PASSWORD"
-          test -n "$DEPLOY_PATH"
-          [[ "$DEPLOY_PATH" == /* ]]
-          lftp -u "$DEPLOY_USERNAME","$DEPLOY_PASSWORD" "ftp://$DEPLOY_HOST" <<LFTP
-          set cmd:fail-exit true
-          set ftp:ssl-force true
-          set ftp:ssl-protect-data true
-          set ssl:verify-certificate true
-          set net:max-retries 3
-          set net:timeout 20
-          mirror --reverse --ignore-time --parallel=4 \
-            --exclude-glob updates2.dau \
-            dist/content/ria "$DEPLOY_PATH/content/ria"
-          mirror --reverse --ignore-time --parallel=4 \
-            --exclude-glob updates2.dau \
-            dist/content/balloon-ria "$DEPLOY_PATH/content/balloon-ria"
-          put -O "$DEPLOY_PATH/content/ria" dist/content/ria/updates2.dau
-          put -O "$DEPLOY_PATH/content/balloon-ria" dist/content/balloon-ria/updates2.dau
-          put -O "$DEPLOY_PATH" dist/update-feed/appcast.xml
-          bye
-          LFTP
