@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Developer IDによる署名と公証の手順を追加した。外部SHIORI・SAORIの読み込みを維持するHardened Runtime設定と、同梱コードを内側から署名する処理を用意した
+
 ## [0.2.18] - 2026-10-24
 
 本体とあわせてUtatane Modulesも更新し、起動中のゴーストを再読み込みしてください。通常SAORIの診断や追加モジュールの共有配置には、対応するSHIORIの更新が必要です。
