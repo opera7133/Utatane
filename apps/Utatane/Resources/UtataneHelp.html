@@ -897,19 +897,197 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 <p>表にあるネイティブSAORIは、SSUを除いてSHIORI非依存の共通レジストリにあり、ネイティブMISAKA、YAYA、SATORI、KAWARIから利用できます。SSUはSATORI同梱実装を維持しています。未知のmacOS用標準ABIモジュールとWindows DLLにも読み込み経路はありますが、Windows固有機能への依存まで吸収するものではありません。</p>
 </section>
 <section class="chapter" id="support-engines"><h2>SHIORI・SAORIの利用</h2><p>SHIORIごとの実行方式・制約とビルド手順は、<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md">Utatane Modulesの資料</a>を参照してください。</p>
-<p>初回起動時にYAYAと里々の共通導入版をカタログから取得します。既に導入済みなら再取得せず、カタログへ接続できなくても起動できます。共通導入版の更新後、起動中のゴーストには再読み込みが必要です。カタログの「導入済み」は共通導入版の状態であり、ゴースト同梱版から切り替わったことを示しません。</p>
 <h3 id="support-engines-shioriの選択">SHIORIの選択</h3>
+<h4 id="support-engines-共通導入版と同梱版">共通導入版と同梱版</h4>
+<p>初回起動時にYAYAと里々の共通導入版をカタログから取得します。既に導入済みなら再取得せず、カタログへ接続できなくても起動できます。共通導入版の更新後、起動中のゴーストには再読み込みが必要です。カタログの「導入済み」は共通導入版の状態であり、ゴースト同梱版から切り替わったことを示しません。</p>
 <p>ゴーストの<code>shiori.macos</code>に指定されたモジュールを優先します。対応する同梱ライブラリの破損や必要な関数の欠落を検出すると、同じSHIORIの共通導入版へ切り替えます。設定の「SHIORI対応状況」でオフにできます。辞書・保存データのエラーでは切り替えません。各SHIORIの配布版は、ゴースト内、共通導入先の順に探します。<code>ese-shiori.dll</code>など、対応済みのDLL名が<code>shiori</code>にある場合、同じフォルダにdylibを置くだけでUtataneが検出します。</p>
 <p>Windows DLLだけを持つゴーストは、辞書や設定を判別し、対応するモジュールを導入済みなら接続します。設定の「SHIORI対応状況」で判定を確認できます。動かない場合は「情報」→「SHIORI読み込み診断…」と<a href="#support-troubleshooting-%E8%A8%BA%E6%96%AD%E3%81%A8%E5%A0%B1%E5%91%8A">診断・報告の手順</a>を使ってください。</p>
-<p>YAYAは6系を既定で使います。<code>yaya.dll</code>・<code>aya.dll</code>・<code>aya5.dll</code>のバージョン情報に関係なく、YAYA 6を選びます。6系が未導入なら導入を案内し、5系へ自動では切り替えません。<code>shiori.macos</code>の明示指定は引き続き優先します。</p>
-<p>この版で初めてYAYA 6を読み込む前に、<code>ghost/master/</code>直下の<code>*_variable.cfg</code>を<code>Utatane-YAYA-backup/</code>へコピーします。既存のバックアップは上書きしません。ゴースト独自の保存ファイルは別途バックアップしてください。</p>
-<p>5系は互換用として導入できます。使う場合は5系の<code>libyaya.dylib</code>を<code>ghost/master/</code>へ置き、<code>descript.txt</code>に<code>shiori.macos,libyaya.dylib</code>を指定してください。6系でハッシュや入れ子の変数を保存した後に5系へ戻すと、保存内容が崩れることがあります。Utataneを終了して、切り替え前の<code>*_variable.cfg</code>をバックアップから戻してから5系を使ってください。復元するとバックアップ後の進行状況は失われます。</p>
 <p>同梱する側の配置・指定方法は<a href="https://dl.wmsci.com/utatane/docs/create/shiori/">SHIORI開発ガイド</a>、各配布物の導入手順は<a href="https://github.com/opera7133/utatane-modules">Utatane Modules</a>にあります。</p>
 <p>通常のmacOS用SHIORIは、ゴースト・プラグインごとに別プロセスで実行します。応答停止や異常終了を検出した場合、実行済みの処理を重複させないため、自動で要求を再送しません。</p>
+<h4 id="support-engines-yaya-5と6の切り替え">YAYA 5と6の切り替え</h4>
+<p>YAYAは6系を既定で使います。<code>yaya.dll</code>・<code>aya.dll</code>・<code>aya5.dll</code>のバージョン情報に関係なく、YAYA 6を選びます。6系が未導入なら導入を案内し、5系へ自動では切り替えません。<code>shiori.macos</code>の明示指定は引き続き優先します。</p>
+<p>YAYA 6を初めて読み込む前に、<code>ghost/master/</code>直下の<code>*_variable.cfg</code>を<code>Utatane-YAYA-backup/</code>へコピーします。既存のバックアップは上書きしません。ゴースト独自の保存ファイルは別途バックアップしてください。</p>
+<p>5系は互換用として導入できます。使う場合は5系の<code>libyaya.dylib</code>を<code>ghost/master/</code>へ置き、<code>descript.txt</code>に<code>shiori.macos,libyaya.dylib</code>を指定してください。6系でハッシュや入れ子の変数を保存した後に5系へ戻すと、保存内容が崩れることがあります。Utataneを終了して、切り替え前の<code>*_variable.cfg</code>をバックアップから戻してから5系を使ってください。復元するとバックアップ後の進行状況は失われます。</p>
+<h3 id="support-engines-共通saoriブリッジ">共通SAORIブリッジ</h3>
+<p>通常のmacOS用SAORIはdylibです。Windows DLLをそのままmacOSへ読み込むことはありません。</p>
+<p>Utataneが提供するSAORIと対応する命令は、<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md#%E5%85%B1%E9%80%9Asaori%E3%83%96%E3%83%AA%E3%83%83%E3%82%B8">共通SAORIブリッジの一覧</a>を参照してください。独自の外部SHIORIが読み込むSAORIは、そのSHIORI側で管理します。</p>
+<h4 id="support-engines-共通導入できるsaori">共通導入できるSAORI</h4>
+<p>次の表は、このページで扱う主な共通SAORIです。<code>PlayWavSound</code>・<code>totp_saori</code>・<code>XPath</code>・<code>timebkn</code>は、0.2.19向けModulesで追加しました。本体0.2.19ではこれらの不足検出・導入案内にも対応します。</p>
+<table>
+<thead>
+<tr>
+<th>モジュール</th>
+<th>対応内容</th>
+<th>制限・補足</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>clipcopy</code></td>
+<td>全引数を改行で結合してコピー。文字列中の<code>\n</code>も改行へ変換</td>
+<td>macOSのクリップボードを使用</td>
+</tr>
+<tr>
+<td><code>textcopy</code> / <code>textcopy2</code></td>
+<td>第1引数をコピー。第2引数が数値で非ゼロなら元の文字列を返す</td>
+<td>第3引数があれば、その区切りをコピー先で改行へ置換</td>
+</tr>
+<tr>
+<td><code>saori-ip</code></td>
+<td><code>GetLocalIP</code>・<code>GetLocalHostname</code></td>
+<td><code>saori_ip.dll</code>・原作配布名の<code>ip.dll</code>に対応。<code>GetInternetIP</code>は非対応（501）</td>
+</tr>
+<tr>
+<td><code>httpc</code></td>
+<td>HTTPの取得・保存・文字列抽出・非同期通知</td>
+<td>次節に必要な版と制限を記載</td>
+</tr>
+<tr>
+<td><code>PlayWavSound</code></td>
+<td>WAVE効果音の再生</td>
+<td>一部のWindowsシステム音名をmacOSの音へ対応付け。実際の音声出力は手動確認が必要</td>
+</tr>
+<tr>
+<td><code>totp_saori</code></td>
+<td>HMAC-SHA1のワンタイムコード</td>
+<td>引数・鍵の形式・桁数等の制限はModulesの資料を参照</td>
+</tr>
+<tr>
+<td><code>XPath</code></td>
+<td>XML文書管理・XPathによる取得</td>
+<td>DTD・外部実体は非対応。文書・結果・計算量に上限あり</td>
+</tr>
+<tr>
+<td><code>timebkn</code></td>
+<td>通常の日時処理</td>
+<td><code>qreki</code>（旧暦・六曜）は未対応で501を返す</td>
+</tr>
+</tbody></table>
+<p><code>saori-ip</code>のローカルIPは有効な非ループバックIPv4の先頭で、複数NICではWindowsと選択が異なる場合があります。</p>
+<p>原版との違い、システム音の対応付け、引数・返却値・制限の詳細は<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md">ModulesのSAORI資料</a>を参照してください。原作の全機能との一致を示すものではありません。</p>
+<h4 id="support-engines-共有配置と診断に必要なmodules">共有配置と診断に必要なModules</h4>
+<p>共有配置の名前解決と、SHIORI内部から呼ぶ通常SAORIの診断には、SHIORI側の対応版が必要です。</p>
+<table>
+<thead>
+<tr>
+<th>SHIORI</th>
+<th>共有配置の名前解決</th>
+<th>通常SAORIの診断</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>YAYA 5 / 6</td>
+<td>r4以降</td>
+<td>r3以降</td>
+</tr>
+<tr>
+<td>里々</td>
+<td>Mc205-5-r2以降</td>
+<td>Mc205-5-r1以降</td>
+</tr>
+<tr>
+<td>華和梨</td>
+<td>9.2.0-r2以降</td>
+<td>9.2.0-r1以降</td>
+</tr>
+<tr>
+<td>忍・灯</td>
+<td>r4以降</td>
+<td>r3以降</td>
+</tr>
+</tbody></table>
+<p>共通導入版を更新した後は、起動中のゴーストを再読み込みしてください。診断の使い方と対象外の経路は、後述の「通常SAORIの呼び出し記録」を参照してください。</p>
+<h4 id="support-engines-httpc互換モジュール0218以降">httpc互換モジュール（0.2.18以降）</h4>
+<p><code>httpc.dll</code>を使うゴースト・プラグイン向けに、Modulesの<code>httpc</code>を共通導入できます。</p>
+<h5 id="support-engines-同期処理">同期処理</h5>
+<table>
+<thead>
+<tr>
+<th>引数</th>
+<th>処理</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>引数なし</td>
+<td>接続状態の確認</td>
+</tr>
+<tr>
+<td>URL</td>
+<td>本文を文字列として取得</td>
+</tr>
+<tr>
+<td>URL、保存先</td>
+<td>バイナリのまま保存。相対保存先はSAORIの配置フォルダ基準</td>
+</tr>
+<tr>
+<td>URL、開始文字列、終了文字列</td>
+<td>一致箇所を先頭から最大254件抽出。最初をResult、残りをValue0以降へ返す</td>
+</tr>
+</tbody></table>
+<h5 id="support-engines-非同期処理">非同期処理</h5>
+<p>本体0.2.18とhttpc 0.1.0-r4以降では、先頭に<code>bg</code>、識別子を付けると非同期で実行します。受付時は空の結果を返し、完了時に呼び出したゴースト・プラグインへ<code>OnHttpcNotify</code>を送ります。</p>
+<table>
+<thead>
+<tr>
+<th>参照値</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Reference0</td>
+<td>識別子</td>
+</tr>
+<tr>
+<td>Reference1</td>
+<td><code>-</code>（原作readmeの空欄ではなく、原作ソースの実際の通知に合わせる）</td>
+</tr>
+<tr>
+<td>Reference2</td>
+<td>同期呼び出しの最初の結果</td>
+</tr>
+<tr>
+<td>Reference3以降</td>
+<td>複数箇所を抽出した場合の残りの結果</td>
+</tr>
+</tbody></table>
+<p>ゴーストの終了・再読み込み、SAORIのアンロード後には通知しません。通常のUtataneネイティブホスト経由で利用でき、Windows DLLホスト経由は対象外です。</p>
+<h5 id="support-engines-htmlの簡易変換">HTMLの簡易変換</h5>
+<p>httpc 0.1.0-r5では、URLの前に<code>erase_tag</code>（タグ除去）・<code>translate_tag</code>（原作の簡易SakuraScript変換）を文字コード指定と並べられます。両方ある場合は変換が優先です。非同期の<code>bg</code>では識別子の後へ置きます。</p>
+<p>変換対象は改行・水平線・リンク・画像の代替テキストと一部の文字参照で、完全なHTML解析ではありません。変換結果は原作同様に半角48桁換算・120行を上限に切り詰めます。保存モードはタグ処理せず、元のバイト列を保存します。</p>
+<h5 id="support-engines-制限と必要な版">制限と必要な版</h5>
+<ul>
+<li>ダウンロードは32MB、文字列結果はUTF-8で2MBまで、同時受付はホストごとに64件までです。</li>
+<li>華和梨は9.1.0-r5以降へ更新してください。古い版では、元のWindows DLLがないとhttpcなどを内蔵機能と誤認する場合があります。</li>
+</ul>
+<p>引数・返却値の詳細は<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md">ModulesのSAORI手順</a>を参照してください。</p>
 <h3 id="support-engines-内蔵saori">内蔵SAORI</h3>
-<p>Utatane 0.2.17以降と、YAYA 5 Tc574-11-r2・YAYA 6 Tc607-2-r2・里々 Mc205-4-r2・華和梨9.1.0-r4以降を組み合わせると、ゴーストへDLLを置かずに次の機能を呼べます。共通導入版を更新した後、起動中のゴーストを再読み込みしてください。以前の本体やModulesにはこの接続がありません。</p>
-<p>以下の表はUtatane 0.2.18時点の対応です。0.2.17の<code>internal_data</code>はConvertのtext（UTF-8）・hex・base64・base64urlまでです。
-圧縮・追加形式・文字コード指定、ファイルハッシュ・Compareと<code>internal_file</code>は0.2.18で追加しました。</p>
+<p>Utatane 0.2.17以降と次のModulesを組み合わせると、ゴーストへDLLを置かずに内蔵機能を呼べます。以前の本体やModulesにはこの接続がありません。</p>
+<table>
+<thead>
+<tr>
+<th>SHIORI</th>
+<th>内蔵SAORIの接続に必要な版</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>YAYA 5</td>
+<td>Tc574-11-r2以降</td>
+</tr>
+<tr>
+<td>YAYA 6</td>
+<td>Tc607-2-r2以降</td>
+</tr>
+<tr>
+<td>里々</td>
+<td>Mc205-4-r2以降</td>
+</tr>
+<tr>
+<td>華和梨</td>
+<td>9.1.0-r4以降</td>
+</tr>
+</tbody></table>
+<p>共通導入版を更新した後は、起動中のゴーストを再読み込みしてください。</p>
+<h4 id="support-engines-対応関数">対応関数</h4>
+<p>以下はUtatane 0.2.18以降の対応です。0.2.17の<code>internal_data</code>はConvertのtext（UTF-8）・hex・base64・base64urlまでです。圧縮・追加形式・文字コード指定、ファイルハッシュ・Compareと<code>internal_file</code>は0.2.18で追加しました。</p>
 <table>
 <thead>
 <tr>
@@ -954,16 +1132,13 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 <td>Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。dataのfile入力に対応。暗号化・鍵生成等は未対応</td>
 </tr>
 </tbody></table>
+<h4 id="support-engines-呼び出し方法">呼び出し方法</h4>
 <p>引数・返却値の基準は<a href="https://ssp.shillest.net/ukadoc/manual/spec_saori_ex.html">UKADOCのSAORI over DirectSSTP</a>です。YAYAでは<code>FUNCTIONEX</code>または<code>LOADLIB</code>／<code>REQUESTLIB</code>、里々では<code>＠SAORI</code>による登録または<code>（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）</code>のようなモジュール名の呼び出し、華和梨では<code>$(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)</code>を使えます。通常のSAORIでは、引き続きmacOS用モジュールが必要です。</p>
+<h4 id="support-engines-非同期通知">非同期通知</h4>
 <p><code>--async=識別子</code>をオプションに加えると即座に204を返し、結果を<code>OnInternalSaoriComplete</code>／<code>OnInternalSaoriFailure</code>へGETで通知します。識別子が<code>On</code>で始まる場合は、その名前／末尾に<code>Failure</code>を加えた名前を使います。Reference0は識別子、1は結果または失敗理由、2はモジュール名、3は関数名、成功時の4以降はValue0以降です。終了・SHIORI再読み込み後には配送しません。同時処理は2〜4件、保留はセッションあたり64件までです。</p>
+<h4 id="support-engines-通信方式と上限">通信方式と上限</h4>
 <p>macOSでは、SHIORIの専用ホストと本体を結ぶ非公開の親子プロセス通信を使用します。WindowsのHWND／WM_COPYDATA、外部XPC、Socket／HTTP経由のSAORI実行には対応していません。UTF-8とShift_JIS（CP932）、最大256引数、8MiBの要求・応答を扱います。未対応の方式や不正な引数は400、処理失敗は500を返します。表示できないバイト列や改行はbase64等で渡してください。</p>
-<p>合成辞書と実ゴーストの一時コピーを使い、同期呼び出し・非同期通知・結果イベントの利用をテストしています。元の辞書・保存データは変更しません。各ゴーストの全機能や、両CPUの画面操作を保証するものではありません。</p>
-<h3 id="support-engines-メーターシステム情報の表示">メーター・システム情報の表示</h3>
-<p>Utatane 0.2.18では、カラー合成と画像の切り抜きを使うメーター表示を改善しました。CPU・メモリ使用率と空き物理メモリの概算も取得できます。</p>
-<p>暦などのデータを外部サイトから取得する場合、表示にはゴースト側の対応も必要です。華和梨の<code>textload_charset</code>で文字コードを指定して読み込む辞書には、華和梨9.2.0以降を使用してください。9.1.0ではこの関数を利用できません。</p>
-<h3 id="support-engines-共通saoriブリッジ">共通SAORIブリッジ</h3>
-<p>Utataneが提供するSAORIと対応する命令は、<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md#%E5%85%B1%E9%80%9Asaori%E3%83%96%E3%83%AA%E3%83%83%E3%82%B8">共通SAORIブリッジの一覧</a>を参照してください。独自の外部SHIORIが読み込むSAORIは、そのSHIORI側で管理します。</p>
-<h3 id="support-engines-日時計算と開発用の確認">日時計算と開発用の確認</h3>
+<h4 id="support-engines-データ変換と圧縮">データ変換と圧縮</h4>
 <p>0.2.18以降では<code>--charset=</code>でデータの文字コードを指定できます（要求の<code>Charset</code>とは別）。
 <code>--out=HEX</code>は大文字、<code>--out=hex</code>は小文字です。同じオプションを複数指定した場合は最後の値を使います。
 Base64は通常形式・URL形式、パディングあり・なしを受け付けます。bech32出力はConvertの<code>--hrp=</code>が必要です。</p>
@@ -971,6 +1146,7 @@ Base64は通常形式・URL形式、パディングあり・なしを受け付�
 <code>Decompress</code>は方式と圧縮データを取り、既定ではBase64から文字列へ戻します。
 <code>--data-in=</code>と<code>--out=</code>で入出力形式を変えられます。gzipの連結メンバーを読み、
 壊れた入力・途中切れ・余分な末尾をエラーにします。展開後も合計8MBが上限です。</p>
+<h4 id="support-engines-メディア情報">メディア情報</h4>
 <p><code>internal_file</code>の<code>MediaInfo</code>はパス、その後に取得するキーを1〜11個渡します。
 <code>Result</code>は<code>audio</code>/<code>video</code>/<code>image</code>、<code>Value0</code>以降は指定した順の値です。
 キーは<code>title</code>、<code>artist</code>、<code>albumartist</code>、<code>album</code>、<code>genre</code>、<code>comment</code>、<code>year</code>、<code>track</code>、
@@ -978,6 +1154,7 @@ Base64は通常形式・URL形式、パディングあり・なしを受け付�
 相対パスは呼び出したゴーストの<code>ghost/master</code>基準です。開発用パレットの単体テストでは絶対パスを使ってください。
 改行はバイト値1、NULは除去して返します。未対応形式は種類と値が空です。
 この関数の契約は<a href="https://github.com/eightman999/Ourin/pull/158">OurinのMediaInfo提案</a>も参照しています。</p>
+<h4 id="support-engines-ハッシュと比較">ハッシュと比較</h4>
 <p><code>internal_crypto</code>のDigest/HMACで<code>--data-in=file</code>を指定すると、データ引数をファイルパスとして読みます。
 相対パスは呼び出したゴーストの<code>ghost/master</code>基準です。ゴーストなしの単体テストでは絶対パスを使ってください。
 ファイルは64KBずつ読み、通常のデータ引数の8MB上限は適用しません。大きなファイルには<code>--async=識別子</code>を付けてください。
@@ -987,6 +1164,8 @@ Base64は通常形式・URL形式、パディングあり・なしを受け付�
 <code>file</code>を使えるのはDigest/HMACのデータ入力だけで、鍵の入力やConvert、Compareには使えません。</p>
 <p><code>Compare</code>は2つのデータをOSの内容非依存の比較処理で照合し、一致なら<code>1</code>、不一致なら<code>0</code>を返します。
 <code>--a-in=hex --b-in=hex</code>などで入力形式を指定できます。例えば16進の署名は、文字の大小に左右されず照合できます。</p>
+<h3 id="support-engines-日時計算と開発用の確認">日時計算と開発用の確認</h3>
+<h4 id="support-engines-日時計算">日時計算</h4>
 <p><code>internal_time</code>の<code>Format</code>は日時と書式、<code>Add</code>は日時・整数の量・単位、<code>Diff</code>は日時1・日時2・単位を取ります。<code>--tz=</code>は位置引数の後に置きます。Formatの書式を省略してオプションを渡す場合、空の位置引数を置いてください。</p>
 <pre><code class="language-text">Format / 0 / %Y/%m/%d %H:%M (%a) / --tz=+09:00
 → 1970/01/01 09:00 (Thu)
@@ -996,34 +1175,18 @@ Diff / 2026-12-20T10:00 / 2026-12-24 / day / --tz=UTC
 → 3
 </code></pre>
 <p>書式はiso8601・rfc3339・http・epoch・epochmsとUKADOCの%書式です。HTTP入力はIMF-fixdate形式に限ります。秒・分・時間は経過時間、日・週・月・年は指定ゾーンの暦で計算し、月末を丸めます。整数はUTCの西暦1〜9999年、文字列は1601年以降です。存在しない日付や夏時間開始時の存在しない時刻は400です。夏時間終了時の重複時刻はmacOSのCalendarが選ぶ時刻を使います。明確に指定する場合はUTCオフセットを付けてください。名前付きゾーンの過去の規則はmacOSの情報を使うため、Windowsと一致するとは限りません。<code>now</code>はOSの現在時刻で、開発用パレットの仮想時刻には連動しません。</p>
+<h4 id="support-engines-内蔵saoriの単体テスト">内蔵SAORIの単体テスト</h4>
 <p>開発用パレットの「内蔵SAORI」で、モジュールと1行1引数を入力して単体テストできます。空行は空引数です。応答全文と所要時間を画面へ表示しますが、要求や結果本文を自動ログには保存しません。この単体テストは本体を直接呼び、SHIORI接続の検証やゴーストへのイベント送信は行いません。<code>--async</code>はghost requiredになります。</p>
+<h4 id="support-engines-内蔵saoriの呼び出し記録">内蔵SAORIの呼び出し記録</h4>
 <p>「内蔵SAORIの呼び出しを記録」をオンにすると、その後の呼び出しをInternalSAORIカテゴリへ記録します。同期応答・非同期受付・非同期処理結果について、セッション識別子、モジュール、関数、状態コード、所要時間、応答バイト数を確認できます。引数、結果本文、非同期識別子は記録しません。記録は初期状態でオフです。通常SAORIは別の診断設定を使います。</p>
+<h4 id="support-engines-通常saoriの呼び出し記録">通常SAORIの呼び出し記録</h4>
 <p>「通常SAORIの呼び出しを記録」をオンにすると、SAORIカテゴリで呼び出し元のフォルダ、選択したモジュールのパス、読み込み／呼び出し／終了の状態、所要時間、応答バイト数を確認できます。通常はmacOS用dylibで、Wineが設定されている場合は本体が呼び出すWindows SAORI DLLも対象です。引数・結果本文は記録せず、初期状態はオフです。</p>
-<p>SHIORI内部で読み込むdylibの記録には、ModulesのYAYA 5/6 r3、里々Mc205-5-r1、華和梨9.2.0-r1、忍・灯r3以降が必要です。既に起動しているセッションでも、その後の要求から切り替わります。独自SHIORIや、Wine内のWindows SHIORIが直接読み込むDLLの内部呼び出しは対象外です。状態<code>1</code>／<code>0</code>は読み込み・終了の成功／失敗、呼び出しはSAORI応答コードです。本体管理の外部接続の終了など、実際の状態コードを取得できない場合は<code>unknown</code>となります。</p>
-<h4 id="support-engines-httpc互換モジュール0218以降">httpc互換モジュール（0.2.18以降）</h4>
-<p><code>httpc.dll</code>を使うゴースト・プラグイン向けに、Utatane Modulesの<code>httpc</code>を共通導入できます。
-引数なしの接続状態確認、URLからの同期文字列取得、URLと保存先を指定するバイナリ保存、
-開始・終了文字列による複数箇所の抽出に対応します。保存先はSAORIの配置フォルダ基準です。
-本体0.2.18とhttpc 0.1.0-r4以降では、先頭に<code>bg</code>、識別子を付けると非同期で実行します。
-受付時は空の結果を返し、完了時に呼び出したゴースト・プラグインへ<code>OnHttpcNotify</code>を送ります。
-Reference0は識別子、Reference1は<code>-</code>、Reference2は同期呼び出しの最初の結果です。
-抽出で複数箇所に一致した場合は、同期応答のValue0以降、非同期通知のReference3以降へ残りを返します。
-抽出は1回の呼び出しで先頭から最大254件を返します。原作readmeのReference1は空欄ですが、原作ソースの実際の通知に合わせています。
-ゴーストの終了・再読み込みやSAORIのアンロード後には通知しません。
-通常のUtataneネイティブホスト経由で利用でき、Windows DLLホスト経由は対象外です。
-華和梨は9.1.0-r5以降へ更新してください。古い版では、元のWindows DLLがないとhttpcなどを内蔵機能と誤認する場合があります。
-ダウンロードは32MB、文字列結果はUTF-8で2MBまで、同時受付はホストごとに64件までです。
-httpc 0.1.0-r5では、URLの前に<code>erase_tag</code>（タグ除去）・<code>translate_tag</code>（原作の簡易SakuraScript変換）を文字コード指定と並べられます。両方ある場合は変換が優先です。非同期の<code>bg</code>では識別子の後へ置きます。変換対象は改行・水平線・リンク・画像の代替テキストと一部の文字参照で、完全なHTML解析ではありません。変換結果は原作同様に半角48桁換算・120行を上限に切り詰めます。保存モードはタグ処理せず、元のバイト列を保存します。詳細は<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md">ModulesのSAORI手順</a>を参照してください。</p>
-<h4 id="support-engines-追加の共通saori0218以降">追加の共通SAORI（0.2.18以降）</h4>
-<p>Modulesに<code>clipcopy</code>・<code>textcopy</code>・<code>saori-ip</code>を追加しました。通常のmacOS実装はdylibです。</p>
-<p>開発版のModulesには<code>PlayWavSound</code>（WAVE効果音）と<code>totp_saori</code>（HMAC-SHA1のワンタイムコード）もあります。本体は不足を検出して共通導入へ案内します。システム音の対応付け、引数と制限は<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md">ModulesのSAORI資料</a>を参照してください。実際の音声出力は手動確認が必要です。</p>
-<p><code>XPath</code>のXML文書管理・XPath取得と、<code>timebkn</code>の通常日時処理も開発版Modulesへ追加しています。<code>XPath</code>はDTD・外部実体を扱わず、文書・結果・計算量に上限があります。<code>timebkn</code>の<code>qreki</code>（旧暦・六曜）は未対応で501を返します。原版との差と詳細な制限は同じModulesの資料を参照してください。</p>
-<ul>
-<li><code>clipcopy</code>: 全引数を改行で結合し、文字列中の<code>\n</code>も改行へ変換してコピーします。</li>
-<li><code>textcopy</code> / <code>textcopy2</code>: 第1引数をコピー。第2引数が数値で非ゼロなら元の文字列を返し、第3引数があればその区切りをコピー先で改行へ置換します。</li>
-<li><code>saori-ip</code>: <code>GetLocalIP</code>と<code>GetLocalHostname</code>。<code>saori_ip.dll</code>・原作配布名の<code>ip.dll</code>に対応します。<code>GetInternetIP</code>は非対応（501）です。ローカルIPは有効な非ループバックIPv4の先頭で、複数NICではWindowsと選択が異なる場合があります。</li>
-</ul>
-<p>共有配置の名前解決にはModulesのSHIORI側も更新してください。YAYA 5/6 r4、里々Mc205-5-r2、華和梨9.2.0-r2、忍・灯r4以降が対象です。原作の全機能との一致を示すものではありません。</p>
+<p>既に起動しているセッションでも、その後の要求から切り替わります。独自SHIORIや、Wine内のWindows SHIORIが直接読み込むDLLの内部呼び出しは対象外です。状態<code>1</code>／<code>0</code>は読み込み・終了の成功／失敗、呼び出しはSAORI応答コードです。本体管理の外部接続の終了など、実際の状態コードを取得できない場合は<code>unknown</code>となります。</p>
+<h4 id="support-engines-検証範囲">検証範囲</h4>
+<p>合成辞書と実ゴーストの一時コピーを使い、同期呼び出し・非同期通知・結果イベントの利用をテストしています。元の辞書・保存データは変更しません。各ゴーストの全機能や、両CPUの画面操作を保証するものではありません。</p>
+<h3 id="support-engines-メーターシステム情報の表示">メーター・システム情報の表示</h3>
+<p>Utatane 0.2.18では、カラー合成と画像の切り抜きを使うメーター表示を改善しました。CPU・メモリ使用率と空き物理メモリの概算も取得できます。</p>
+<p>暦などのデータを外部サイトから取得する場合、表示にはゴースト側の対応も必要です。華和梨の<code>textload_charset</code>で文字コードを指定して読み込む辞書には、華和梨9.2.0以降を使用してください。9.1.0ではこの関数を利用できません。</p>
 </section>
 </main></div>
 <script>
