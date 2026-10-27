@@ -87,6 +87,8 @@ jobs:
           test -n "$DEPLOY_PATH"
           [[ "$DEPLOY_PATH" == /* ]]
           [[ "$DEPLOY_PATH" != "/" ]]
+          mkdir -p dist/existing-notarized/update-feed
+          cp dist/existing-notarized/appcast-notarized.xml dist/existing-notarized/update-feed/appcast.xml
           lftp -u "$DEPLOY_USERNAME","$DEPLOY_PASSWORD" "ftp://$DEPLOY_HOST" <<LFTP
           set cmd:fail-exit true
           set ftp:ssl-force true
@@ -94,7 +96,7 @@ jobs:
           set ssl:verify-certificate true
           set net:max-retries 3
           set net:timeout 20
-          put -o "$DEPLOY_PATH/appcast.xml" dist/existing-notarized/appcast-notarized.xml
+          put -O "$DEPLOY_PATH" dist/existing-notarized/update-feed/appcast.xml
           bye
           LFTP
       - name: Update release download notice and scan results, preserving maintainer edits
