@@ -1017,6 +1017,7 @@ httpc 0.1.0-r5では、URLの前に<code>erase_tag</code>（タグ除去）・<c
 <h4 id="support-engines-追加の共通saori0218以降">追加の共通SAORI（0.2.18以降）</h4>
 <p>Modulesに<code>clipcopy</code>・<code>textcopy</code>・<code>saori-ip</code>を追加しました。通常のmacOS実装はdylibです。</p>
 <p>開発版のModulesには<code>PlayWavSound</code>（WAVE効果音）と<code>totp_saori</code>（HMAC-SHA1のワンタイムコード）もあります。本体は不足を検出して共通導入へ案内します。システム音の対応付け、引数と制限は<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md">ModulesのSAORI資料</a>を参照してください。実際の音声出力は手動確認が必要です。</p>
+<p><code>XPath</code>のXML文書管理・XPath取得と、<code>timebkn</code>の通常日時処理も開発版Modulesへ追加しています。<code>XPath</code>はDTD・外部実体を扱わず、文書・結果・計算量に上限があります。<code>timebkn</code>の<code>qreki</code>（旧暦・六曜）は未対応で501を返します。原版との差と詳細な制限は同じModulesの資料を参照してください。</p>
 <ul>
 <li><code>clipcopy</code>: 全引数を改行で結合し、文字列中の<code>\n</code>も改行へ変換してコピーします。</li>
 <li><code>textcopy</code> / <code>textcopy2</code>: 第1引数をコピー。第2引数が数値で非ゼロなら元の文字列を返し、第3引数があればその区切りをコピー先で改行へ置換します。</li>

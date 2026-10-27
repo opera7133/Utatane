@@ -50,11 +50,11 @@ private func requirementCatalog() throws -> SignedModuleCatalog {
     let managed = root.appending(path: "managed")
     try FileManager.default.createDirectory(at: master, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: root) }
-    try "＠SAORI\n効果音,saori/PlayWavSound.dll\n認証,saori/totp_saori.dll\n".write(to: master.appending(path: "satori_conf.txt"), atomically: true, encoding: .utf8)
+    try "＠SAORI\n効果音,saori/PlayWavSound.dll\n認証,saori/totp_saori.dll\nXML,saori/XPath.dll\n日時,saori/timebkn.dll\n".write(to: master.appending(path: "satori_conf.txt"), atomically: true, encoding: .utf8)
     let ghost = InstalledGhost(name: "probe", rootDirectory: root, defaultShellDirectory: root)
     let scanner = GhostModuleRequirements()
-    #expect(Set(scanner.unresolved(for: ghost, applicationSupportURL: managed).filter { $0.kind == "SAORI" }.map(\.id)) == ["playwavsound", "totp-saori"])
-    for (identity, library) in [("playwavsound", "playwavsound"), ("totp-saori", "totp_saori")] {
+    #expect(Set(scanner.unresolved(for: ghost, applicationSupportURL: managed).filter { $0.kind == "SAORI" }.map(\.id)) == ["playwavsound", "totp-saori", "xpath", "timebkn"])
+    for (identity, library) in [("playwavsound", "playwavsound"), ("totp-saori", "totp_saori"), ("xpath", "xpath"), ("timebkn", "timebkn")] {
         let folder = managed.appending(path: "NativeSaori/\(identity)/lib")
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         try Data().write(to: folder.appending(path: "lib\(library).dylib"))

@@ -129,6 +129,8 @@ Modulesに`clipcopy`・`textcopy`・`saori-ip`を追加しました。通常のm
 
 開発版のModulesには`PlayWavSound`（WAVE効果音）と`totp_saori`（HMAC-SHA1のワンタイムコード）もあります。本体は不足を検出して共通導入へ案内します。システム音の対応付け、引数と制限は[ModulesのSAORI資料](https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md)を参照してください。実際の音声出力は手動確認が必要です。
 
+`XPath`のXML文書管理・XPath取得と、`timebkn`の通常日時処理も開発版Modulesへ追加しています。`XPath`はDTD・外部実体を扱わず、文書・結果・計算量に上限があります。`timebkn`の`qreki`（旧暦・六曜）は未対応で501を返します。原版との差と詳細な制限は同じModulesの資料を参照してください。
+
 - `clipcopy`: 全引数を改行で結合し、文字列中の`\n`も改行へ変換してコピーします。
 - `textcopy` / `textcopy2`: 第1引数をコピー。第2引数が数値で非ゼロなら元の文字列を返し、第3引数があればその区切りをコピー先で改行へ置換します。
 - `saori-ip`: `GetLocalIP`と`GetLocalHostname`。`saori_ip.dll`・原作配布名の`ip.dll`に対応します。`GetInternetIP`は非対応（501）です。ローカルIPは有効な非ループバックIPv4の先頭で、複数NICではWindowsと選択が異なる場合があります。
