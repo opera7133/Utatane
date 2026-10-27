@@ -3,6 +3,54 @@ import Testing
 @testable import UtataneContent
 import UtataneCore
 
+/// Synthetic ZIP: stored install.txt followed by an LZMA-compressed descript.txt.
+/// The first entry exercises fallback after ditto has already extracted a file.
+private let lzmaNarFixture = "UEsDBBQAAAAAAAAAIVylTmfaNAAAADQAAAALAAAAaW5zdGFsbC50eHR0eXBlLGdob3N0Cm5hbWUsTFpNQSBGaXh0dXJlCmRpcmVjdG9yeSxsem1hLWZpeHR1cmUKUEsDBD8AAgAOAAAAIVzh5Yc9JgAAABIAAAAZAAAAZ2hvc3QvbWFzdGVyL2Rlc2NyaXB0LnR4dAkEBQBdAACAAAA3GEn9+mITnYzAqtX3boRvyATbreQ+Yf/+U+AAUEsBAhQDFAAAAAAAAAAhXKVOZ9o0AAAANAAAAAsAAAAAAAAAAAAAAKSBAAAAAGluc3RhbGwudHh0UEsBAj8DPwACAA4AAAAhXOHlhz0mAAAAEgAAABkAAAAAAAAAAAAAAKSBXQAAAGdob3N0L21hc3Rlci9kZXNjcmlwdC50eHRQSwUGAAAAAAIAAgCAAAAAugAAAAAA"
+
+@Test func `installs LZMA NAR after a partially successful ditto extraction`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let archive = fixture.root.appending(path: "lzma.nar")
+    try #require(Data(base64Encoded: lzmaNarFixture)).write(to: archive)
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(result.items.map(\.name) == ["LZMA Fixture"])
+    let descript = fixture.roots.ghostsDirectory.appending(path: "lzma-fixture/ghost/master/descript.txt")
+    #expect(try String(contentsOf: descript, encoding: .utf8) == "name,LZMA Fixture\n")
+}
+
+@Test func `LZMA fallback preserves extracted size limits`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let archive = fixture.root.appending(path: "lzma.nar")
+    try #require(Data(base64Encoded: lzmaNarFixture)).write(to: archive)
+
+    #expect(throws: NarInstallError.extractedContentTooLarge) {
+        try NarInstaller(maximumExtractedBytes: 1).install(archiveURL: archive, roots: fixture.roots)
+    }
+    #expect(!FileManager.default.fileExists(atPath: fixture.roots.ghostsDirectory.path))
+}
+
+@Test func `corrupt LZMA NAR leaves existing content unchanged`() throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let existing = fixture.roots.ghostsDirectory.appending(path: "lzma-fixture")
+    try FileManager.default.createDirectory(at: existing, withIntermediateDirectories: true)
+    let saved = existing.appending(path: "saved.txt")
+    try Data("keep".utf8).write(to: saved)
+    var data = try #require(Data(base64Encoded: lzmaNarFixture))
+    data[160] ^= 0xFF // Damage the compressed stream, leaving ZIP metadata readable.
+    let archive = fixture.root.appending(path: "broken.nar")
+    try data.write(to: archive)
+
+    #expect(throws: NarInstallError.self) {
+        try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+    }
+    #expect(try String(contentsOf: saved, encoding: .utf8) == "keep")
+    #expect(try FileManager.default.contentsOfDirectory(atPath: existing.path) == ["saved.txt"])
+}
+
 @Test
 func `accepts Windows separators while rejecting unsafe archive entries`() throws {
     let installer = NarInstaller()

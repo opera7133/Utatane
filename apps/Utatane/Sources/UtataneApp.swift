@@ -1795,43 +1795,119 @@ private struct UtataneRootView: View {
         }
     }
 
-    @MainActor
-    private func resolvePluginResponse(_ response: PluginResponse, pluginID: String) async -> SakuraScriptPluginPlayback? {
-        var script = response.script.map(SakuraScript.init(rawValue:))
-        var flags = (response.headers["ScriptOption"] ?? "").split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-        let notifies = (response.headers["EventOption"] ?? "").split(separator: ",").contains { $0.trimmingCharacters(in: .whitespaces).lowercased() == "notify" }
-        if let event = response.event, let session,
-           let eventResponse = try? await session.response(for: notifies
-               ? .notification(id: event, references: response.references)
-               : .shiori(id: event, references: response.references))
-        {
-            if !notifies, let reply = eventResponse.script {
-                script = reply
-                flags = []
-            }
+    private func runningPluginTargets() -> [SSTPTarget] {
+        var targets: [SSTPTarget] = []
+        if let currentGhost, let session, let balloon, let selectedShell {
+            targets.append((currentGhost, session, scriptPlayer, balloon, selectedShell))
         }
-        return script.map { .init(script: $0, origin: .init(id: pluginID), flags: flags) }
+        targets += calledGhosts.values.sorted { $0.ghost.id.path < $1.ghost.id.path }.map {
+            ($0.ghost, $0.session, $0.player, $0.balloon, $0.shell)
+        }
+        return targets
+    }
+
+    private func isCurrentPluginTarget(_ target: SSTPTarget) -> Bool {
+        if currentGhost?.id == target.ghost.id {
+            return session === target.session
+        }
+        return calledGhosts[target.ghost.id]?.session === target.session
     }
 
     @MainActor
-    private func resolvePluginSelection(origin: SakuraScriptPluginOrigin, link: BalloonTextLink, label: String) async -> SakuraScriptPluginPlayback? {
-        guard !isTransitioningGhost, let activeSession = session else { return nil }
+    private func resolvePluginResponse(_ response: PluginResponse, pluginID: String,
+                                       callerGhostID: URL? = nil) async -> SakuraScriptPluginPlayback?
+    {
+        let targets = runningPluginTargets()
+        let indexed = Dictionary(uniqueKeysWithValues: targets.map { ($0.ghost.id, $0) })
+        let caller = callerGhostID ?? currentGhost?.id
+        let descriptors = targets.map { target in
+            PluginGhostTarget(id: target.ghost.id, names: [target.ghost.name,
+                                                           target.ghost.rootDirectory.lastPathComponent,
+                                                           SSTPFMORecord.identifier(for: target.ghost.rootDirectory)]
+                    + target.ghost.characters.compactMap(\.name)
+                    + [target.ghost.characterName(for: 0, shell: target.shell)].compactMap(\.self))
+        }
+        let replies = await PluginResponseRouter.route(response, callerID: caller, running: descriptors) { id, event, references, notifies in
+            guard let target = indexed[id], isCurrentPluginTarget(target) else { return nil }
+            let reply = try? await target.session.response(for: notifies
+                ? .notification(id: event, references: references)
+                : .shiori(id: event, references: references))
+            return reply?.script?.rawValue
+        }
+        var callerReply: SakuraScriptPluginPlayback?
+        for reply in replies {
+            guard let target = indexed[reply.ghostID], isCurrentPluginTarget(target) else { continue }
+            let playback = SakuraScriptPluginPlayback(script: SakuraScript(rawValue: reply.script),
+                                                      origin: reply.isPluginScript ? .init(id: pluginID) : nil, flags: reply.flags)
+            if reply.ghostID == caller {
+                callerReply = playback
+            } else {
+                target.player.play(playback, balloon: target.balloon)
+            }
+        }
+        return callerReply
+    }
+
+    @MainActor
+    private func showPluginInput(origin: SakuraScriptPluginOrigin, command: SakuraScriptInputCommand,
+                                 scope: Int, callerGhostID: URL?) async -> SakuraScriptPluginPlayback?
+    {
+        guard let target = runningPluginTargets().first(where: { $0.ghost.id == callerGhostID }) else { return nil }
+        var pendingReply: SakuraScriptPluginPlayback?
+        let sendEvent: @MainActor @Sendable (GhostEvent) async -> SakuraScript? = { event in
+            guard isCurrentPluginTarget(target), case let .shiori(id, references) = event else { return nil }
+            let arguments = references.keys.max().map { maximum in (0 ... maximum).map { references[$0] ?? "" } } ?? []
+            let reply = await invokePlugin(target: origin.id, event: id, arguments: arguments,
+                                           reflectsResponse: true, callerGhostID: target.ghost.id)
+            pendingReply = reply
+            return reply?.script
+        }
+        let playResponse: @MainActor @Sendable (SakuraScript) -> Void = { reply in
+            guard isCurrentPluginTarget(target) else { return }
+            if let pendingReply, pendingReply.script == reply {
+                target.player.play(pendingReply, balloon: target.balloon)
+            }
+        }
+        let response: SakuraScript?
+        if let runtime = calledGhosts[target.ghost.id] {
+            response = await runtime.showPluginInput(command: command, scope: scope, sendEvent: sendEvent, playResponse: playResponse)
+        } else {
+            let appearance = command.kind == .textArea
+                ? TextInputWindowController.Appearance.textArea(balloon: target.balloon, balloonID: command.balloonID,
+                                                                scope: scope, surfaceID: balloonWindowController.displayedSurfaceID(for: scope))
+                : textInputAppearance(style: .input, balloonID: command.balloonID)
+            let controller = command.kind == .textArea ? textAreaWindowController : textInputWindowController
+            response = await controller.showScriptInput(command: command, appearance: appearance, sendEvent: sendEvent, playResponse: playResponse)
+        }
+        guard let response, pendingReply?.script == response else { return nil }
+        return pendingReply
+    }
+
+    @MainActor
+    private func resolvePluginSelection(origin: SakuraScriptPluginOrigin, link: BalloonTextLink, label: String,
+                                        callerGhostID: URL? = nil) async -> SakuraScriptPluginPlayback?
+    {
+        guard !isTransitioningGhost,
+              let target = runningPluginTargets().first(where: { $0.ghost.id == (callerGhostID ?? currentGhost?.id) })
+        else { return nil }
+        let activeSession = target.session
         var ghostReply: SakuraScript?
         var pluginReply: SakuraScriptPluginPlayback?
         for event in link.pluginSelectionEvents(label: label) {
             if ghostReply == nil {
                 let references = Dictionary(uniqueKeysWithValues: event.arguments.enumerated().map { ($0.offset, $0.element) })
                 if let response = try? await activeSession.response(for: .shiori(id: event.id, references: references)) {
-                    forwardCommunication(from: currentGhost, response: response)
+                    forwardCommunication(from: target.ghost, response: response)
                     if let script = response.script, !script.rawValue.isEmpty {
                         ghostReply = script
                     }
                 }
             }
             if pluginReply == nil {
-                pluginReply = await invokePlugin(target: origin.id, event: event.id, arguments: event.arguments, reflectsResponse: true)
+                pluginReply = await invokePlugin(target: origin.id, event: event.id, arguments: event.arguments, reflectsResponse: true, callerGhostID: target.ghost.id)
             }
         }
+        guard isCurrentPluginTarget(target) else { return nil }
         return pluginReply ?? ghostReply.map { .init(script: $0) }
     }
 
@@ -1840,23 +1916,33 @@ private struct UtataneRootView: View {
         target: String,
         event: String,
         arguments: [String],
-        reflectsResponse: Bool
+        reflectsResponse: Bool,
+        callerGhostID: URL? = nil
     ) async -> SakuraScriptPluginPlayback? {
+        let caller = runningPluginTargets().first { $0.ghost.id == (callerGhostID ?? currentGhost?.id) }
+        if callerGhostID != nil, caller == nil {
+            return nil
+        }
         let references = Dictionary(uniqueKeysWithValues: arguments.enumerated().map { ($0.offset, $0.element) })
         do {
-            guard let response = try await pluginRuntime.request(
+            let response = try await pluginRuntime.request(
                 pluginIDOrName: target,
                 method: reflectsResponse ? "GET" : "NOTIFY",
                 event: event,
-                sender: currentGhost?.name,
+                sender: caller?.ghost.name,
                 references: references
-            ) else {
+            )
+            if let caller, !isCurrentPluginTarget(caller) {
+                return nil
+            }
+            guard let response else {
                 return await (pluginFailureScript(
                     reason: pluginExists(target) ? "disabled" : "notfound",
                     target: target,
                     event: event,
                     arguments: arguments,
-                    reflectsResponse: reflectsResponse
+                    reflectsResponse: reflectsResponse,
+                    targetSession: caller?.session
                 )).map { .init(script: $0) }
             }
             if response.statusCode == 204 {
@@ -1868,11 +1954,18 @@ private struct UtataneRootView: View {
                     target: target,
                     event: event,
                     arguments: arguments,
-                    reflectsResponse: reflectsResponse
+                    reflectsResponse: reflectsResponse,
+                    targetSession: caller?.session
                 )).map { .init(script: $0) }
             }
-            return reflectsResponse ? await resolvePluginResponse(response, pluginID: target) : nil
+            let pluginID = installedPlugins.first {
+                $0.id.caseInsensitiveCompare(target) == .orderedSame || $0.name.caseInsensitiveCompare(target) == .orderedSame
+            }?.id ?? target
+            return reflectsResponse ? await resolvePluginResponse(response, pluginID: pluginID, callerGhostID: caller?.ghost.id) : nil
         } catch {
+            if let caller, !isCurrentPluginTarget(caller) {
+                return nil
+            }
             AppLogStore.shared.error(
                 "プラグイン実行エラー: \(target) / \(event): \(error.localizedDescription)",
                 category: "Plugin"
@@ -1882,7 +1975,8 @@ private struct UtataneRootView: View {
                 target: target,
                 event: event,
                 arguments: arguments,
-                reflectsResponse: reflectsResponse
+                reflectsResponse: reflectsResponse,
+                targetSession: caller?.session
             )).map { .init(script: $0) }
         }
     }
@@ -1900,15 +1994,16 @@ private struct UtataneRootView: View {
         target: String,
         event: String,
         arguments: [String],
-        reflectsResponse: Bool
+        reflectsResponse: Bool,
+        targetSession: GhostSession? = nil
     ) async -> SakuraScript? {
-        guard let session else { return nil }
+        guard let activeSession = targetSession ?? session else { return nil }
         var references = [0: reason, 1: target, 2: event]
         for (index, argument) in arguments.enumerated() {
             references[index + 3] = argument
         }
         let failureEvent = reflectsResponse ? "OnRaisePluginFailure" : "OnNotifyPluginFailure"
-        let script = try? await session.handle(event: .shiori(id: failureEvent, references: references))
+        let script = try? await activeSession.handle(event: .shiori(id: failureEvent, references: references))
         return reflectsResponse ? script : nil
     }
 
@@ -2580,6 +2675,9 @@ private struct UtataneRootView: View {
             }
             scriptPlayer.onCloseSystemDialog = { id in
                 systemDialogController.close(id: id)
+            }
+            scriptPlayer.onPluginInputBox = { origin, command, scope in
+                await showPluginInput(origin: origin, command: command, scope: scope, callerGhostID: currentGhost?.id)
             }
             scriptPlayer.onInputBox = { command in
                 defer {
@@ -4793,6 +4891,15 @@ private struct UtataneRootView: View {
             4: previous.map(String.init) ?? "",
             5: "0,0,\(Int(size.width)),\(Int(size.height))"
         ]
+        Task {
+            for (plugin, response) in await pluginRuntime.broadcast(event: "OnOtherSurfaceChange", references: references,
+                                                                    matching: { $0.observesOtherSurfaceChange })
+            {
+                if let reply = await resolvePluginResponse(response, pluginID: plugin.id), let balloon {
+                    scriptPlayer.play(reply, balloon: balloon)
+                }
+            }
+        }
         if let currentGhost, currentGhost.id != originID,
            otherSurfaceChangeObservers.contains(currentGhost.id)
         {
@@ -4816,14 +4923,29 @@ private struct UtataneRootView: View {
         let joinedReferences = context.references.keys.max().map { maximum in
             (0 ... maximum).map { context.references[$0] ?? "" }.joined(separator: "\u{1}")
         } ?? ""
-        let event = GhostEvent.shiori(id: "OnOtherGhostTalk", references: [
+        let references: [Int: String] = [
             0: ghost.name,
             1: ghost.characters.first(where: { $0.scope == 0 })?.name ?? ghost.name,
             2: context.flags.joined(separator: ","),
             3: context.eventID ?? "",
             4: script.rawValue,
             5: joinedReferences
-        ])
+        ]
+        let event = GhostEvent.shiori(id: "OnOtherGhostTalk", references: references)
+        let before = phase == .before
+        let originPlugin = context.pluginOrigin?.id
+        Task {
+            for (plugin, response) in await pluginRuntime.broadcast(event: "OnOtherGhostTalk", references: references,
+                                                                    matching: { $0.observesOtherGhostTalk && $0.observesOtherGhostTalkBefore == before
+                                                                        && $0.id.caseInsensitiveCompare(originPlugin ?? "") != .orderedSame
+                                                                    })
+            {
+                if let reply = await resolvePluginResponse(response, pluginID: plugin.id), let balloon {
+                    // Prevent a plugin from recursively observing its own reply.
+                    scriptPlayer.play(reply, balloon: balloon)
+                }
+            }
+        }
         if let currentGhost, currentGhost.id != originID,
            otherGhostTalkModes[currentGhost.id] == expectedMode
         {
@@ -6212,6 +6334,20 @@ private struct UtataneRootView: View {
                     reflectsResponse: reflectsResponse,
                     excluding: ghost.id
                 )
+            }
+            runtime.player.onPluginEvent = { [weak runtime] target, id, arguments, reflectsResponse in
+                guard let runtime else { return nil }
+                return await invokePlugin(target: target, event: id, arguments: arguments,
+                                          reflectsResponse: reflectsResponse, callerGhostID: runtime.ghost.id)
+            }
+            runtime.player.onPluginInputBox = { [weak runtime] origin, command, scope in
+                guard let runtime else { return nil }
+                return await showPluginInput(origin: origin, command: command, scope: scope, callerGhostID: runtime.ghost.id)
+            }
+            runtime.player.onPluginSelection = { [weak runtime] origin, link, label in
+                guard let runtime else { return nil }
+                return await resolvePluginSelection(origin: origin, link: link, label: label,
+                                                    callerGhostID: runtime.ghost.id)
             }
             runtime.onOtherGhostTalk = { target, script in
                 handleOtherGhostTalk(target: target, script: script, excluding: ghost.id)
@@ -7603,6 +7739,12 @@ private struct UtataneRootView: View {
         let failures = await pluginRuntime.reload(installedPlugins) { plugin in
             let callback = pluginSaoriEventHandler(for: plugin.id)
             switch plugin.runtime {
+            case .nativeSHIORI(.kagari):
+                return try KagariPluginTransport(
+                    plugin: plugin,
+                    moduleURLOverride: plugin.moduleURL.pathExtension.lowercased() == "dll" ? nil : plugin.moduleURL,
+                    resolver: .init(allowsFallback: allowsShioriFallback)
+                )
             case let .nativeSHIORI(nativeKind):
                 guard let kind = ConventionalShioriKind(shioriFilename: "\(nativeKind.rawValue).dll"),
                       let module = try UtataneModuleResolver(allowsFallback: allowsShioriFallback)

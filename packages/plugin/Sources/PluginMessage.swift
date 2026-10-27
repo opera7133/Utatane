@@ -5,11 +5,14 @@ public struct PluginRequest: Sendable, Equatable {
     public let method: String
     public let headers: ShioriHeaders
 
-    public init(method: String, id: String, charset: String = "UTF-8", sender: String? = nil, references: [Int: String] = [:]) {
+    public init(method: String, id: String, charset: String = "UTF-8", sender: String? = nil,
+                language: String = PluginLanguage.preferredHeader, references: [Int: String] = [:])
+    {
         self.method = method
         var headers = ShioriHeaders([
             ShioriHeader(name: "ID", value: id),
-            ShioriHeader(name: "Charset", value: charset)
+            ShioriHeader(name: "Charset", value: charset),
+            ShioriHeader(name: "Language", value: language)
         ])
         if let sender {
             headers.append(name: "Sender", value: sender)
@@ -26,6 +29,17 @@ public struct PluginRequest: Sendable, Equatable {
 
     public var shioriRequest: ShioriRequest {
         ShioriRequest(method: method, version: "PLUGIN/2.0", headers: headers)
+    }
+}
+
+public enum PluginLanguage {
+    public static var preferredHeader: String {
+        header(for: Locale.preferredLanguages.first ?? "en")
+    }
+
+    public static func header(for identifier: String) -> String {
+        let code = identifier.split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map(String.init) ?? "en"
+        return Locale(identifier: "en_US_POSIX").localizedString(forLanguageCode: code) ?? "English"
     }
 }
 

@@ -195,10 +195,26 @@ public struct NarInstaller: Sendable {
 
         // Older NAR creators commonly store Windows-style backslashes in ZIP entry names.
         // ditto extracts them as literal filename characters, then the isolated tree is normalized below.
-        try run(
-            executable: "/usr/bin/ditto",
-            arguments: ["-x", "-k", "--norsrc", archiveURL.path, extractionRoot.path]
-        )
+        do {
+            try run(
+                executable: "/usr/bin/ditto",
+                arguments: ["-x", "-k", "--norsrc", archiveURL.path, extractionRoot.path]
+            )
+        } catch {
+            let dittoError = error
+            // ditto does not support ZIP-LZMA. Discard its partial extraction before
+            // retrying with libarchive; both paths retain the same entry/tree checks.
+            try fileManager.removeItem(at: extractionRoot)
+            try fileManager.createDirectory(at: extractionRoot, withIntermediateDirectories: true)
+            do {
+                try run(
+                    executable: "/usr/bin/bsdtar",
+                    arguments: ["-x", "-f", archiveURL.path, "-C", extractionRoot.path]
+                )
+            } catch {
+                throw NarInstallError.commandFailed("ditto: \(dittoError.localizedDescription); bsdtar: \(error.localizedDescription)")
+            }
+        }
         try validateExtractedTree(at: extractionRoot)
         try normalizeWindowsSeparatedPaths(at: extractionRoot)
         try validateExtractedTree(at: extractionRoot)

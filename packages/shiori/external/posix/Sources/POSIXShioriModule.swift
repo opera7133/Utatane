@@ -98,8 +98,8 @@ public struct POSIXShioriModuleResolver: Sendable {
         return nil
     }
 
-    func loadSession(for kind: POSIXShioriKind, masterDirectoryURL: URL,
-                     environment: [String: String] = ProcessInfo.processInfo.environment) throws -> POSIXShioriSession
+    public func loadSession(for kind: POSIXShioriKind, masterDirectoryURL: URL,
+                            environment: [String: String] = ProcessInfo.processInfo.environment) throws -> POSIXShioriSession
     {
         guard let selected = moduleURL(for: kind, masterDirectoryURL: masterDirectoryURL, environment: environment) else {
             throw POSIXShioriError.moduleUnavailable(kind)

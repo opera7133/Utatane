@@ -12,6 +12,7 @@ public struct InstalledPlugin: Identifiable, Sendable, Equatable {
     public enum NativeSHIORIKind: String, Sendable, Equatable {
         case akari
         case kawari
+        case kagari
         case misaka
         case satori
         case yaya
@@ -29,6 +30,8 @@ public struct InstalledPlugin: Identifiable, Sendable, Equatable {
     public let readmeCharset: String?
     public let secondChangeInterval: Int
     public let observesOtherGhostTalk: Bool
+    public var observesOtherGhostTalkBefore = false
+    public var observesOtherSurfaceChange = false
     public let runtime: Runtime
 }
 
@@ -87,9 +90,11 @@ public struct PluginCatalog: Sendable {
             readmeURL: safeFile(named: metadata["readme"] ?? "readme.txt", in: root, mustExist: true),
             readmeCharset: metadata["readme.charset"],
             secondChangeInterval: max(Int(metadata["secondchangeinterval"] ?? "1") ?? 1, 0),
-            observesOtherGhostTalk: ["true", "1", "immediate", "delayed"].contains(
+            observesOtherGhostTalk: ["true", "1", "immediate", "delayed", "before", "after"].contains(
                 metadata["otherghosttalk"]?.lowercased() ?? ""
             ),
+            observesOtherGhostTalkBefore: metadata["otherghosttalk"]?.lowercased() == "before",
+            observesOtherSurfaceChange: ["true", "1"].contains(metadata["othersurfacechange"]?.lowercased() ?? ""),
             runtime: runtime
         )
     }
@@ -99,6 +104,9 @@ public struct PluginCatalog: Sendable {
         directory: URL,
         allowsNativeDetection: Bool
     ) -> InstalledPlugin.Runtime {
+        if ["kagari.dll", "libkagari.dylib", "libkagari.so"].contains(moduleURL.lastPathComponent.lowercased()) {
+            return .nativeSHIORI(.kagari)
+        }
         if allowsNativeDetection, let kind = nativeSHIORIKind(
             in: directory,
             declaredModuleFilename: moduleURL.lastPathComponent
@@ -122,6 +130,7 @@ public struct PluginCatalog: Sendable {
         )?.id.rawValue {
         case "akari": .akari
         case "kawari": .kawari
+        case "kagari": .kagari
         case "misaka": .misaka
         case "satori": .satori
         case "yaya": .yaya

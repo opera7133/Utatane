@@ -253,6 +253,7 @@ public final class SakuraScriptPlayer {
     public var onTextAreaBox: (@MainActor (SakuraScriptInputCommand, Int) async -> SakuraScript?)?
     public var onCloseTextAreaBox: (@MainActor (String) -> Void)?
     public var onInputBox: (@MainActor (SakuraScriptInputCommand) async -> SakuraScript?)?
+    public var onPluginInputBox: (@MainActor (SakuraScriptPluginOrigin, SakuraScriptInputCommand, Int) async -> SakuraScriptPluginPlayback?)?
     public var onSystemDialog: (@MainActor (SakuraScriptSystemDialogCommand) async -> SakuraScript?)?
     public var onCloseSystemDialog: (@MainActor (String) -> Void)?
     public var onHTTP: (@MainActor (SakuraScriptHTTPRequest) async -> SakuraScript?)?
@@ -1909,13 +1910,23 @@ public final class SakuraScriptPlayer {
                     let activity = UUID()
                     statusActivities[activity] = "input"
                     defer { statusActivities[activity] = nil }
-                    let response = if command.kind == .textArea {
-                        await onTextAreaBox?(command, scope)
+                    if let origin = located.pluginOrigin {
+                        if let reply = await onPluginInputBox?(origin, command, scope) {
+                            if reply.flags.contains("nobreak") {
+                                enqueue(reply.script, balloon: balloon, context: reply.context)
+                            } else {
+                                pendingTokens.insert(contentsOf: playbackTokens(reply.script, pluginOrigin: reply.origin), at: 0)
+                            }
+                        }
                     } else {
-                        await onInputBox?(command)
-                    }
-                    if let response {
-                        pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
+                        let response = if command.kind == .textArea {
+                            await onTextAreaBox?(command, scope)
+                        } else {
+                            await onInputBox?(command)
+                        }
+                        if let response {
+                            pendingTokens.insert(contentsOf: playbackTokens(response), at: 0)
+                        }
                     }
                 case let .systemDialog(command):
                     finishRenderingBatch()

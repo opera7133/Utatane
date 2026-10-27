@@ -354,6 +354,57 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         }
     }
 
+    /// Presents a script input while leaving event ownership with the caller (ghost or plugin).
+    public func showScriptInput(
+        command: SakuraScriptInputCommand,
+        appearance: Appearance?,
+        sendEvent: @escaping @MainActor @Sendable (GhostEvent) async -> SakuraScript?,
+        playResponse: @escaping @MainActor @Sendable (SakuraScript) -> Void
+    ) async -> SakuraScript? {
+        if command.kind == .textArea {
+            return await showTextArea(command: command, appearance: appearance, sendEvent: sendEvent, playResponse: playResponse)
+        }
+        let submit: @MainActor @Sendable (String) async -> SakuraScript? = { value in
+            await sendEvent(SHIORIEventFactory.userInput(id: command.id, value: value,
+                                                         supplementalValue: command.supplementalValue, additionalReferences: command.references))
+        }
+        let cancel: @MainActor @Sendable (Bool) async -> SakuraScript? = { timedOut in
+            let reply = await sendEvent(SHIORIEventFactory.userInputCancel(id: command.id, timedOut: timedOut))
+            if timedOut, reply?.rawValue.isEmpty != false {
+                return await submit("timeout")
+            }
+            return reply
+        }
+        if command.keepsOpenAfterSubmit {
+            showPersistentInput(
+                id: command.id, title: String(localized: "文字を入力"), initialValue: command.initialValue,
+                maximumLength: command.maximumLength, autocompleteValues: [], appearance: appearance,
+                timeoutMilliseconds: command.timeoutMilliseconds, clearsValueAfterSubmit: !command.keepsValueAfterSubmit,
+                inputKind: .init(command.kind),
+                placeholder: command.placeholder,
+                onSubmit: { value in Task {
+                    if let reply = await submit(value) {
+                        playResponse(reply)
+                    }
+                } },
+                onCancel: { timedOut in Task {
+                    if let reply = await cancel(timedOut) {
+                        playResponse(reply)
+                    }
+                } }
+            )
+            return nil
+        }
+        let result = await showInput(id: command.id, title: String(localized: "文字を入力"), initialValue: command.initialValue,
+                                     inputKind: .init(command.kind), maximumLength: command.maximumLength, autocompleteValues: [],
+                                     placeholder: command.placeholder, appearance: appearance, timeoutMilliseconds: command.timeoutMilliseconds)
+        guard !Task.isCancelled else { return nil }
+        switch result {
+        case let .submitted(value): return await submit(value)
+        case let .cancelled(timedOut, _): return await cancel(timedOut)
+        }
+    }
+
     public func showTextArea(
         command: SakuraScriptInputCommand,
         appearance: Appearance?,

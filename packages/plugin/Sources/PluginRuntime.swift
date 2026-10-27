@@ -1,4 +1,5 @@
 import Foundation
+import UtataneCore
 
 public protocol PluginTransport: Sendable {
     func request(_ request: PluginRequest) async throws -> PluginResponse
@@ -26,6 +27,7 @@ public actor PluginRuntime {
         let plugin: InstalledPlugin
         let transport: any PluginTransport
         var secondsUntilTick: Int
+        var charset: String
     }
 
     private var loaded: [String: LoadedPlugin] = [:]
@@ -55,7 +57,8 @@ public actor PluginRuntime {
                 next[plugin.id.lowercased()] = try LoadedPlugin(
                     plugin: plugin,
                     transport: transportFactory(plugin),
-                    secondsUntilTick: max(plugin.secondChangeInterval, 1)
+                    secondsUntilTick: max(plugin.secondChangeInterval, 1),
+                    charset: plugin.charset
                 )
             } catch {
                 failures.append(PluginLoadFailure(plugin: plugin, message: error.localizedDescription))
@@ -104,11 +107,13 @@ public actor PluginRuntime {
         let response = try await entry.transport.request(PluginRequest(
             method: method,
             id: event,
-            charset: entry.plugin.charset,
+            charset: entry.charset,
             sender: sender,
             references: references
         ))
-        return generation == requestGeneration ? response : nil
+        guard generation == requestGeneration else { return nil }
+        negotiateCharset(response, event: event, pluginID: entry.plugin.id)
+        return response
     }
 
     public func secondChangeResponses() async -> [(InstalledPlugin, PluginResponse)] {
@@ -127,7 +132,7 @@ public actor PluginRuntime {
                 if let response = try? await entry.transport.request(PluginRequest(
                     method: "GET",
                     id: "OnSecondChange",
-                    charset: entry.plugin.charset
+                    charset: entry.charset
                 )) {
                     guard generation == requestGeneration else { return [] }
                     responses.append((entry.plugin, response))
@@ -142,25 +147,34 @@ public actor PluginRuntime {
         method: String = "GET",
         event: String,
         sender: String? = nil,
-        references: [Int: String] = [:]
+        references: [Int: String] = [:],
+        matching: @Sendable (InstalledPlugin) -> Bool = { _ in true }
     ) async -> [(InstalledPlugin, PluginResponse)] {
         let requestGeneration = generation
         var responses: [(InstalledPlugin, PluginResponse)] = []
         for key in loaded.keys.sorted() {
-            guard let entry = loaded[key] else { continue }
+            guard let entry = loaded[key], matching(entry.plugin) else { continue }
             let response = try? await entry.transport.request(PluginRequest(
                 method: method,
                 id: event,
-                charset: entry.plugin.charset,
+                charset: entry.charset,
                 sender: sender,
                 references: references
             ))
             guard generation == requestGeneration else { return [] }
             if let response {
+                negotiateCharset(response, event: event, pluginID: entry.plugin.id)
                 responses.append((entry.plugin, response))
             }
         }
         return responses
+    }
+
+    private func negotiateCharset(_ response: PluginResponse, event: String, pluginID: String) {
+        guard event.caseInsensitiveCompare("version") == .orderedSame, response.statusCode == 200,
+              let charset = response.headers["Charset"], LegacyTextDecoder.encoding(named: charset) != nil
+        else { return }
+        loaded[pluginID.lowercased()]?.charset = charset
     }
 
     private func entry(matching idOrName: String) -> LoadedPlugin? {

@@ -7,6 +7,46 @@ import UtatanePlugin
 import UtataneSakuraScript
 import UtataneShell
 
+@Test @MainActor
+func `plugin input responses return to their origin and keep later choices owned`() async throws {
+    try await withPluginPlayer { player, balloons, balloon, _ in
+        var ordinaryInputs = 0
+        var pluginInputs: [String] = []
+        player.onInputBox = { _ in ordinaryInputs += 1; return nil }
+        player.onPluginInputBox = { origin, command, scope in
+            pluginInputs.append(origin.id + ":" + command.id)
+            #expect(scope == 0)
+            return .init(script: SakuraScript(rawValue: #"\q[save,OnSaved]"#), origin: origin)
+        }
+        await player.playAndWait(SakuraScript(rawValue: #"\![open,inputbox,OnInputDiary]"#), balloon: balloon,
+                                 characterDelayMilliseconds: 0, context: .init(pluginOrigin: .init(id: "diary")))
+        #expect(pluginInputs == ["diary:OnInputDiary"])
+        #expect(ordinaryInputs == 0)
+        let link = try #require(balloons.textAndLinks(for: 0)?.1.first)
+        #expect(link.id == "OnSaved")
+        #expect(link.pluginOrigin?.id == "diary")
+        await player.playAndWait(SakuraScript(rawValue: #"\![open,inputbox,OnOrdinary]"#), balloon: balloon, characterDelayMilliseconds: 0)
+        #expect(ordinaryInputs == 1)
+    }
+}
+
+@Test @MainActor
+func `a ghost reply to plugin input keeps ghost ownership`() async throws {
+    try await withPluginPlayer { player, balloons, balloon, _ in
+        var calls: [String] = []
+        player.onPluginInputBox = { _, command, _ in
+            calls.append("plugin:" + command.id)
+            return .init(script: SakuraScript(rawValue: #"\![open,inputbox,OnGhostInput]\q[ghost,OnGhostChoice]"#), flags: ["plugin-event"])
+        }
+        player.onInputBox = { command in calls.append("ghost:" + command.id); return nil }
+        await player.playAndWait(SakuraScript(rawValue: #"\![open,inputbox,OnPluginInput]"#), balloon: balloon,
+                                 characterDelayMilliseconds: 0, context: .init(pluginOrigin: .init(id: "plugin")))
+        #expect(calls == ["plugin:OnPluginInput", "ghost:OnGhostInput"])
+        let link = try #require(balloons.textAndLinks(for: 0)?.1.first)
+        #expect(link.pluginOrigin == nil)
+    }
+}
+
 @MainActor
 private func withPluginPlayer(_ body: @MainActor (SakuraScriptPlayer, BalloonWindowController, BalloonDefinition, URL) async throws -> Void) async throws {
     let root = FileManager.default.temporaryDirectory.appending(path: "Plugin playback \(UUID())")
@@ -207,6 +247,67 @@ struct BalloonSelectorIntegrationTests {
             balloons.onLinkClick?(cancel.id, cancel.arguments)
             try await requireEventually { events.contains("OnBalloonSelectCancel") }
             #expect(requests.contains("OnPLUGINUTIL.GetBalloonSize"))
+            await transport.shutdown()
+        }
+    }
+}
+
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["UTATANE_DBDIARY_PLUGIN"] != nil
+        && ProcessInfo.processInfo.environment["UTATANE_YAYA_MODULE"] != nil
+        && ProcessInfo.processInfo.environment["UTATANE_NATIVE_SHIORI_HOST"] != nil))
+@MainActor
+struct DBdiaryIntegrationTests {
+    @Test func `real diary input saves Japanese text and reads it after reload`() async throws {
+        try await withPluginPlayer { player, _, balloon, root in
+            let plugins = root.appending(path: "plugins")
+            let directory = plugins.appending(path: "日記 Plugin")
+            try FileManager.default.createDirectory(at: plugins, withIntermediateDirectories: true)
+            let source = try URL(filePath: #require(ProcessInfo.processInfo.environment["UTATANE_DBDIARY_PLUGIN"]))
+            try FileManager.default.copyItem(at: source, to: directory)
+            // Some public NARs include a checkout. It is not needed to execute the dictionary.
+            try? FileManager.default.removeItem(at: directory.appending(path: ".git"))
+            let plugin = try #require(PluginCatalog().load(from: [plugins]).first)
+            let module = try URL(filePath: #require(ProcessInfo.processInfo.environment["UTATANE_YAYA_MODULE"]))
+            let state = root.appending(path: "state")
+            var transport = try DynamicLibraryPluginTransport(plugin: plugin, stateDirectoryURL: state, moduleURLOverride: module)
+            @MainActor func request(_ id: String, _ references: [Int: String] = [:]) async throws -> PluginResponse {
+                try await transport.request(PluginRequest(method: "GET", id: id, charset: "UTF-8", sender: "Probe", references: references))
+            }
+            #expect(try await request("version").statusCode == 200)
+            let text = "日本語の日記 café 🌙"
+            var inputIDs: [String] = []
+            var ghostInputs = 0
+            player.onInputBox = { _ in ghostInputs += 1; return nil }
+            player.onPluginInputBox = { origin, command, _ in
+                #expect(origin.id == plugin.id)
+                inputIDs.append(command.id)
+                guard case let .shiori(id, references) = SHIORIEventFactory.userInput(id: command.id, value: text) else { return nil }
+                let response = try? await request(id, references)
+                return response?.script.map { .init(script: SakuraScript(rawValue: $0), origin: origin) }
+            }
+            let open = try #require(try await request("OnCallInputBeautifulDiary").script)
+            await player.playAndWait(SakuraScript(rawValue: open), balloon: balloon, characterDelayMilliseconds: 0,
+                                     context: .init(flags: ["plugin-script"], pluginOrigin: .init(id: plugin.id)))
+            #expect(inputIDs == ["OnInputBeautifulDiary"])
+            #expect(ghostInputs == 0)
+            let files = try FileManager.default.contentsOfDirectory(at: directory.appending(path: "Diary"), includingPropertiesForKeys: nil)
+            let saved = try #require(files.first { (try? String(contentsOf: $0, encoding: .utf8).contains(text)) == true })
+            let date = saved.deletingPathExtension().lastPathComponent
+            let read = try await request("OnGetBeautifulDiary", [0: date, 1: "before:", 2: ":after", 3: "empty", 4: "missing"])
+            #expect(read.script?.contains("before:" + text) == true)
+            #expect(read.script?.contains(":after") == true)
+            let beforeReload = try Data(contentsOf: saved)
+            let cancel = SHIORIEventFactory.userInputCancel(id: "OnInputBeautifulDiary", timedOut: false)
+            if case let .shiori(id, references) = cancel {
+                _ = try await request(id, references)
+            }
+            #expect(try Data(contentsOf: saved) == beforeReload)
+            await transport.shutdown()
+            transport = try DynamicLibraryPluginTransport(plugin: plugin, stateDirectoryURL: state, moduleURLOverride: module)
+            #expect(try await request("version").statusCode == 200)
+            let reloaded = try await request("OnGetBeautifulDiary", [0: date, 1: "loaded:"])
+            #expect(reloaded.script?.contains("loaded:" + text) == true)
+            #expect(try Data(contentsOf: saved) == beforeReload)
             await transport.shutdown()
         }
     }
