@@ -93,8 +93,8 @@ public struct GhostModuleRequirements: Sendable {
             let catalogModule = catalog?.modules.first(where: { module in
                 module.kinds.contains("saori") && windowsFilenames(for: module).contains(dll.lastPathComponent.lowercased())
             })
-            let moduleID = catalogModule?.id ?? (["saori_cpuid": "saori-cpuid", "proxy_ex": "proxy-ex", "saori_ip": "saori-ip", "ip": "saori-ip"][stem] ?? stem)
-            let knownSAORI = ["saori_cpuid", "kenonoke", "textcopy2", "mciaudior", "wmove", "httpc", "proxy_ex", "clipcopy", "textcopy", "saori_ip", "ip"].contains(stem)
+            let moduleID = catalogModule?.id ?? (["saori_cpuid": "saori-cpuid", "proxy_ex": "proxy-ex", "saori_ip": "saori-ip", "ip": "saori-ip", "totp_saori": "totp-saori"][stem] ?? stem)
+            let knownSAORI = ["saori_cpuid", "kenonoke", "textcopy2", "mciaudior", "wmove", "httpc", "proxy_ex", "clipcopy", "textcopy", "saori_ip", "ip", "playwavsound", "totp_saori"].contains(stem)
             guard dll.standardizedFileURL != declaredURL?.standardizedFileURL,
                   knownSAORI || catalogModule != nil,
                   seen.insert(dll.standardizedFileURL.path).inserted,

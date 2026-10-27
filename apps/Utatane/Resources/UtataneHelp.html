@@ -1016,6 +1016,7 @@ Reference0は識別子、Reference1は<code>-</code>、Reference2は同期呼び
 httpc 0.1.0-r5では、URLの前に<code>erase_tag</code>（タグ除去）・<code>translate_tag</code>（原作の簡易SakuraScript変換）を文字コード指定と並べられます。両方ある場合は変換が優先です。非同期の<code>bg</code>では識別子の後へ置きます。変換対象は改行・水平線・リンク・画像の代替テキストと一部の文字参照で、完全なHTML解析ではありません。変換結果は原作同様に半角48桁換算・120行を上限に切り詰めます。保存モードはタグ処理せず、元のバイト列を保存します。詳細は<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md">ModulesのSAORI手順</a>を参照してください。</p>
 <h4 id="support-engines-追加の共通saori0218以降">追加の共通SAORI（0.2.18以降）</h4>
 <p>Modulesに<code>clipcopy</code>・<code>textcopy</code>・<code>saori-ip</code>を追加しました。通常のmacOS実装はdylibです。</p>
+<p>開発版のModulesには<code>PlayWavSound</code>（WAVE効果音）と<code>totp_saori</code>（HMAC-SHA1のワンタイムコード）もあります。本体は不足を検出して共通導入へ案内します。システム音の対応付け、引数と制限は<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/saori.md">ModulesのSAORI資料</a>を参照してください。実際の音声出力は手動確認が必要です。</p>
 <ul>
 <li><code>clipcopy</code>: 全引数を改行で結合し、文字列中の<code>\n</code>も改行へ変換してコピーします。</li>
 <li><code>textcopy</code> / <code>textcopy2</code>: 第1引数をコピー。第2引数が数値で非ゼロなら元の文字列を返し、第3引数があればその区切りをコピー先で改行へ置換します。</li>

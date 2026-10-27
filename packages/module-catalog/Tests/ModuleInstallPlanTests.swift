@@ -44,6 +44,27 @@ private func requirementCatalog() throws -> SignedModuleCatalog {
     }
 }
 
+@Test func `additional SAORI registrations use catalog IDs and stop prompting after installation`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: "SAORI 日本語 \(UUID())")
+    let master = root.appending(path: "ghost/master")
+    let managed = root.appending(path: "managed")
+    try FileManager.default.createDirectory(at: master, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try "＠SAORI\n効果音,saori/PlayWavSound.dll\n認証,saori/totp_saori.dll\n".write(to: master.appending(path: "satori_conf.txt"), atomically: true, encoding: .utf8)
+    let ghost = InstalledGhost(name: "probe", rootDirectory: root, defaultShellDirectory: root)
+    let scanner = GhostModuleRequirements()
+    #expect(Set(scanner.unresolved(for: ghost, applicationSupportURL: managed).filter { $0.kind == "SAORI" }.map(\.id)) == ["playwavsound", "totp-saori"])
+    for (identity, library) in [("playwavsound", "playwavsound"), ("totp-saori", "totp_saori")] {
+        let folder = managed.appending(path: "NativeSaori/\(identity)/lib")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data().write(to: folder.appending(path: "lib\(library).dylib"))
+        try Data("""
+        {"schemaVersion":1,"id":"\(identity)","version":"0.1.0","revision":1,"abi":"saori-utf8-v1","minimumOS":"14.0","architectures":["arm64","x86_64"],"files":{"lib/lib\(library).dylib":"test"}}
+        """.utf8).write(to: folder.deletingLastPathComponent().appending(path: "module.json"))
+    }
+    #expect(scanner.unresolved(for: ghost, applicationSupportURL: managed).filter { $0.kind == "SAORI" }.isEmpty)
+}
+
 @Test func `a declaration cannot install a module of a different kind and unknown DLLs trigger catalog discovery`() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     let master = root.appending(path: "ghost/master")
