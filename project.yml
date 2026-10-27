@@ -84,6 +84,14 @@ targets:
             LSHandlerRank: Default
             LSItemContentTypes:
               - dev.utatane.nar
+          # A different app may export its own preferred UTI for .nar. Keep
+          # this extension claim separate: LSItemContentTypes takes precedence
+          # over CFBundleTypeExtensions within the same document-type entry.
+          - CFBundleTypeName: NAR Archive
+            CFBundleTypeRole: Editor
+            LSHandlerRank: Default
+            CFBundleTypeExtensions:
+              - nar
         CFBundleURLTypes:
           - CFBundleURLName: Ukagaka Web Link
             CFBundleURLSchemes:
