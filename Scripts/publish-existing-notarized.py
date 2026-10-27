@@ -130,13 +130,6 @@ def announce(args):
         stream.write(body)
         stream.flush()
         subprocess.run(["gh", "release", "edit", record["tag"], "--repo", github.repository, "--notes-file", stream.name], check=True)
-    labels = {ARCHIVE: "macOS（Developer ID署名・公証済み、Apple Silicon / Intel）",
-              FEED: "公証済みZIP用Sparkleフィード", "Utatane-macOS.zip": "旧配布物（未公証）",
-              "appcast.xml": "旧ZIP用Sparkleフィード"}
-    for asset in release["assets"]:
-        if asset["name"] in labels:
-            subprocess.run(["gh", "api", "--method", "PATCH", f"repos/{github.repository}/releases/assets/{int(asset['id'])}",
-                            "-f", "label=" + labels[asset["name"]]], check=True, stdout=subprocess.DEVNULL)
 
 
 def verify_published(args):
