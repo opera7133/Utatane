@@ -61,7 +61,7 @@
     "view-downloads": "配布ページを開く",
     "get-utatane-macos-zip-from-the-latest-release-it-supports-both-ap": "最新リリースのmacOS版をダウンロード。Apple SiliconとIntelの両方に対応しています。",
     "move-the-app": "アプリを移動",
-    "unzip-the-download-and-move-utatane-app-to-your-applications-fold": "ZIPを展開して、Utatane.appを「アプリケーション」フォルダへ。",
+    "unzip-the-download-and-move-utatane-app-to-your-applications-fold": "DMGを開いて、Utatane.appを隣のApplicationsへ。ZIPの場合は展開して移動してください。",
     "say-hello": "起動する",
     "open-utatane-to-display-ria-the-included-character-you-can-add-ot": "Utataneを開くと、同梱キャラクター「りあ」を表示できます。ほかのゴーストは、あとから追加できます。",
     "if-macos-blocks-the-first-launch": "初回起動をmacOSに止められたら",

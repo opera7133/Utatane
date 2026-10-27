@@ -1,0 +1,5 @@
+[project]
+name = "utatane-dmg-tools"
+version = "1.0.0"
+requires-python = ">=3.11,<3.14"
+dependencies = ["dmgbuild==1.6.7"]

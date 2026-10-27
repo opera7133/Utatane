@@ -61,7 +61,7 @@
     "view-downloads": "다운로드 페이지 열기",
     "get-utatane-macos-zip-from-the-latest-release-it-supports-both-ap": "최신 macOS 버전을 받으세요. Apple Silicon과 Intel Mac을 모두 지원해요.",
     "move-the-app": "앱 이동",
-    "unzip-the-download-and-move-utatane-app-to-your-applications-fold": "ZIP 압축을 풀고 Utatane.app을 ‘응용 프로그램’ 폴더로 옮기세요.",
+    "unzip-the-download-and-move-utatane-app-to-your-applications-fold": "DMG를 열고 Utatane.app을 Applications로 드래그하세요. 이전 ZIP 버전은 먼저 압축을 푸세요.",
     "say-hello": "실행",
     "open-utatane-to-display-ria-the-included-character-you-can-add-ot": "Utatane를 열면 기본 제공 캐릭터 리아를 표시할 수 있어요. 다른 고스트는 나중에 추가할 수 있어요.",
     "if-macos-blocks-the-first-launch": "macOS가 첫 실행을 차단한다면",

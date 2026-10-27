@@ -20,8 +20,8 @@ Utataneは、伺かのキャラクターをMacのデスクトップで動かす�
 
 ## インストールする
 
-1. [公式サイト](https://dl.wmsci.com/utatane/)のダウンロードボタンからmacOS版を取得します。[リリースページ](https://github.com/opera7133/Utatane/releases)では、`Utatane-macOS-notarized.zip`がある場合はそちらを、なければ`Utatane-macOS.zip`を選びます。
-2. ZIPを展開し、`Utatane.app` を「アプリケーション」フォルダへ移動します。
+1. [公式サイト](https://dl.wmsci.com/utatane/)のダウンロードボタンからmacOS版を取得します。[リリースページ](https://github.com/opera7133/Utatane/releases)では、`Utatane-macOS.dmg`があればそちらを選びます。ZIPのみの版では、公証済みの追加ZIPがあればそちらを選びます。
+2. DMGを開き、`Utatane.app`を隣のApplicationsへドラッグします。ZIPの場合は展開し、「アプリケーション」フォルダへ移動します。
 3. Utataneを起動します。macOS 14以降のApple Silicon・Intel Macに対応しています。
 
 公式の配布版はDeveloper ID署名・公証済みです。古い未署名版でmacOSが起動を止める場合は、まず最新の公証済み版を取得してください。初回起動時に、インターネットからダウンロードしたアプリを開くかの確認が出ることはあります。

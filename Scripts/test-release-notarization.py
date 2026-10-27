@@ -211,6 +211,180 @@ class NotarizationTests(unittest.TestCase):
             with self.assertRaises((ValueError, M.ET.ParseError)):
                 M.feed_build(contents)
 
+    def image(self):
+        self.data["releaseArchive"] = "Utatane-macOS.dmg"
+        M.seal(self.candidate, "candidate.json", self.data)
+        M.write(self.receipt / "status.json", self.status("Accepted"))
+        self.args.image = self.root / "image"
+        self.args.image_receipt = self.root / "image-receipt"
+        self.args.image.mkdir()
+        (self.args.image / "Utatane-macOS.dmg").write_bytes(b"signed image with stapled app")
+        self.image_data = self.data | {"appSubmissionId": self.request["submissionId"],
+            "imageSHA256": M.digest(self.args.image / "Utatane-macOS.dmg")}
+        M.seal(self.args.image, "image.json", self.image_data)
+        self.image_request = {key: self.image_data[key] for key in ("tag", "commit", "runId", "imageSHA256")} | {"submissionId": str(uuid.uuid4())}
+        M.write(self.args.image_receipt / "request.json", self.image_request)
+
+    def test_legacy_zip_candidate_skips_second_notarization(self):
+        M.write(self.receipt / "status.json", self.status("Accepted"))
+        with patch.object(M.GitHub, "source", return_value=self.source), patch.object(M, "output") as out, \
+             patch.object(M.subprocess, "run") as command:
+            M.package_image(self.args)
+        out.assert_called_once_with("enabled", "false")
+        command.assert_not_called()
+
+    def test_image_cannot_belong_to_another_app_submission(self):
+        self.image()
+        M.seal(self.args.image, "image.json", self.image_data | {"appSubmissionId": str(uuid.uuid4())})
+        with self.assertRaises(ValueError):
+            M.load_image(self.args, self.data, self.request)
+
+    def test_modified_signed_image_is_rejected(self):
+        self.image()
+        (self.args.image / "Utatane-macOS.dmg").write_bytes(b"replacement image")
+        with self.assertRaises(ValueError):
+            M.load_image(self.args, self.data, self.request)
+
+    def test_image_receipt_is_bound_to_exact_image_bytes(self):
+        self.image()
+        M.write(self.args.image_receipt / "request.json", self.image_request | {"imageSHA256": "f" * 64})
+        with self.assertRaises(ValueError):
+            M.load_image(self.args, self.data, self.request)
+
+    def test_pending_or_rejected_image_cannot_publish_even_when_app_is_accepted(self):
+        self.image()
+        for status in ("In Progress", "Rejected"):
+            M.write(self.args.image_receipt / "status.json", {"id": self.image_request["submissionId"], "status": status})
+            with patch.object(M.GitHub, "source", return_value=self.source), patch.object(M.subprocess, "run") as command:
+                with self.assertRaises(ValueError):
+                    M.finalize(self.args)
+            command.assert_not_called()
+
+    def test_signed_image_is_recovered_without_repackaging_or_resigning(self):
+        self.image()
+        cached = self.args.image.rename(self.root / "cached-image")
+        def download(artifact, destination):
+            M.shutil.copytree(cached, destination)
+        with patch.object(M.GitHub, "source", return_value=self.source), \
+             patch.object(M.GitHub, "continuation_artifact", return_value={"id": 456}), \
+             patch.object(M.GitHub, "download", side_effect=download), patch.object(M.subprocess, "run") as command:
+            M.package_image(self.args)
+        command.assert_not_called()
+        self.assertEqual((self.args.image / "Utatane-macOS.dmg").read_bytes(), b"signed image with stapled app")
+
+    def test_missing_submitted_image_cannot_be_rebuilt(self):
+        self.image()
+        with patch.object(M.GitHub, "source", return_value=self.source), \
+             patch.object(M.GitHub, "continuation_artifact", side_effect=[None, {"id": 456}]), \
+             patch.object(M.subprocess, "run") as command:
+            with self.assertRaises(ValueError):
+                M.package_image(self.args)
+        command.assert_not_called()
+
+    def test_image_pending_for_days_never_uploads_or_resigns_again(self):
+        self.image()
+        cached = self.args.image_receipt.rename(self.root / "cached-image-receipt")
+        def download(artifact, destination):
+            M.shutil.copytree(cached, destination)
+        with patch.object(M.GitHub, "source", return_value=self.source), \
+             patch.object(M.GitHub, "continuation_artifact", return_value={"id": 456}), \
+             patch.object(M.GitHub, "download", side_effect=download), patch.object(M, "output") as out:
+            for status in ("In Progress", "In Progress", "Accepted"):
+                if self.args.image_receipt.exists():
+                    M.shutil.rmtree(self.args.image_receipt)
+                def command(*args):
+                    self.assertEqual(args[2], "info")
+                    return json.dumps({"id": self.image_request["submissionId"], "status": status}).encode()
+                def log(command, **kwargs):
+                    self.assertEqual(command[2], "log")
+                    M.write(Path(command[-1]), {"status": status, "issues": None})
+                with patch.object(M, "run", side_effect=command), patch.object(M.subprocess, "run", side_effect=log):
+                    M.notarize_image(self.args)
+        self.assertEqual([item.args[1] for item in out.call_args_list if item.args[0] == "status"], ["pending", "pending", "accepted"])
+
+    def test_image_upload_crash_recovers_from_apple_history(self):
+        self.image()
+        name = f"Utatane-v0.2.19-run123-{self.image_data['imageSHA256'][:16]}.dmg"
+        def command(*args):
+            if args[2] == "history":
+                return json.dumps({"history": [{"name": name, "id": self.image_request["submissionId"]}]}).encode()
+            self.assertEqual(args[2], "info")
+            return json.dumps({"id": self.image_request["submissionId"], "status": "In Progress"}).encode()
+        with patch.object(M.GitHub, "source", return_value=self.source), \
+             patch.object(M.GitHub, "continuation_artifact", return_value=None), patch.object(M, "run", side_effect=command):
+            M.notarize_image(self.args)
+        self.assertEqual(M.read(self.args.image_receipt / "request.json"), self.image_request)
+
+    def test_finalized_dmg_is_recovered_without_restapling(self):
+        self.image()
+        M.write(self.args.image_receipt / "status.json", {"id": self.image_request["submissionId"], "status": "Accepted"})
+        self.args.final.mkdir()
+        (self.args.final / "Utatane-macOS.dmg").write_bytes(b"final stapled image")
+        M.seal(self.args.final, "finalized.json", self.data | {"submissionId": self.request["submissionId"], "imageSubmissionId": self.image_request["submissionId"], "imageSHA256": self.image_request["imageSHA256"]})
+        cached = self.args.final.rename(self.root / "cached-final-image")
+        def download(artifact, destination):
+            M.shutil.copytree(cached, destination)
+        with patch.object(M.GitHub, "source", return_value=self.source), \
+             patch.object(M.GitHub, "continuation_artifact", return_value={"id": 456}), \
+             patch.object(M.GitHub, "download", side_effect=download), patch.object(M, "verify_feed"), patch.object(M.subprocess, "run") as command:
+            M.finalize(self.args)
+        command.assert_not_called()
+        self.assertEqual((self.args.final / "Utatane-macOS.dmg").read_bytes(), b"final stapled image")
+
+    def test_dmg_finalization_staples_same_image_and_signs_dmg_feed(self):
+        self.image()
+        M.write(self.args.image_receipt / "status.json", {"id": self.image_request["submissionId"], "status": "Accepted"})
+        M.write(self.args.image_receipt / "notary-log.json", {"status": "Accepted"})
+        M.write(self.receipt / "notary-log.json", {"status": "Accepted"})
+        (self.candidate / "content").mkdir()
+        (self.candidate / "release-notes.md").write_text("notes")
+        (self.candidate / "generate_appcast").write_text("generator fixture")
+        M.seal(self.candidate, "candidate.json", self.data)
+        item = M.ET.fromstring(f'<item xmlns:sparkle="{M.SPARKLE[1:-1]}"><sparkle:version>201</sparkle:version><enclosure url="https://github.com/owner/repo/releases/download/v0.2.19/Utatane-macOS.dmg"/></item>')
+        calls = []
+        def command(args, **kwargs):
+            calls.append(args)
+            if "--ed-key-file" in args:
+                (self.args.final / "update-feed/appcast.xml").write_text("signed feed")
+        with patch.object(M.GitHub, "source", return_value=self.source), \
+             patch.object(M.GitHub, "continuation_artifact", return_value=None), \
+             patch.dict(os.environ, {"SPARKLE_PRIVATE_KEY": "isolated-test-key"}), \
+             patch.object(M.subprocess, "run", side_effect=command), patch.object(M, "verify_feed", return_value=item):
+            M.finalize(self.args)
+        saved = M.verify(self.args.final, "finalized.json")
+        self.assertEqual(saved["imageSubmissionId"], self.image_request["submissionId"])
+        self.assertEqual(M.release_name(saved), "Utatane-macOS.dmg")
+        self.assertEqual((self.args.final / "Utatane-macOS.dmg").read_bytes(), b"signed image with stapled app")
+        self.assertFalse(any(args[0] in ("ditto", "uv") or "--sign" in args for args in calls))
+        self.assertTrue(any(args[:3] == ["xcrun", "stapler", "staple"] for args in calls))
+
+    def test_dmg_upload_receipt_survives_info_failure(self):
+        self.image()
+        def command(*args):
+            if args[2] == "history":
+                return b'{"history": []}'
+            if args[2] == "submit":
+                return json.dumps({"id": self.image_request["submissionId"]}).encode()
+            raise subprocess.CalledProcessError(1, args)
+        with patch.object(M.GitHub, "source", return_value=self.source), \
+             patch.object(M.GitHub, "continuation_artifact", return_value=None), \
+             patch.object(M, "run", side_effect=command), patch.object(M, "output") as out:
+            with self.assertRaises(subprocess.CalledProcessError):
+                M.notarize_image(self.args)
+        self.assertEqual(M.read(self.args.image_receipt / "request.json"), self.image_request)
+        out.assert_called_once_with("reused", "false")
+
+    def test_pending_image_cannot_mark_accepted_app_terminal(self):
+        self.image()
+        M.write(self.args.image_receipt / "status.json", {"id": self.image_request["submissionId"], "status": "In Progress"})
+        with self.assertRaises(ValueError):
+            M.terminal(self.args)
+
+    def test_unknown_archive_format_is_rejected(self):
+        M.seal(self.candidate, "candidate.json", self.data | {"releaseArchive": "../../unexpected.dmg"})
+        with self.assertRaises(ValueError):
+            M.verify(self.candidate, "candidate.json")
+
 
 if __name__ == "__main__":
     unittest.main()

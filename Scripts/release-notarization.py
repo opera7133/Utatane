@@ -25,6 +25,13 @@ CANDIDATE = "Utatane-notary-candidate"
 SPARKLE = "{http://www.andymatuschak.org/xml-namespaces/sparkle}"
 
 
+def release_name(state):
+    name = state.get("releaseArchive", "Utatane-macOS.zip")
+    if name not in ("Utatane-macOS.zip", "Utatane-macOS.dmg"):
+        raise ValueError("Unsupported release archive")
+    return name
+
+
 def run(*args, **kwargs):
     return subprocess.check_output(list(map(str, args)), **kwargs)
 
@@ -85,6 +92,7 @@ def verify(root, name):
         raise ValueError("Invalid release identity")
     if not isinstance(data["runId"], int) or data["runId"] <= 0:
         raise ValueError("Invalid source run")
+    release_name(data)
     if name == "candidate.json" and data["archiveSHA256"] != data["files"]["Utatane-submission.zip"]:
         raise ValueError("Submission hash differs from the candidate manifest")
     return data
@@ -173,6 +181,13 @@ def prepare(args):
         raise ValueError("App version differs from the tagged build")
     subprocess.run(["codesign", "--verify", "--deep", "--strict", str(args.app)], check=True)
     subprocess.run(["ditto", "-c", "-k", "--keepParent", str(args.app), str(root / "Utatane-submission.zip")], check=True)
+    if args.dmg_assets:
+        shutil.copytree(args.dmg_assets, root / "dmg-assets")
+        shutil.copyfile("Scripts/build-dmg.py", root / "build-dmg.py")
+        for name in ("pyproject.toml", "uv.lock"):
+            target = root / "dmg-tools" / name
+            target.parent.mkdir(exist_ok=True)
+            shutil.copyfile(Path("Scripts/dmg") / name, target)
     shutil.copyfile(args.generator, root / "generate_appcast")
     shutil.copytree(args.content, root / "content")
     (root / "release-notes.md").write_bytes(run("python3", "Scripts/generate-release-notes.py", "--tag", tag))
@@ -181,6 +196,7 @@ def prepare(args):
         "runId": int(os.environ["GITHUB_RUN_ID"]), "buildNumber": number,
         "teamId": os.environ["APPLE_TEAM_ID"], "archiveSHA256": digest(root / "Utatane-submission.zip"),
         "sparklePublicKey": info["SUPublicEDKey"],
+        **({"releaseArchive": "Utatane-macOS.dmg"} if args.dmg_assets else {}),
     })
 
 
@@ -276,6 +292,7 @@ def load_candidate(args):
     bind(source, candidate, receipt)
     output("tag", candidate["tag"])
     output("submission", receipt["submissionId"])
+    output("archive", release_name(candidate))
 
 
 def check(args):
@@ -298,6 +315,131 @@ def check(args):
             raise ValueError("Notarization log contradicts the accepted status")
 
 
+def require_accepted(directory, receipt):
+    status = read(directory / "status.json")
+    if status["status"] != "Accepted" or status["id"].lower() != receipt["submissionId"].lower():
+        raise ValueError("Publication requires Apple's Accepted status for these bytes")
+
+
+def staple_app(args, candidate, temporary):
+    subprocess.run(["ditto", "-x", "-k", str(args.directory / "Utatane-submission.zip"), temporary], check=True)
+    app = Path(temporary) / "Utatane.app"
+    info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
+    if info["CFBundleShortVersionString"] != candidate["tag"][1:] or int(info["CFBundleVersion"]) != candidate["buildNumber"]:
+        raise ValueError("Signed app version changed")
+    details = subprocess.run(["codesign", "-dvv", str(app)], capture_output=True, text=True, check=True).stderr
+    if f"TeamIdentifier={candidate['teamId']}" not in details or "runtime" not in details:
+        raise ValueError("Unexpected signing team or missing hardened runtime")
+    for command in (["xcrun", "stapler", "staple"], ["xcrun", "stapler", "validate"],
+                    ["codesign", "--verify", "--deep", "--strict"], ["spctl", "--assess", "--type", "execute", "--verbose=2"]):
+        subprocess.run([*command, str(app)], check=True)
+    return app
+
+
+def bind_image(image, candidate, receipt):
+    for key in ("tag", "commit", "runId", "buildNumber", "teamId", "archiveSHA256", "sparklePublicKey"):
+        if image[key] != candidate[key]:
+            raise ValueError("Packaged image belongs to another signed candidate")
+    if image["appSubmissionId"] != receipt["submissionId"] or release_name(image) != "Utatane-macOS.dmg":
+        raise ValueError("Packaged image belongs to another app notarization")
+    if image["imageSHA256"] != image["files"]["Utatane-macOS.dmg"]:
+        raise ValueError("Image digest differs from its manifest")
+
+
+def load_image(args, candidate, app_receipt):
+    image = verify(args.image, "image.json")
+    bind_image(image, candidate, app_receipt)
+    request = read(args.image_receipt / "request.json")
+    if any(request[key] != image[key] for key in ("tag", "commit", "runId", "imageSHA256")):
+        raise ValueError("Image notarization belongs to different bytes")
+    uuid.UUID(request["submissionId"])
+    return image, request
+
+
+def package_image(args):
+    candidate = verify(args.directory, "candidate.json")
+    receipt = read(args.receipt / "request.json")
+    github = GitHub()
+    bind(github.source(candidate["runId"]), candidate, receipt)
+    require_accepted(args.receipt, receipt)
+    if release_name(candidate).endswith(".zip"):
+        output("enabled", "false")
+        return
+    output("enabled", "true")
+    existing = github.continuation_artifact(f"Utatane-notary-image-{candidate['runId']}")
+    if existing:
+        github.download(existing, args.image)
+        bind_image(verify(args.image, "image.json"), candidate, receipt)
+        output("reused", "true")
+        return
+    if github.continuation_artifact(f"Utatane-image-request-{candidate['runId']}"):
+        raise ValueError("Original disk image is missing; refusing to rebuild submitted bytes")
+    args.image.mkdir(parents=True, exist_ok=False)
+    with tempfile.TemporaryDirectory(prefix="utatane-image-package-") as temporary:
+        app = staple_app(args, candidate, temporary)
+        # Builder, lockfile and rendered artwork come from the original tagged candidate.
+        # Keep uv's mutable environment outside the sealed candidate directory.
+        environment = os.environ | {"UV_PROJECT_ENVIRONMENT": str(Path(temporary) / "tools-env")}
+        subprocess.run(["uv", "run", "--no-config", "--project", str(args.directory / "dmg-tools"), "--locked",
+                        "python", str(args.directory / "build-dmg.py"), "--app", str(app),
+                        "--assets", str(args.directory / "dmg-assets"), "--output", str(args.image / "Utatane-macOS.dmg"),
+                        "--require-app-ticket"], env=environment, check=True)
+    path = args.image / "Utatane-macOS.dmg"
+    subprocess.run(["codesign", "--force", "--sign", os.environ["UTATANE_SIGN_IDENTITY"], "--timestamp", str(path)], check=True)
+    subprocess.run(["codesign", "--verify", "--strict", str(path)], check=True)
+    details = subprocess.run(["codesign", "-dvv", str(path)], capture_output=True, text=True, check=True).stderr
+    if f"TeamIdentifier={candidate['teamId']}" not in details:
+        raise ValueError("Disk image signing team differs from the app")
+    seal(args.image, "image.json", {key: value for key, value in candidate.items() if key != "files"} |
+         {"appSubmissionId": receipt["submissionId"], "imageSHA256": digest(path)})
+    output("reused", "false")
+
+
+def notarize_image(args):
+    candidate = verify(args.directory, "candidate.json")
+    app_receipt = read(args.receipt / "request.json")
+    github = GitHub()
+    bind(github.source(candidate["runId"]), candidate, app_receipt)
+    require_accepted(args.receipt, app_receipt)
+    image = verify(args.image, "image.json")
+    bind_image(image, candidate, app_receipt)
+    previous = github.continuation_artifact(f"Utatane-image-request-{candidate['runId']}")
+    if previous:
+        github.download(previous, args.image_receipt)
+        _, receipt = load_image(args, candidate, app_receipt)
+        output("reused", "true")
+    else:
+        name = f"Utatane-{candidate['tag']}-run{candidate['runId']}-{image['imageSHA256'][:16]}.dmg"
+        history = json.loads(run("xcrun", "notarytool", "history", *notary_auth(args.profile), "--output-format", "json"))
+        matches = [item for item in history.get("history", []) if item.get("name") == name]
+        if matches:
+            submission = matches[0]["id"]
+        else:
+            with tempfile.TemporaryDirectory(prefix="utatane-image-submit-") as temporary:
+                path = Path(temporary) / name
+                shutil.copyfile(args.image / "Utatane-macOS.dmg", path)
+                submission = json.loads(run("xcrun", "notarytool", "submit", path, *notary_auth(args.profile), "--output-format", "json"))["id"]
+        uuid.UUID(submission)
+        receipt = {key: image[key] for key in ("tag", "commit", "runId", "imageSHA256")} | {"submissionId": submission}
+        write(args.image_receipt / "request.json", receipt)
+        # Save this receipt even if the following info/log request fails.
+        output("reused", "false")
+    response = json.loads(run("xcrun", "notarytool", "info", receipt["submissionId"], *notary_auth(args.profile), "--output-format", "json"))
+    if response["id"].lower() != receipt["submissionId"].lower():
+        raise ValueError("Apple returned a different disk image submission")
+    status = response["status"]
+    if status not in ("Accepted", "In Progress", "Invalid", "Rejected"):
+        raise ValueError(f"Unexpected disk image notarization status: {status}")
+    write(args.image_receipt / "status.json", response)
+    if status != "In Progress":
+        subprocess.run(["xcrun", "notarytool", "log", receipt["submissionId"], *notary_auth(args.profile), str(args.image_receipt / "notary-log.json")], check=True)
+        log = read(args.image_receipt / "notary-log.json")
+        if log["status"] != status or (status == "Accepted" and any(item.get("severity") == "error" for item in log.get("issues") or [])):
+            raise ValueError("Disk image notarization log contradicts the status")
+    output("status", {"Accepted": "accepted", "In Progress": "pending", "Invalid": "rejected", "Rejected": "rejected"}[status])
+    summary(f"{candidate['tag']}: disk image notarization is **{status}** ({receipt['submissionId']}).")
+
+
 def verify_feed(root, public):
     appcast = root / "update-feed/appcast.xml"
     contents = appcast.read_bytes()
@@ -309,9 +451,13 @@ def verify_feed(root, public):
         raise ValueError("Invalid signed feed length")
     item = ET.fromstring(contents).find("channel/item")
     enclosure = item.find("enclosure")
-    archive = root / "Utatane-macOS.zip"
+    state_file = "finalized.json" if (root / "finalized.json").exists() else None
+    name = release_name(read(root / state_file)) if state_file else Path(enclosure.attrib["url"]).name
+    if name not in ("Utatane-macOS.zip", "Utatane-macOS.dmg"):
+        raise ValueError("Unsupported feed archive")
+    archive = root / name
     if int(enclosure.attrib["length"]) != archive.stat().st_size:
-        raise ValueError("Feed does not match final ZIP size")
+        raise ValueError("Feed does not match final archive size")
     with tempfile.TemporaryDirectory() as temporary:
         temp = Path(temporary)
         (temp / "public.der").write_bytes(bytes.fromhex("302a300506032b6570032100") + base64.b64decode(public))
@@ -331,44 +477,53 @@ def finalize(args):
     status = read(args.receipt / "status.json")
     if status["status"] != "Accepted" or status["id"].lower() != receipt["submissionId"].lower():
         raise ValueError("Publication requires Apple's Accepted status")
+    archive_name = release_name(candidate)
+    if archive_name.endswith(".dmg"):
+        _, request = load_image(args, candidate, receipt)
+        require_accepted(args.image_receipt, request)
     existing = github.continuation_artifact(f"Utatane-notary-finalized-{candidate['runId']}")
     if existing:
         github.download(existing, args.final)
         saved = verify(args.final, "finalized.json")
         if any(saved[key] != candidate[key] for key in ("tag", "commit", "runId", "buildNumber", "archiveSHA256", "sparklePublicKey")) or saved["submissionId"] != receipt["submissionId"]:
             raise ValueError("Finalized artifact belongs to another notarization")
+        if release_name(saved) != archive_name or (archive_name.endswith(".dmg") and saved["imageSubmissionId"] != request["submissionId"]):
+            raise ValueError("Finalized artifact belongs to another image notarization")
+        if archive_name.endswith(".dmg") and saved["imageSHA256"] != request["imageSHA256"]:
+            raise ValueError("Finalized artifact belongs to different submitted image bytes")
         verify_feed(args.final, saved["sparklePublicKey"])
         output("reused", "true")
         return
     args.final.mkdir(parents=True, exist_ok=False)
-    with tempfile.TemporaryDirectory(prefix="utatane-staple-") as temporary:
-        subprocess.run(["ditto", "-x", "-k", str(args.directory / "Utatane-submission.zip"), temporary], check=True)
-        app = Path(temporary) / "Utatane.app"
-        info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
-        if info["CFBundleShortVersionString"] != candidate["tag"][1:] or int(info["CFBundleVersion"]) != candidate["buildNumber"]:
-            raise ValueError("Signed app version changed")
-        details = subprocess.run(["codesign", "-dvv", str(app)], capture_output=True, text=True, check=True).stderr
-        if f"TeamIdentifier={candidate['teamId']}" not in details or "runtime" not in details:
-            raise ValueError("Unexpected signing team or missing hardened runtime")
-        for command in (["xcrun", "stapler", "staple"], ["xcrun", "stapler", "validate"], ["codesign", "--verify", "--deep", "--strict"], ["spctl", "--assess", "--type", "execute", "--verbose=2"]):
-            subprocess.run([*command, str(app)], check=True)
-        subprocess.run(["ditto", "-c", "-k", "--keepParent", str(app), str(args.final / "Utatane-macOS.zip")], check=True)
+    if archive_name.endswith(".dmg"):
+        shutil.copyfile(args.image / "Utatane-macOS.dmg", args.final / archive_name)
+        for command in (["xcrun", "stapler", "staple"], ["xcrun", "stapler", "validate"],
+                        ["codesign", "--verify", "--strict"],
+                        ["spctl", "--assess", "--type", "open", "--context", "context:primary-signature", "--verbose=2"]):
+            subprocess.run([*command, str(args.final / archive_name)], check=True)
+    else:
+        with tempfile.TemporaryDirectory(prefix="utatane-staple-") as temporary:
+            app = staple_app(args, candidate, temporary)
+            subprocess.run(["ditto", "-c", "-k", "--keepParent", str(app), str(args.final / archive_name)], check=True)
     feed = args.final / "update-feed"
     feed.mkdir()
-    shutil.copyfile(args.final / "Utatane-macOS.zip", feed / "Utatane-macOS.zip")
+    shutil.copyfile(args.final / archive_name, feed / archive_name)
     generator = (args.directory / "generate_appcast").resolve()
     generator.chmod(0o755)
     subprocess.run([str(generator), "--ed-key-file", "-", "--download-url-prefix", f"https://github.com/{github.repository}/releases/download/{candidate['tag']}/", "--link", "https://dl.wmsci.com/utatane.html", "--maximum-deltas", "0", "-o", str(feed / "appcast.xml"), str(feed)], input=os.environ["SPARKLE_PRIVATE_KEY"].encode(), check=True)
-    (feed / "Utatane-macOS.zip").unlink()
+    (feed / archive_name).unlink()
     shutil.copytree(args.directory / "content", args.final / "content")
     shutil.copyfile(args.directory / "release-notes.md", args.final / "release-notes.md")
     shutil.copyfile(args.receipt / "notary-log.json", args.final / "notary-log.json")
+    if archive_name.endswith(".dmg"):
+        shutil.copyfile(args.image_receipt / "notary-log.json", args.final / "image-notary-log.json")
     item = verify_feed(args.final, candidate["sparklePublicKey"])
     if item.find(SPARKLE + "version").text != str(candidate["buildNumber"]):
         raise ValueError("Feed build number differs from source")
-    if item.find("enclosure").attrib["url"] != f"https://github.com/{github.repository}/releases/download/{candidate['tag']}/Utatane-macOS.zip":
+    if item.find("enclosure").attrib["url"] != f"https://github.com/{github.repository}/releases/download/{candidate['tag']}/{archive_name}":
         raise ValueError("Feed download URL differs from source")
-    seal(args.final, "finalized.json", {**{key: candidate[key] for key in ("schemaVersion", "tag", "commit", "runId", "buildNumber", "archiveSHA256", "sparklePublicKey")}, "submissionId": receipt["submissionId"]})
+    seal(args.final, "finalized.json", {**{key: candidate[key] for key in ("schemaVersion", "tag", "commit", "runId", "buildNumber", "archiveSHA256", "sparklePublicKey")}, "submissionId": receipt["submissionId"],
+        **({"releaseArchive": archive_name, "imageSubmissionId": request["submissionId"], "imageSHA256": request["imageSHA256"]} if archive_name.endswith(".dmg") else {})})
     output("reused", "false")
 
 
@@ -395,11 +550,11 @@ def publish(args):
     if saved["commit"] != source["head_sha"] or saved["tag"] != source["head_branch"]:
         raise ValueError("Finalized release no longer matches its source")
     verify_feed(args.final, saved["sparklePublicKey"])
-    if os.environ["VT_SHA256"] != digest(args.final / "Utatane-macOS.zip"):
+    if os.environ["VT_SHA256"] != digest(args.final / release_name(saved)):
         raise ValueError("VirusTotal result belongs to different bytes")
     promote = saved["buildNumber"] >= feed_build(production_feed())
     tag = saved["tag"]
-    assets = [args.final / "Utatane-macOS.zip", args.final / "update-feed/appcast.xml"]
+    assets = [args.final / release_name(saved), args.final / "update-feed/appcast.xml"]
     result = subprocess.run(["gh", "release", "view", tag, "--repo", github.repository, "--json", "assets,isDraft"], capture_output=True, text=True)
     if result.returncode == 0:
         release = json.loads(result.stdout)
@@ -443,6 +598,11 @@ def terminal(args):
     candidate = verify(args.directory, "candidate.json")
     receipt = read(args.receipt / "request.json")
     status = read(args.receipt / "status.json")
+    if status["status"] == "Accepted" and release_name(candidate).endswith(".dmg"):
+        _, receipt = load_image(args, candidate, receipt)
+        status = read(args.image_receipt / "status.json")
+        if status["id"].lower() != receipt["submissionId"].lower():
+            raise ValueError("Image status differs from its notarization receipt")
     if status["status"] not in ("Accepted", "Invalid", "Rejected"):
         raise ValueError("A pending submission is not terminal")
     write(Path("dist/notary-terminal/result.json"), {
@@ -454,7 +614,7 @@ def terminal(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("prepare", "submit", "discover", "load", "check", "finalize", "publish", "verify-published", "terminal"))
+    parser.add_argument("command", choices=("prepare", "submit", "discover", "load", "check", "finalize", "publish", "verify-published", "terminal", "package-image", "notarize-image"))
     parser.add_argument("--directory", type=Path, default=Path("dist/notary-candidate"))
     parser.add_argument("--receipt", type=Path, default=Path("dist/notary-request"))
     parser.add_argument("--final", type=Path, default=Path("dist/release"))
@@ -463,8 +623,11 @@ def main():
     parser.add_argument("--app", type=Path)
     parser.add_argument("--generator", type=Path)
     parser.add_argument("--content", type=Path)
+    parser.add_argument("--dmg-assets", type=Path)
+    parser.add_argument("--image", type=Path, default=Path("dist/notary-image"))
+    parser.add_argument("--image-receipt", type=Path, default=Path("dist/image-request"))
     args = parser.parse_args()
-    {"prepare": prepare, "submit": submit, "discover": discover, "load": load_candidate, "check": check, "finalize": finalize, "publish": publish, "verify-published": verify_published, "terminal": terminal}[args.command](args)
+    {"prepare": prepare, "submit": submit, "discover": discover, "load": load_candidate, "check": check, "finalize": finalize, "publish": publish, "verify-published": verify_published, "terminal": terminal, "package-image": package_image, "notarize-image": notarize_image}[args.command](args)
 
 
 if __name__ == "__main__":

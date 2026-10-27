@@ -61,7 +61,7 @@
     "view-downloads": "View downloads",
     "get-utatane-macos-zip-from-the-latest-release-it-supports-both-ap": "Download the latest release for macOS. It supports both Apple Silicon and Intel Macs.",
     "move-the-app": "Move the app",
-    "unzip-the-download-and-move-utatane-app-to-your-applications-fold": "Unzip the download and move Utatane.app to your Applications folder.",
+    "unzip-the-download-and-move-utatane-app-to-your-applications-fold": "Open the DMG and drag Utatane.app to Applications. For older ZIP downloads, extract the archive first.",
     "say-hello": "Say hello",
     "open-utatane-to-display-ria-the-included-character-you-can-add-ot": "Open Utatane to display Ria, the included character. You can add other ghosts later.",
     "if-macos-blocks-the-first-launch": "If macOS blocks the first launch",

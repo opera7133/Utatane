@@ -155,7 +155,7 @@
       const latest = releases[0];
       if (!latest) throw new Error("No published releases");
       const assets = Array.isArray(latest.assets) ? latest.assets : [];
-      const asset = ["Utatane-macOS-notarized.zip", "Utatane-macOS.zip"]
+      const asset = ["Utatane-macOS.dmg", "Utatane-macOS-notarized.zip", "Utatane-macOS.zip"]
         .map(name => assets.find(a => a && a.name === name &&
           safeGitHubURL(a.browser_download_url, "/opera7133/Utatane/releases/download/")))
         .find(Boolean);

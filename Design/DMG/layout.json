@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "backgroundSource": "background.svg",
+  "backgroundFilename": "background.tiff",
+  "windowContentSizeInPoints": { "width": 768, "height": 512 },
+  "coordinateOrigin": "top-left",
+  "iconSizeInPoints": 96,
+  "iconCentersInPoints": {
+    "application": { "x": 208, "y": 256 },
+    "applicationsShortcut": { "x": 560, "y": 256 }
+  },
+  "arrowCenterInPoints": { "x": 384, "y": 256 }
+}

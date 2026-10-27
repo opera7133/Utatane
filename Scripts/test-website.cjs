@@ -49,10 +49,13 @@ async function run(data, options={}) {
     const data = release('v0.2.18','2026-10-24');
     r=await run([{...data,assets:[...data.assets,notarized]}],{simple});
     assert.equal(r.ids['download-link'].href,notarized.browser_download_url);
+    const dmg = {name:'Utatane-macOS.dmg',browser_download_url:base+'/download/v0.2.18/Utatane-macOS.dmg'};
+    r=await run([{...data,assets:[...data.assets,notarized,dmg]}],{simple});
+    assert.equal(r.ids['download-link'].href,dmg.browser_download_url);
     r=await run([data],{simple});
     assert.equal(r.ids['download-link'].href,data.assets[0].browser_download_url);
   }
-  console.log('PASS: overview and simple page prefer a notarized addition and support normal release ZIPs');
+  console.log('PASS: overview and simple page prefer DMG, then a notarized addition, and support old ZIPs');
   for (const [label,data,options] of [
     ['HTTP failure',[],{httpError:true}],['network failure',[],{reject:true}],['timeout',[],{timeout:true}],['empty list',[],{}],['invalid response',{},{}],['unsafe URL',[release('bad','2026-08-01',{html_url:'https://evil.example/tag/x'})],{}]
   ]) {

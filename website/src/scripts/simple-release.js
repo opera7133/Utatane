@@ -37,12 +37,12 @@
                 releaseDateEl.textContent = ` / ${year}-${month}-${day} ${hours}:${minutes} 更新`;
               }
             }
-            const zipAsset = ["Utatane-macOS-notarized.zip", "Utatane-macOS.zip"]
+            const downloadAsset = ["Utatane-macOS.dmg", "Utatane-macOS-notarized.zip", "Utatane-macOS.zip"]
               .map(name => latestRelease.assets?.find(asset => asset.name === name))
               .find(Boolean);
-            if (downloadLinkEl && zipAsset?.browser_download_url) {
-              downloadLinkEl.href = zipAsset.browser_download_url;
-              downloadLinkEl.setAttribute("download", zipAsset.name);
+            if (downloadLinkEl && downloadAsset?.browser_download_url) {
+              downloadLinkEl.href = downloadAsset.browser_download_url;
+              downloadLinkEl.setAttribute("download", downloadAsset.name);
             } else if (downloadLinkEl && latestRelease.html_url) {
               downloadLinkEl.href = latestRelease.html_url;
             }
@@ -51,7 +51,7 @@
           console.warn("最新バージョンの取得に失敗しました:", error);
           if (versionInfoEl) {
             versionInfoEl.innerHTML =
-              "（最新リリースの <code>Utatane-macOS.zip</code>）";
+              "（最新リリースのmacOS用配布ファイル）";
           }
         }
       })();

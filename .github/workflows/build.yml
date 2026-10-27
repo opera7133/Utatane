@@ -8,7 +8,6 @@ on:
       - "**/README.md"
       - "CHANGELOG.md"
       - "LICENSE"
-      - "Design/**"
       - "Docs/**"
       - "Internal-Docs/**"
       - "References/**"
@@ -20,7 +19,6 @@ on:
       - "**/README.md"
       - "CHANGELOG.md"
       - "LICENSE"
-      - "Design/**"
       - "Docs/**"
       - "Internal-Docs/**"
       - "References/**"
@@ -58,6 +56,16 @@ jobs:
         run: |
           python3 Scripts/test-release-notarization.py
           python3 Scripts/test-publish-existing-notarized.py
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.13.5'
+          python-version: '3.13'
+
+      - name: Test real DMG generation, Finder layout, and signature preservation
+        run: |
+          brew install librsvg
+          uv run --no-config --project Scripts/dmg --locked python Scripts/test-dmg.py
 
       - name: Test Swift packages
         run: swift test --package-path packages
@@ -300,13 +308,19 @@ jobs:
       - name: Sign the complete app
         run: python3 Scripts/sign-app.py build/Build/Products/Release/Utatane.app --identity "$UTATANE_SIGN_IDENTITY"
 
+      - name: Export Retina DMG artwork from SVG
+        run: |
+          brew install librsvg
+          python3 Scripts/export-dmg-assets.py
+
       - name: Preserve the exact signed candidate
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           python3 Scripts/release-notarization.py prepare \
             --app build/Build/Products/Release/Utatane.app \
-            --generator dist/release-inputs/generate_appcast --content dist/content
+            --generator dist/release-inputs/generate_appcast --content dist/content \
+            --dmg-assets build/dmg-assets
 
       - name: Upload signed candidate for delayed notarization
         uses: actions/upload-artifact@v7

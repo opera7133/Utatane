@@ -68,7 +68,9 @@ jobs:
         run: python3 Scripts/release-notarization.py load --run-id "$SOURCE_RUN_ID"
       - name: Configure notarization authentication
         env:
-          UTATANE_NOTARY_ONLY: '1'
+          UTATANE_NOTARY_ONLY: ${{ steps.candidate.outputs.archive == 'Utatane-macOS.dmg' && '0' || '1' }}
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -84,36 +86,78 @@ jobs:
           path: dist/notary-request
           retention-days: 30
           if-no-files-found: ignore
-      - name: Record rejected submission and stop repeated automatic checks
-        if: steps.status.outputs.status == 'rejected'
-        run: python3 Scripts/release-notarization.py terminal
-      - name: Use OpenSSL 3 for Ed25519 archive and feed verification
+      - uses: astral-sh/setup-uv@v7
+        if: steps.status.outputs.status == 'accepted' && steps.candidate.outputs.archive == 'Utatane-macOS.dmg'
+        with:
+          version: '0.13.5'
+          python-version: '3.13'
+      - name: Package a signed DMG containing the stapled app, or recover the original image
+        id: package
         if: steps.status.outputs.status == 'accepted'
+        run: python3 Scripts/release-notarization.py package-image
+      - name: Preserve signed DMG bytes before submitting to Apple
+        if: steps.package.outputs.reused == 'false'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Utatane-notary-image-${{ matrix.source }}
+          path: dist/notary-image
+          retention-days: 30
+          if-no-files-found: error
+      - name: Submit or check the same DMG without waiting on the runner
+        id: image
+        if: steps.package.outputs.enabled == 'true'
+        run: python3 Scripts/release-notarization.py notarize-image
+      - name: Preserve DMG submission receipt even if status retrieval fails
+        if: ${{ always() && steps.image.outputs.reused == 'false' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Utatane-image-request-${{ matrix.source }}
+          path: dist/image-request
+          retention-days: 30
+          if-no-files-found: error
+      - name: Save DMG notarization diagnostics
+        if: ${{ always() && steps.package.outputs.enabled == 'true' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: Utatane-image-diagnostics-${{ matrix.source }}
+          path: dist/image-request
+          retention-days: 30
+          if-no-files-found: ignore
+      - name: Record rejected app or DMG submission
+        if: steps.status.outputs.status == 'rejected' || steps.image.outputs.status == 'rejected'
+        run: python3 Scripts/release-notarization.py terminal
+      - name: Allow publication only when every required notarization is accepted
+        id: publication
+        if: steps.status.outputs.status == 'accepted' && (steps.package.outputs.enabled == 'false' || steps.image.outputs.status == 'accepted')
+        run: echo 'ready=true' >> "$GITHUB_OUTPUT"
+      - name: Use OpenSSL 3 for Ed25519 archive and feed verification
+        if: steps.publication.outputs.ready == 'true'
         run: |
           brew install openssl@3
           echo "$(brew --prefix openssl@3)/bin" >> "$GITHUB_PATH"
       - name: Staple, verify Gatekeeper, and generate the final signed update
         id: final
-        if: steps.status.outputs.status == 'accepted'
+        if: steps.publication.outputs.ready == 'true'
         env:
           SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: python3 Scripts/release-notarization.py finalize
       - name: Preserve the finalized bytes before attempting publication
-        if: ${{ steps.status.outputs.status == 'accepted' && steps.final.outputs.reused == 'false' }}
+        if: ${{ steps.publication.outputs.ready == 'true' && steps.final.outputs.reused == 'false' }}
         uses: actions/upload-artifact@v7
         with:
           name: Utatane-notary-finalized-${{ matrix.source }}
           path: dist/release
           retention-days: 30
           if-no-files-found: error
-      - name: Scan the final ZIP with VirusTotal
-        if: steps.status.outputs.status == 'accepted'
+      - name: Scan the final distribution archive with VirusTotal
+        if: steps.publication.outputs.ready == 'true'
         env:
           VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
-        run: bash Scripts/scan-release-virustotal.sh dist/release/Utatane-macOS.zip
+          RELEASE_ARCHIVE: ${{ steps.candidate.outputs.archive }}
+        run: bash Scripts/scan-release-virustotal.sh "dist/release/$RELEASE_ARCHIVE"
       - name: Publish verified release assets without replacing different bytes
         id: publish
-        if: steps.status.outputs.status == 'accepted'
+        if: steps.publication.outputs.ready == 'true'
         run: python3 Scripts/release-notarization.py publish
       - name: Install feed deployment tool
         if: steps.publish.outputs.promote == 'true'
@@ -150,12 +194,12 @@ jobs:
           bye
           LFTP
       - name: Verify the production feed and record publication completion
-        if: steps.status.outputs.status == 'accepted'
+        if: steps.publication.outputs.ready == 'true'
         run: |
           python3 Scripts/release-notarization.py verify-published
           python3 Scripts/release-notarization.py terminal
       - name: Preserve terminal state for future scheduled checks
-        if: ${{ always() && (steps.status.outputs.status == 'rejected' || (steps.status.outputs.status == 'accepted' && success())) }}
+        if: ${{ always() && (steps.status.outputs.status == 'rejected' || steps.image.outputs.status == 'rejected' || (steps.publication.outputs.ready == 'true' && success())) }}
         uses: actions/upload-artifact@v7
         with:
           name: Utatane-notary-terminal-${{ matrix.source }}
@@ -163,7 +207,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
       - name: Fail rejected notarization without publishing
-        if: steps.status.outputs.status == 'rejected'
+        if: steps.status.outputs.status == 'rejected' || steps.image.outputs.status == 'rejected'
         run: exit 1
       - name: Remove temporary authentication keychain
         if: always()
@@ -171,3 +215,4 @@ jobs:
           if [[ -n "${UTATANE_SIGNING_KEYCHAIN:-}" ]]; then
             security delete-keychain "$UTATANE_SIGNING_KEYCHAIN"
           fi
+          rm -f "$RUNNER_TEMP/utatane-developer-id.p12"

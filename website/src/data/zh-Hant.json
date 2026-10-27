@@ -61,7 +61,7 @@
     "view-downloads": "前往下載頁面",
     "get-utatane-macos-zip-from-the-latest-release-it-supports-both-ap": "下載最新的 macOS 版本，同時支援 Apple Silicon 和 Intel Mac。",
     "move-the-app": "移動應用程式",
-    "unzip-the-download-and-move-utatane-app-to-your-applications-fold": "解壓縮 ZIP，將 Utatane.app 移到「應用程式」資料夾。",
+    "unzip-the-download-and-move-utatane-app-to-your-applications-fold": "開啟 DMG，將 Utatane.app 拖到 Applications。舊版 ZIP 請先解壓縮。",
     "say-hello": "啟動",
     "open-utatane-to-display-ria-the-included-character-you-can-add-ot": "開啟 Utatane，即可顯示內建角色「りあ」。之後還可以新增其他人格。",
     "if-macos-blocks-the-first-launch": "首次啟動被 macOS 阻擋時",

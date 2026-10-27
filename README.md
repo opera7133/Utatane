@@ -72,8 +72,8 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 
 ## とりあえず使う
 
-1. [公式サイト](https://dl.wmsci.com/utatane/)のダウンロードボタンからmacOS版を取得する。[Releases](https://github.com/opera7133/Utatane/releases)では、`Utatane-macOS-notarized.zip`がある場合はそちらを、なければ`Utatane-macOS.zip`を選ぶ
-2. ZIPを展開し、`Utatane.app`を「アプリケーション」フォルダへ移動する
+1. [公式サイト](https://dl.wmsci.com/utatane/)のダウンロードボタンからmacOS版を取得する。[Releases](https://github.com/opera7133/Utatane/releases)では、`Utatane-macOS.dmg`があればそちらを選ぶ。ZIPのみの版では、公証済みの追加ZIPがあればそちらを選ぶ
+2. DMGを開き、`Utatane.app`を隣のApplicationsへドラッグする。ZIPの場合は展開して「アプリケーション」フォルダへ移動する
 3. Utataneを起動する
 
 初回起動時にSHIORIモジュールの導入を終えると、同梱ゴースト「りあ」と専用バルーン「Ria」を利用できます。りあは時間帯や曜日に応じた会話、マウス操作、着せ替え、短い外出、現在地の天気確認などに対応しています。
