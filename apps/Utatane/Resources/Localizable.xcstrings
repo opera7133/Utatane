@@ -11166,6 +11166,35 @@
         }
       }
     },
+    "右クリックメニュー" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Context Menu"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "오른쪽 클릭 메뉴"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右键菜单"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右鍵選單"
+          }
+        }
+      }
+    },
     "合成された音声を再生できませんでした。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15516,6 +15545,35 @@
         }
       }
     },
+    "自動ではゴーストやシェルのメニュー画像・文字色を使う。指定がなければmacOS標準で表示する。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Automatic uses menu images and text colors provided by the ghost or shell. Without custom settings, the macOS menu is used."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동에서는 고스트나 셸의 메뉴 이미지와 글자색을 사용합니다. 설정이 없으면 macOS 기본 메뉴로 표시합니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动模式使用 Ghost 或 Shell 提供的菜单图片和文字颜色。未指定时使用 macOS 标准菜单。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動模式使用 Ghost 或 Shell 提供的選單圖片與文字顏色。未指定時使用 macOS 標準選單。"
+          }
+        }
+      }
+    },
     "自動会話" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -16045,6 +16103,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Display Mode"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "표시 방식"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "显示方式"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "顯示方式"
+          }
+        }
+      }
+    },
+    "表示方法" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Display Style"
           }
         },
         "ko" : {

@@ -644,5 +644,8 @@
   "モジュールを導入中…" : "Installing modules…",
   "カタログに掲載がない" : "Not listed in the catalog",
   "カタログを未確認" : "Catalog not checked",
-  "通常SAORIの診断には %@ 以降が必要。" : "Ordinary SAORI diagnostics require %@ or later."
+  "通常SAORIの診断には %@ 以降が必要。" : "Ordinary SAORI diagnostics require %@ or later.",
+  "右クリックメニュー" : "Context Menu",
+  "表示方法" : "Display Style",
+  "自動ではゴーストやシェルのメニュー画像・文字色を使う。指定がなければmacOS標準で表示する。" : "Automatic uses menu images and text colors provided by the ghost or shell. Without custom settings, the macOS menu is used."
 }

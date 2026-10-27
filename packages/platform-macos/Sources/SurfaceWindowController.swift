@@ -134,6 +134,8 @@ public final class SurfaceWindowController {
     public var onURLDropping: (@MainActor (Int, URL) -> Void)?
     public var onURLDrop: (@MainActor (Int, URL) -> Void)?
     public var onTextDrop: (@MainActor (Int, String) -> Void)?
+    public var contextMenuAppearance: (@MainActor () -> SurfaceMenuAppearance?)?
+    public var prepareContextMenu: (@MainActor () async -> Void)?
     public var contextMenuItems: (@MainActor (Int) -> [SurfaceContextMenuItem])?
     public var onUserDressupChange: (@MainActor ([DressupChange]) -> Void)?
 
@@ -1217,6 +1219,8 @@ public final class SurfaceWindowController {
             else { return }
             onDisplayHandover?(event)
         }
+        character.contextMenuAppearance = { [weak self] in self?.contextMenuAppearance?() }
+        character.prepareContextMenu = { [weak self] in await self?.prepareContextMenu?() }
         character.contextMenuItems = { [weak self] in
             self?.contextMenuItems?(scope) ?? []
         }
@@ -1480,6 +1484,8 @@ private final class CharacterSurfaceController {
     var onURLDropping: (@MainActor (URL) -> Void)?
     var onURLDrop: (@MainActor (URL) -> Void)?
     var onTextDrop: (@MainActor (String) -> Void)?
+    var contextMenuAppearance: (@MainActor () -> SurfaceMenuAppearance?)?
+    var prepareContextMenu: (@MainActor () async -> Void)?
     var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
 
     init(
@@ -2952,6 +2958,8 @@ private final class CharacterSurfaceController {
         imageView.onParameterDragEnd = { [weak self] in
             self?.restoreNijigenerateDrag()
         }
+        imageView.contextMenuAppearance = { [weak self] in self?.contextMenuAppearance?() }
+        imageView.prepareContextMenu = { [weak self] in await self?.prepareContextMenu?() }
         imageView.contextMenuItems = { [weak self] in
             self?.contextMenuItems?() ?? []
         }
@@ -3632,6 +3640,8 @@ private final class SurfaceImageView: NSImageView {
     var parameterDragRegion: String?
     var onParameterDragUpdate: ((Int, Int) -> Void)?
     var onParameterDragEnd: (() -> Void)?
+    var contextMenuAppearance: (@MainActor () -> SurfaceMenuAppearance?)?
+    var prepareContextMenu: (@MainActor () async -> Void)?
     var contextMenuItems: (@MainActor () -> [SurfaceContextMenuItem])?
     var onNarDrop: (([URL]) -> Void)?
     var onFileDropping: (([URL]) -> Void)?
@@ -4000,8 +4010,13 @@ private final class SurfaceImageView: NSImageView {
             return
         }
         sendClickEvent(event)
-        if let menu = menu(for: event) {
-            NSMenu.popUpContextMenu(menu, with: event, for: self)
+        Task { [weak self] in
+            guard let self else { return }
+            await prepareContextMenu?()
+            guard window != nil else { return }
+            if let menu = menu(for: event) {
+                NSMenu.popUpContextMenu(menu, with: event, for: self)
+            }
         }
     }
 
@@ -4390,7 +4405,12 @@ private final class SurfaceImageView: NSImageView {
     override func menu(for event: NSEvent) -> NSMenu? {
         guard let contextMenuItems else { return nil }
         let items = contextMenuItems()
-        return items.isEmpty ? nil : SurfaceContextMenuBuilder().build(from: items)
+        guard !items.isEmpty else { return nil }
+        if let appearance = contextMenuAppearance?(), let window {
+            SurfaceThemedMenuController.shared.show(items: items, appearance: appearance, at: window.convertPoint(toScreen: event.locationInWindow))
+            return nil
+        }
+        return SurfaceContextMenuBuilder().build(from: items)
     }
 }
 

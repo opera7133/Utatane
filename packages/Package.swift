@@ -93,9 +93,13 @@ let package = Package(
             name: "UtataneMCP",
             path: "mcp-server/Sources"
         ),
+        .target(name: "UtataneLZMA", path: "content-validator-lzma/Sources",
+                sources: ["Decoder.c", "Vendor/LzmaDec.c"], publicHeadersPath: "include",
+                linkerSettings: [.linkedLibrary("z")]),
         .target(
             name: "UtataneContentValidator",
             dependencies: [
+                "UtataneLZMA",
                 "UtataneCore",
                 "UtataneGhostKit",
                 "UtataneSakuraScript",

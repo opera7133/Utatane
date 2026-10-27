@@ -19,6 +19,25 @@ private func makeSpectrumWave() throws -> URL {
     return url
 }
 
+@Test @MainActor func `same sound filename in different plugin folders never reuses the other audio`() async throws {
+    let source = try makeSpectrumWave()
+    defer { try? FileManager.default.removeItem(at: source) }
+    let root = FileManager.default.temporaryDirectory.appending(path: "plugin-sound-\(UUID())")
+    defer { try? FileManager.default.removeItem(at: root) }
+    for name in ["ghost", "first", "second"] {
+        let directory = root.appending(path: name)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: source, to: directory.appending(path: "same.wav"))
+    }
+    let player = SakuraScriptSoundPlayer(); player.isMuted = true
+    defer { player.discard() }
+    player.resourceBaseDirectory = root.appending(path: "ghost")
+    for name in ["first", "second", "ghost"] {
+        try await player.execute(.play(file: "same.wav", loop: false, options: []), resourceDirectory: name == "ghost" ? nil : root.appending(path: name))
+        #expect(player.propertyValue(for: "currentghost.sound.index(0).path") == root.appending(path: name + "/same.wav").path)
+    }
+}
+
 @Test func `spectrum measures stereo levels and ISO bands without audio output`() throws {
     let url = try makeSpectrumWave()
     defer { try? FileManager.default.removeItem(at: url) }

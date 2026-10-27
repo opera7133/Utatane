@@ -314,6 +314,7 @@ final class UtataneSettingsStore: ObservableObject {
         static let mailUsesTLS = "network.mail.usesTLS"
         static let startupBehavior = "general.startupBehavior"
         static let showsDockIcon = "general.showsDockIcon"
+        static let contextMenuMode = "general.contextMenuMode"
         static let appearance = "general.appearance"
         static let windowLevelBehavior = "general.windowLevelBehavior"
         static let windowMode = "general.windowMode"
@@ -514,6 +515,10 @@ final class UtataneSettingsStore: ObservableObject {
         }
     }
 
+    @Published var contextMenuMode: SurfaceMenuMode {
+        didSet { defaults.set(contextMenuMode.rawValue, forKey: Key.contextMenuMode) }
+    }
+
     @Published var shellScalePercent: Int {
         didSet { saveGhostValue(shellScalePercent, kind: Key.shellScalePercent) }
     }
@@ -693,6 +698,7 @@ final class UtataneSettingsStore: ObservableObject {
         } else {
             speechVoiceSettingsByScope = [0: SpeechVoiceSettings(), 1: SpeechVoiceSettings()]
         }
+        contextMenuMode = SurfaceMenuMode(rawValue: defaults.string(forKey: Key.contextMenuMode) ?? "") ?? .automatic
         shellScalePercent = 100
         automaticallyFitsLargeSurfaces = true
         balloonScalePercent = 100
@@ -954,6 +960,15 @@ struct UtataneSettingsView: View {
                             )
                             .disabled(settings.windowMode == .off)
                             Text("ゴーストとバルーンを通常の1枚のウィンドウ内に表示する。配信や画面収録でウィンドウ単位に取り込みやすくなる。")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Section("右クリックメニュー") {
+                            Picker("表示方法", selection: $settings.contextMenuMode) {
+                                Text("自動").tag(SurfaceMenuMode.automatic)
+                                Text("macOS標準").tag(SurfaceMenuMode.standard)
+                            }
+                            Text("自動ではゴーストやシェルのメニュー画像・文字色を使う。指定がなければmacOS標準で表示する。")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }

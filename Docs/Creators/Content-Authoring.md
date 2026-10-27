@@ -100,7 +100,7 @@ Windows版とmacOS版でファイル名を変える場合は、利用するSHIOR
 
 ## Utataneでの確認方法
 
-配布前の確認には、NARを使う方法と展開済みフォルダを使う方法があります。
+配布前の確認には、NARを使う方法と展開済みフォルダを使う方法があります。CLIとNAR検査サイトは、stored・deflate・LZMA圧縮のZIP/NARを扱います。アーカイブ50MB、展開合計200MB、1ファイル64MB、テキスト1ファイル8MBなどの制限があり、LZMA辞書は64MBまでです。
 
 - macOS環境がない場合や、まず構成だけ確認したい場合: [Utatane NAR検査](https://utatane-validate.wmsci.com/)へNARをアップロードします。SHIORIの判定、Utataneでの対応状況、基本的な構成上の問題を確認できます。
 - 利用者と同じ条件: NARをUtataneへドラッグ＆ドロップして新規インストールします。

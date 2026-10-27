@@ -78,12 +78,12 @@ public struct ContentArchiveValidator: Sendable {
                 throw ArchiveValidationError.unreadable("ZIPのエントリ一覧を最後まで読み取れません。")
             }
 
-            var prepared: [(entry: Entry, path: String, maximumBytes: UInt64)] = []
+            var prepared: [(entry: Entry, path: String, maximumBytes: UInt64, lzma: LZMAArchiveEntry?)] = []
             var pathKeys = Set<String>()
             var directoryKeys = Set<String>()
             var declaredExtractedBytes: UInt64 = 0
             var declaredTextBytes: UInt64 = 0
-            for entry in entries {
+            for (index, entry) in entries.enumerated() {
                 try checkDeadline(startedAt)
                 guard entry.type != .symlink else {
                     throw ArchiveValidationError.unsupported("シンボリックリンクは展開できません: \(entry.path)")
@@ -126,7 +126,13 @@ public struct ContentArchiveValidator: Sendable {
                     throw ArchiveValidationError.extractedTooLarge
                 }
                 declaredExtractedBytes = nextSize
-                prepared.append((entry, path, entryLimit))
+                let lzma = preflight.lzmaEntries[index]
+                if let lzma {
+                    guard entry.uncompressedSize == lzma.uncompressedSize, entry.checksum == lzma.checksum else {
+                        throw ArchiveValidationError.unreadable("LZMAエントリのサイズ・チェックサムが一致しません。")
+                    }
+                }
+                prepared.append((entry, path, entryLimit, lzma))
             }
 
             let temporaryRoot = fileManager.temporaryDirectory
@@ -162,7 +168,7 @@ public struct ContentArchiveValidator: Sendable {
                     let output = try FileHandle(forWritingTo: destination)
                     var entryExtractedBytes: UInt64 = 0
                     do {
-                        _ = try archive.extract(item.entry) { chunk in
+                        let consume: (Data) throws -> Void = { chunk in
                             try checkDeadline(startedAt)
                             let (nextEntrySize, entryOverflow) = entryExtractedBytes
                                 .addingReportingOverflow(UInt64(chunk.count))
@@ -186,6 +192,11 @@ public struct ContentArchiveValidator: Sendable {
                             }
                             extractedBytes = nextSize
                             try output.write(contentsOf: chunk)
+                        }
+                        if let lzma = item.lzma {
+                            try lzma.extract(consumer: consume)
+                        } else {
+                            _ = try archive.extract(item.entry, skipCRC32: false, consumer: consume)
                         }
                         try output.close()
                     } catch {
@@ -380,6 +391,7 @@ private enum ArchiveValidationError: Error {
 private struct ZIPPreflight {
     let entryCount: Int
     let isEncrypted: Bool
+    let lzmaEntries: [Int: LZMAArchiveEntry]
 
     static func inspect(url: URL) throws -> ZIPPreflight {
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
@@ -411,7 +423,8 @@ private struct ZIPPreflight {
         }
         let centralEnd = offset + centralSize
         var encrypted = false
-        for _ in 0 ..< Int(totalEntries) {
+        var lzmaEntries: [Int: LZMAArchiveEntry] = [:]
+        for index in 0 ..< Int(totalEntries) {
             guard offset + 46 <= centralEnd, data.uint32LE(at: offset) == 0x0201_4B50 else {
                 throw ArchiveValidationError.unreadable("ZIPの中央ディレクトリが壊れています。")
             }
@@ -423,12 +436,40 @@ private struct ZIPPreflight {
             guard next >= offset, next <= centralEnd else {
                 throw ArchiveValidationError.unreadable("ZIPのエントリ情報が壊れています。")
             }
+            if data.uint16LE(at: offset + 10) == 14 {
+                let local = Int(data.uint32LE(at: offset + 42))
+                let flags = data.uint16LE(at: offset + 8)
+                let compressed = Int(data.uint32LE(at: offset + 20))
+                let size = data.uint32LE(at: offset + 24)
+                guard local + 30 <= offset, data.uint32LE(at: local) == 0x0403_4B50,
+                      data.uint16LE(at: local + 8) == 14, data.uint16LE(at: local + 6) == flags,
+                      size != .max, compressed != Int(UInt32.max)
+                else {
+                    throw ArchiveValidationError.unreadable("LZMAのローカルヘッダが壊れています。")
+                }
+                let localNameSize = Int(data.uint16LE(at: local + 26))
+                let payloadOffset = local + 30 + localNameSize + Int(data.uint16LE(at: local + 28))
+                guard payloadOffset <= offset, compressed <= offset - payloadOffset,
+                      data[local + 30 ..< local + 30 + localNameSize] == data[offset + 46 ..< offset + 46 + nameLength]
+                else {
+                    throw ArchiveValidationError.unreadable("LZMAのデータ範囲が壊れています。")
+                }
+                if flags & 8 == 0 {
+                    guard data.uint32LE(at: local + 18) == UInt32(compressed), data.uint32LE(at: local + 22) == size,
+                          data.uint32LE(at: local + 14) == data.uint32LE(at: offset + 16)
+                    else {
+                        throw ArchiveValidationError.unreadable("LZMAヘッダのサイズが一致しません。")
+                    }
+                }
+                lzmaEntries[index] = LZMAArchiveEntry(archiveData: data, payloadRange: payloadOffset ..< payloadOffset + compressed,
+                                                      uncompressedSize: UInt64(size), checksum: data.uint32LE(at: offset + 16), requiresEndMarker: flags & 2 != 0)
+            }
             offset = next
         }
         guard offset == centralEnd else {
             throw ArchiveValidationError.unreadable("ZIPの中央ディレクトリ件数が一致しません。")
         }
-        return ZIPPreflight(entryCount: Int(totalEntries), isEncrypted: encrypted)
+        return ZIPPreflight(entryCount: Int(totalEntries), isEncrypted: encrypted, lzmaEntries: lzmaEntries)
     }
 }
 

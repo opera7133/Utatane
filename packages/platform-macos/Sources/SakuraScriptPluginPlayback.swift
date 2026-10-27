@@ -6,10 +6,14 @@ import UtataneSakuraScript
 public struct SakuraScriptPluginOrigin: Sendable, Equatable {
     public let id: String
     public let interactionID: UUID
+    public let resourceDirectory: URL?
+    public let generation: UUID?
 
-    public init(id: String, interactionID: UUID = UUID()) {
+    public init(id: String, interactionID: UUID = UUID(), resourceDirectory: URL? = nil, generation: UUID? = nil) {
         self.id = id
         self.interactionID = interactionID
+        self.resourceDirectory = resourceDirectory
+        self.generation = generation
     }
 }
 

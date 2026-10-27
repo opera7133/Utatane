@@ -7,6 +7,45 @@ import UtataneSakuraScript
 
 @MainActor
 struct TextInputWindowControllerTests {
+    @Test func `plugin input requests completion before showing and submits to its event owner`() async throws {
+        let controller = TextInputWindowController()
+        defer { controller.close() }
+        var events: [GhostEvent] = []
+        let owner = UUID()
+        let command = SakuraScriptInputCommand(kind: .text, id: "OnPluginInput", timeoutMilliseconds: nil, initialValue: "")
+        let task = Task { @MainActor in
+            await controller.showScriptInput(command: command, appearance: nil, ownerID: owner, sendEvent: { event in
+                events.append(event)
+                if case .shiori("inputbox.autocomplete", _) = event {
+                    return .init(rawValue: "候補\u{1}候補\u{1}別の候補")
+                }
+                return .init(rawValue: "saved")
+            }, playResponse: { _ in })
+        }
+        try await requireEventually { controller.window != nil }
+        #expect(controller.currentRequest?.autocompleteValues == ["候補", "別の候補"])
+        #expect(controller.currentRequest?.ownerID == owner)
+        controller.submitCurrent("入力")
+        #expect(await task.value?.rawValue == "saved")
+        #expect(events == [.shiori(id: "inputbox.autocomplete", references: [0: "inputbox", 1: "OnPluginInput"]), SHIORIEventFactory.userInput(id: "OnPluginInput", value: "入力")])
+    }
+
+    @Test func `plugin reload closes only owned input and stale completion cannot reopen it`() async {
+        let controller = TextInputWindowController()
+        defer { controller.close() }
+        controller.show(.init(title: "Ghost", onCommit: { _ in }))
+        controller.closePluginInput()
+        #expect(controller.window != nil)
+        controller.show(.init(title: "Plugin", ownerID: UUID(), onCommit: { _ in }))
+        controller.closePluginInput()
+        #expect(controller.window == nil)
+        var current = true
+        let command = SakuraScriptInputCommand(kind: .password, id: "OnSecret", timeoutMilliseconds: nil, initialValue: "")
+        _ = await controller.showScriptInput(command: command, appearance: nil, ownerID: UUID(), isCurrent: { current },
+                                             sendEvent: { _ in current = false; return .init(rawValue: "old") }, playResponse: { _ in })
+        #expect(controller.window == nil)
+    }
+
     @Test
     func `shows and closes input window`() {
         let controller = TextInputWindowController()

@@ -1735,7 +1735,7 @@ public final class SakuraScriptPlayer {
                     if command == .wait {
                         finishRenderingBatch()
                     }
-                    try await soundPlayer.execute(command)
+                    try await soundPlayer.execute(command, resourceDirectory: located.pluginOrigin?.resourceDirectory)
                 case let .embeddedEvent(id, arguments):
                     if let embeddedScript = await onEmbeddedEvent?(id, arguments) {
                         pendingTokens.insert(contentsOf: playbackTokens(embeddedScript), at: 0)
@@ -1817,7 +1817,7 @@ public final class SakuraScriptPlayer {
                 case .resetStickyWindows:
                     surfaceWindowController.resetStickyWindows()
                 case let .inlineImage(path, isOpaque, options):
-                    if let image = resolveInlineImage(path: path, isOpaque: isOpaque, options: options) {
+                    if let image = resolveInlineImage(path: path, isOpaque: isOpaque, options: options, pluginDirectory: located.pluginOrigin?.resourceDirectory) {
                         let targetScope = scope
                         let currentLength = (textByScope[targetScope, default: ""] as NSString).length
                         textByScope[targetScope, default: ""].append("\u{FFFC}")
@@ -1832,7 +1832,7 @@ public final class SakuraScriptPlayer {
                         )
                     }
                 case let .positionedImage(path, x, y, isOpaque, options):
-                    if let image = resolveInlineImage(path: path, isOpaque: isOpaque, options: options) {
+                    if let image = resolveInlineImage(path: path, isOpaque: isOpaque, options: options, pluginDirectory: located.pluginOrigin?.resourceDirectory) {
                         try activateIfNeeded(scope: scope)
                         let foreground = options.contains {
                             $0.caseInsensitiveCompare("--option=foreground") == .orderedSame
@@ -2253,7 +2253,7 @@ public final class SakuraScriptPlayer {
         )
     }
 
-    private func resolveInlineImage(path: String, isOpaque: Bool, options: [String]) -> NSImage? {
+    private func resolveInlineImage(path: String, isOpaque: Bool, options: [String], pluginDirectory: URL?) -> NSImage? {
         let usesSelfAlpha = options.contains {
             $0.caseInsensitiveCompare("--option=use_self_alpha") == .orderedSame
         }
@@ -2267,18 +2267,20 @@ public final class SakuraScriptPlayer {
                 }
             }
         }
-        guard let baseDirectory = resourceBaseDirectory else { return nil }
+        guard let baseDirectory = pluginDirectory ?? resourceBaseDirectory else { return nil }
         let normalizedPath = path.replacingOccurrences(of: "\\", with: "/")
         let url: URL
         if normalizedPath.hasPrefix("/") {
             let candidate = URL(fileURLWithPath: normalizedPath).standardizedFileURL.resolvingSymlinksInPath()
-            guard ([baseDirectory] + additionalImageDirectories).contains(where: { root in
+            guard ([baseDirectory] + [resourceBaseDirectory].compactMap(\.self) + additionalImageDirectories).contains(where: { root in
                 let path = root.standardizedFileURL.resolvingSymlinksInPath().path
                 return candidate.path.hasPrefix(path + "/")
             }) else { return nil }
             url = candidate
         } else {
-            url = baseDirectory.appending(path: normalizedPath)
+            let root = baseDirectory.standardizedFileURL.resolvingSymlinksInPath()
+            url = root.appending(path: normalizedPath).standardizedFileURL.resolvingSymlinksInPath()
+            guard url.path.hasPrefix(root.path + "/") else { return nil }
         }
         if FileManager.default.fileExists(atPath: url.path) {
             image = if isOpaque || usesSelfAlpha {

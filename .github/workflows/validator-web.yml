@@ -7,6 +7,7 @@ on:
       - "packages/Package.swift"
       - "packages/Package.resolved"
       - "packages/content-validator/**"
+      - "packages/content-validator-lzma/**"
       - "packages/content-validator-cli/**"
       - "packages/core/**"
       - "packages/ghost-kit/**"
@@ -21,6 +22,7 @@ on:
       - "packages/Package.swift"
       - "packages/Package.resolved"
       - "packages/content-validator/**"
+      - "packages/content-validator-lzma/**"
       - "packages/content-validator-cli/**"
       - "packages/core/**"
       - "packages/ghost-kit/**"
@@ -75,26 +77,38 @@ jobs:
             "$SWIFT_BUILD_IMAGE" \
             bash Scripts/build-validator-web-bundle.sh
 
-      - name: Create smoke-test NAR
+      - name: Create smoke-test NARs
         working-directory: Content/Bundled/Ghosts/ria
-        run: zip -qr "$RUNNER_TEMP/ria.nar" .
-
-      - name: Smoke-test archive validation
         run: |
-          docker run --platform linux/amd64 --rm \
-            -v "$PWD:/workspace:ro" \
-            -v "$RUNNER_TEMP:/test-input:ro" \
-            -w /workspace \
-            "$SWIFT_BUILD_IMAGE" \
-            dist/validator-web/bin/utatane-validate \
-              --json --archive /test-input/ria.nar \
-              > "$RUNNER_TEMP/report.json"
-          jq -e '
-            .ghostName == "りあ" and
-            .shioriAssessment.identifier == "yaya" and
-            .shioriAssessment.supportStatus == "supported" and
-            (.diagnostics | length) == 0
-          ' "$RUNNER_TEMP/report.json"
+          zip -qr "$RUNNER_TEMP/ria.nar" .
+          python3 - <<'PYTHON'
+          import os
+          from pathlib import Path
+          import zipfile
+          with zipfile.ZipFile(Path(os.environ["RUNNER_TEMP"]) / "ria-lzma.nar", "w", compression=zipfile.ZIP_LZMA) as archive:
+              for path in sorted(Path(".").rglob("*")):
+                  if path.is_file():
+                      archive.write(path, path.as_posix())
+          PYTHON
+
+      - name: Smoke-test deflate and LZMA archive validation
+        run: |
+          for archive in ria.nar ria-lzma.nar; do
+            docker run --platform linux/amd64 --rm \
+              -v "$PWD:/workspace:ro" \
+              -v "$RUNNER_TEMP:/test-input:ro" \
+              -w /workspace \
+              "$SWIFT_BUILD_IMAGE" \
+              dist/validator-web/bin/utatane-validate \
+                --json --archive "/test-input/$archive" \
+                > "$RUNNER_TEMP/report.json"
+            jq -e '
+              .ghostName == "りあ" and
+              .shioriAssessment.identifier == "yaya" and
+              .shioriAssessment.supportStatus == "supported" and
+              (.diagnostics | length) == 0
+            ' "$RUNNER_TEMP/report.json"
+          done
 
       - name: Verify Linux compatibility floor
         run: |

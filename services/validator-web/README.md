@@ -68,3 +68,7 @@ find services/validator-web -name '*.php' -print0 | xargs -0 -n1 php -l
 UTATANE_VALIDATE_BINARY="$PWD/packages/.build/arm64-apple-macosx/debug/utatane-validate" \
   php -S 127.0.0.1:8080 -t services/validator-web/public
 ```
+
+## LZMA圧縮NAR
+
+stored・deflateに加えてZIP method 14（LZMA）を共通CLIで展開します。デコーダーを静的に組み込むため、サーバー側の`7z`・`xz`・`bsdtar`や追加ライブラリの導入は不要です。辞書サイズは64MBまでで、CRC・宣言サイズ・出力サイズ・既存の件数/時間制限を検査します。ZIP64・暗号化ZIP・シンボリックリンク等の制限は変わりません。LZMA SDKのpublic-domainデコーダーの出典は`licenses/LZMA-SDK.txt`に記載し、ライセンス画面にも表示します。

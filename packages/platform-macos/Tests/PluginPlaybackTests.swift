@@ -312,3 +312,56 @@ struct DBdiaryIntegrationTests {
         }
     }
 }
+
+@Test @MainActor
+func `plugin images stay relative to their origin and cannot escape through a symlink`() async throws {
+    try await withPluginPlayer { player, balloons, balloon, root in
+        let plugin = FileManager.default.temporaryDirectory.appending(path: "plugin-images-\(UUID())")
+        try FileManager.default.createDirectory(at: plugin, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: plugin) }
+        try makePNG(width: 8, height: 8, color: NSColor(deviceRed: 1, green: 0, blue: 0, alpha: 1)).write(to: root.appending(path: "same.png"))
+        try makePNG(width: 8, height: 8, color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)).write(to: plugin.appending(path: "same.png"))
+        try FileManager.default.createSymbolicLink(at: plugin.appending(path: "escape.png"), withDestinationURL: root.appending(path: "same.png"))
+        let script = SakuraScript(rawValue: #"\_b[same.png,inline,--option=use_self_alpha]\_b[escape.png,inline]"#)
+        await player.playAndWait(script, balloon: balloon, characterDelayMilliseconds: 0,
+                                 context: .init(pluginOrigin: .init(id: "images", resourceDirectory: plugin)))
+        let images = try #require(balloons.contentSnapshots(scopes: [0])[0]?.inlineImages)
+        #expect(images.count == 1)
+        #expect(images.values.first?.colorAtCenter()?.blueComponent ?? 0 > 0.9)
+        await player.playAndWait(SakuraScript(rawValue: #"\_b[same.png,inline,--option=use_self_alpha]"#), balloon: balloon, characterDelayMilliseconds: 0)
+        let ordinary = try #require(balloons.contentSnapshots(scopes: [0])[0]?.inlineImages.values.first)
+        #expect(ordinary.colorAtCenter()?.redComponent ?? 0 > 0.9)
+    }
+}
+
+@Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["UTATANE_AKARI_PLUGIN"] != nil
+        && ProcessInfo.processInfo.environment["UTATANE_AKARI_MODULE"] != nil
+        && ProcessInfo.processInfo.environment["UTATANE_NATIVE_SHIORI_HOST"] != nil))
+@MainActor
+struct AkariPluginImageIntegrationTests {
+    @Test func `real AKARI plugin toolbar renders its own images and dispatches cancel`() async throws {
+        try await withPluginPlayer { player, balloons, balloon, root in
+            let plugins = root.appending(path: "plugins")
+            let directory = plugins.appending(path: "AKARI")
+            try FileManager.default.createDirectory(at: plugins, withIntermediateDirectories: true)
+            let source = try URL(filePath: #require(ProcessInfo.processInfo.environment["UTATANE_AKARI_PLUGIN"]))
+            try FileManager.default.copyItem(at: source, to: directory)
+            let plugin = try #require(PluginCatalog().load(from: [plugins]).first)
+            let module = try URL(filePath: #require(ProcessInfo.processInfo.environment["UTATANE_AKARI_MODULE"]))
+            let transport = try DynamicLibraryPluginTransport(plugin: plugin, stateDirectoryURL: root.appending(path: "state"), moduleURLOverride: module)
+            let response = try await transport.request(PluginRequest(method: "GET", id: "showBottunSet", charset: "UTF-8"))
+            let script = try #require(response.script)
+            #expect(script.contains("fam_house.png"))
+            let origin = SakuraScriptPluginOrigin(id: plugin.id, resourceDirectory: plugin.directory)
+            await player.playAndWait(SakuraScript(rawValue: script), balloon: balloon, characterDelayMilliseconds: 0,
+                                     context: .init(flags: ["notranslate"], pluginOrigin: origin))
+            #expect(balloons.contentSnapshots(scopes: [0])[0]?.inlineImages.count == 4)
+            let links = try #require(balloons.textAndLinks(for: 0)?.1)
+            #expect(links.map(\.id).contains("Menu_CANCEL"))
+            #expect(links.allSatisfy { $0.pluginOrigin?.resourceDirectory == plugin.directory })
+            let cancel = try await transport.request(PluginRequest(method: "GET", id: "Menu_CANCEL", charset: "UTF-8"))
+            #expect(cancel.script == #"\e"#)
+            await transport.shutdown()
+        }
+    }
+}

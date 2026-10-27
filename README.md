@@ -145,7 +145,7 @@ Content/Local/
 
 ## ライセンス
 
-Utatane本体は[MIT License](LICENSE)で公開しています。
+Utatane本体は[MIT License](LICENSE)で公開しています。NAR検証にはIgor Pavlovによるpublic domainの[LZMAデコーダー](packages/content-validator-lzma/NOTICE.txt)も使用しています。
 
 SHIORI・SAORIの配布物とライセンスは[Utatane Modules](https://github.com/opera7133/utatane-modules)で確認できます。アプリ本体には移植済みのSHIORI・SAORIを同梱していません。
 

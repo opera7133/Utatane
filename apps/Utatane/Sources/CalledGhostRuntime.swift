@@ -229,7 +229,13 @@ final class CalledGhostRuntime {
         }
     }
 
-    func showPluginInput(command: SakuraScriptInputCommand, scope: Int,
+    func closePluginInputs() {
+        textInputWindowController.closePluginInput()
+        textAreaWindowController.closePluginInput()
+    }
+
+    func showPluginInput(command: SakuraScriptInputCommand, scope: Int, ownerID: UUID,
+                         isCurrent: @escaping @MainActor @Sendable () -> Bool,
                          sendEvent: @escaping @MainActor @Sendable (GhostEvent) async -> SakuraScript?,
                          playResponse: @escaping @MainActor @Sendable (SakuraScript) -> Void) async -> SakuraScript?
     {
@@ -238,7 +244,7 @@ final class CalledGhostRuntime {
                                                             scope: scope, surfaceID: balloonController.displayedSurfaceID(for: scope))
             : textInputAppearance(style: .input, balloonID: command.balloonID)
         let controller = command.kind == .textArea ? textAreaWindowController : textInputWindowController
-        return await controller.showScriptInput(command: command, appearance: appearance, sendEvent: sendEvent, playResponse: playResponse)
+        return await controller.showScriptInput(command: command, appearance: appearance, ownerID: ownerID, isCurrent: isCurrent, sendEvent: sendEvent, playResponse: playResponse)
     }
 
     func start(

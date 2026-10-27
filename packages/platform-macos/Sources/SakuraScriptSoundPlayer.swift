@@ -92,17 +92,17 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         }
     }
 
-    func execute(_ command: SakuraScriptSoundCommand) async throws {
+    func execute(_ command: SakuraScriptSoundCommand, resourceDirectory: URL? = nil) async throws {
         switch command {
         case let .play(file, loop, options):
+            guard let url = resolvedURL(for: file, resourceDirectory: resourceDirectory) else {
+                onError?(file, CocoaError(.fileNoSuchFile))
+                return
+            }
             let player: AVAudioPlayer
-            if loadedFile == file, let audioPlayer {
+            if loadedURL == url, let audioPlayer {
                 player = audioPlayer
             } else {
-                guard let url = resolvedURL(for: file) else {
-                    onError?(file, CocoaError(.fileNoSuchFile))
-                    return
-                }
                 do {
                     player = try AVAudioPlayer(contentsOf: url)
                 } catch {
@@ -117,6 +117,7 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
                 identifier = Self.nextIdentifier
                 requestedVolume = 1
             }
+            loadedFile = file
             player.delegate = self
             player.numberOfLoops = 0
             apply(options: options, to: player)
@@ -127,7 +128,7 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
             isLooping = loop
             updateSpectrumTimer()
         case let .load(file, options):
-            guard let url = resolvedURL(for: file) else {
+            guard let url = resolvedURL(for: file, resourceDirectory: resourceDirectory) else {
                 onError?(file, CocoaError(.fileNoSuchFile))
                 return
             }
@@ -383,15 +384,15 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         return min(duration, max(0, (isRelative ? currentTime : 0) + seconds))
     }
 
-    private func resolvedURL(for path: String) -> URL? {
+    private func resolvedURL(for path: String, resourceDirectory: URL?) -> URL? {
         let normalized = path.replacingOccurrences(of: "\\", with: "/")
         let candidate: URL
         if normalized.hasPrefix("/") {
             // Music-player ghosts retain absolute paths from selection/drop events.
             candidate = URL(filePath: normalized).standardizedFileURL
         } else {
-            guard let base = resourceBaseDirectory?.standardizedFileURL else { return nil }
-            candidate = base.appending(path: normalized, directoryHint: .notDirectory).standardizedFileURL
+            guard let base = (resourceDirectory ?? resourceBaseDirectory)?.standardizedFileURL.resolvingSymlinksInPath() else { return nil }
+            candidate = base.appending(path: normalized, directoryHint: .notDirectory).standardizedFileURL.resolvingSymlinksInPath()
             let basePath = base.path.hasSuffix("/") ? base.path : base.path + "/"
             guard candidate.path.hasPrefix(basePath) else { return nil }
         }

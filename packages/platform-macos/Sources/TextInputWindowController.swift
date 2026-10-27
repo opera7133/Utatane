@@ -118,6 +118,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         public let allowsCancel: Bool
         public let appearance: Appearance?
         public let keepsOpenAfterCommit: Bool
+        public let ownerID: UUID?
         public let clearsValueAfterCommit: Bool
         public let onCommit: @MainActor @Sendable (String) -> Void
         public let onCancel: (@MainActor @Sendable () -> Void)?
@@ -136,6 +137,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             appearance: Appearance? = nil,
             keepsOpenAfterCommit: Bool = false,
             clearsValueAfterCommit: Bool = false,
+            ownerID: UUID? = nil,
             onCommit: @escaping @MainActor @Sendable (String) -> Void,
             onCancel: (@MainActor @Sendable () -> Void)? = nil
         ) {
@@ -151,6 +153,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             self.allowsCancel = allowsCancel
             self.appearance = appearance
             self.keepsOpenAfterCommit = keepsOpenAfterCommit
+            self.ownerID = ownerID
             self.clearsValueAfterCommit = clearsValueAfterCommit
             self.onCommit = onCommit
             self.onCancel = onCancel
@@ -159,7 +162,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
 
     public private(set) var currentValue = ""
     private(set) var window: NSWindow?
-    private var currentRequest: Request?
+    private(set) var currentRequest: Request?
     private var timeoutTask: Task<Void, Never>?
     private var timeoutHandler: (@MainActor () -> Void)?
 
@@ -284,7 +287,8 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         autocompleteValues: [String],
         placeholder: String? = nil,
         appearance: Appearance?,
-        timeoutMilliseconds: Int?
+        timeoutMilliseconds: Int?,
+        ownerID: UUID? = nil
     ) async -> InputResult {
         await withCheckedContinuation { continuation in
             show(Request(
@@ -296,6 +300,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
                 autocompleteValues: autocompleteValues,
                 placeholder: placeholder,
                 appearance: appearance,
+                ownerID: ownerID,
                 onCommit: { value in continuation.resume(returning: .submitted(value)) },
                 onCancel: {
                     continuation.resume(returning: .cancelled(timedOut: false, value: inputKind == .textArea ? self.currentValue : ""))
@@ -327,6 +332,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         clearsValueAfterSubmit: Bool,
         inputKind: InputKind = .text,
         placeholder: String? = nil,
+        ownerID: UUID? = nil,
         onSubmit: @escaping @MainActor @Sendable (String) -> Void,
         onCancel: @escaping @MainActor @Sendable (Bool) -> Void
     ) {
@@ -341,6 +347,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             appearance: appearance,
             keepsOpenAfterCommit: true,
             clearsValueAfterCommit: clearsValueAfterSubmit,
+            ownerID: ownerID,
             onCommit: onSubmit,
             onCancel: { onCancel(false) }
         ))
@@ -358,12 +365,17 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
     public func showScriptInput(
         command: SakuraScriptInputCommand,
         appearance: Appearance?,
+        ownerID: UUID? = nil,
+        isCurrent: @escaping @MainActor @Sendable () -> Bool = { true },
         sendEvent: @escaping @MainActor @Sendable (GhostEvent) async -> SakuraScript?,
         playResponse: @escaping @MainActor @Sendable (SakuraScript) -> Void
     ) async -> SakuraScript? {
         if command.kind == .textArea {
-            return await showTextArea(command: command, appearance: appearance, sendEvent: sendEvent, playResponse: playResponse)
+            return await showTextArea(command: command, appearance: appearance, ownerID: ownerID, sendEvent: sendEvent, playResponse: playResponse)
         }
+        let autocomplete = await sendEvent(.shiori(id: "inputbox.autocomplete", references: [0: command.inputTypeName, 1: command.id]))
+        guard isCurrent(), !Task.isCancelled else { return nil }
+        let candidates = Self.autocompleteValues(from: autocomplete?.rawValue)
         let submit: @MainActor @Sendable (String) async -> SakuraScript? = { value in
             await sendEvent(SHIORIEventFactory.userInput(id: command.id, value: value,
                                                          supplementalValue: command.supplementalValue, additionalReferences: command.references))
@@ -378,10 +390,10 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         if command.keepsOpenAfterSubmit {
             showPersistentInput(
                 id: command.id, title: String(localized: "文字を入力"), initialValue: command.initialValue,
-                maximumLength: command.maximumLength, autocompleteValues: [], appearance: appearance,
+                maximumLength: command.maximumLength, autocompleteValues: candidates, appearance: appearance,
                 timeoutMilliseconds: command.timeoutMilliseconds, clearsValueAfterSubmit: !command.keepsValueAfterSubmit,
                 inputKind: .init(command.kind),
-                placeholder: command.placeholder,
+                placeholder: command.placeholder, ownerID: ownerID,
                 onSubmit: { value in Task {
                     if let reply = await submit(value) {
                         playResponse(reply)
@@ -396,9 +408,9 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             return nil
         }
         let result = await showInput(id: command.id, title: String(localized: "文字を入力"), initialValue: command.initialValue,
-                                     inputKind: .init(command.kind), maximumLength: command.maximumLength, autocompleteValues: [],
-                                     placeholder: command.placeholder, appearance: appearance, timeoutMilliseconds: command.timeoutMilliseconds)
-        guard !Task.isCancelled else { return nil }
+                                     inputKind: .init(command.kind), maximumLength: command.maximumLength, autocompleteValues: candidates,
+                                     placeholder: command.placeholder, appearance: appearance, timeoutMilliseconds: command.timeoutMilliseconds, ownerID: ownerID)
+        guard isCurrent(), !Task.isCancelled else { return nil }
         switch result {
         case let .submitted(value): return await submit(value)
         case let .cancelled(timedOut, _): return await cancel(timedOut)
@@ -408,6 +420,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
     public func showTextArea(
         command: SakuraScriptInputCommand,
         appearance: Appearance?,
+        ownerID: UUID? = nil,
         sendEvent: @escaping @MainActor @Sendable (GhostEvent) async -> SakuraScript?,
         playResponse: @escaping @MainActor @Sendable (SakuraScript) -> Void
     ) async -> SakuraScript? {
@@ -416,7 +429,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
                 id: command.id, title: String(localized: "文字を入力"), initialValue: command.initialValue,
                 maximumLength: command.maximumLength, autocompleteValues: [], appearance: appearance,
                 timeoutMilliseconds: command.timeoutMilliseconds, clearsValueAfterSubmit: !command.keepsValueAfterSubmit,
-                inputKind: .textArea, placeholder: command.placeholder,
+                inputKind: .textArea, placeholder: command.placeholder, ownerID: ownerID,
                 onSubmit: { value in
                     Task {
                         if let response = await sendEvent(SHIORIEventFactory.textAreaInput(id: command.id, value: value, additionalReferences: command.references)) {
@@ -438,7 +451,7 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
         let result = await showInput(
             id: command.id, title: String(localized: "文字を入力"), initialValue: command.initialValue,
             inputKind: .textArea, maximumLength: command.maximumLength, autocompleteValues: [],
-            placeholder: command.placeholder, appearance: appearance, timeoutMilliseconds: command.timeoutMilliseconds
+            placeholder: command.placeholder, appearance: appearance, timeoutMilliseconds: command.timeoutMilliseconds, ownerID: ownerID
         )
         guard !Task.isCancelled else { return nil }
         switch result {
@@ -487,6 +500,12 @@ public final class TextInputWindowController: NSObject, NSWindowDelegate {
             : value
         guard let maximumLength, maximumLength >= 0 else { return normalized }
         return String(normalized.prefix(maximumLength))
+    }
+
+    public func closePluginInput() {
+        if currentRequest?.ownerID != nil {
+            close()
+        }
     }
 
     public func close(id: String? = nil) {

@@ -1,0 +1,8 @@
+LZMA SDK decoder — Igor Pavlov
+
+The bundled LzmaDec.c, LzmaDec.h, 7zTypes.h, Precomp.h, and Compiler.h
+are public domain, as stated in each source file.
+
+Source: https://github.com/ip7z/7zip/tree/b88c6bc09339de32f7d18bbab900686b244f42ba/C
+Only these public-domain files are included, not the LGPL or unRAR components.
+The Utatane wrapper is covered by Utatane’s MIT license.

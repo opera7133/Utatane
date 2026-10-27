@@ -35,13 +35,17 @@ KAGARIの`kagari.dll`・`libkagari.dylib`・`libkagari.so`は、上記とは異�
 
 `descript.txt`の`otherghosttalk,true|before|after`で会話通知を購読できます。`true`は再生後です。同じプラグイン自身が返したスクリプトは、そのプラグインへ再通知しません。`othersurfacechange,true`ではサーフェス変更を通知します。
 
-プラグイン由来の`inputbox`・`passwordinput`・`textareabox`は、入力・キャンセル・時間切れを発信元プラグインへ返します。呼び出しゴーストの画面でも、その画面の入力コントローラーを使います。割り込み時のすべてのイベントをプラグインへ中継する機能は未対応です。
+プラグイン由来の`inputbox`・`passwordinput`・`textareabox`は、入力・キャンセル・時間切れを発信元プラグインへ返します。入力候補は`inputbox.autocomplete`を発信元へ問い合わせます。プラグイン再読み込み時はその入力欄を閉じ、古い応答・選択肢を破棄します。呼び出しゴーストの画面でも、その画面の入力コントローラーを使います。割り込み時のすべてのイベントをプラグインへ中継する機能は未対応です。
 
 ## Windows DLL
 
 対応するdylibを見つけられず、選択された`filename`または`filename.macos`が`.dll`の場合だけ、汎用Windows DLLホストへ接続します。実行に必要なのはWine、`utatane-dll-host.exe`、対象プラグインDLLです。場所は`UTATANE_WINE_EXECUTABLE`、`UTATANE_WINE_PREFIX`、`UTATANE_WINDOWS_DLL_HOST`で指定できます。Debugビルドではホストの既定位置として`Content/Local/WindowsDLLBridge/utatane-dll-host.exe`も参照します。
 
 この経路はWindowsプラグイン一般の互換性を保証しません。外部EXE、COM、独自UIなどへ依存するプラグインは動作しない場合があります。また、Wineの初回設定が完了するまで起動に時間がかかることがあります。
+
+プラグイン自身の画像・音声は、発信元プラグインのフォルダを基準に読み込みます。画像の相対パスとシンボリックリンクは基準フォルダの外へ出られず、他のプラグインの画像フォルダを一律に許可しません。ゴーストが返したEvent応答は、ゴースト側の素材を使います。同名ファイルを持つ別プラグインへ切り替えても、音声の実体を取り違えません。
+
+AKARI製プラグインにはModulesの灯（AKARI）2.003-r5以降が必要です。r4以前の外部モジュール入口はPLUGIN/2.0を受け付けません。
 
 ## BalloonSelector
 
@@ -96,3 +100,14 @@ Modulesの[proxy_ex移植版](https://github.com/opera7133/utatane-modules/blob/
 左右などチャンネル別のレベルと、帯域別のレベル、再生位置を取得できます。
 一時停止中は通知を止め、停止時はゼロのレベルを返します。音量設定を掛ける前の波形を解析します。
 MIDI・CD・動画の解析と、SSPとの数値の完全一致は未対応です。
+
+`--architecture arm64`または`--architecture x86_64`でCPUを選べます。指定したCPUにホストを切り出して実行し、そのハッシュも記録します。Intel実行にはRosettaが必要です。
+
+画像付きの別エンジンの回帰確認には、次のオプションを追加します。
+
+```sh
+--akari-plugin-archive /path/to/sudohaikuyu-998d8f65c86cc541a34c6fbec2e721fcb0ba0ba2.zip \
+--akari-module /path/to/akari/lib/libakari.dylib
+```
+
+取得元は[固定コミットの原版](https://github.com/nikolat/sudohaikuyu/tree/998d8f65c86cc541a34c6fbec2e721fcb0ba0ba2)です。GitHubのsource ZIPを使い、SHA-256 `e482e97e8cc798986963cfe390199271e995d4e32d4161f3437be2470407d25c`で照合します。AKARI r5以降を使い、元のツールバー画像4枚とキャンセルの処理を確認します。オンライン認証・投稿やWindows専用SAORIを含む全動作の確認ではありません。

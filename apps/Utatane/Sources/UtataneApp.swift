@@ -352,6 +352,8 @@ private struct UtataneRootView: View {
     @State private var cachedCalledGhosts: [URL: CalledGhostRuntime] = [:]
     @State private var otherGhostTalkModes: [URL: SakuraScriptOtherGhostTalkMode] = [:]
     @State private var otherSurfaceChangeObservers: Set<URL> = []
+    @State private var pluginInteractionGeneration = UUID()
+    @State private var menuAppearanceResources: [URL: [String: String]] = [:]
     @State private var siteMenuResources: [URL: GhostSiteMenuResources] = [:]
     @State private var sstpCookies: [String: [String: String]] = [:]
     @State private var sstpQuietUntil: Date?
@@ -1817,6 +1819,7 @@ private struct UtataneRootView: View {
     private func resolvePluginResponse(_ response: PluginResponse, pluginID: String,
                                        callerGhostID: URL? = nil) async -> SakuraScriptPluginPlayback?
     {
+        let generation = pluginInteractionGeneration
         let targets = runningPluginTargets()
         let indexed = Dictionary(uniqueKeysWithValues: targets.map { ($0.ghost.id, $0) })
         let caller = callerGhostID ?? currentGhost?.id
@@ -1834,11 +1837,12 @@ private struct UtataneRootView: View {
                 : .shiori(id: event, references: references))
             return reply?.script?.rawValue
         }
+        guard generation == pluginInteractionGeneration else { return nil }
         var callerReply: SakuraScriptPluginPlayback?
         for reply in replies {
             guard let target = indexed[reply.ghostID], isCurrentPluginTarget(target) else { continue }
             let playback = SakuraScriptPluginPlayback(script: SakuraScript(rawValue: reply.script),
-                                                      origin: reply.isPluginScript ? .init(id: pluginID) : nil, flags: reply.flags)
+                                                      origin: reply.isPluginScript ? .init(id: pluginID, resourceDirectory: installedPlugins.first { $0.id == pluginID }?.directory, generation: pluginInteractionGeneration) : nil, flags: reply.flags)
             if reply.ghostID == caller {
                 callerReply = playback
             } else {
@@ -1852,34 +1856,39 @@ private struct UtataneRootView: View {
     private func showPluginInput(origin: SakuraScriptPluginOrigin, command: SakuraScriptInputCommand,
                                  scope: Int, callerGhostID: URL?) async -> SakuraScriptPluginPlayback?
     {
-        guard let target = runningPluginTargets().first(where: { $0.ghost.id == callerGhostID }) else { return nil }
+        guard origin.generation == nil || origin.generation == pluginInteractionGeneration,
+              let target = runningPluginTargets().first(where: { $0.ghost.id == callerGhostID }) else { return nil }
+        let isCurrent: @MainActor @Sendable () -> Bool = {
+            isCurrentPluginTarget(target) && (origin.generation == nil || origin.generation == pluginInteractionGeneration)
+        }
         var pendingReply: SakuraScriptPluginPlayback?
         let sendEvent: @MainActor @Sendable (GhostEvent) async -> SakuraScript? = { event in
-            guard isCurrentPluginTarget(target), case let .shiori(id, references) = event else { return nil }
+            guard isCurrent(), case let .shiori(id, references) = event else { return nil }
             let arguments = references.keys.max().map { maximum in (0 ... maximum).map { references[$0] ?? "" } } ?? []
             let reply = await invokePlugin(target: origin.id, event: id, arguments: arguments,
                                            reflectsResponse: true, callerGhostID: target.ghost.id)
+            guard isCurrent() else { return nil }
             pendingReply = reply
             return reply?.script
         }
         let playResponse: @MainActor @Sendable (SakuraScript) -> Void = { reply in
-            guard isCurrentPluginTarget(target) else { return }
+            guard isCurrent() else { return }
             if let pendingReply, pendingReply.script == reply {
                 target.player.play(pendingReply, balloon: target.balloon)
             }
         }
         let response: SakuraScript?
         if let runtime = calledGhosts[target.ghost.id] {
-            response = await runtime.showPluginInput(command: command, scope: scope, sendEvent: sendEvent, playResponse: playResponse)
+            response = await runtime.showPluginInput(command: command, scope: scope, ownerID: origin.interactionID, isCurrent: isCurrent, sendEvent: sendEvent, playResponse: playResponse)
         } else {
             let appearance = command.kind == .textArea
                 ? TextInputWindowController.Appearance.textArea(balloon: target.balloon, balloonID: command.balloonID,
                                                                 scope: scope, surfaceID: balloonWindowController.displayedSurfaceID(for: scope))
                 : textInputAppearance(style: .input, balloonID: command.balloonID)
             let controller = command.kind == .textArea ? textAreaWindowController : textInputWindowController
-            response = await controller.showScriptInput(command: command, appearance: appearance, sendEvent: sendEvent, playResponse: playResponse)
+            response = await controller.showScriptInput(command: command, appearance: appearance, ownerID: origin.interactionID, isCurrent: isCurrent, sendEvent: sendEvent, playResponse: playResponse)
         }
-        guard let response, pendingReply?.script == response else { return nil }
+        guard isCurrent(), let response, pendingReply?.script == response else { return nil }
         return pendingReply
     }
 
@@ -1887,7 +1896,7 @@ private struct UtataneRootView: View {
     private func resolvePluginSelection(origin: SakuraScriptPluginOrigin, link: BalloonTextLink, label: String,
                                         callerGhostID: URL? = nil) async -> SakuraScriptPluginPlayback?
     {
-        guard !isTransitioningGhost,
+        guard !isTransitioningGhost, origin.generation == nil || origin.generation == pluginInteractionGeneration,
               let target = runningPluginTargets().first(where: { $0.ghost.id == (callerGhostID ?? currentGhost?.id) })
         else { return nil }
         let activeSession = target.session
@@ -1907,7 +1916,7 @@ private struct UtataneRootView: View {
                 pluginReply = await invokePlugin(target: origin.id, event: event.id, arguments: event.arguments, reflectsResponse: true, callerGhostID: target.ghost.id)
             }
         }
-        guard isCurrentPluginTarget(target) else { return nil }
+        guard isCurrentPluginTarget(target), origin.generation == nil || origin.generation == pluginInteractionGeneration else { return nil }
         return pluginReply ?? ghostReply.map { .init(script: $0) }
     }
 
@@ -2916,6 +2925,7 @@ private struct UtataneRootView: View {
             _ = try? await ghostSession.start(event: SHIORIEventFactory.initialize(isReload: isReload))
             GhostUsageHistory.store.begin(GhostUsageHistory.identity(ghost))
             siteMenuResources[ghost.id] = await loadSiteMenuResources(from: ghostSession)
+            await refreshMenuAppearanceResources(ghostID: ghost.id, session: ghostSession)
             configureContextMenu()
             let shellDefinition = try shellLoader.load(from: shellChoice.directory)
                 .applyingPresentationDefaults(from: ghost)
@@ -5413,6 +5423,25 @@ private struct UtataneRootView: View {
         return trimmed.isEmpty ? nil : trimmed
     }
 
+    private func refreshMenuAppearanceResources(ghostID: URL, session: GhostSession) async {
+        var values: [String: String] = [:]
+        for key in SurfaceMenuAppearance.resourceKeys {
+            if let value = await shioriResource(key, from: session) {
+                values[key] = value
+            }
+        }
+        guard runningPluginTargets().contains(where: { $0.ghost.id == ghostID && $0.session === session }) else { return }
+        menuAppearanceResources[ghostID] = values
+    }
+
+    private func contextMenuAppearance(for target: GhostContextMenuTarget) -> SurfaceMenuAppearance? {
+        guard networkSettings.contextMenuMode == .automatic,
+              let shell = menuShell(for: target), let ghost = menuGhost(for: target) else { return nil }
+        let values = (try? DescriptParser().parse(contentsOf: shell.directory.appending(path: "descript.txt"))) ?? [:]
+        return SurfaceMenuAppearance(shellDirectory: shell.directory, shellValues: values, ghostDirectory: ghost.rootDirectory.appending(path: "ghost/master"),
+                                     overrides: menuAppearanceResources[ghost.id] ?? [:])
+    }
+
     private func configureContextMenu() {
         refreshContentExplorer()
         surfaceWindowController.onUserDressupChange = { changes in
@@ -5422,10 +5451,23 @@ private struct UtataneRootView: View {
                 }
             }
         }
+        surfaceWindowController.contextMenuAppearance = { contextMenuAppearance(for: .primary) }
+        surfaceWindowController.prepareContextMenu = {
+            guard networkSettings.contextMenuMode == .automatic, let currentGhost, let session else { return }
+            await refreshMenuAppearanceResources(ghostID: currentGhost.id, session: session)
+        }
         surfaceWindowController.contextMenuItems = { scope in
             contextMenuItems(for: .primary, scope: scope)
         }
         for runtime in calledGhosts.values {
+            runtime.surfaceController.contextMenuAppearance = { [weak runtime] in
+                guard let runtime else { return nil }
+                return contextMenuAppearance(for: .called(runtime))
+            }
+            runtime.surfaceController.prepareContextMenu = { [weak runtime] in
+                guard networkSettings.contextMenuMode == .automatic, let runtime else { return }
+                await refreshMenuAppearanceResources(ghostID: runtime.ghost.id, session: runtime.session)
+            }
             runtime.contextMenuItems = { scope in
                 contextMenuItems(for: .called(runtime), scope: scope)
             }
@@ -6263,6 +6305,7 @@ private struct UtataneRootView: View {
         otherGhostTalkModes.removeValue(forKey: runtime.ghost.id)
         otherSurfaceChangeObservers.remove(runtime.ghost.id)
         siteMenuResources.removeValue(forKey: runtime.ghost.id)
+        menuAppearanceResources.removeValue(forKey: runtime.ghost.id)
         try await startCalledGhost(ghost, replacing: replacement)
     }
 
@@ -6441,6 +6484,7 @@ private struct UtataneRootView: View {
                 ) ?? ""
             }
             siteMenuResources[ghost.id] = await loadSiteMenuResources(from: runtime.session)
+            await refreshMenuAppearanceResources(ghostID: ghost.id, session: runtime.session)
             recentContentStore.record(
                 kind: .ghost,
                 identifier: ghost.rootDirectory.path,
@@ -7734,6 +7778,12 @@ private struct UtataneRootView: View {
     }
 
     private func reloadPlugins() async {
+        pluginInteractionGeneration = UUID()
+        textInputWindowController.closePluginInput()
+        textAreaWindowController.closePluginInput()
+        for runtime in calledGhosts.values {
+            runtime.closePluginInputs()
+        }
         installedPlugins = (try? PluginCatalog().load(from: ContentRoot.pluginReadDirectories)) ?? []
         let allowsShioriFallback = networkSettings.allowsShioriFallback
         let failures = await pluginRuntime.reload(installedPlugins) { plugin in

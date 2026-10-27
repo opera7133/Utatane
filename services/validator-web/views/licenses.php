@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 $licenses = [
     'Utatane' => file_get_contents(dirname(__DIR__) . '/licenses/Utatane.txt'),
+    'LZMA SDK (public-domain decoder)' => file_get_contents(dirname(__DIR__) . '/licenses/LZMA-SDK.txt'),
     'ZIP Foundation' => file_get_contents(dirname(__DIR__) . '/licenses/ZIPFoundation.txt'),
 ];
 ?>
