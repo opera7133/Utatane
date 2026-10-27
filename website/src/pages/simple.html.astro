@@ -239,7 +239,7 @@ import { sitePath, siteURL } from "../site.mjs";
       <ol>
         <li>
           Releasesから最新リリースの
-          <code>Utatane-macOS.zip</code> をダウンロード
+          macOS版をダウンロード（公証済みの追加ZIPがある場合はそちらを選択）
         </li>
         <li>
           ZIPを展開し、<code>Utatane.app</code
@@ -251,11 +251,10 @@ import { sitePath, siteURL } from "../site.mjs";
 
       <h2>初回起動でmacOSに止められた場合</h2>
       <p>
-        現在の配布版は未署名です。一度起動を試してから、「システム設定」→「プライバシーとセキュリティ」で起動を許可してください。
+        公式の配布版はDeveloper ID署名・公証済みです。古い未署名版で起動を止められる場合は、まず最新の公証済み版を取得してください。
       </p>
       <p>
-        もしくは、アプリケーションフォルダで{' '}
-        <code>sudo xattr -rc Utatane.app</code> を実行してください。
+        初回起動時に、インターネットからダウンロードしたアプリを開くかの確認が出ることはあります。
       </p>
       <p>
         なお、GitHub

@@ -1,0 +1,119 @@
+name: Publish notarized addition to existing release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Published release tag containing Utatane-macOS-notarized.zip and appcast-notarized.xml'
+        type: string
+        required: true
+      archive_sha256:
+        description: 'Exact SHA-256 of the locally verified stapled ZIP'
+        type: string
+        required: true
+      submission_id:
+        description: 'Existing Accepted Apple submission ID; never resubmitted'
+        type: string
+        required: true
+
+permissions:
+  contents: write
+
+# Share the lock with normal publication to prevent a feed deployment race.
+concurrency:
+  group: notarized-release-publication
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+      ARCHIVE_SHA256: ${{ inputs.archive_sha256 }}
+      SUBMISSION_ID: ${{ inputs.submission_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate explicit publication inputs before using credentials
+        run: |
+          python3 - <<'PY'
+          import importlib.util,os,sys
+          sys.dont_write_bytecode=True
+          spec=importlib.util.spec_from_file_location('existing','Scripts/publish-existing-notarized.py')
+          module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+          module.validate_inputs(os.environ['RELEASE_TAG'],os.environ['ARCHIVE_SHA256'],os.environ['SUBMISSION_ID'])
+          PY
+      - name: Download the already published candidate and signed feed
+        run: |
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern Utatane-macOS-notarized.zip --pattern appcast-notarized.xml \
+            --dir dist/existing-notarized
+      - name: Configure notarization authentication without a signing certificate
+        env:
+          UTATANE_NOTARY_ONLY: '1'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: bash Scripts/setup-apple-signing.sh
+      - name: Install verification and deployment tools
+        run: |
+          brew install openssl@3 lftp
+          echo "$(brew --prefix openssl@3)/bin" >> "$GITHUB_PATH"
+      - name: Verify Apple ticket, both CPU signatures, Gatekeeper and signed update feed
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          python3 Scripts/publish-existing-notarized.py verify \
+            --tag "$RELEASE_TAG" --sha256 "$ARCHIVE_SHA256" --submission-id "$SUBMISSION_ID"
+      - name: Scan the exact final ZIP with VirusTotal
+        env:
+          VT_API_KEY: ${{ secrets.VIRUSTOTAL_API_KEY }}
+        run: bash Scripts/scan-release-virustotal.sh dist/existing-notarized/Utatane-macOS-notarized.zip
+      - name: Deploy the verified update feed
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USERNAME: ${{ secrets.DEPLOY_USERNAME }}
+          DEPLOY_PASSWORD: ${{ secrets.DEPLOY_PASSWORD }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          test -n "$DEPLOY_HOST"
+          test -n "$DEPLOY_USERNAME"
+          test -n "$DEPLOY_PASSWORD"
+          test -n "$DEPLOY_PATH"
+          [[ "$DEPLOY_PATH" == /* ]]
+          [[ "$DEPLOY_PATH" != "/" ]]
+          lftp -u "$DEPLOY_USERNAME","$DEPLOY_PASSWORD" "ftp://$DEPLOY_HOST" <<LFTP
+          set cmd:fail-exit true
+          set ftp:ssl-force true
+          set ftp:ssl-protect-data true
+          set ssl:verify-certificate true
+          set net:max-retries 3
+          set net:timeout 20
+          put -o "$DEPLOY_PATH/appcast.xml" dist/existing-notarized/appcast-notarized.xml
+          bye
+          LFTP
+      - name: Update release download notice and scan results, preserving maintainer edits
+        run: python3 Scripts/publish-existing-notarized.py announce
+      - name: Verify the public production feed
+        run: python3 Scripts/publish-existing-notarized.py verify-published
+      - name: Preserve public verification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: existing-notarized-verification
+          path: |
+            dist/existing-notarized/verification.json
+            dist/existing-notarized/notary-log.json
+          retention-days: 90
+          if-no-files-found: ignore
+      - name: Remove temporary authentication keychain
+        if: always()
+        run: |
+          if [[ -n "${UTATANE_SIGNING_KEYCHAIN:-}" ]]; then
+            security delete-keychain "$UTATANE_SIGNING_KEYCHAIN"
+          fi

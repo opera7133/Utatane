@@ -2,6 +2,7 @@
 set -euo pipefail
 
 file_path="${1:?Usage: scan-release-virustotal.sh /path/to/Utatane-macOS.zip}"
+file_name=$(basename "$file_path")
 if [ ! -f "$file_path" ]; then
   echo "Error: $file_path not found"
   exit 1
@@ -90,7 +91,7 @@ echo "VT_STATUS=$vt_status" >> "$GITHUB_ENV"
 
 {
   echo "### 🛡️ VirusTotal Scan Results"
-  echo "- **File:** \`Utatane-macOS.zip\`"
+  echo "- **File:** \`$file_name\`"
   echo "- **Status:** $vt_status"
   echo "- **SHA-256:** \`$sha256\`"
   echo "- **Report:** [$vt_url]($vt_url)"

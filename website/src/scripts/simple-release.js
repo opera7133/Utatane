@@ -37,11 +37,9 @@
                 releaseDateEl.textContent = ` / ${year}-${month}-${day} ${hours}:${minutes} 更新`;
               }
             }
-            const zipAsset = latestRelease.assets?.find(
-              (asset) =>
-                asset.name === "Utatane-macOS.zip" ||
-                asset.name.endsWith(".zip"),
-            );
+            const zipAsset = ["Utatane-macOS-notarized.zip", "Utatane-macOS.zip"]
+              .map(name => latestRelease.assets?.find(asset => asset.name === name))
+              .find(Boolean);
             if (downloadLinkEl && zipAsset?.browser_download_url) {
               downloadLinkEl.href = zipAsset.browser_download_url;
               downloadLinkEl.setAttribute("download", zipAsset.name);

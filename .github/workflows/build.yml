@@ -55,7 +55,9 @@ jobs:
         run: python3 Scripts/test-release-notes.py
 
       - name: Test delayed notarization and publication guards
-        run: python3 Scripts/test-release-notarization.py
+        run: |
+          python3 Scripts/test-release-notarization.py
+          python3 Scripts/test-publish-existing-notarized.py
 
       - name: Test Swift packages
         run: swift test --package-path packages

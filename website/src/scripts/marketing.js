@@ -155,8 +155,10 @@
       const latest = releases[0];
       if (!latest) throw new Error("No published releases");
       const assets = Array.isArray(latest.assets) ? latest.assets : [];
-      const asset = assets.find(a => a && a.name === "Utatane-macOS.zip" &&
-        safeGitHubURL(a.browser_download_url, "/opera7133/Utatane/releases/download/"));
+      const asset = ["Utatane-macOS-notarized.zip", "Utatane-macOS.zip"]
+        .map(name => assets.find(a => a && a.name === name &&
+          safeGitHubURL(a.browser_download_url, "/opera7133/Utatane/releases/download/")))
+        .find(Boolean);
       const date = new Date(latest.published_at || NaN);
       releaseState = { kind:"ready", release:{
         name:latest.tag_name, url:safeGitHubURL(latest.html_url, "/opera7133/Utatane/releases/tag/"),

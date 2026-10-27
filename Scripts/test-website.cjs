@@ -7,20 +7,21 @@ const assert = require('node:assert/strict');
 const html = fs.readFileSync(path.join(__dirname, '../website/src/components/marketing/HomePage.astro'), 'utf8');
 const css = fs.readFileSync(path.join(__dirname, '../website/src/styles/marketing.css'), 'utf8');
 const script = fs.readFileSync(path.join(__dirname, '../website/src/scripts/marketing.js'), 'utf8');
+const simpleScript = fs.readFileSync(path.join(__dirname, '../website/src/scripts/simple-release.js'), 'utf8');
 const base = 'https://github.com/opera7133/Utatane/releases';
 const release = (tag, date, extra = {}) => ({tag_name:tag, published_at:date, html_url:base+'/tag/'+tag, prerelease:true, assets:[{name:'Utatane-macOS.zip', browser_download_url:base+'/download/'+tag+'/Utatane-macOS.zip', size:10485760}], ...extra});
 function element(dataset={}) { return {dataset, textContent:'', attrs:{}, hidden:true, classList:{values:new Set(),add(v){this.values.add(v);},toggle(v,on){on?this.values.add(v):this.values.delete(v);},contains(v){return this.values.has(v);}}, getAttribute(k){return this.attrs[k.toLowerCase()];}, setAttribute(k,v){this.attrs[k]=v;}, removeAttribute(k){delete this.attrs[k];}, addEventListener(k,v){this[k]=v;}}; }
 async function run(data, options={}) {
-  const ids = Object.fromEntries(['release-status','release-link','download-link','download-label','release-kind','motion-toggle','title'].map(id=>[id,element()]));
+  const ids = Object.fromEntries(['release-status','release-link','download-link','download-label','release-kind','motion-toggle','title','latest-version','release-date','version-info'].map(id=>[id,element()]));
   const document = {documentElement:{lang:options.pageLanguage || 'ja'},getElementById:id=>ids[id]};
   let abort;
-  const context = {document, URL, Intl, Date, AbortController, setTimeout(fn){abort=fn;return 1;},clearTimeout(){},fetch:async(url,{signal})=>{
+  const context = {document, URL, Intl, Date, AbortController, setTimeout(fn){abort=fn;return 1;},clearTimeout(){},fetch:async(url,{signal}={})=>{
     assert.match(url,/api.github.com/);
     if(options.timeout) { abort(); assert.equal(signal.aborted,true); throw Error('aborted'); }
     if(options.reject) throw Error('network');
     return {ok:!options.httpError,json:async()=>data};
   }};
-  vm.runInNewContext(script,context);
+  vm.runInNewContext(options.simple ? simpleScript : script,context);
   await new Promise(resolve=>setImmediate(resolve));
   return {ids,document};
 }
@@ -43,6 +44,15 @@ async function run(data, options={}) {
     assert.equal(r.ids['download-link'].href,base+'/download/'+newer+'/Utatane-macOS.zip');
   }
   console.log('PASS: delayed notarization never selects an older version, including numeric/prerelease ordering');
+  for (const simple of [false, true]) {
+    const notarized = {name:'Utatane-macOS-notarized.zip',browser_download_url:base+'/download/v0.2.18/Utatane-macOS-notarized.zip'};
+    const data = release('v0.2.18','2026-10-24');
+    r=await run([{...data,assets:[...data.assets,notarized]}],{simple});
+    assert.equal(r.ids['download-link'].href,notarized.browser_download_url);
+    r=await run([data],{simple});
+    assert.equal(r.ids['download-link'].href,data.assets[0].browser_download_url);
+  }
+  console.log('PASS: overview and simple page prefer a notarized addition and support normal release ZIPs');
   for (const [label,data,options] of [
     ['HTTP failure',[],{httpError:true}],['network failure',[],{reject:true}],['timeout',[],{timeout:true}],['empty list',[],{}],['invalid response',{},{}],['unsafe URL',[release('bad','2026-08-01',{html_url:'https://evil.example/tag/x'})],{}]
   ]) {
