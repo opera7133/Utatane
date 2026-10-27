@@ -28,13 +28,7 @@ public final class ApplicationRelauncher: ObservableObject {
         try process.run()
         helper = process
         isRestarting = true
-        // terminateLater enters a nested run loop. Calling it from a MainActor /
-        // main-queue job would hold that executor while shutdown awaits more jobs.
-        RunLoop.main.perform {
-            MainActor.assumeIsolated {
-                NSApplication.shared.terminate(nil)
-            }
-        }
+        ApplicationTermination.request()
     }
 
     /// A separate process survives the app's exit. Paths and environment values are

@@ -521,7 +521,7 @@ private struct UtataneRootView: View {
             mainPresentationSession.onDisplayChange = { events in sendEvents(events) }
             presentationCoordinator.onCloseRequest = { mode, identifier in
                 if mode == .shared {
-                    NSApplication.shared.terminate(nil)
+                    ApplicationTermination.request()
                 } else if identifier == mainPresentationSession.identifier {
                     dismissCurrentGhost()
                 } else if let runtime = calledGhosts.values.first(where: {
@@ -9817,9 +9817,10 @@ private final class UtataneApplicationDelegate: NSObject, NSApplicationDelegate 
     }
 
     func terminate(menuScope: Int, windowScope: Int) {
+        guard !isAwaitingTermination else { return }
         terminationMenuScope = menuScope
         terminationWindowScope = windowScope
-        NSApplication.shared.terminate(nil)
+        ApplicationTermination.request()
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool {
