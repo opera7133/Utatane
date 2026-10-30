@@ -89,3 +89,30 @@ func `explicit macOS SHIORI takes priority over dictionary signatures`(filename:
     #expect(descriptor?.id == "external-windows-shiori")
     #expect(descriptor?.runtimeRequirement == .wine)
 }
+
+@Test(arguments: [("mae_corpus.txt", "mae"), ("dnproxy.ini", "dnproxy"), ("dnproxy.dll.config", "dnproxy"), ("ghost.asproj", "aosora")])
+func `identifies engines with generic Windows DLL names`(signature: String, expected: String) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: "SHIORI 日本語 \(UUID())")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "shiori.dll")?.id == "external-windows-shiori")
+    try Data().write(to: root.appending(path: signature))
+    #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "shiori.dll")?.id.rawValue == expected)
+    if expected == "dnproxy" {
+        #expect(ShioriCatalog.descriptor(id: "dnproxy")?.runtimeRequirement == .configuredExecutable)
+        #expect(ShioriCatalog.descriptor(moduleFilename: "engine\\DNPROXY_DEBUG.DLL")?.id == "dnproxy")
+    }
+    #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "shiori.dll", macOSModuleFilename: "libcustom.dylib")?.id == "external-posix-shiori")
+}
+
+@Test func `finds generic native SHIORI with no known dictionary`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data().write(to: root.appending(path: "shiori.dylib"))
+    #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "unknown.dll")?.id == "external-posix-shiori")
+    #expect(NativeShioriLibraryLocator.firstExisting(in: NativeShioriLibraryLocator.candidates(moduleID: nil, masterDirectory: root))?.lastPathComponent == "shiori.dylib")
+    #expect(NativeShioriLibraryLocator.declaredURL("../escape.dll", in: root) == nil)
+    #expect(NativeShioriLibraryLocator.declaredURL("/tmp/escape.dll", in: root) == nil)
+    #expect(NativeShioriLibraryLocator.candidates(moduleID: "../escape", nativeRoot: root).isEmpty)
+}

@@ -103,6 +103,8 @@ public enum ShioriCatalog {
         .init(id: "kagari", displayName: "kagari", moduleFilenames: ["kagari.dll"], execution: .dynamicLibrary, provisioning: .user),
         .init(id: "minato", displayName: "minato", aliases: ["湊"], moduleFilenames: ["minato.dll", "libminato.dylib"], execution: .dynamicLibrary, provisioning: .user),
         .init(id: "pasta", displayName: "pasta", aliases: [], moduleFilenames: ["pasta.dll", "libpasta.dylib"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "mae", displayName: "真絵", aliases: ["MAE"], moduleFilenames: ["mae.dll", "libmae.dylib"], execution: .dynamicLibrary, provisioning: .user, support: .experimental),
+        .init(id: "dnproxy", displayName: "D.N.Proxy", moduleFilenames: ["dnproxy.dll", "dnproxy_debug.dll", "libdnproxy.dylib"], execution: .dynamicLibrary, provisioning: .user, runtimeRequirement: .configuredExecutable, support: .experimental),
         .init(id: "aosora", displayName: "蒼空", aliases: ["Aosora"], moduleFilenames: ["aosora.dll"], execution: .bundledNativeModule, provisioning: .user, support: .experimental),
         .init(id: "first", displayName: "FIRST", moduleFilenames: ["first.dll"], execution: .builtIn, provisioning: .included),
         .init(id: "misaka", displayName: "美坂", aliases: ["MISAKA"], moduleFilenames: ["misaka.dll"], execution: .dynamicLibrary, provisioning: .user),
@@ -158,8 +160,9 @@ public enum ShioriCatalog {
         guard let filename = moduleFilename?.trimmingCharacters(in: .whitespacesAndNewlines),
               !filename.isEmpty
         else { return nil }
+        let basename = filename.replacingOccurrences(of: "\\", with: "/").split(separator: "/").last.map(String.init) ?? filename
         return descriptors.first { descriptor in
-            descriptor.moduleFilenames.contains { $0.caseInsensitiveCompare(filename) == .orderedSame }
+            descriptor.moduleFilenames.contains { $0.caseInsensitiveCompare(basename) == .orderedSame }
         }
     }
 
@@ -192,6 +195,12 @@ public enum ShioriCatalog {
             "satori"
         } else if exists("kawarirc.kis") || exists("kawari.ini") {
             "kawari"
+        } else if exists("mae_corpus.txt") {
+            "mae"
+        } else if exists("dnproxy.ini") || exists("dnproxy.dll.config") {
+            "dnproxy"
+        } else if exists("ghost.asproj") {
+            "aosora"
         } else if exists("misaka.ini") {
             "misaka"
         } else if exists("main.amb") || exists("main.azr") || exists("akari.ini") {
@@ -203,6 +212,11 @@ public enum ShioriCatalog {
         }
         if let detected = detectedID.flatMap(descriptor(id:)) ?? descriptor(moduleFilename: declaredModuleFilename) {
             return detected
+        }
+        if NativeShioriLibraryLocator.firstExisting(in: NativeShioriLibraryLocator.candidates(
+            moduleID: nil, masterDirectory: masterDirectory, declaredFilename: declaredModuleFilename
+        )) != nil {
+            return descriptor(id: "external-posix-shiori")
         }
         switch declaredModuleFilename.flatMap({ URL(filePath: $0).pathExtension.lowercased() }) {
         case "dylib", "so", "bundle":

@@ -24,13 +24,30 @@ public final class NativeShioriSession: Sendable {
                       onInternalSaoriEvent: nil, hostURL: hostURL)
     }
 
-    public init(directoryURL: URL, moduleURL: URL,
+    public convenience init(directoryURL: URL, moduleURL: URL,
+                            stateDirectoryURL: URL? = nil,
+                            saoriCaller: (any NativeSaoriCalling)? = nil,
+                            saoriRootURL: URL? = nil,
+                            moduleResolver: UtataneModuleResolver = .init(),
+                            saoriDiagnostics: SaoriDiagnostics = .shared,
+                            onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)?,
+                            internalSaoriMediaReader: (any InternalSaoriMediaReading)? = nil,
+                            hostURL: URL = NativeShioriProcessSession.defaultHostURL) throws
+    {
+        try self.init(directoryURL: directoryURL, moduleURL: moduleURL, selectedKind: nil,
+                      stateDirectoryURL: stateDirectoryURL, saoriCaller: saoriCaller, saoriRootURL: saoriRootURL,
+                      moduleResolver: moduleResolver, saoriDiagnostics: saoriDiagnostics,
+                      onInternalSaoriEvent: onInternalSaoriEvent, internalSaoriMediaReader: internalSaoriMediaReader,
+                      hostURL: hostURL)
+    }
+
+    public init(directoryURL: URL, moduleURL: URL, selectedKind: ConventionalShioriKind?,
                 stateDirectoryURL: URL? = nil,
                 saoriCaller: (any NativeSaoriCalling)? = nil,
                 saoriRootURL: URL? = nil,
                 moduleResolver: UtataneModuleResolver = .init(),
                 saoriDiagnostics: SaoriDiagnostics = .shared,
-                onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)?,
+                onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)? = nil,
                 internalSaoriMediaReader: (any InternalSaoriMediaReading)? = nil,
                 hostURL: URL = NativeShioriProcessSession.defaultHostURL) throws
     {
@@ -43,7 +60,7 @@ public final class NativeShioriSession: Sendable {
                 moduleResolver: moduleResolver
             ))
         } else {
-            let kind = ConventionalShioriKind(libraryFilename: moduleURL.lastPathComponent)
+            let kind = selectedKind ?? ConventionalShioriKind(libraryFilename: moduleURL.lastPathComponent)
             if kind == .yaya6 {
                 try YayaSaveBackup.prepare(in: directoryURL)
             }

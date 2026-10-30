@@ -170,3 +170,39 @@ struct UtataneModuleLoaderTests {
         }
     }
 }
+
+@Test(arguments: [ConventionalShioriKind.mae, .dnproxy])
+func `new conventional engines support shared and generic ghost libraries`(kind: ConventionalShioriKind) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: "modules 日本語 \(UUID())")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let support = root.appending(path: "support")
+    let master = root.appending(path: "ghost/master")
+    let resolver = UtataneModuleResolver(applicationSupportURL: support, bundledResourcesURL: nil, environment: [:])
+    #expect(ConventionalShioriKind(libraryFilename: kind.libraryFilename) == kind)
+    #expect(ConventionalShioriKind(shioriFilename: "\(kind.rawValue).dll") == kind)
+    #expect(ConventionalShioriKind(shioriFilename: "DNPROXY_DEBUG.DLL") == .dnproxy)
+    let shared = support.appending(path: "\(kind.rawValue)/lib/\(kind.libraryFilename)")
+    let nested = master.appending(path: "\(kind.rawValue)/lib/\(kind.libraryFilename)")
+    let generic = master.appending(path: "shiori.dylib")
+    let canonical = master.appending(path: kind.libraryFilename)
+    for file in [shared, nested, generic, canonical] {
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data().write(to: file)
+        #expect(try resolver.moduleURL(for: kind, masterDirectoryURL: master, declaredModuleFilename: "shiori.dll") == file)
+    }
+    let child = master.appending(path: "engine/shiori.dylib")
+    try FileManager.default.createDirectory(at: child.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: child)
+    #expect(try resolver.moduleURL(for: kind, masterDirectoryURL: master, declaredModuleFilename: "engine/shiori.dll") == child)
+}
+
+@Test func `misaka uses the same declared subfolder search as other conventional engines`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let master = root.appending(path: "ghost/master")
+    let generic = master.appending(path: "engine/shiori.dylib")
+    try FileManager.default.createDirectory(at: generic.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: generic)
+    let resolver = UtataneModuleResolver(applicationSupportURL: root.appending(path: "support"), bundledResourcesURL: nil, environment: [:])
+    #expect(try resolver.moduleURL(for: .misaka, masterDirectoryURL: master, declaredModuleFilename: "engine/shiori.dll") == generic)
+}

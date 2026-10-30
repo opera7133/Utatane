@@ -901,6 +901,9 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 <h4 id="support-engines-共通導入版と同梱版">共通導入版と同梱版</h4>
 <p>初回起動時にYAYAと里々の共通導入版をカタログから取得します。既に導入済みなら再取得せず、カタログへ接続できなくても起動できます。共通導入版の更新後、起動中のゴーストには再読み込みが必要です。カタログの「導入済み」は共通導入版の状態であり、ゴースト同梱版から切り替わったことを示しません。</p>
 <p>ゴーストの<code>shiori.macos</code>に指定されたモジュールを優先します。対応する同梱ライブラリの破損や必要な関数の欠落を検出すると、同じSHIORIの共通導入版へ切り替えます。設定の「SHIORI対応状況」でオフにできます。辞書・保存データのエラーでは切り替えません。各SHIORIの配布版は、ゴースト内、共通導入先の順に探します。<code>ese-shiori.dll</code>など、対応済みのDLL名が<code>shiori</code>にある場合、同じフォルダにdylibを置くだけでUtataneが検出します。</p>
+<p>開発版では真絵の<code>mae_corpus.txt</code>、D.N.Proxyの<code>dnproxy.ini</code>または<code>dnproxy.dll.config</code>も判別します。<code>shiori.dll</code>という汎用名でも対応する共通導入版を選べます。D.N.Proxyには別途.NET 10ランタイムが必要で、C#ソースの実行時コンパイルにはSDKが必要です。対応範囲はModulesの案内を確認してください。</p>
+<p>ゴースト内の<code>shiori.dylib</code>も探索します。蒼空などの手動導入は、共通導入先の<code>&lt;名前&gt;/lib/lib&lt;名前&gt;.dylib</code>または<code>&lt;名前&gt;/lib&lt;名前&gt;.dylib</code>を確認するため、<code>module.json</code>がなくても実行を止めません。カタログの版・更新判定にはmanifestが必要です。</p>
+<p>真絵で「話すネタが思いつかない」という台詞が繰り返される場合は、mae 0.1.0-r3以降へ更新してください。未定義の翻訳・バルーン終了イベントを発話へ置き換える問題を修正しています。ゴースト内に旧版の<code>libmae.dylib</code>がある場合はそちらが優先されるので、同梱版も置き換えてから再読み込みしてください。</p>
 <p>Windows DLLだけを持つゴーストは、辞書や設定を判別し、対応するモジュールを導入済みなら接続します。設定の「SHIORI対応状況」で判定を確認できます。動かない場合は「情報」→「SHIORI読み込み診断…」と<a href="#support-troubleshooting-%E8%A8%BA%E6%96%AD%E3%81%A8%E5%A0%B1%E5%91%8A">診断・報告の手順</a>を使ってください。</p>
 <p>同梱する側の配置・指定方法は<a href="https://dl.wmsci.com/utatane/docs/create/shiori/">SHIORI開発ガイド</a>、各配布物の導入手順は<a href="https://github.com/opera7133/utatane-modules">Utatane Modules</a>にあります。</p>
 <p>通常のmacOS用SHIORIは、ゴースト・プラグインごとに別プロセスで実行します。応答停止や異常終了を検出した場合、実行済みの処理を重複させないため、自動で要求を再送しません。</p>

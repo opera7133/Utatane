@@ -121,20 +121,16 @@ public struct POSIXShioriModuleResolver: Sendable {
     }
 
     private func candidateURLs(for kind: POSIXShioriKind, masterDirectoryURL: URL) -> [URL] {
-        let names = ["lib\(kind.rawValue).dylib", "lib\(kind.rawValue).so", "lib\(kind.rawValue).bundle"]
-        let applicationSupport = applicationSupportURL.appending(path: kind.rawValue, directoryHint: .isDirectory)
-        var directories = [
-            masterDirectoryURL,
-            masterDirectoryURL.appending(path: "\(kind.rawValue)/lib", directoryHint: .isDirectory),
-            applicationSupport.appending(path: "lib", directoryHint: .isDirectory),
-            applicationSupport
-        ]
-        if let resources = bundledResourcesURL {
-            directories.append(resources.appending(path: "NativeShiori/\(kind.rawValue)", directoryHint: .isDirectory))
-        }
-        return directories.flatMap { directory in
-            names.map { directory.appending(path: $0, directoryHint: .notDirectory) }
-        }
+        let descriptor = (try? Data(contentsOf: masterDirectoryURL.appending(path: "descript.txt")))
+            .flatMap { LegacyTextDecoder.decode($0) } ?? ""
+        let declared = descriptor.components(separatedBy: .newlines).compactMap { line -> String? in
+            let pair = line.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            return pair.count == 2 && pair[0].lowercased() == "shiori" ? pair[1] : nil
+        }.last
+        return NativeShioriLibraryLocator.candidates(
+            moduleID: kind.rawValue, masterDirectory: masterDirectoryURL, declaredFilename: declared,
+            nativeRoot: applicationSupportURL, bundledResources: bundledResourcesURL
+        )
     }
 }
 

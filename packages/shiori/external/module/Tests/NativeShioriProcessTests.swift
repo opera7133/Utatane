@@ -234,3 +234,25 @@ private final class ProcessWindowController: NativeSaoriWindowControlling, @unch
     try session.close()
     #expect(store.snapshot().last?.message.contains("phase=unload") == true)
 }
+
+@Test func `generic filename preserves YAYA backup and same-engine recovery`() throws {
+    let fixture = try NativeProcessFixture()
+    defer { fixture.remove() }
+    let master = try fixture.directory("ghost 日本語")
+    let selected = master.appending(path: "shiori.dylib")
+    try Data("broken native library".utf8).write(to: selected)
+    try Data("original save".utf8).write(to: master.appending(path: "yaya_variable.cfg"))
+    let support = fixture.root.appending(path: "NativeShiori")
+    let shared = support.appending(path: "yaya-6/lib/libyaya-6.dylib")
+    try FileManager.default.createDirectory(at: shared.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try FileManager.default.copyItem(at: fixture.module, to: shared)
+    let resolver = UtataneModuleResolver(applicationSupportURL: support, bundledResourcesURL: nil, environment: [:])
+    let session = try NativeShioriSession(directoryURL: master, moduleURL: selected, selectedKind: .yaya6, moduleResolver: resolver, hostURL: fixture.host)
+    defer { try? session.close() }
+    #expect(try session.request("GET SHIORI/3.0\r\nID: OnBoot\r\n\r\n").contains("Value: 1"))
+    #expect(try String(contentsOf: master.appending(path: "Utatane-YAYA-backup/yaya_variable.cfg"), encoding: .utf8) == "original save")
+    // An explicit unknown module has no inferred engine and must not recover to YAYA.
+    #expect(throws: NativeShioriProcessError.self) {
+        try NativeShioriSession(directoryURL: master, moduleURL: selected, moduleResolver: resolver, hostURL: fixture.host)
+    }
+}

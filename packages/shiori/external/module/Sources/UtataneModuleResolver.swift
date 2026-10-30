@@ -1,4 +1,5 @@
 import Foundation
+import UtataneCore
 
 public struct UtataneModuleResolver: Sendable {
     private let applicationSupportURL: URL
@@ -20,28 +21,7 @@ public struct UtataneModuleResolver: Sendable {
     }
 
     public func misakaModuleURL(masterDirectoryURL: URL? = nil) throws -> URL? {
-        if let override = environment["UTATANE_MISAKA_MODULE"] {
-            guard override.hasPrefix("/"), !override.contains("\0") else {
-                throw UtataneModuleError.invalidConfiguration("UTATANE_MISAKA_MODULE must be an absolute path")
-            }
-            // Preserve explicit configuration errors instead of silently using a different engine.
-            return URL(fileURLWithPath: override)
-        }
-        if let masterDirectoryURL {
-            for name in ["libmisaka.dylib", "misaka-native/lib/libmisaka.dylib"] {
-                let file = masterDirectoryURL.appending(path: name)
-                if FileManager.default.fileExists(atPath: file.path) {
-                    return file
-                }
-            }
-        }
-        var roots = [applicationSupportURL]
-        if let bundledResourcesURL {
-            roots.append(bundledResourcesURL.appending(path: "NativeShiori"))
-        }
-        return roots.map { $0.appending(path: "misaka-native/lib/libmisaka.dylib") }.first {
-            FileManager.default.fileExists(atPath: $0.path)
-        }
+        try moduleURL(for: .misaka, masterDirectoryURL: masterDirectoryURL)
     }
 
     public func misakaFallbackURL(for selected: URL, masterDirectoryURL: URL) throws -> URL? {
@@ -52,9 +32,10 @@ public struct UtataneModuleResolver: Sendable {
     }
 
     public func moduleURL(for kind: ConventionalShioriKind, masterDirectoryURL: URL? = nil) throws -> URL? {
-        if kind == .misaka {
-            return try misakaModuleURL(masterDirectoryURL: masterDirectoryURL)
-        }
+        try moduleURL(for: kind, masterDirectoryURL: masterDirectoryURL, declaredModuleFilename: nil)
+    }
+
+    public func moduleURL(for kind: ConventionalShioriKind, masterDirectoryURL: URL?, declaredModuleFilename: String?) throws -> URL? {
         let key = "UTATANE_\(kind.rawValue.uppercased().replacingOccurrences(of: "-", with: "_"))_MODULE"
         if let path = environment[key] {
             guard path.hasPrefix("/"), !path.contains("\0") else {
@@ -62,17 +43,10 @@ public struct UtataneModuleResolver: Sendable {
             }
             return URL(fileURLWithPath: path)
         }
-        var directories: [URL] = []
-        if let masterDirectoryURL {
-            directories += [masterDirectoryURL, masterDirectoryURL.appending(path: "\(kind.rawValue)/lib")]
-        }
-        directories.append(applicationSupportURL.appending(path: "\(kind.rawValue)/lib"))
-        if let bundledResourcesURL {
-            directories.append(bundledResourcesURL.appending(path: "NativeShiori/\(kind.rawValue)/lib"))
-        }
-        return directories.map { $0.appending(path: kind.libraryFilename) }.first {
-            FileManager.default.fileExists(atPath: $0.path)
-        }
+        return NativeShioriLibraryLocator.firstExisting(in: NativeShioriLibraryLocator.candidates(
+            moduleID: kind == .misaka ? "misaka-native" : kind.rawValue, masterDirectory: masterDirectoryURL, declaredFilename: declaredModuleFilename,
+            nativeRoot: applicationSupportURL, bundledResources: bundledResourcesURL
+        ))
     }
 
     public func fallbackURL(for kind: ConventionalShioriKind, selected: URL, masterDirectoryURL: URL) throws -> URL? {

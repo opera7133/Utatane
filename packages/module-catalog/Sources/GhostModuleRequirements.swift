@@ -11,7 +11,13 @@ public struct GhostModuleRequirement: Sendable, Identifiable, Equatable {
 
 /// Finds catalog modules needed by a newly installed ghost without changing its files.
 public struct GhostModuleRequirements: Sendable {
-    public init() {}
+    private let bundledResourcesURL: URL?
+    private let environment: [String: String]
+
+    public init(bundledResourcesURL: URL? = Bundle.main.resourceURL, environment: [String: String] = ProcessInfo.processInfo.environment) {
+        self.bundledResourcesURL = bundledResourcesURL
+        self.environment = environment
+    }
 
     /// Finds DLLs that still need a native module or an explicitly configured Windows host.
     /// This works without a network catalog, so a failed fetch cannot silently start a new ghost.
@@ -39,22 +45,22 @@ public struct GhostModuleRequirements: Sendable {
            descriptor?.execution != .externalProcess,
            let declaredURL, declaredURL.pathExtension.lowercased() == "dll"
         {
-            let yayaID: String? = if descriptor?.id.rawValue == "yaya" {
-                "yaya-6"
-            } else {
-                nil
+            let knownID: String? = switch descriptor?.id.rawValue {
+            case "yaya": "yaya-6"
+            case "misaka": "misaka-native"
+            case "external-posix-shiori", "external-windows-shiori", nil: nil
+            default: descriptor?.id.rawValue
             }
-            let catalogModule = catalog?.modules.first(where: { module in
-                module.kinds.contains("shiori")
-                    && (yayaID.map { module.id == $0 }
-                        ?? (windowsFilenames(for: module).contains(declaredURL.lastPathComponent.lowercased())
-                            || module.id == descriptor?.id.rawValue))
-            })
-            let id = yayaID ?? catalogModule?.id ?? (descriptor?.id.rawValue == "misaka" ? "misaka-native"
-                : (descriptor?.id.rawValue ?? declaredURL.deletingPathExtension().lastPathComponent.lowercased()))
-            if !localLibraryExists(beside: declaredURL, moduleID: id),
-               !managedLibraryExists(moduleID: id, kind: "shiori", root: applicationSupportURL)
-            {
+            let catalogModule = catalog?.modules.first { module in
+                module.kinds.contains("shiori") && (knownID.map { module.id == $0 }
+                    ?? windowsFilenames(for: module).contains(declaredURL.lastPathComponent.lowercased()))
+            }
+            let id = knownID ?? catalogModule?.id ?? declaredURL.deletingPathExtension().lastPathComponent.lowercased()
+            let local = NativeShioriLibraryLocator.firstExisting(in: NativeShioriLibraryLocator.candidates(
+                moduleID: knownID ?? catalogModule?.id, masterDirectory: master,
+                declaredFilename: ghost.effectiveShioriFilename
+            ))
+            if local == nil, !managedLibraryExists(moduleID: id, kind: "shiori", root: applicationSupportURL) {
                 result.append(GhostModuleRequirement(
                     id: id, displayName: catalogModule?.displayName ?? descriptor?.displayName ?? declaredURL.lastPathComponent,
                     kind: "SHIORI", sourceDLLURL: FileManager.default.fileExists(atPath: declaredURL.path) ? declaredURL : nil
@@ -178,7 +184,21 @@ public struct GhostModuleRequirements: Sendable {
     }
 
     private func managedLibraryExists(moduleID: String, kind: String, root: URL) -> Bool {
-        ModuleCatalogInventory(applicationSupportURL: root).isInstalled(moduleID: moduleID, kind: kind)
+        if ModuleCatalogInventory(applicationSupportURL: root).isInstalled(moduleID: moduleID, kind: kind) {
+            return true
+        }
+        // Manual SHIORI installs (notably Aosora) need no Modules manifest.
+        // Keep version/update inventory separate from runtime file availability.
+        guard kind == "shiori" else { return false }
+        let token = moduleID == "misaka-native" ? "MISAKA" : moduleID.uppercased().replacingOccurrences(of: "-", with: "_")
+        if let override = environment["UTATANE_\(token)_MODULE"], override.hasPrefix("/"), !override.contains("\0"),
+           NativeShioriLibraryLocator.firstExisting(in: [URL(fileURLWithPath: override)]) != nil
+        {
+            return true
+        }
+        return NativeShioriLibraryLocator.firstExisting(in: NativeShioriLibraryLocator.candidates(
+            moduleID: moduleID, nativeRoot: root.appending(path: "NativeShiori"), bundledResources: bundledResourcesURL
+        )) != nil
     }
 
     private func windowsFilenames(for module: SignedModuleCatalog.Module) -> Set<String> {

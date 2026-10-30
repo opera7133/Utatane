@@ -14,6 +14,8 @@ public enum ConventionalShioriKind: String, Sendable {
     case shino
     case akari
     case kawari
+    case mae
+    case dnproxy
 
     public var libraryFilename: String {
         self == .niseshiori ? "libniseshiori.dylib" : "lib\(rawValue).dylib"
@@ -34,6 +36,8 @@ public enum ConventionalShioriKind: String, Sendable {
         case "libshino.dylib": self = .shino
         case "libakari.dylib": self = .akari
         case "libkawari.dylib": self = .kawari
+        case "libmae.dylib": self = .mae
+        case "libdnproxy.dylib": self = .dnproxy
         default: return nil
         }
     }
@@ -55,6 +59,8 @@ public enum ConventionalShioriKind: String, Sendable {
         case "shino.dll", "libshino.dylib": self = .shino
         case "akari.dll", "libakari.dylib": self = .akari
         case "kawari.dll", "libkawari.dylib": self = .kawari
+        case "mae.dll", "libmae.dylib": self = .mae
+        case "dnproxy.dll", "dnproxy_debug.dll", "libdnproxy.dylib": self = .dnproxy
         default: return nil
         }
     }

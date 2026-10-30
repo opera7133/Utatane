@@ -129,3 +129,47 @@ private func yayaDLLVersionFixture(_ major: Int) -> Data {
     try Data().write(to: master.appending(path: "libsaori_cpuid.dylib"))
     #expect(scanner.missing(for: ghost, in: catalog, applicationSupportURL: managed).isEmpty)
 }
+
+@Test(arguments: [("mae", "mae_corpus.txt"), ("dnproxy", "dnproxy.ini"), ("aosora", "ghost.asproj")])
+func `engine discovery and manual shared installs agree with startup`(id: String, signature: String) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: "ghost 日本語 \(UUID())")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let master = root.appending(path: "ghost/master")
+    let support = root.appending(path: "support")
+    try FileManager.default.createDirectory(at: master, withIntermediateDirectories: true)
+    try Data().write(to: master.appending(path: signature))
+    let ghost = InstalledGhost(name: "Test", rootDirectory: root, defaultShellDirectory: root, shioriFilename: "shiori.dll")
+    let scanner = GhostModuleRequirements(bundledResourcesURL: nil, environment: [:])
+    #expect(scanner.unresolved(for: ghost, applicationSupportURL: support).map(\.id) == [id])
+    let shared = support.appending(path: "NativeShiori/\(id)/lib\(id).dylib")
+    try FileManager.default.createDirectory(at: shared.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: shared)
+    // No module.json: this is usable, but its version is unknown to inventory.
+    #expect(!ModuleCatalogInventory(applicationSupportURL: support).isInstalled(moduleID: id, kind: "shiori"))
+    #expect(scanner.unresolved(for: ghost, applicationSupportURL: support).isEmpty)
+    try FileManager.default.removeItem(at: shared)
+    let nested = master.appending(path: "\(id)/lib/lib\(id).dylib")
+    try FileManager.default.createDirectory(at: nested.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: nested)
+    #expect(scanner.unresolved(for: ghost, applicationSupportURL: support).isEmpty)
+    try FileManager.default.removeItem(at: nested)
+    try Data().write(to: master.appending(path: "shiori.dylib"))
+    #expect(scanner.unresolved(for: ghost, applicationSupportURL: support).isEmpty)
+}
+
+@Test func `SHIORI requirements honor bundled and explicit runtime library paths`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let master = root.appending(path: "ghost/master")
+    let resources = root.appending(path: "Resources")
+    let library = resources.appending(path: "NativeShiori/aosora/lib/libaosora.dylib")
+    try FileManager.default.createDirectory(at: master, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: library.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data().write(to: master.appending(path: "ghost.asproj"))
+    try Data().write(to: library)
+    let ghost = InstalledGhost(name: "Test", rootDirectory: root, defaultShellDirectory: root, shioriFilename: "aosora.dll")
+    #expect(GhostModuleRequirements(bundledResourcesURL: resources, environment: [:]).unresolved(for: ghost, applicationSupportURL: root).isEmpty)
+    #expect(GhostModuleRequirements(bundledResourcesURL: nil, environment: [:]).unresolved(for: ghost, applicationSupportURL: root).map(\.id) == ["aosora"])
+    let explicit = GhostModuleRequirements(bundledResourcesURL: nil, environment: ["UTATANE_AOSORA_MODULE": library.path])
+    #expect(explicit.unresolved(for: ghost, applicationSupportURL: root).isEmpty)
+}

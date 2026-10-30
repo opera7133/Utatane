@@ -3187,11 +3187,11 @@ private struct UtataneRootView: View {
             ?? ConventionalShioriKind(shioriFilename: ghost.shioriFilename)
         if let kind {
             let resolver = UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback)
-            if let module = try resolver.moduleURL(for: kind, masterDirectoryURL: masterDirectory) {
+            if let module = try resolver.moduleURL(for: kind, masterDirectoryURL: masterDirectory, declaredModuleFilename: ghost.shioriFilename) {
                 reportInternalSaoriCompatibility(module)
                 return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
                     NativeShioriSession(
-                        directoryURL: masterDirectory, moduleURL: module,
+                        directoryURL: masterDirectory, moduleURL: module, selectedKind: kind,
                         stateDirectoryURL: stateDirectory,
                         saoriCaller: nativeSaoriRegistry(for: masterDirectory),
                         saoriRootURL: saoriRoot,
@@ -3240,7 +3240,7 @@ private struct UtataneRootView: View {
         } else if MateriaFirstPersonalityEngine.supports(shioriFilename: ghost.shioriFilename) {
             throw AppError.windowsShioriUnavailable
         }
-        if let moduleURL = ContentRoot.shioriModuleURL(for: ghost) {
+        if let moduleURL = ContentRoot.localNativeShioriModuleURL(for: ghost) ?? ContentRoot.shioriModuleURL(for: ghost) {
             switch moduleURL.pathExtension.lowercased() {
             case "dylib", "so", "bundle":
                 reportInternalSaoriCompatibility(moduleURL)
@@ -5633,7 +5633,7 @@ private struct UtataneRootView: View {
             if ghost.shioriMacOSFilename != nil || winePreferredGhostIDs.contains(ghost.id.standardizedFileURL) {
                 module = ContentRoot.shioriModuleURL(for: ghost)
             } else if let kind = descriptor.flatMap({ ConventionalShioriKind(shioriFilename: "\($0.id.rawValue).dll") }),
-                      let resolved = try? UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback).moduleURL(for: kind, masterDirectoryURL: master)
+                      let resolved = try? UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback).moduleURL(for: kind, masterDirectoryURL: master, declaredModuleFilename: ghost.shioriFilename)
             {
                 module = resolved
             } else if descriptor?.execution == .bundledNativeModule {
@@ -5645,7 +5645,7 @@ private struct UtataneRootView: View {
                 if let filename = ghost.shioriFilename?.replacingOccurrences(of: "\\", with: "/"), !filename.hasPrefix("/") {
                     let url = master.appending(path: filename).standardizedFileURL
                     if url.path.hasPrefix(master.standardizedFileURL.path + "/") {
-                        module = url
+                        module = ContentRoot.localNativeShioriModuleURL(for: ghost) ?? url
                     }
                 }
             }
@@ -10157,6 +10157,13 @@ enum ContentRoot {
             dllURL: dllURL,
             charset: charset
         )
+    }
+
+    static func localNativeShioriModuleURL(for ghost: InstalledGhost) -> URL? {
+        let master = ghost.rootDirectory.appending(path: "ghost/master")
+        return NativeShioriLibraryLocator.firstExisting(in: NativeShioriLibraryLocator.candidates(
+            moduleID: nil, masterDirectory: master, declaredFilename: ghost.effectiveShioriFilename
+        ))
     }
 
     static func shioriModuleURL(for ghost: InstalledGhost) -> URL? {

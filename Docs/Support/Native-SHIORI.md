@@ -10,6 +10,12 @@ SHIORIごとの実行方式・制約とビルド手順は、[Utatane Modulesの�
 
 ゴーストの`shiori.macos`に指定されたモジュールを優先します。対応する同梱ライブラリの破損や必要な関数の欠落を検出すると、同じSHIORIの共通導入版へ切り替えます。設定の「SHIORI対応状況」でオフにできます。辞書・保存データのエラーでは切り替えません。各SHIORIの配布版は、ゴースト内、共通導入先の順に探します。`ese-shiori.dll`など、対応済みのDLL名が`shiori`にある場合、同じフォルダにdylibを置くだけでUtataneが検出します。
 
+開発版では真絵の`mae_corpus.txt`、D.N.Proxyの`dnproxy.ini`または`dnproxy.dll.config`も判別します。`shiori.dll`という汎用名でも対応する共通導入版を選べます。D.N.Proxyには別途.NET 10ランタイムが必要で、C#ソースの実行時コンパイルにはSDKが必要です。対応範囲はModulesの案内を確認してください。
+
+ゴースト内の`shiori.dylib`も探索します。蒼空などの手動導入は、共通導入先の`<名前>/lib/lib<名前>.dylib`または`<名前>/lib<名前>.dylib`を確認するため、`module.json`がなくても実行を止めません。カタログの版・更新判定にはmanifestが必要です。
+
+真絵で「話すネタが思いつかない」という台詞が繰り返される場合は、mae 0.1.0-r3以降へ更新してください。未定義の翻訳・バルーン終了イベントを発話へ置き換える問題を修正しています。ゴースト内に旧版の`libmae.dylib`がある場合はそちらが優先されるので、同梱版も置き換えてから再読み込みしてください。
+
 Windows DLLだけを持つゴーストは、辞書や設定を判別し、対応するモジュールを導入済みなら接続します。設定の「SHIORI対応状況」で判定を確認できます。動かない場合は「情報」→「SHIORI読み込み診断…」と[診断・報告の手順](Troubleshooting.md#診断と報告)を使ってください。
 
 同梱する側の配置・指定方法は[SHIORI開発ガイド](../Creators/SHIORI-Development.md)、各配布物の導入手順は[Utatane Modules](https://github.com/opera7133/utatane-modules)にあります。
