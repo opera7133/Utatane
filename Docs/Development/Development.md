@@ -151,12 +151,14 @@ Content/Local/Skins/        カレンダースキン
 
 ゴースト・SHIORI・SAORIの制作者がUtatane対応を確認する手順は、[制作者向けUtatane対応ガイド](../Creators/Content-Authoring.md)を参照してください。
 
-firstのネイティブ解析テストは、実物をFixtureへコピーせず環境変数で指定します。未指定なら実物依存部分だけスキップされます。
+firstのネイティブ解析テストは、実物をFixtureへコピーせず環境変数で指定します。未指定なら実物依存試験は明示的なスキップになり、成功した実物試験には数えません。指定したファイルがない場合は失敗します。DLLなしで可能な計算・入力検証は別の単体試験で実行します。
 
 ```sh
 UTATANE_FIRST_DLL="$HOME/Library/Application Support/Utatane/Ghosts/first/ghost/master/first.dll" \
 swift test --package-path packages --filter UtataneFirstNativeTests
 ```
+
+任意素材の検証では、終了コードだけでなく、選択した試験が実際に実行され、素材不足によるスキップがないことも確認してください。Swift Testingの末尾の総件数にはスキップも含まれるため、実行・スキップを分けて記録します。実プラグインの検証スクリプトは、スキップが含まれた場合も失敗にします。ヘッドライン試験は`UTATANE_HEADLINE_FIXTURE`、nijigenerate試験は`UTATANE_NIJIGENERATE_PUPPET`または`UTATANE_NICXLIVE_SMOKE_PUPPET`を指定すると実行対象になります。Wine・ホスト・ライブラリなど必要な依存が欠けていれば失敗します。
 
 ## MCPサーバー
 

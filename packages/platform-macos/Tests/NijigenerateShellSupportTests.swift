@@ -99,15 +99,16 @@ import Testing
     )?.puppetURL == externalPuppet)
 }
 
-@Test @MainActor func `nijigenerate renderer loads local smoke puppet when configured`() throws {
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_NIJIGENERATE_PUPPET"] != nil
+        || ProcessInfo.processInfo.environment["UTATANE_NICXLIVE_SMOKE_PUPPET"] != nil))
+@MainActor func `nijigenerate renderer loads local smoke puppet when configured`() throws {
     let environment = ProcessInfo.processInfo.environment
     let puppetPath = environment["UTATANE_NIJIGENERATE_PUPPET"]
         ?? environment["UTATANE_NICXLIVE_SMOKE_PUPPET"]
-    guard let puppetPath,
-          let libraryPath = environment["UTATANE_NICXLIVE_LIBRARY"]
-    else { return }
+    let puppet = try #require(puppetPath)
+    let libraryPath = try #require(environment["UTATANE_NICXLIVE_LIBRARY"])
     let runtime = NijigenerateShellRuntime(
-        puppetURL: URL(filePath: puppetPath),
+        puppetURL: URL(filePath: puppet),
         libraryURL: URL(filePath: libraryPath)
     )
     let view = try NijigenerateViewFactory.make(

@@ -4,12 +4,14 @@ import UtataneCore
 @testable import UtataneFirstNative
 import UtataneSakuraScript
 
-private func utilityMaster() -> URL? {
-    ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"].map { URL(filePath: $0).deletingLastPathComponent() }
+private func utilityMaster() throws -> URL {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
+    return URL(filePath: path).deletingLastPathComponent()
 }
 
-@Test func `FIRST utility dialogue is read from the supplied DLL while host guidance stays marked`() async throws {
-    guard let master = utilityMaster() else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST utility dialogue is read from the supplied DLL while host guidance stays marked`() async throws {
+    let master = try utilityMaster()
     let strings = try FirstDLLAnalyzer(contentsOf: master.appending(path: "first.dll")).knownStringsByVirtualAddress()
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
@@ -40,8 +42,9 @@ private func utilityMaster() -> URL? {
     #expect(cleaned.rawValue == "\\0" + completion + "\\e")
 }
 
-@Test func `FIRST reminder editing preserves file actions and cancellation does not change state`() async throws {
-    guard let master = utilityMaster() else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST reminder editing preserves file actions and cancellation does not change state`() async throws {
+    let master = try utilityMaster()
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let start = Date(timeIntervalSince1970: 1000)
@@ -76,11 +79,16 @@ private func utilityMaster() -> URL? {
     #expect(FirstReminder.validatedFilePath("~/Documents/test.txt")?.hasPrefix("/") == true)
 }
 
-@Test func `FIRST repeating reminders skip missed intervals and retain their saved identity`() async throws {
+@Test func `FIRST reminder repeat calculation does not require a DLL`() throws {
     let start = Date(timeIntervalSince1970: 1000)
     let reminder = try #require(FirstReminder.parse("every10m|RepeatNote", now: start))
     #expect(reminder.followingDate(after: start.addingTimeInterval(3601)) == start.addingTimeInterval(4200))
-    guard let master = utilityMaster() else { return }
+}
+
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST repeating reminders skip missed intervals and retain their saved identity`() async throws {
+    let start = Date(timeIntervalSince1970: 1000)
+    let master = try utilityMaster()
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let first = try NativeFirstPersonalityEngine(masterDirectoryURL: master, now: { start }, stateRootURL: root)
@@ -110,8 +118,9 @@ private func utilityMaster() -> URL? {
     }
 }
 
-@Test func `FIRST weather and mail results display current data without executing header text`() throws {
-    guard let master = utilityMaster() else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST weather and mail results display current data without executing header text`() throws {
+    let master = try utilityMaster()
     let session = try FirstNativeSession(masterDirectoryURL: master)
     let weatherCommand = try session.firstMenuChoiceScript(id: "weather", energy: 360)
     #expect(SakuraScriptParser().parse(weatherCommand ?? "").contains(.weatherGet(eventID: "OnFIRSTWeather")))
@@ -132,8 +141,9 @@ private func utilityMaster() -> URL? {
     #expect(try session.script(forEventID: "OnBIFF2Complete", references: [0: "3", 1: "2048", 2: "TestAccount", 3: headers]) == mail)
 }
 
-@Test func `FIRST notes persist and can be edited completed and deleted`() async throws {
-    guard let master = utilityMaster() else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST notes persist and can be edited completed and deleted`() async throws {
+    let master = try utilityMaster()
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let engine = try NativeFirstPersonalityEngine(masterDirectoryURL: master, stateRootURL: root)
@@ -160,8 +170,9 @@ private func utilityMaster() -> URL? {
     #expect(store.load()?.todoItems?.isEmpty == true)
 }
 
-@Test func `FIRST reminders survive restart and deliver once when talking is allowed`() async throws {
-    guard let master = utilityMaster() else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST reminders survive restart and deliver once when talking is allowed`() async throws {
+    let master = try utilityMaster()
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     let start = Date(timeIntervalSince1970: 1000)
@@ -176,8 +187,9 @@ private func utilityMaster() -> URL? {
     #expect(store.load()?.reminders?.isEmpty == true)
 }
 
-@Test func `FIRST utility storage errors leave notes unchanged`() async throws {
-    guard let master = utilityMaster() else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST utility storage errors leave notes unchanged`() async throws {
+    let master = try utilityMaster()
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     try Data().write(to: root)
@@ -202,8 +214,9 @@ private func utilityMaster() -> URL? {
     #expect(FirstUtilityText.gravity("😀") == nil)
 }
 
-@Test func `FIRST converts kana and exposes only selected system commands`() throws {
-    guard let master = utilityMaster() else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST converts kana and exposes only selected system commands`() throws {
+    let master = try utilityMaster()
     let session = try FirstNativeSession(masterDirectoryURL: master)
     #expect(try session.gurongiConvert("あいうえお") == "ガギグゲゴ")
     #expect(try session.gurongiConvert("アイウエオ") == "ガギグゲゴ")

@@ -132,7 +132,7 @@ Utatane 0.2.17以降と次のModulesを組み合わせると、ゴーストへDL
 | `internal_text` | `Normalize` | NFC、NFD、NFKC、NFKD |
 | `internal_random` | `Bytes`、`Number`、`UUID` | Bytesは1〜1024バイト、NumberはInt64の閉区間、UUIDはv4/v7 |
 | `internal_data` | `Convert`、`Compress`、`Decompress` | text、hex/HEX、base64/base64url、base32、url、bech32。圧縮・展開はgzip/zlib/deflate。brotli/zstdは未対応 |
-| `internal_file` | `MediaInfo` | 音声・画像・動画の種類とメタデータ。取得できる項目はmacOSの対応形式による |
+| `internal_file` | `MediaInfo`。開発版では`ImageInfo`、`IsImageLoadable`、`IsMediaLoadable`も対応 | 音声・画像・動画の種類とメタデータ、画像寸法、素材の読込可否。取得できる項目はmacOSの対応形式による |
 | `internal_crypto` | `Digest`、`HMAC`、`Compare` | Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。dataのfile入力に対応。暗号化・鍵生成等は未対応 |
 
 ### 呼び出し方法
@@ -167,6 +167,16 @@ Base64は通常形式・URL形式、パディングあり・なしを受け付�
 相対パスは呼び出したゴーストの`ghost/master`基準です。開発用パレットの単体テストでは絶対パスを使ってください。
 改行はバイト値1、NULは除去して返します。未対応形式は種類と値が空です。
 この関数の契約は[OurinのMediaInfo提案](https://github.com/eightman999/Ourin/pull/158)も参照しています。
+
+開発版では、SSP 2.9.27で追加された次の3関数にも対応します。公開済みの本体0.2.19には含まれません。関数の有無は`internal_system`の`ListFunctions`で確認できます。
+
+- `ImageInfo`: パスの後に`width`・`height`などのキーを1〜11個渡すと、画像の画素数を指定した順で返します。画像でなければ`Result`と各値は空です。未知のキーも空になります。EXIFの回転は適用しません。
+- `IsImageLoadable`: パスだけを渡します。`none`（未対応）、`read`（読み取り）、`embed`（素材として利用）、`write`（素材として利用でき、PNGで書き出せる）のいずれかを返します。Utataneのシェルが扱うPNG・APNG・GIF・WebPと、macOSが読み取れるその他の画像形式を区別します。アニメーション画像に`write`は返しません。
+- `IsMediaLoadable`: パスだけを渡します。macOSの対応する音声・動画の拡張子から`read`または`none`を返します。中身の検査や実際の再生成功を保証する判定ではありません。
+
+相対パスは`ghost/master`基準で、`/`と`\`の両方を受け付けます。ファイルがない場合やディレクトリは400です。画像の情報・可否判定は先頭4MiB以内をImageIOで読み、画素全体は展開しません。その範囲で判別できない画像は情報が空、可否が`none`になる場合があります。同期・`--async`の両方に対応します。
+
+返す可否はUtatane自身の能力で、SSPのWindows用コーデック一覧とは異なります。引数と応答の基準は[UKADOC projectのinternal_file仕様](https://github.com/ukatech/ukadoc-spec/tree/main/spec/saori-ex/internal_file)を参照してください。
 
 ### ハッシュと比較
 

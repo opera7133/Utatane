@@ -48,10 +48,9 @@ import Testing
     ])
 }
 
-@Test func `installed recall config parses a downloaded fixture without Wine`() throws {
-    guard let fixturePath = ProcessInfo.processInfo.environment["UTATANE_HEADLINE_FIXTURE"] else {
-        return
-    }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_HEADLINE_FIXTURE"] != nil))
+func `installed recall config parses a downloaded fixture without Wine`() throws {
+    let fixturePath = try #require(ProcessInfo.processInfo.environment["UTATANE_HEADLINE_FIXTURE"])
     let repositoryRoot = URL(filePath: #filePath)
         .deletingLastPathComponent()
         .deletingLastPathComponent()
@@ -60,9 +59,7 @@ import Testing
     let headlines = try HeadlineCatalog().load(
         from: repositoryRoot.appending(path: "Content/Local/Headline", directoryHint: .isDirectory)
     )
-    guard let recall = headlines.first(where: { $0.id.lastPathComponent == "recall" }) else {
-        return
-    }
+    let recall = try #require(headlines.first(where: { $0.id.lastPathComponent == "recall" }))
     let data = try Data(contentsOf: URL(filePath: fixturePath))
     let items = try ConfigHeadlineSensor().analyze(
         headline: recall,

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+### SakuraScript・内蔵SAORI
+
+- `\%month`や`\%selfname`など、文字として表示するためにエスケープした`%`が再生前に展開される問題を修正した
+- 内蔵SAORIの`internal_file`に`ImageInfo`・`IsImageLoadable`・`IsMediaLoadable`を追加した。画像の寸法を画素展開せずに取得し、macOSでの素材利用・読込可否を調べられる
+
+### 開発・検証
+
+- FIRST・ヘッドライン・nijigenerateの任意実物試験で、未実行を成功と区別して記録するよう修正した。素材を指定しない場合は明示的にスキップし、指定した素材・依存が欠けていれば失敗にする。実プラグイン検証でもスキップがあれば成功にしない
+
 ### SHIORI
 
 - 真絵の`mae_corpus.txt`とD.N.Proxyの設定ファイルから、`shiori.dll`など汎用名のSHIORIも判別し、ゴースト内または共通導入先のモジュールへ接続する

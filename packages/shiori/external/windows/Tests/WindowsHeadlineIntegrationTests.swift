@@ -3,13 +3,13 @@ import Testing
 import UtataneNetwork
 @testable import UtataneWindowsShiori
 
-@Test func `installed recall sensor parses a local HTML fixture through Wine`() throws {
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_HEADLINE_FIXTURE"] != nil))
+func `installed recall sensor parses a local HTML fixture through Wine`() throws {
     let environment = ProcessInfo.processInfo.environment
-    guard let winePath = environment["UTATANE_WINE_EXECUTABLE"],
-          let prefixPath = environment["UTATANE_WINE_PREFIX"],
-          let hostPath = environment["UTATANE_WINDOWS_DLL_HOST"],
-          let fixturePath = environment["UTATANE_HEADLINE_FIXTURE"]
-    else { return }
+    let winePath = try #require(environment["UTATANE_WINE_EXECUTABLE"])
+    let prefixPath = try #require(environment["UTATANE_WINE_PREFIX"])
+    let hostPath = try #require(environment["UTATANE_WINDOWS_DLL_HOST"])
+    let fixturePath = try #require(environment["UTATANE_HEADLINE_FIXTURE"])
 
     let repositoryRoot = URL(filePath: #filePath)
         .deletingLastPathComponent()

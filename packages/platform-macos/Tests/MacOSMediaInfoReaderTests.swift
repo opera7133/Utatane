@@ -1,9 +1,55 @@
 import AppKit
 import AVFoundation
 import Foundation
+import ImageIO
 import Testing
 import UtataneNativeSaori
 @testable import UtatanePlatformMacOS
+
+@Test func `image metadata and capability describe actual macOS loaders without playing media`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: "画像能力 \(UUID())")
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 3, pixelsHigh: 2,
+                                               bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                               isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+    let png = root.appending(path: "画像.png")
+    let tiff = root.appending(path: "画像.tiff")
+    try #require(bitmap.representation(using: .png, properties: [:])).write(to: png)
+    try #require(bitmap.representation(using: .tiff, properties: [:])).write(to: tiff)
+    let reader = MacOSMediaInfoReader()
+    #expect(try reader.imageInfo(png).values == ["width": "3", "height": "2"])
+    #expect(try reader.imageLoadability(png) == .write)
+    #expect(try reader.imageInfo(tiff).kind == "image")
+    #expect(try reader.imageLoadability(tiff) == .read)
+    // A valid header is still recognized when the extension cannot be used by a shell.
+    let renamed = root.appending(path: "画像.bin")
+    try FileManager.default.copyItem(at: png, to: renamed)
+    #expect(try reader.imageInfo(renamed).values["width"] == "3")
+    #expect(try reader.imageLoadability(renamed) == .read)
+    let gif = root.appending(path: "animated.gif")
+    let destination = try #require(CGImageDestinationCreateWithURL(gif as CFURL, "com.compuserve.gif" as CFString, 2, nil))
+    let cgImage = try #require(bitmap.cgImage)
+    for _ in 0 ..< 2 {
+        CGImageDestinationAddImage(destination, cgImage, nil)
+    }
+    #expect(CGImageDestinationFinalize(destination))
+    #expect(try reader.imageLoadability(gif) == .embed)
+    let apng = root.appending(path: "animated.apng")
+    try #require(Data(base64Encoded: animatedPNGBase64)).write(to: apng)
+    #expect(try reader.imageLoadability(apng) == .embed)
+    #expect(try SurfaceImageLoader().load(.init(id: 0, imageURL: gif, alphaMaskURL: nil)).size.width == 3)
+    let invalid = root.appending(path: "invalid.png")
+    try Data([1, 2, 3]).write(to: invalid)
+    #expect(try reader.imageInfo(invalid).kind.isEmpty)
+    #expect(try reader.imageLoadability(invalid) == .none)
+    #expect(try reader.mediaLoadability(png) == .none)
+    let wav = root.appending(path: "candidate.wav")
+    try Data().write(to: wav)
+    #expect(try reader.imageInfo(wav).kind.isEmpty)
+    #expect(try reader.mediaLoadability(wav) == .read) // Extension prediction, not a playback promise.
+    #expect(try reader.mediaLoadability(renamed) == .none)
+}
 
 @Test func `MediaInfo reads generated image and audio files without playing them`() throws {
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)

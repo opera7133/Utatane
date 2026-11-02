@@ -32,10 +32,9 @@ import UtataneSakuraScript
     #expect(strings.isEmpty)
 }
 
-@Test func `analyzes an explicitly supplied FIRST DLL`() async throws {
-    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else {
-        return
-    }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `analyzes an explicitly supplied FIRST DLL`() async throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
 
     let analyzer = try FirstDLLAnalyzer(contentsOf: URL(filePath: path))
     let strings = try analyzer.embeddedStrings()
@@ -706,8 +705,9 @@ import UtataneSakuraScript
     #expect(bathReturns.allSatisfy { $0.contains("leave,inductionmode") })
 }
 
-@Test func `FIRST boot and surface restore preserve the original branches`() throws {
-    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST boot and surface restore preserve the original branches`() throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
     let session = try FirstNativeSession(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent())
     let talk = try session.randomTalkScript(choice: 5, aitxtChoices: [0, 1, 2])
     for choice in 4 ... 7 {
@@ -732,8 +732,9 @@ import UtataneSakuraScript
     #expect(SakuraScriptParser().parse(explorer).contains(.contentAction(.openContentExplorer("headlinesensorexplorer"))))
 }
 
-@Test func `FIRST headline batch remains readable through next page and cancel choices`() async throws {
-    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST headline batch remains readable through next page and cancel choices`() async throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
     let master = URL(filePath: path).deletingLastPathComponent()
     let stateRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -779,8 +780,9 @@ import UtataneSakuraScript
     #expect(try session.headlineFindScript(name: "", url: "", phase: "invalid", headline: "", isBathing: false) == nil)
 }
 
-@Test func `FIRST eyesight keeps the original drawing input and timeout contract`() async throws {
-    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST eyesight keeps the original drawing input and timeout contract`() async throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
     let master = URL(filePath: path).deletingLastPathComponent()
     let session = try FirstNativeSession(masterDirectoryURL: master)
     #expect(try session.firstMenuChoiceScript(id: "eyesight", energy: 360) == session.eyesightEnterScript())
@@ -807,8 +809,9 @@ import UtataneSakuraScript
     #expect(try await engine.handle(event: .shiori(id: "OnEyesightgameNext", references: [0: "0"]))?.rawValue == NativeFirstPersonalityEngine.normalizeFIRSTScript(next))
 }
 
-@Test func `FIRST errands connect search clock settings and content explorers`() throws {
-    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST errands connect search clock settings and content explorers`() throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
     let session = try FirstNativeSession(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent())
     let searchResponse = try session.firstMenuChoiceScript(id: "google", energy: 360)
     let search = try #require(searchResponse)
@@ -827,8 +830,9 @@ import UtataneSakuraScript
     #expect(uptime.contains("25時間1分1秒"))
 }
 
-@Test func `FIRST search returns Sakura surface to the Sakura scope in both reactions`() throws {
-    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST search returns Sakura surface to the Sakura scope in both reactions`() throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
     let session = try FirstNativeSession(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent())
     for choice in 0 ..< 2 {
         let script = try session.googleSearchScript(query: "test", choice: choice)
@@ -848,8 +852,9 @@ import UtataneSakuraScript
     }
 }
 
-@Test func `FIRST timer replaces an earlier timer and ignores obsolete completions`() async throws {
-    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST timer replaces an earlier timer and ignores obsolete completions`() async throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
     let master = URL(filePath: path).deletingLastPathComponent()
     let stateRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: stateRoot) }
@@ -880,13 +885,17 @@ import UtataneSakuraScript
     #expect(try session.timerStartScript(minutes: 99, restarting: false) == nil)
 }
 
-@Test func `FIRST dice validates bounded notation and returns each roll and total`() async throws {
+@Test func `FIRST dice notation is validated without a DLL`() {
     #expect(FirstDiceSpecification(input: " 2D6 ")?.count == 2)
     #expect(FirstDiceSpecification(input: "20d1000")?.sides == 1000)
     for invalid in ["", "d6", "1d", "0d6", "21d6", "1d1", "1d1001", "1d6d8"] {
         #expect(FirstDiceSpecification(input: invalid) == nil)
     }
-    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+}
+
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST dice validates bounded notation and returns each roll and total`() async throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
     let stateRoot = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: stateRoot) }
     let engine = try NativeFirstPersonalityEngine(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent(), stateRootURL: stateRoot)
@@ -904,8 +913,9 @@ import UtataneSakuraScript
     })
 }
 
-@Test func `FIRST historical news menu entries and cached weather are readable`() throws {
-    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST historical news menu entries and cached weather are readable`() throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
     let session = try FirstNativeSession(masterDirectoryURL: URL(filePath: path).deletingLastPathComponent())
     let menu = try session.fixedNewsMenuScript()
     let choices = SakuraScriptParser().parse(menu).compactMap { token -> String? in
@@ -924,8 +934,9 @@ import UtataneSakuraScript
     #expect(try session.legacyWeatherScript(lines: []) != populated)
 }
 
-@Test func `FIRST weather reads an existing UTF8 or ShiftJIS cache without modifying it`() throws {
-    guard let path = ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] else { return }
+@Test(.enabled(if: ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"] != nil))
+func `FIRST weather reads an existing UTF8 or ShiftJIS cache without modifying it`() throws {
+    let path = try #require(ProcessInfo.processInfo.environment["UTATANE_FIRST_DLL"])
     let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
     defer { try? FileManager.default.removeItem(at: root) }
     try FileManager.default.createDirectory(at: root.appending(path: "var"), withIntermediateDirectories: true)

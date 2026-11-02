@@ -1,11 +1,53 @@
 import AVFoundation
 import Foundation
 import ImageIO
+import UniformTypeIdentifiers
 import UtataneNativeSaori
+import UtataneShell
 
 /// Reads metadata without creating a player or changing playback state.
 public struct MacOSMediaInfoReader: InternalSaoriMediaReading {
     public init() {}
+
+    public func imageInfo(_ url: URL) throws -> InternalSaoriMediaInfo {
+        guard let source = try? Self.imageSource(url),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? NSNumber,
+              let height = properties[kCGImagePropertyPixelHeight] as? NSNumber,
+              width.int64Value > 0, height.int64Value > 0
+        else { return .init() }
+        return .init(kind: "image", values: ["width": width.stringValue, "height": height.stringValue])
+    }
+
+    public func imageLoadability(_ url: URL) throws -> InternalSaoriLoadability {
+        guard let source = try? Self.imageSource(url), CGImageSourceGetType(source) != nil,
+              CGImageSourceCopyPropertiesAtIndex(source, 0, nil) != nil else { return .none }
+        // AppKit can read more formats than the shell's image-file resolver accepts.
+        guard ShellLoader.supportsSurfaceImageExtension(url.pathExtension) else { return .read }
+        if CGImageSourceGetType(source) as String? == UTType.png.identifier,
+           CGImageSourceGetCount(source) == 1,
+           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+           (properties[kCGImagePropertyPNGDictionary] as? [CFString: Any])?[kCGImagePropertyAPNGLoopCount] == nil
+        {
+            // Utatane exports PNG, but does not export animated PNG/GIF/WebP.
+            return .write
+        }
+        return .embed
+    }
+
+    public func mediaLoadability(_ url: URL) throws -> InternalSaoriLoadability {
+        guard let type = UTType(filenameExtension: url.pathExtension),
+              type.conforms(to: .audio) || type.conforms(to: .movie) else { return .none }
+        return AVURLAsset.audiovisualTypes().contains(where: { $0.rawValue == type.identifier }) ? .read : .none
+    }
+
+    private static func imageSource(_ url: URL) throws -> CGImageSource? {
+        let file = try FileHandle(forReadingFrom: url)
+        defer { try? file.close() }
+        // Metadata only: bound reads and never expand the image's pixel buffer.
+        let header = try file.read(upToCount: 4 * 1024 * 1024) ?? Data()
+        return CGImageSourceCreateWithData(header as CFData, [kCGImageSourceShouldCache: false] as CFDictionary)
+    }
 
     public func read(_ url: URL) throws -> InternalSaoriMediaInfo {
         if let source = CGImageSourceCreateWithURL(url as CFURL, nil),

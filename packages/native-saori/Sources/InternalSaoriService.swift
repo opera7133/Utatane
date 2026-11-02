@@ -13,7 +13,7 @@ public struct InternalSaoriService: Sendable {
         "internal_random": ["Bytes", "Number", "UUID"],
         "internal_data": ["Convert", "Compress", "Decompress"],
         "internal_crypto": ["Digest", "HMAC", "Compare"],
-        "internal_file": ["MediaInfo"]
+        "internal_file": ["MediaInfo", "ImageInfo", "IsImageLoadable", "IsMediaLoadable"]
     ]
 
     private let now: @Sendable () -> Date
@@ -88,7 +88,7 @@ public struct InternalSaoriService: Sendable {
             let values = (0 ... last).map { arguments[$0]! }
             guard let function = available.first(where: { $0.caseInsensitiveCompare(values[0]) == .orderedSame }) else { throw Failure("unknown function") }
             let result = try execute(module: module, function: function, arguments: Array(values.dropFirst()), validatesOnly: validatesOnly, isCancelled: isCancelled)
-            return encode(status: result.0.isEmpty ? 204 : 200, result: result.0, values: result.1, charset: charset)
+            return encode(status: result.0.isEmpty && result.1.isEmpty ? 204 : 200, result: result.0, values: result.1, charset: charset)
         } catch let failure as InternalSaoriTime.Failure {
             return encode(status: 400, error: failure.message, charset: charset)
         } catch let failure as Failure {
@@ -130,6 +130,7 @@ public struct InternalSaoriService: Sendable {
         switch (module, function) {
         case ("internal_system", "ListModules"), ("internal_random", "UUID"): return 0
         case ("internal_system", "ListFunctions"), ("internal_random", "Bytes"), ("internal_data", "Convert"): return 1
+        case ("internal_file", "IsImageLoadable"), ("internal_file", "IsMediaLoadable"): return 1
         case ("internal_time", "Format"), ("internal_text", _), ("internal_random", "Number"), ("internal_crypto", "Digest"), ("internal_crypto", "Compare"), ("internal_data", _), ("internal_file", _): return 2
         default: return 3
         }
@@ -139,6 +140,7 @@ public struct InternalSaoriService: Sendable {
         let count: Int
         let allowed: Set<String>
         switch (module, function) {
+        case ("internal_file", "IsImageLoadable"), ("internal_file", "IsMediaLoadable"): count = 1; allowed = []
         case ("internal_file", _): count = 2 + arguments.dropFirst(2).prefix(while: { !$0.hasPrefix("--") }).count; allowed = []
         case ("internal_system", "ListModules"): count = 0; allowed = []
         case ("internal_system", "ListFunctions"): count = 1; allowed = []
@@ -171,7 +173,7 @@ public struct InternalSaoriService: Sendable {
             guard allowed.contains(key) else { throw Failure("invalid parameter") }
             options[key] = String(value[value.index(after: separator)...])
         }
-        if module == "internal_file", !(2 ... 12).contains(positional.count) {
+        if module == "internal_file", !["IsImageLoadable", "IsMediaLoadable"].contains(function), !(2 ... 12).contains(positional.count) {
             throw Failure("invalid parameter")
         }
         if validatesOnly {
@@ -186,11 +188,23 @@ public struct InternalSaoriService: Sendable {
         }
         switch module {
         case "internal_file":
-            guard (2 ... 12).contains(positional.count), let mediaReader else { throw Failure("invalid parameter") }
+            guard let mediaReader else { throw Failure("invalid parameter") }
             let url = try resolveFile(positional[0])
             guard (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else { throw Failure("file not found") }
-            let info = try mediaReader.read(url)
-            let values = positional.dropFirst().map { info.values[$0.lowercased()] ?? "" }.map {
+            if function == "IsImageLoadable" {
+                return try (mediaReader.imageLoadability(url).rawValue, [])
+            }
+            if function == "IsMediaLoadable" {
+                return try (mediaReader.mediaLoadability(url).rawValue, [])
+            }
+            let info = try function == "ImageInfo" ? mediaReader.imageInfo(url) : mediaReader.read(url)
+            let values = positional.dropFirst().map { key in
+                let key = key.lowercased()
+                if function == "ImageInfo", !["width", "height"].contains(key) {
+                    return ""
+                }
+                return info.values[key] ?? ""
+            }.map {
                 $0.replacingOccurrences(of: "\r\n", with: "\u{1}").replacingOccurrences(of: "\r", with: "\u{1}")
                     .replacingOccurrences(of: "\n", with: "\u{1}").replacingOccurrences(of: "\0", with: "")
             }

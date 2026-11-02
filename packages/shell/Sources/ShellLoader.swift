@@ -24,6 +24,10 @@ public enum ShellError: LocalizedError, Equatable {
 public struct ShellLoader: Sendable {
     private static let surfaceImageExtensions = ["png", "apng", "gif", "webp"]
 
+    public static func supportsSurfaceImageExtension(_ value: String) -> Bool {
+        surfaceImageExtensions.contains(value.lowercased())
+    }
+
     private let parser = SurfacesParser()
     private let surfaceTableParser = SurfaceTableParser()
 
@@ -133,7 +137,7 @@ public struct ShellLoader: Sendable {
             .appending(path: normalizedFilename, directoryHint: .notDirectory)
             .standardizedFileURL
             .resolvingSymlinksInPath()
-        guard Self.surfaceImageExtensions.contains(imageURL.pathExtension.lowercased()),
+        guard Self.supportsSurfaceImageExtension(imageURL.pathExtension),
               imageURL.path.hasPrefix(root.path + "/"),
               FileManager.default.fileExists(atPath: imageURL.path)
         else {

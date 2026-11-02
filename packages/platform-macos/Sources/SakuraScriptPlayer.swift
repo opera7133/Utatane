@@ -2228,13 +2228,28 @@ public final class SakuraScriptPlayer {
             "minute", "second", "month", "hour", "day", "exh", "et", "dms",
             "ms", "mz", "ml", "mc", "mh", "mt", "me", "mp", "m?"
         ]
-        var result = source
-        for name in names {
-            result = result.replacingOccurrences(
-                of: "%\(name)",
-                with: environmentValue(for: name),
-                options: .caseInsensitive
-            )
+        var result = ""
+        var index = source.startIndex
+        var values: [String: String] = [:]
+        while index < source.endIndex {
+            let character = source[index]
+            let next = source.index(after: index)
+            // Preserve escape pairs for the parser, including \\% and \\\\.
+            if character == "\\", next < source.endIndex {
+                result.append(character)
+                result.append(source[next])
+                index = source.index(after: next)
+            } else if character == "%", let name = names.first(where: {
+                source[next...].prefix($0.count).lowercased() == $0
+            }) {
+                let value = values[name] ?? environmentValue(for: name)
+                values[name] = value
+                result += value
+                index = source.index(next, offsetBy: name.count)
+            } else {
+                result.append(character)
+                index = next
+            }
         }
         return result
     }

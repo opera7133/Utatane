@@ -20,6 +20,15 @@ AKARI_SHA256 = "e482e97e8cc798986963cfe390199271e995d4e32d4161f3437be2470407d25c
 DIARY_SHA256 = "afd10bc9eda37b408b21b5facbc3e74f269824e72ce91d89728e502b87f51489"
 
 
+def require_executed_suites(output, suites):
+    # Swift Testing's aggregate count includes skipped tests. A green footer and
+    # an enclosing suite's success do not prove every real-fixture check ran.
+    if re.search(r"\b(?:Test|Suite) .+\bskipped(?:\.|:|$)", output, re.MULTILINE):
+        raise ValueError("The requested real plugin tests included skipped checks")
+    if not re.search(r"Test run with [1-9][0-9]* tests?.*passed", output) or any(f"Suite {suite} passed" not in output for suite in suites):
+        raise ValueError("The requested real plugin suites did not run successfully")
+
+
 def sha256(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
@@ -154,8 +163,7 @@ def main():
             report_path.with_suffix(".log").write_text(result.stdout)
             print(result.stdout, end="", flush=True)
             result.check_returncode()
-            if not re.search(r"Test run with [1-9][0-9]* tests?.*passed", result.stdout) or any(f"Suite {suite} passed" not in result.stdout for suite in suites):
-                raise ValueError("The requested real plugin suites did not run successfully")
+            require_executed_suites(result.stdout, suites)
             if tree_hash(source) != inputs["balloonselector"]["treeSHA256"] or sha256(diary) != DIARY_SHA256:
                 raise ValueError("Original plugin data changed during validation")
             report["passed"] = True

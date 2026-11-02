@@ -6,6 +6,41 @@ private func asynchronousRequest(_ module: String, _ arguments: [String]) -> Dat
     Data((["EXECUTE SAORI/1.0", "Charset: UTF-8", "Module: \(module)"] + arguments.enumerated().map { "Argument\($0.offset): \($0.element)" }).joined(separator: "\r\n").appending("\r\n\r\n").utf8)
 }
 
+private struct AsyncImageCapabilityReader: InternalSaoriMediaReading {
+    func read(_: URL) throws -> InternalSaoriMediaInfo {
+        .init()
+    }
+
+    func imageInfo(_: URL) throws -> InternalSaoriMediaInfo {
+        .init(kind: "image", values: ["width": "3", "height": "2"])
+    }
+
+    func imageLoadability(_: URL) throws -> InternalSaoriLoadability {
+        .write
+    }
+}
+
+@Test func `image functions complete asynchronously with ordered values and unary arguments`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    try Data().write(to: root.appending(path: "image.png"))
+    let recorder = InternalEventRecorder()
+    let service = InternalSaoriService(ghostDirectory: root, mediaReader: AsyncImageCapabilityReader())
+    let session = InternalSaoriSession(onEvent: { recorder.record($0) }, service: service)
+    defer { session.close() }
+    for args in [["IsImageLoadable", "image.png", "--async=OnImageCapability"],
+                 ["ImageInfo", "image.png", "height", "unknown", "width", "--async=OnImageSize"]]
+    {
+        #expect(String(decoding: session.response(to: asynchronousRequest("internal_file", args)), as: UTF8.self).hasPrefix("SAORI/1.0 204"))
+    }
+    let events = await recorder.events(count: 2)
+    #expect(events.first { $0.id == "OnImageCapability" }?.references[1] == "write")
+    let size = try #require(events.first { $0.id == "OnImageSize" })
+    #expect(size.references[1] == "image")
+    #expect(size.references[4] == "2" && size.references[5] == "" && size.references[6] == "3")
+}
+
 private final class InternalEventRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private var recorded: [InternalSaoriEvent] = []
