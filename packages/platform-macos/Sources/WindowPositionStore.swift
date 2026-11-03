@@ -5,6 +5,8 @@ public final class WindowPositionStore {
     private let defaults: UserDefaults
     private let namespace: String
     private var contentID: URL?
+    private var pendingBalloonPositions: [String: [String: Double]] = [:]
+    private var balloonPositionSaveTask: Task<Void, Never>?
 
     public init(
         defaults: UserDefaults = .standard,
@@ -15,6 +17,7 @@ public final class WindowPositionStore {
     }
 
     public func setContentID(_ contentID: URL?) {
+        flushBalloonPositions()
         self.contentID = contentID?.standardizedFileURL
     }
 
@@ -35,21 +38,50 @@ public final class WindowPositionStore {
         if anchorOffset != nil {
             value["storesAnchor"] = true
         }
-        defaults.set(
-            value,
-            forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace)
-        )
+        let storageKey = key(for: kind, scope: scope, coordinateSpace: coordinateSpace)
+        pendingBalloonPositions.removeValue(forKey: storageKey)
+        defaults.set(value, forKey: storageKey)
     }
 
     func balloonDragOffset(scope: Int, coordinateSpace: PresentationCoordinateSpace) -> NSPoint? {
-        guard let value = defaults.dictionary(forKey: key(for: .balloon, scope: scope, coordinateSpace: coordinateSpace) + ".drag"),
+        guard let value = storedPosition(forKey: key(for: .balloon, scope: scope, coordinateSpace: coordinateSpace) + ".drag"),
               let x = value["x"] as? Double, let y = value["y"] as? Double else { return nil }
         return NSPoint(x: x, y: y)
     }
 
     func saveBalloonDragOffset(_ offset: NSPoint, scope: Int, coordinateSpace: PresentationCoordinateSpace) {
-        defaults.set(["x": Double(offset.x), "y": Double(offset.y)],
-                     forKey: key(for: .balloon, scope: scope, coordinateSpace: coordinateSpace) + ".drag")
+        let storageKey = key(for: .balloon, scope: scope, coordinateSpace: coordinateSpace) + ".drag"
+        pendingBalloonPositions.removeValue(forKey: storageKey)
+        defaults.set(["x": Double(offset.x), "y": Double(offset.y)], forKey: storageKey)
+    }
+
+    func queueBalloonPosition(_ origin: NSPoint, relativeTo base: NSPoint?, scope: Int, coordinateSpace: PresentationCoordinateSpace) {
+        let storageKey = key(for: .balloon, scope: scope, coordinateSpace: coordinateSpace)
+        pendingBalloonPositions[storageKey] = ["x": Double(origin.x), "y": Double(origin.y)]
+        if let base {
+            pendingBalloonPositions[storageKey + ".drag"] = ["x": Double(origin.x - base.x), "y": Double(origin.y - base.y)]
+        }
+        guard balloonPositionSaveTask == nil else { return }
+        balloonPositionSaveTask = Task { [weak self] in
+            do {
+                try await Task.sleep(for: .milliseconds(100))
+            } catch { return }
+            guard !Task.isCancelled else { return }
+            self?.flushBalloonPositions()
+        }
+    }
+
+    func flushBalloonPositions() {
+        balloonPositionSaveTask?.cancel()
+        balloonPositionSaveTask = nil
+        for (storageKey, value) in pendingBalloonPositions {
+            defaults.set(value, forKey: storageKey)
+        }
+        pendingBalloonPositions.removeAll(keepingCapacity: true)
+    }
+
+    private func storedPosition(forKey storageKey: String) -> [String: Any]? {
+        pendingBalloonPositions[storageKey] ?? defaults.dictionary(forKey: storageKey)
     }
 
     func remove(
@@ -57,9 +89,12 @@ public final class WindowPositionStore {
         scope: Int,
         coordinateSpace: PresentationCoordinateSpace = .desktop
     ) {
-        defaults.removeObject(forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace))
+        let storageKey = key(for: kind, scope: scope, coordinateSpace: coordinateSpace)
+        pendingBalloonPositions.removeValue(forKey: storageKey)
+        defaults.removeObject(forKey: storageKey)
         if kind == .balloon {
-            defaults.removeObject(forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace) + ".drag")
+            pendingBalloonPositions.removeValue(forKey: storageKey + ".drag")
+            defaults.removeObject(forKey: storageKey + ".drag")
         }
     }
 
@@ -92,11 +127,9 @@ public final class WindowPositionStore {
         coordinateSpace: PresentationCoordinateSpace = .desktop,
         anchorOffset: NSPoint? = nil
     ) -> NSPoint? {
-        guard let value = defaults.dictionary(
-            forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace)
-        ),
-            let x = value["x"] as? Double,
-            let y = value["y"] as? Double
+        guard let value = storedPosition(forKey: key(for: kind, scope: scope, coordinateSpace: coordinateSpace)),
+              let x = value["x"] as? Double,
+              let y = value["y"] as? Double
         else {
             return nil
         }

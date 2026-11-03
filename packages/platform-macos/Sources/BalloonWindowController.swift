@@ -223,6 +223,7 @@ public final class BalloonWindowController {
     }
 
     public func resetContent() {
+        positionStore.flushBalloonPositions()
         for presentation in presentations.values {
             presentation.item.discard()
         }
@@ -815,13 +816,9 @@ public final class BalloonWindowController {
                     self?.placementOriginByScope.removeValue(forKey: scope)
                 }
                 if reason == .userInteraction {
-                    if let base = self?.placementOriginByScope[scope] {
-                        positionStore.saveBalloonDragOffset(NSPoint(x: origin.x - base.x, y: origin.y - base.y),
-                                                            scope: scope, coordinateSpace: geometryProvider.coordinateSpace)
-                    }
-                    positionStore.save(
+                    positionStore.queueBalloonPosition(
                         origin,
-                        for: .balloon,
+                        relativeTo: self?.placementOriginByScope[scope],
                         scope: scope,
                         coordinateSpace: geometryProvider.coordinateSpace
                     )

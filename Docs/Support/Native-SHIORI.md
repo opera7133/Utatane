@@ -10,7 +10,7 @@ SHIORIごとの実行方式・制約とビルド手順は、[Utatane Modulesの�
 
 ゴーストの`shiori.macos`に指定されたモジュールを優先します。対応する同梱ライブラリの破損や必要な関数の欠落を検出すると、同じSHIORIの共通導入版へ切り替えます。設定の「SHIORI対応状況」でオフにできます。辞書・保存データのエラーでは切り替えません。各SHIORIの配布版は、ゴースト内、共通導入先の順に探します。`ese-shiori.dll`など、対応済みのDLL名が`shiori`にある場合、同じフォルダにdylibを置くだけでUtataneが検出します。
 
-開発版では真絵の`mae_corpus.txt`、D.N.Proxyの`dnproxy.ini`または`dnproxy.dll.config`も判別します。`shiori.dll`という汎用名でも対応する共通導入版を選べます。D.N.Proxyには別途.NET 10ランタイムが必要で、C#ソースの実行時コンパイルにはSDKが必要です。対応範囲はModulesの案内を確認してください。
+0.2.20以降では真絵の`mae_corpus.txt`、D.N.Proxyの`dnproxy.ini`または`dnproxy.dll.config`も判別します。`shiori.dll`という汎用名でも対応する共通導入版を選べます。D.N.Proxyには別途.NET 10ランタイムが必要で、C#ソースの実行時コンパイルにはSDKが必要です。対応範囲はModulesの案内を確認してください。
 
 ゴースト内の`shiori.dylib`も探索します。蒼空などの手動導入は、共通導入先の`<名前>/lib/lib<名前>.dylib`または`<名前>/lib<名前>.dylib`を確認するため、`module.json`がなくても実行を止めません。カタログの版・更新判定にはmanifestが必要です。
 
@@ -132,7 +132,7 @@ Utatane 0.2.17以降と次のModulesを組み合わせると、ゴーストへDL
 | `internal_text` | `Normalize` | NFC、NFD、NFKC、NFKD |
 | `internal_random` | `Bytes`、`Number`、`UUID` | Bytesは1〜1024バイト、NumberはInt64の閉区間、UUIDはv4/v7 |
 | `internal_data` | `Convert`、`Compress`、`Decompress` | text、hex/HEX、base64/base64url、base32、url、bech32。圧縮・展開はgzip/zlib/deflate。brotli/zstdは未対応 |
-| `internal_file` | `MediaInfo`。開発版では`ImageInfo`、`IsImageLoadable`、`IsMediaLoadable`も対応 | 音声・画像・動画の種類とメタデータ、画像寸法、素材の読込可否。取得できる項目はmacOSの対応形式による |
+| `internal_file` | `MediaInfo`。0.2.20以降では`ImageInfo`、`IsImageLoadable`、`IsMediaLoadable`も対応 | 音声・画像・動画の種類とメタデータ、画像寸法、素材の読込可否。取得できる項目はmacOSの対応形式による |
 | `internal_crypto` | `Digest`、`HMAC`、`Compare` | Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。dataのfile入力に対応。暗号化・鍵生成等は未対応 |
 
 ### 呼び出し方法
@@ -168,7 +168,7 @@ Base64は通常形式・URL形式、パディングあり・なしを受け付�
 改行はバイト値1、NULは除去して返します。未対応形式は種類と値が空です。
 この関数の契約は[OurinのMediaInfo提案](https://github.com/eightman999/Ourin/pull/158)も参照しています。
 
-開発版では、SSP 2.9.27で追加された次の3関数にも対応します。公開済みの本体0.2.19には含まれません。関数の有無は`internal_system`の`ListFunctions`で確認できます。
+0.2.20以降では、SSP 2.9.27で追加された次の3関数にも対応します。関数の有無は`internal_system`の`ListFunctions`で確認できます。
 
 - `ImageInfo`: パスの後に`width`・`height`などのキーを1〜11個渡すと、画像の画素数を指定した順で返します。画像でなければ`Result`と各値は空です。未知のキーも空になります。EXIFの回転は適用しません。
 - `IsImageLoadable`: パスだけを渡します。`none`（未対応）、`read`（読み取り）、`embed`（素材として利用）、`write`（素材として利用でき、PNGで書き出せる）のいずれかを返します。Utataneのシェルが扱うPNG・APNG・GIF・WebPと、macOSが読み取れるその他の画像形式を区別します。アニメーション画像に`write`は返しません。

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## [0.2.20] - 2026-11-03
+
+### 表示・操作
+
+- バルーンをドラッグするときは位置の保存をまとめ、移動中に設定へ書き込む回数を減らした
+
 ### SakuraScript・内蔵SAORI
 
 - `\%month`や`\%selfname`など、文字として表示するためにエスケープした`%`が再生前に展開される問題を修正した
@@ -943,7 +949,8 @@
 - シェル・バルーンの倍率、ウインドウ位置、画面端補正などの設定を追加
 - 起動中のゴーストを操作するstdio形式のMCPサーバーを同梱
 
-[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.18...HEAD
+[Unreleased]: https://github.com/opera7133/Utatane/compare/v0.2.20...HEAD
+[0.2.20]: https://github.com/opera7133/Utatane/compare/v0.2.19...v0.2.20
 [0.2.19]: https://github.com/opera7133/Utatane/compare/v0.2.18...v0.2.19
 [0.2.18]: https://github.com/opera7133/Utatane/compare/v0.2.17...v0.2.18
 [0.2.17]: https://github.com/opera7133/Utatane/compare/v0.2.16...v0.2.17
