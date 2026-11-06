@@ -85,3 +85,51 @@ private func cryptoResponse(_ arguments: [String]) -> String {
         try InternalSaoriCrypto.Input.file(root).consume(isCancelled: { false }) { _ in try? writer.truncate(atOffset: 0) }
     }
 }
+
+@Test(arguments: ["crc32", "adler32"])
+func `checksum digests preserve standard vectors empty values and big endian output`(algorithm: String) {
+    let crc = algorithm == "crc32"
+    for (source, expected) in [("", crc ? "00000000" : "00000001"),
+                               ("abc", crc ? "352441c2" : "024d0127"),
+                               ("123456789", crc ? "cbf43926" : "091e01de")]
+    {
+        #expect(cryptoResponse(["Digest", algorithm, source]).contains("Result: \(expected)\r\n"))
+        #expect(cryptoResponse(["Digest", algorithm.uppercased(), source, "--out=HEX"]).contains("Result: \(expected.uppercased())\r\n"))
+    }
+    #expect(cryptoResponse(["Digest", algorithm, "123456789", "--out=base64"]).contains("Result: \(crc ? "y/Q5Jg==" : "CR4B3g==")\r\n"))
+    #expect(cryptoResponse(["Digest", algorithm, "00ff0a", "--data-in=hex"]).contains("Result: \(crc ? "8cb0cd7e" : "020b010a")\r\n"))
+    #expect(cryptoResponse(["Digest", algorithm, "AP8K", "--data-in=base64"]).contains("Result: \(crc ? "8cb0cd7e" : "020b010a")\r\n"))
+    #expect(cryptoResponse(["Digest", algorithm, "あ"]).contains("Result: \(crc ? "75cbfced" : "043001e7")\r\n"))
+    #expect(cryptoResponse(["Digest", algorithm, "あ", "--charset=Shift_JIS"]).contains("Result: \(crc ? "9eba4bde" : "01a60123")\r\n"))
+    #expect(cryptoResponse(["HMAC", algorithm, "key", "123456789"]).contains("unsupported algorithm"))
+    #expect(cryptoResponse(["Digest", algorithm, "0", "--data-in=hex"]).contains("invalid encoding"))
+}
+
+@Test(arguments: ["crc32", "adler32"])
+func `checksum files stream beyond the protocol limit with cancellation and empty files`(algorithm: String) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let file = root.appending(path: "検査値.bin")
+    FileManager.default.createFile(atPath: file.path, contents: nil)
+    let writer = try FileHandle(forWritingTo: file)
+    let chunk = Data((0 ..< 65536).map { UInt8(truncatingIfNeeded: $0) })
+    for _ in 0 ..< 129 {
+        try writer.write(contentsOf: chunk)
+    }
+    try writer.close()
+    let service = InternalSaoriService(ghostDirectory: root)
+    // Python zlib vectors for bytes(range(256))*256*129 (8,454,144 bytes).
+    let expected = algorithm == "crc32" ? "88045a87" : "65ed43ee"
+    #expect(cryptoResponse(service, ["Digest", algorithm, file.lastPathComponent, "--data-in=file"]).contains("Result: \(expected)\r\n"))
+    var checks = 0
+    #expect(throws: InternalSaoriService.Failure.self) {
+        try InternalSaoriCrypto.calculate(function: "Digest", algorithm: algorithm, input: .file(file), key: Data(), isCancelled: {
+            checks += 1; return checks == 2
+        })
+    }
+    #expect(checks == 2) // Stop between 64KiB chunks, not after hashing the entire file.
+    try Data().write(to: file)
+    #expect(cryptoResponse(service, ["Digest", algorithm, file.lastPathComponent, "--data-in=file"]).contains("Result: \(algorithm == "crc32" ? "00000000" : "00000001")\r\n"))
+    #expect(cryptoResponse(service, ["Digest", algorithm, "missing", "--data-in=file"]).contains("file not found"))
+}

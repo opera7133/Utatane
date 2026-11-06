@@ -1,19 +1,43 @@
 import AppKit
 import SwiftUI
 
+public struct SHIORIModuleChoice: Identifiable, Sendable {
+    public var id: String {
+        path
+    }
+
+    public let path: String
+    public let kind: String
+    public init(path: String, kind: String) {
+        self.path = path; self.kind = kind
+    }
+}
+
 public struct SHIORIDiagnosticTarget: Identifiable, Sendable {
     public let id: String
     public let name: String
     public let selectedFilename: String?
     public let macOSOverride: String?
     public let moduleURL: URL?
+    public let additionalInspection: (@Sendable () -> String)?
     public let runtimeResult: String
+    public let selectionPath: String?
+    public let selectionKind: String?
+    public let availableModules: [SHIORIModuleChoice]
+    public let kindIDs: [String]
     public let moduleRequirementsReport: String
 
     public init(
         id: String, name: String, selectedFilename: String?, macOSOverride: String?,
-        moduleURL: URL?, runtimeResult: String, moduleRequirementsReport: String = ""
+        moduleURL: URL?, runtimeResult: String,
+        selectionPath: String? = nil, selectionKind: String? = nil,
+        availableModules: [SHIORIModuleChoice] = [], kindIDs: [String] = [], moduleRequirementsReport: String = "", additionalInspection: (@Sendable () -> String)? = nil
     ) {
+        self.selectionPath = selectionPath
+        self.selectionKind = selectionKind
+        self.availableModules = availableModules
+        self.kindIDs = kindIDs
+        self.additionalInspection = additionalInspection
         self.id = id
         self.name = name
         self.selectedFilename = selectedFilename
@@ -39,12 +63,16 @@ public enum SHIORIModuleInspector {
             "SHIORI: \(target.name)",
             "Ghost: \(target.id)",
             "Selected: \(target.selectedFilename ?? "(none)")",
+            "User selection: \(target.selectionPath ?? "(automatic)") [\(target.selectionKind ?? "detect ABI")]",
             "shiori.macos: \(target.macOSOverride ?? "(none; automatic selection)")",
             "App CPU: \(architecture)",
             "Last load / initialization: \(target.runtimeResult)",
             target.moduleRequirementsReport,
             ""
         ]
+        if let inspection = target.additionalInspection {
+            lines += [inspection(), ""]
+        }
         guard let url = target.moduleURL else {
             lines.append("No external module path resolved. Built-in engines / SHIOLINK do not require a generic dylib; configured native modules may be unavailable. See the initialization result above.")
             return lines.joined(separator: "\n")
@@ -99,15 +127,20 @@ public enum SHIORIModuleInspector {
 
 @MainActor
 public final class SHIORIDiagnosticsWindowController: NSWindowController {
-    public init(targets: [SHIORIDiagnosticTarget], selectedID: String?, refresh: @escaping () async -> [SHIORIDiagnosticTarget]) {
-        let view = SHIORIDiagnosticsView(targets: targets, selectedID: selectedID ?? targets.first?.id ?? "", refresh: refresh)
+    public init(targets: [SHIORIDiagnosticTarget], selectedID: String?,
+                saveSelection: @escaping (String, String?, String?) throws -> Void = { _, _, _ in },
+                reloadSelection: @escaping (String) async -> Void = { _ in },
+                refresh: @escaping () async -> [SHIORIDiagnosticTarget])
+    {
+        let view = SHIORIDiagnosticsView(targets: targets, selectedID: selectedID ?? targets.first?.id ?? "",
+                                         saveSelection: saveSelection, reloadSelection: reloadSelection, refresh: refresh)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 760, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 920, height: 700),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false
         )
         window.title = String(localized: "SHIORI読み込み診断")
         window.contentView = NSHostingView(rootView: view)
-        window.minSize = NSSize(width: 520, height: 360)
+        window.minSize = NSSize(width: 800, height: 600)
         window.center()
         super.init(window: window)
     }
@@ -121,7 +154,13 @@ public final class SHIORIDiagnosticsWindowController: NSWindowController {
 private struct SHIORIDiagnosticsView: View {
     @State var targets: [SHIORIDiagnosticTarget]
     @State var selectedID: String
+    let saveSelection: (String, String?, String?) throws -> Void
+    let reloadSelection: (String) async -> Void
     let refresh: () async -> [SHIORIDiagnosticTarget]
+    @State private var path = ""
+    @State private var kind = ""
+    @State private var errorMessage = ""
+    @State private var busy = false
     @State private var report = ""
     @State private var revision = 0
 
@@ -143,6 +182,51 @@ private struct SHIORIDiagnosticsView: View {
                 }
                 .disabled(report.isEmpty)
             }
+            if let target = targets.first(where: { $0.id == selectedID }) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("選択順：アプリの明示指定 → ゴーストのshiori.macos → 自動判定（同梱 → 共通導入版）")
+                        .font(.caption)
+                    HStack {
+                        TextField("macOS用SHIORIの絶対パス", text: $path)
+                        Button("ファイルを選ぶ…") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseDirectories = false
+                            panel.allowsMultipleSelection = false
+                            if panel.runModal() == .OK, let url = panel.url {
+                                path = url.path; kind = ""
+                            }
+                        }
+                        Menu("共通導入版") {
+                            ForEach(target.availableModules) { choice in
+                                Button(choice.kind) { path = choice.path; kind = choice.kind }
+                            }
+                        }.disabled(target.availableModules.isEmpty)
+                    }
+                    HStack {
+                        Picker("SHIORIの種類", selection: $kind) {
+                            Text("ファイル名から判定").tag("")
+                            ForEach(target.kindIDs, id: \.self) { Text(verbatim: $0).tag($0) }
+                        }
+                        Button("選択を保存") { save(path: path, kind: kind.isEmpty ? nil : kind) }
+                            .disabled(path.isEmpty)
+                        Button("自動選択に戻す") { save(path: nil, kind: nil) }
+                        Button("SHIORIを再読み込み") {
+                            busy = true
+                            Task {
+                                await reloadSelection(selectedID)
+                                targets = await refresh(); revision += 1; busy = false
+                            }
+                        }
+                    }
+                    Text("保存した選択は次回の読み込みから適用する。指定先の消失・CPU不一致・起動失敗は下の診断で確認できる。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("YAYA 6の初回読み込み前に変数をバックアップする。6系で保存した変数を5系へ戻す場合は、切り替え前のバックアップを復元してから起動する。復元時の進行状況はバックアップ時点になる。")
+                        .font(.caption).foregroundStyle(.secondary)
+                    if !errorMessage.isEmpty {
+                        Text(verbatim: errorMessage).foregroundStyle(.red)
+                    }
+                }
+            }
             ScrollView {
                 Text(verbatim: report)
                     .font(.system(.body, design: .monospaced))
@@ -153,12 +237,24 @@ private struct SHIORIDiagnosticsView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .padding(16)
+        .disabled(busy)
         .task(id: "\(selectedID):\(revision)") {
             report = "…"
             guard let target = targets.first(where: { $0.id == selectedID }) else { report = ""; return }
+            path = target.selectionPath ?? ""
+            kind = target.selectionKind ?? ""
             let result = await SHIORIModuleInspector.inspect(target)
             guard !Task.isCancelled else { return }
             report = result
         }
+    }
+
+    private func save(path: String?, kind: String?) {
+        do {
+            try saveSelection(selectedID, path, kind)
+            errorMessage = ""
+            busy = true
+            Task { targets = await refresh(); revision += 1; busy = false }
+        } catch { errorMessage = error.localizedDescription }
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-public enum ConventionalShioriKind: String, Sendable {
+public enum ConventionalShioriKind: String, Sendable, CaseIterable {
     case yaya
     case yaya6 = "yaya-6"
     case satori

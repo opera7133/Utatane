@@ -2524,6 +2524,64 @@
         }
       }
     },
+    "SHIORIの種類" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SHIORI type"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SHIORI 종류"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SHIORI 类型"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SHIORI 類型"
+          }
+        }
+      }
+    },
+    "SHIORIを再読み込み" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reload SHIORI"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "SHIORI 다시 불러오기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新加载 SHIORI"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重新載入 SHIORI"
+          }
+        }
+      }
+    },
     "SHIORIセッションは停止しています。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3510,6 +3568,35 @@
         }
       }
     },
+    "YAYA 6の初回読み込み前に変数をバックアップする。6系で保存した変数を5系へ戻す場合は、切り替え前のバックアップを復元してから起動する。復元時の進行状況はバックアップ時点になる。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Variables are backed up before the first YAYA 6 load. To return to YAYA 5 after saving with version 6, restore the backup made before switching, then start the ghost. Progress returns to the backup date."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "YAYA 6을 처음 로드하기 전에 변수를 백업해. 6에서 저장한 후 5로 돌아가려면 전환 전 백업을 복원하고 시작해. 진행 상황은 백업 시점으로 돌아가."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "首次加载 YAYA 6 前会备份变量。使用 6 保存后返回 5 时，请先恢复切换前的备份再启动。进度将恢复到备份时点。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "首次載入 YAYA 6 前會備份變數。使用 6 儲存後返回 5 時，請先還原切換前的備份再啟動。進度將回到備份時點。"
+          }
+        }
+      }
+    },
     "dylibとWine DLLの読み込み先・状態・所要時間を記録する。引数と結果本文は記録しない。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -3771,31 +3858,31 @@
         }
       }
     },
-    "⌘クリックで複数選択" : {
+    "macOS用SHIORIの絶対パス" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Command-click to select multiple items"
+            "value" : "Absolute path to macOS SHIORI"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Command-클릭으로 여러 항목 선택"
+            "value" : "macOS SHIORI의 절대 경로"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按住 Command 点击可多选"
+            "value" : "macOS SHIORI 的绝对路径"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按住 Command 點按可多選"
+            "value" : "macOS SHIORI 的絕對路徑"
           }
         }
       }
@@ -7280,6 +7367,35 @@
         }
       }
     },
+    "チェックした項目（表示中）" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Checked Items (Visible)"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "체크한 항목(표시 중)"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已勾选的项目（当前显示）"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已勾選的項目（目前顯示）"
+          }
+        }
+      }
+    },
     "デスクトップ" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -7798,6 +7914,64 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "建置%@"
+          }
+        }
+      }
+    },
+    "ファイルを選ぶ…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose File…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 선택…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选择文件…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選擇檔案…"
+          }
+        }
+      }
+    },
+    "ファイル名から判定" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Detect from filename"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "파일 이름으로 판별"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "根据文件名判断"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "依檔案名稱判斷"
           }
         }
       }
@@ -9165,6 +9339,151 @@
         }
       }
     },
+    "一括ダウンロード" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batch Download"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일괄 다운로드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批量下载"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批次下載"
+          }
+        }
+      }
+    },
+    "一括修復" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batch Repair"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일괄 복구"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批量修复"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批次修復"
+          }
+        }
+      }
+    },
+    "一括削除…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batch Delete…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일괄 삭제…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批量删除…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批次刪除…"
+          }
+        }
+      }
+    },
+    "一括操作" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batch Actions"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일괄 작업"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批量操作"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批次操作"
+          }
+        }
+      }
+    },
+    "一括更新" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Batch Update"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "일괄 업데이트"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批量更新"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批次更新"
+          }
+        }
+      }
+    },
     "一般" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -9277,6 +9596,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "列表中越上方的資料夾優先順序越高。如果多處有相同資料夾名稱的內容，只會載入優先順序較高的一份。從列表移除資料夾不會刪除其中的檔案。"
+          }
+        }
+      }
+    },
+    "上の一括操作から確認、更新、修復、削除ができる。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use the batch menu above to check, update, repair, or delete."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "위의 일괄 작업에서 확인, 업데이트, 복구, 삭제할 수 있어."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可通过上方的批量操作检查、更新、修复或删除。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可透過上方的批次操作檢查、更新、修復或刪除。"
           }
         }
       }
@@ -9919,6 +10267,35 @@
         }
       }
     },
+    "保存した選択は次回の読み込みから適用する。指定先の消失・CPU不一致・起動失敗は下の診断で確認できる。" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved selections apply on the next load. Check the diagnostics below for missing files, CPU mismatches, and startup failures."
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장한 선택은 다음 로드부터 적용돼. 파일 유실, CPU 불일치, 시작 실패는 아래 진단에서 확인할 수 있어."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存的选择在下次加载时生效。文件缺失、CPU 不匹配和启动失败可在下方诊断中查看。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存的選擇在下次載入時生效。檔案遺失、CPU 不符與啟動失敗可在下方診斷中查看。"
+          }
+        }
+      }
+    },
     "倍率は現在のゴーストにだけ保存される。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -10263,6 +10640,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "全螢幕顯示"
+          }
+        }
+      }
+    },
+    "共通導入版" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shared Installation"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "공통 설치 버전"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共享安装版本"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "共用安裝版本"
           }
         }
       }
@@ -12583,6 +12989,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "所需模組"
+          }
+        }
+      }
+    },
+    "必要なモジュールをまとめて導入…" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Install Required Modules Together…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "필요한 모듈 한꺼번에 설치…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批量安装所需模块…"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "批次安裝所需模組…"
           }
         }
       }
@@ -15748,6 +16183,35 @@
         }
       }
     },
+    "自動選択に戻す" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use Automatic Selection"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "자동 선택으로 복귀"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复自动选择"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢復自動選擇"
+          }
+        }
+      }
+    },
     "色を選択" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -15951,89 +16415,89 @@
         }
       }
     },
-    "表示中の全項目の更新を確認" : {
+    "表示中のチェックを解除" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Check All Visible Items for Updates"
+            "value" : "Uncheck Visible Items"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "표시 중인 모든 항목 업데이트 확인"
+            "value" : "표시 중인 항목 체크 해제"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "检查所有显示项目的更新"
+            "value" : "取消勾选可见项目"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "檢查所有顯示項目的更新"
+            "value" : "取消勾選可見項目"
           }
         }
       }
     },
-    "表示中の全項目を修復" : {
+    "表示中の全項目" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Repair All Visible Items"
+            "value" : "All Visible Items"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "표시 중인 모든 항목 복구"
+            "value" : "표시 중인 모든 항목"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "修复所有显示项目"
+            "value" : "所有可见项目"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "修復所有顯示項目"
+            "value" : "所有可見項目"
           }
         }
       }
     },
-    "表示中の全項目を更新" : {
+    "表示中の対象をすべてチェック" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Update All Visible Items"
+            "value" : "Check All Visible Eligible Items"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "표시 중인 모든 항목 업데이트"
+            "value" : "표시 중인 대상 모두 체크"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "更新所有显示项目"
+            "value" : "勾选所有可操作的可见项目"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "更新所有顯示項目"
+            "value" : "勾選所有可操作的可見項目"
           }
         }
       }
@@ -17691,6 +18155,64 @@
         }
       }
     },
+    "選択した行" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Selected Rows"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택한 행"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "选中的行"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "選取的列"
+          }
+        }
+      }
+    },
+    "選択を保存" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save Selection"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "선택 저장"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存选择"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "儲存選擇"
+          }
+        }
+      }
+    },
     "選択中のゴーストへイベントIDとReferenceを送り、SHIORIの応答を確認する。" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -17720,89 +18242,31 @@
         }
       }
     },
-    "選択項目の更新を確認" : {
+    "選択順：アプリの明示指定 → ゴーストのshiori.macos → 自動判定（同梱 → 共通導入版）" : {
       "extractionState" : "manual",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Check Selected Items for Updates"
+            "value" : "Priority: app selection → ghost shiori.macos → automatic detection (local → shared installation)"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "선택 항목 업데이트 확인"
+            "value" : "선택 순서: 앱 지정 → 고스트 shiori.macos → 자동 감지(동봉 → 공통 설치)"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "检查所选项目的更新"
+            "value" : "选择顺序：应用指定 → Ghost 的 shiori.macos → 自动检测（随附 → 共享安装）"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "檢查所選項目的更新"
-          }
-        }
-      }
-    },
-    "選択項目を修復" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Repair Selected Items"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "선택 항목 복구"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "修复所选项目"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "修復所選項目"
-          }
-        }
-      }
-    },
-    "選択項目を更新" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Update Selected Items"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "선택 항목 업데이트"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更新所选项目"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更新所選項目"
+            "value" : "選擇順序：應用程式指定 → Ghost 的 shiori.macos → 自動偵測（隨附 → 共用安裝）"
           }
         }
       }

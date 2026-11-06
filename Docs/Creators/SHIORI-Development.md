@@ -1,6 +1,6 @@
 # SHIORIの配布と開発
 
-SHIORIの移植、dylibの入口、ビルドと検証、SHIOLINKの接続手順は、[Utatane Modulesの開発ガイド](https://github.com/opera7133/utatane-modules/blob/main/docs/shiori-development.md)にあります。
+SHIORIの移植、dylibが公開する関数、ビルドと検証、SHIOLINKの接続手順は、[Utatane Modulesの開発ガイド](https://github.com/opera7133/utatane-modules/blob/main/docs/shiori-development.md)にあります。
 
 ## WindowsとmacOSを同じゴーストで配布する
 

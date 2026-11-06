@@ -81,6 +81,98 @@ private struct NativeProcessFixture {
 }
 
 struct NativeShioriProcessTests {
+    @Test func `worker callbacks fail without consuming or corrupting the synchronous pipe`() throws {
+        let fixture = try NativeProcessFixture()
+        defer { fixture.remove() }
+        let source = fixture.root.appending(path: "worker.c")
+        let module = fixture.root.appending(path: "worker.dylib")
+        try #"""
+        #include <dlfcn.h>
+        #include <pthread.h>
+        #include <stdint.h>
+        #include <stdlib.h>
+        #include <string.h>
+        typedef void *(*Internal)(const void *, int32_t, int32_t *);
+        typedef int32_t (*Window)(int32_t, int32_t, int32_t, int32_t, int32_t *);
+        static Internal internal;
+        static Window window;
+        int32_t utatane_internal_saori_set_callback(Internal value) { internal = value; return 1; }
+        int32_t utatane_wmove_set_window_callback(Window value) { window = value; return 1; }
+        int32_t loadu(void *p, int32_t n) { free(p); return n > 0 && internal && window; }
+        int32_t unload(void) { return 1; }
+        static void *worker(void *ignored) {
+            (void)ignored;
+            int32_t size = 123;
+            const char *wire = "EXECUTE SAORI/1.0\r\nModule: internal_system\r\nCharset: UTF-8\r\nArgument0: ListModules\r\n\r\n";
+            void *result = internal(wire, (int32_t)strlen(wire), &size);
+            int rejected = !result && size == 0 && window(1, 0, 0, 0, NULL) == 0;
+            free(result);
+            typedef void (*Reporter)(int32_t,int32_t,uint64_t,uint64_t,const char *);
+            Reporter reporter = (Reporter)dlsym(RTLD_DEFAULT, "utatane_host_saori_diagnostic");
+            if (reporter) reporter(2, 200, 0, 0, "/fixture/worker.dylib");
+            return (void *)(intptr_t)rejected;
+        }
+        void *request(void *input, int32_t *size) {
+            free(input);
+            pthread_t thread;
+            if (pthread_create(&thread, NULL, worker, NULL)) return NULL;
+            void *result = NULL;
+            pthread_join(thread, &result);
+            const char *answer = result ? "worker-rejected" : "worker-failed";
+            *size = (int32_t)strlen(answer);
+            void *output = malloc(*size); memcpy(output, answer, *size); return output;
+        }
+        """#.write(to: source, atomically: true, encoding: .utf8)
+        let compiler = Process()
+        compiler.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        compiler.arguments = ["clang", "-dynamiclib", source.path, "-o", module.path]
+        try compiler.run()
+        compiler.waitUntilExit()
+        #expect(compiler.terminationStatus == 0)
+        let store = AppLogStore(), diagnostics = SaoriDiagnostics(store: store)
+        diagnostics.isEnabled = true
+        let session = try NativeShioriProcessSession(directoryURL: fixture.root, moduleURL: module, diagnostics: diagnostics, hostURL: fixture.host)
+        defer { try? session.close() }
+        #expect(try session.request("WORKER") == "worker-rejected")
+        #expect(try session.request("WORKER again") == "worker-rejected")
+        #expect(store.snapshot().isEmpty)
+    }
+
+    @Test func `failed module initialization returns its bounded diagnostic`() throws {
+        let fixture = try NativeProcessFixture()
+        defer { fixture.remove() }
+        let source = fixture.root.appending(path: "error.c")
+        let module = fixture.root.appending(path: "error.dylib")
+        try #"""
+        #include <stdint.h>
+        #include <stdlib.h>
+        #include <string.h>
+        int32_t loadu(void *p, int32_t n) { free(p); (void)n; return 0; }
+        int32_t unload(void) { return 1; }
+        void *request(void *p, int32_t *n) { free(p); *n = 0; return NULL; }
+        void *utatane_shiori_last_error(int32_t *n) {
+            const char *error = "DNProxy [compile]: fixture failure";
+            *n = (int32_t)strlen(error);
+            void *result = malloc(*n); memcpy(result, error, *n); return result;
+        }
+        """#.write(to: source, atomically: true, encoding: .utf8)
+        let compiler = Process()
+        compiler.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        compiler.arguments = ["clang", "-dynamiclib", source.path, "-o", module.path]
+        try compiler.run()
+        compiler.waitUntilExit()
+        #expect(compiler.terminationStatus == 0)
+        do {
+            _ = try NativeShioriProcessSession(directoryURL: fixture.root, moduleURL: module, hostURL: fixture.host)
+            Issue.record("load must fail")
+        } catch let error as NativeShioriProcessError {
+            guard case let .hostFailure(status, reason) = error else { throw error }
+            #expect(status == 3)
+            #expect(reason == "DNProxy [compile]: fixture failure")
+            #expect(!error.canRecoverByLoadingAnotherModule)
+        }
+    }
+
     @Test func `SAORI window calls return to the owning ghost`() throws {
         let fixture = try NativeProcessFixture()
         defer { fixture.remove() }
@@ -254,5 +346,20 @@ private final class ProcessWindowController: NativeSaoriWindowControlling, @unch
     // An explicit unknown module has no inferred engine and must not recover to YAYA.
     #expect(throws: NativeShioriProcessError.self) {
         try NativeShioriSession(directoryURL: master, moduleURL: selected, moduleResolver: resolver, hostURL: fixture.host)
+    }
+}
+
+@Test func `explicit selected native module loads and failed selection remains an error`() throws {
+    let fixture = try NativeProcessFixture()
+    defer { fixture.remove() }
+    let selection = GhostShioriSelection(modulePath: fixture.module.path)
+    let session = try NativeShioriSession(directoryURL: fixture.root, selectedModule: selection, hostURL: fixture.host)
+    #expect(try session.request("GET SHIORI/3.0\r\nID: OnTest\r\n\r\n").contains("200"))
+    let invalid = fixture.root.appending(path: "broken.dylib")
+    try Data("invalid native image".utf8).write(to: invalid)
+    #expect(throws: (any Error).self) {
+        try NativeShioriSession(directoryURL: fixture.root,
+                                selectedModule: GhostShioriSelection(modulePath: invalid.path, kindID: "yaya-6"),
+                                hostURL: fixture.host)
     }
 }

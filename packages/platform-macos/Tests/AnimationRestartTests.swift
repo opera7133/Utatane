@@ -132,3 +132,23 @@ import UtataneShell
     // Inspect the frame published at commit, before the animation task can run.
     #expect(surfaces.renderedImage()?.containsColor { ($0.usingColorSpace(.deviceRGB)?.blueComponent ?? 0) > 0.9 } == true)
 }
+
+@Test @MainActor func `paused SERIKO stays paused through global suspension and can be stopped or replaced`() async throws {
+    let (root, surfaces, _, defaults) = try animationRestartFixture()
+    defer { surfaces.resetContent(); defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)); try? FileManager.default.removeItem(at: root) }
+    surfaces.playAnimation(identifier: "7")
+    try await requireEventually { surfaces.renderedImage()?.containsColor { ($0.usingColorSpace(.deviceRGB)?.blueComponent ?? 0) > 0.9 } == true }
+    surfaces.pauseAnimation(identifier: "7")
+    surfaces.setSuspended(true)
+    surfaces.setSuspended(false)
+    #expect(surfaces.serikoInspectorSnapshots.first?.pausedAnimationIDs == [7])
+    surfaces.stopAnimation(identifier: "7")
+    await surfaces.waitForAnimation(identifier: "7")
+    #expect(surfaces.serikoInspectorSnapshots.first?.isAnimating == false)
+    surfaces.playAnimation(identifier: "7")
+    surfaces.resumeAnimation(identifier: "7")
+    try await requireEventually { surfaces.renderedImage()?.containsColor { ($0.usingColorSpace(.deviceRGB)?.blueComponent ?? 0) > 0.9 } == true }
+    surfaces.stopAnimation(identifier: "7")
+    await surfaces.waitForAnimation(identifier: "7")
+    #expect(surfaces.serikoInspectorSnapshots.first?.isAnimating == false)
+}

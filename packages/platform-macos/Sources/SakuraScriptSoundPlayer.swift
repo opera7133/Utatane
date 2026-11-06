@@ -3,7 +3,7 @@ import Foundation
 import UtataneSakuraScript
 
 @MainActor
-final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
+final class SakuraScriptSoundPlayer: NSObject {
     enum CompletionAction: Equatable {
         case loop
         case stop
@@ -17,14 +17,14 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
     var onError: ((String, Error) -> Void)?
     var resourceBaseDirectory: URL?
     var isMuted = false {
-        didSet { audioPlayer?.volume = isMuted ? 0 : requestedVolume }
+        didSet { audioPlayer?.isMuted = isMuted }
     }
 
     var outputVolume: Float? {
-        audioPlayer?.volume
+        audioPlayer.map { isMuted ? 0 : $0.volume }
     }
 
-    private var audioPlayer: AVAudioPlayer?
+    private var audioPlayer: SoundAudioSource?
     private var loadedFile: String?
     private var loadedURL: URL?
     private var requestedVolume: Float = 1
@@ -43,7 +43,14 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
     private var spectrumTask: Task<Void, Never>?
     private var spectrumCompletionTask: Task<Void, Never>?
     private var spectrumGeneration = UUID()
-    private var spectrumAnalyzer: SoundSpectrumAnalyzer?
+    private let makeSpectrumWorker: (@Sendable () -> any SoundSpectrumAnalyzing)?
+    private var spectrumWorker: (any SoundSpectrumAnalyzing)?
+
+    init(makeSpectrumWorker: (@Sendable () -> any SoundSpectrumAnalyzing)? = nil) {
+        self.makeSpectrumWorker = makeSpectrumWorker
+        super.init()
+    }
+
     private var spectrumEnvelope = SoundSpectrumEnvelope()
     private var lastSpectrumPosition = 0
 
@@ -53,6 +60,9 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         if suspended {
             resumesAfterSuspension = audioPlayer?.isPlaying == true
             audioPlayer?.pause()
+            spectrumTask?.cancel()
+            spectrumTask = nil
+            spectrumGeneration = UUID()
         } else if let completion = pendingCompletion {
             pendingCompletion = nil
             resumesAfterSuspension = false
@@ -62,6 +72,7 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
                 audioPlayer?.play()
             }
             resumesAfterSuspension = false
+            updateSpectrumTimer()
         }
     }
 
@@ -72,7 +83,7 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         spectrumCompletionTask?.cancel()
         spectrumCompletionTask = nil
         spectrumGeneration = UUID()
-        spectrumAnalyzer = nil
+        spectrumWorker = nil
         spectrumEnvelope = .init()
         spectrumInterval = 0
         spectrumBands = 10
@@ -99,12 +110,12 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
                 onError?(file, CocoaError(.fileNoSuchFile))
                 return
             }
-            let player: AVAudioPlayer
+            let player: SoundAudioSource
             if loadedURL == url, let audioPlayer {
                 player = audioPlayer
             } else {
                 do {
-                    player = try AVAudioPlayer(contentsOf: url)
+                    player = try SoundAudioSource(contentsOf: url)
                 } catch {
                     onError?(file, error)
                     throw error
@@ -118,11 +129,10 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
                 requestedVolume = 1
             }
             loadedFile = file
-            player.delegate = self
-            player.numberOfLoops = 0
+            configureCallbacks(player)
             apply(options: options, to: player)
             player.prepareToPlay()
-            player.play()
+            guard player.play() else { return }
             hasStartedPlayback = true
             isPaused = false
             isLooping = loop
@@ -132,14 +142,14 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
                 onError?(file, CocoaError(.fileNoSuchFile))
                 return
             }
-            let player: AVAudioPlayer
+            let player: SoundAudioSource
             do {
-                player = try AVAudioPlayer(contentsOf: url)
+                player = try SoundAudioSource(contentsOf: url)
             } catch {
                 onError?(file, error)
                 throw error
             }
-            player.delegate = self
+            configureCallbacks(player)
             discard()
             requestedVolume = 1
             apply(options: options, to: player)
@@ -173,9 +183,10 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
             audioPlayer?.pause()
             spectrumTask?.cancel()
             spectrumTask = nil
+            spectrumGeneration = UUID()
             isPaused = hasStartedPlayback
         case .resume:
-            audioPlayer?.play()
+            guard audioPlayer?.play() == true else { return }
             hasStartedPlayback = audioPlayer != nil
             isPaused = false
             updateSpectrumTimer()
@@ -189,11 +200,16 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         }
     }
 
-    nonisolated func audioPlayerDidFinishPlaying(_ player: AVAudioPlayer, successfully flag: Bool) {
-        let finishedIdentifier = ObjectIdentifier(player)
-        Task { @MainActor [weak self] in
-            guard self?.audioPlayer.map(ObjectIdentifier.init) == finishedIdentifier else { return }
-            self?.handlePlaybackFinished(successfully: flag)
+    private func configureCallbacks(_ player: SoundAudioSource) {
+        player.isMuted = isMuted
+        player.onFinished = { [weak self, weak player] in
+            guard let self, let player, audioPlayer === player else { return }
+            handlePlaybackFinished(successfully: true)
+        }
+        player.onFailure = { [weak self, weak player] error in
+            guard let self, let player, audioPlayer === player, let loadedFile else { return }
+            discard()
+            onError?(loadedFile, error)
         }
     }
 
@@ -210,6 +226,7 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
             audioPlayer.currentTime = 0
             audioPlayer.prepareToPlay()
             audioPlayer.play()
+            updateSpectrumTimer()
             return
         case .stop, .error:
             let zero = spectrumZeroReferences()
@@ -240,8 +257,10 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         return isLooping ? .loop : .stop
     }
 
-    private func apply(options: [String], to player: AVAudioPlayer) {
+    private func apply(options: [String], to player: SoundAudioSource) {
+        var equalizer = player.settings
         for option in options {
+            equalizer.apply(option)
             let parts = option.split(separator: "=", maxSplits: 1).map(String.init)
             guard parts.count == 2 else { continue }
             switch parts[0].lowercased() {
@@ -278,16 +297,22 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
                 continue
             }
         }
-        player.volume = isMuted ? 0 : requestedVolume
+        player.applyProcessing(equalizer, volume: requestedVolume)
+        player.isMuted = isMuted
     }
 
     private func updateSpectrumTimer() {
         spectrumTask?.cancel()
         spectrumTask = nil
         spectrumGeneration = UUID()
-        guard spectrumInterval > 0, hasStartedPlayback, !isPaused, let loadedURL else { return }
-        if spectrumAnalyzer == nil {
-            spectrumAnalyzer = try? SoundSpectrumAnalyzer(url: loadedURL)
+        audioPlayer?.capturesSpectrum = spectrumInterval > 0
+        guard spectrumInterval > 0, hasStartedPlayback, !isPaused, !isSuspended, loadedURL != nil else { return }
+        if spectrumWorker == nil {
+            if let makeSpectrumWorker {
+                spectrumWorker = makeSpectrumWorker()
+            } else if let audioPlayer {
+                spectrumWorker = SoundSpectrumWorker(samples: audioPlayer.spectrumSamples)
+            }
         }
         let generation = spectrumGeneration
         let interval = Duration.milliseconds(spectrumInterval)
@@ -297,7 +322,7 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
                 do { try await Task.sleep(until: deadline, clock: .continuous) } catch { return }
                 guard let self, generation == spectrumGeneration else { return }
                 if !isSuspended, audioPlayer?.isPlaying == true {
-                    await emitSpectrum()
+                    await emitSpectrum(generation: generation)
                 }
                 deadline += interval
                 // Do not accumulate requests if a SHIORI is slower than its requested cadence.
@@ -308,19 +333,24 @@ final class SakuraScriptSoundPlayer: NSObject, AVAudioPlayerDelegate {
         }
     }
 
-    private func emitSpectrum() async {
-        guard let audioPlayer, let loadedFile else { return }
-        let channels = spectrumAnalyzer?.channelCount ?? max(1, min(8, audioPlayer.numberOfChannels))
-        let values = (try? spectrumAnalyzer?.levels(at: audioPlayer.currentTime, bands: spectrumBands))
-            ?? [Double](repeating: 0, count: channels + spectrumBands)
+    private func emitSpectrum(generation: UUID) async {
+        guard let audioPlayer, let loadedFile, let loadedURL, let spectrumWorker else { return }
+        let position = audioPlayer.currentTime
+        let bands = spectrumBands
+        let frame = try? await spectrumWorker.analyze(url: loadedURL, position: position, bands: bands)
+        // An actor hop can overlap pause, seek, reload, stop or a new sound.
+        guard !Task.isCancelled, generation == spectrumGeneration,
+              self.audioPlayer === audioPlayer, !isPaused, !isSuspended, audioPlayer.isPlaying else { return }
+        let channels = frame?.channels ?? max(1, min(8, audioPlayer.numberOfChannels))
+        let values = frame?.levels ?? [Double](repeating: 0, count: channels + bands)
         let result = spectrumEnvelope.update(values, at: ProcessInfo.processInfo.systemUptime, hold: Double(spectrumHold) / 1000)
-        lastSpectrumPosition = Int(audioPlayer.currentTime * 1000)
+        lastSpectrumPosition = Int(position * 1000)
         await onSpectrum?(spectrumReferences(file: loadedFile, channels: channels, levels: result.levels, peaks: result.peaks))
     }
 
     private func spectrumZeroReferences() -> [Int: String]? {
         guard spectrumInterval > 0 || spectrumTask != nil, let loadedFile else { return nil }
-        let channels = spectrumAnalyzer?.channelCount ?? max(1, min(8, audioPlayer?.numberOfChannels ?? 1))
+        let channels = max(1, min(8, audioPlayer?.numberOfChannels ?? 1))
         let zeros = [Int](repeating: 0, count: channels + spectrumBands)
         return spectrumReferences(file: loadedFile, channels: channels, levels: zeros, peaks: zeros)
     }

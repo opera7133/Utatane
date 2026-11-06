@@ -767,19 +767,20 @@ func `renders installed CLDSP2 surfaces without changing ghost files`() throws {
         width: 2, height: 4,
         color: NSColor(deviceRed: 0, green: 0, blue: 1, alpha: 1)
     ).write(to: directory.appending(path: "surface2.png"))
+    // These layers remain until the explicit stop command, even on a busy UI thread.
     let targetAnimations = [
         SurfaceAnimation(
             id: 1, interval: "never",
             patterns: [SurfaceAnimationPattern(
                 order: 0, method: "overlay", surfaceID: 1,
-                waitMilliseconds: 1000, x: 0, y: 0
+                waitMilliseconds: 60000, x: 0, y: 0
             )]
         ),
         SurfaceAnimation(
             id: 2, interval: "never",
             patterns: [SurfaceAnimationPattern(
                 order: 0, method: "overlay", surfaceID: 2,
-                waitMilliseconds: 1000, x: 6, y: 0
+                waitMilliseconds: 60000, x: 6, y: 0
             )]
         )
     ]

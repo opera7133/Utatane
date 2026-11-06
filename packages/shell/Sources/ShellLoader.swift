@@ -34,17 +34,26 @@ public struct ShellLoader: Sendable {
     public init() {}
 
     public func load(from shellDirectory: URL) throws -> ShellDefinition {
+        try load(from: shellDirectory, contentsOfDirectory: {
+            try FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil, options: [])
+        })
+    }
+
+    /// One inventory per load. Do not retain it across reloads or asset reads.
+    func load(from shellDirectory: URL, contentsOfDirectory: (URL) throws -> [URL]) throws -> ShellDefinition {
         let fileManager = FileManager.default
-        let shellFiles = try fileManager.contentsOfDirectory(
-            at: shellDirectory,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )
-        let surfacesURLs = shellFiles.filter {
-            $0.pathExtension.lowercased() == "txt"
-                && $0.lastPathComponent.lowercased().hasPrefix("surfaces")
+        let shellFiles = try contentsOfDirectory(shellDirectory)
+        // Image discovery historically included hidden files, while definition
+        // discovery skipped them. Only candidate text files need hidden metadata.
+        let definitionFiles = shellFiles.filter {
+            guard $0.pathExtension.lowercased() == "txt",
+                  $0.lastPathComponent.lowercased().hasPrefix("surface") else { return false }
+            return (try? $0.resourceValues(forKeys: [.isHiddenKey]).isHidden) != true
+        }
+        let surfacesURLs = definitionFiles.filter {
+            $0.lastPathComponent.lowercased().hasPrefix("surfaces")
         }.sorted { $0.lastPathComponent < $1.lastPathComponent }
-        let legacySurfaceURLs = shellFiles.compactMap { url -> (url: URL, surfaceID: Int)? in
+        let legacySurfaceURLs = definitionFiles.compactMap { url -> (url: URL, surfaceID: Int)? in
             legacySurfaceID(from: url.lastPathComponent).map { (url, $0) }
         }.sorted {
             if $0.surfaceID != $1.surfaceID {
@@ -52,9 +61,7 @@ public struct ShellLoader: Sendable {
             }
             return $0.url.lastPathComponent < $1.url.lastPathComponent
         }
-        let existingSurfaceIDs = try Set(fileManager.contentsOfDirectory(atPath: shellDirectory.path).compactMap {
-            surfaceID(fromImageFilename: $0)
-        })
+        let existingSurfaceIDs = Set(shellFiles.compactMap { surfaceID(fromImageFilename: $0.lastPathComponent) })
         guard !surfacesURLs.isEmpty || !legacySurfaceURLs.isEmpty || !existingSurfaceIDs.isEmpty else {
             throw ShellError.missingFile(
                 shellDirectory.appending(path: "surfaces.txt", directoryHint: .notDirectory)
@@ -133,14 +140,16 @@ public struct ShellLoader: Sendable {
         while normalizedFilename.lowercased().hasSuffix(".png.png") {
             normalizedFilename.removeLast(4)
         }
-        let imageURL = shellDirectory
+        let requested = shellDirectory
             .appending(path: normalizedFilename, directoryHint: .notDirectory)
             .standardizedFileURL
-            .resolvingSymlinksInPath()
-        guard Self.supportsSurfaceImageExtension(imageURL.pathExtension),
-              imageURL.path.hasPrefix(root.path + "/"),
-              FileManager.default.fileExists(atPath: imageURL.path)
-        else {
+        let candidates = requested.pathExtension.isEmpty
+            ? Self.surfaceImageExtensions.map { requested.appendingPathExtension($0) } : [requested]
+        guard let imageURL = candidates.map({ $0.resolvingSymlinksInPath() }).first(where: {
+            Self.supportsSurfaceImageExtension($0.pathExtension)
+                && $0.path.hasPrefix(root.path + "/")
+                && FileManager.default.fileExists(atPath: $0.path)
+        }) else {
             throw ShellError.missingElement(filename: filename, directory: shellDirectory)
         }
 

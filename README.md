@@ -6,11 +6,11 @@ Utataneは、伺かをmacOSで動かすための本体アプリです。
 
 ![Utatane スクリーンショット](Design/SampleScreenShot.png)
 
-まだ開発中です。既存ゴーストとの互換性を地道に増やしています。SSP全部入りではありません。
+現在も開発を続けており、既存ゴーストとの互換性を順次広げています。対応する機能や利用条件は、[互換性の確認](Docs/Support/Compatibility.md)と各機能の案内を参照してください。
 
-Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국어
+対応言語: 日本語 / English / 简体中文 / 繁体中文 / 한국어
 
-## だいたいできること
+## 主な機能
 
 ### ゴーストの表示と会話
 
@@ -36,18 +36,19 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - システム設定に従う／ライト／ダークの外観切り替え
 - ゴースト起動やシェル切り替えに時間がかかる場合の進行表示
 
-### 人格とかネットワークとか
+### ゴーストの実行と連携
 
-- YAYA(文) / KAGARI / SHIOLINK(MiyoJS等) / 里珠(Proxy) / 里々 / 華和梨 / 美坂 / 灯 / ese-shiori / 偽栞 / 忍 / 翡翠 / 結奈をSHIORIとして使うゴーストのネイティブ実行 (蒼空・里珠・結奈については"実験的な機能"を参照)
+- YAYA、里々、華和梨などのSHIORIを使うゴーストの実行。対応するモジュールと制約は[SHIORI・SAORIの利用](Docs/Support/Native-SHIORI.md)を参照
 - 韓国語助詞トランスレータ`ParticleMakoto`と`Makoto Basic with Select and Repeat`のネイティブ実行
 - カタログから導入できる`saori_cpuid`、`kenonoke`、`textcopy2`、`mciaudior`、`wmove`のネイティブSAORI互換
+- ゴースト別のSHIORI選択・解除と、読み込み診断
 - コンテンツエクスプローラから行うゴースト、シェル、バルーン、ヘッドライン、プラグインの個別・一括ネットワーク更新。ゴーストとバルーンは設定した日数ごとの自動更新にも対応
 - SSTP over HTTP、RSS / Atom、HEADLINE/2.0
 - 同じLAN上のSSP・IP Messengerとのメンバー発見、平文メッセージ送受信、受信SakuraScriptの安全な表示再生
 - `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
 - Materiaの「さくら」をWineなしで実行
 - プラグインの利用（ネイティブ対応SHIORIおよびmacOS向けにビルドされたdylibを使用するプラグインのみ）
-- カレンダー
+- カレンダーの予定表示・編集と、iCalendar URLからの購読
 - macOS標準音声、各種macOS対応ローカルエンジン、OpenAI、ElevenLabs、Aivis Cloud API、Azure Speech、Google Cloud TTS、AITalk WebAPI、CoeFont Cloudによる発話の読み上げと、macOS標準の音声認識
 
 <details>
@@ -61,16 +62,13 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 
 </details>
 
-## まだ無理なこと
+## 互換性について
 
-今のところは以下の通り。
+Windows向けのDLLやexeを使用するコンテンツは、対応するmacOS用モジュール、またはWineの設定が必要です。SakuraScript・SERIKO・着せ替えなどの対応範囲は、[各互換表](Docs/README.md)で確認できます。
 
-- 一般のWindows向けSHIORI / SAORI / プラグインDLLやexeは直接実行できません (wine設定で利用可)
-- Windows固有のFMOには対応していません
-- SakuraScript、SERIKO、着せ替えなどは未対応の命令や定義があります
-- ゴーストによっては表示、文字コード、イベントの互換性に問題があります
+ゴーストごとに使う命令や外部モジュールが異なるため、まず起動・会話・メニュー操作を試してください。表示や動作で困った場合は[トラブル対処](Docs/Support/Troubleshooting.md)を参照してください。
 
-## とりあえず使う
+## インストール
 
 1. [公式サイト](https://dl.wmsci.com/utatane/)のダウンロードボタンからmacOS版を取得する。[Releases](https://github.com/opera7133/Utatane/releases)では、`Utatane-macOS.dmg`があればそちらを選ぶ。ZIPのみの版では、公証済みの追加ZIPがあればそちらを選ぶ
 2. DMGを開き、`Utatane.app`を隣のApplicationsへドラッグする。ZIPの場合は展開して「アプリケーション」フォルダへ移動する
@@ -80,7 +78,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 
 公式の配布版はDeveloper ID署名・公証済みです。古い未署名版を使っていてmacOSに起動を止められる場合は、まず最新の公証済み版を取得してください。
 
-## ほかのゴーストを追加する
+## ゴーストやバルーンを追加する
 
 同梱のりあ以外にも、次の方法でゴーストやバルーンを追加できます。
 
@@ -90,7 +88,7 @@ Supported Languages: 日本語 / English / 简体中文 / 繁体中文 / 한국�
 - 展開済みのSSPフォルダから`ghost`と`balloon`を取り込む
 - UtataneのコンテンツフォルダをFinderで表示する
 
-SSPから持ってくる場合は、SSP本体のZIPを展開して、そのフォルダを「SSPフォルダから取り込む」で選びます。同名のものは上書きしません。
+SSPから持ってくる場合は、SSP本体のZIPを展開して、そのフォルダを「SSPフォルダから取り込む」で選びます。同名のコンテンツがある場合は、既存の内容を保持します。
 
 インストールしたコンテンツは次の場所に保存されます。
 
@@ -134,14 +132,14 @@ Content/Local/
 
 </details>
 
-## もう少し詳しい話
+## 詳しい使い方と開発資料
 
 - [ドキュメント一覧](Docs/README.md)
 - [Webドキュメント](https://dl.wmsci.com/utatane/docs/) / [はじめてのUtatane](Docs/Guide/Getting-Started.md)
 - [変更履歴](CHANGELOG.md)
 - [ウィンドウモード](Docs/Guide/Window-Mode.md)
 - [ゴースト・SHIORI・SAORI制作者向けUtatane対応ガイド](Docs/Creators/Content-Authoring.md)
-- [ゴースト互換状況](Docs/Support/Compatibility.md)
+- [互換性の確認](Docs/Support/Compatibility.md)
 
 ## ライセンス
 

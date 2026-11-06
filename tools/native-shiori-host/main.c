@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdint.h>
+#include <pthread.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <string.h>
@@ -54,6 +55,8 @@ static int error_reply(int fd, uint8_t status, const char *message) {
 }
 
 static int32_t window_callback(int32_t operation, int32_t scope, int32_t x, int32_t speed, int32_t *output) {
+    // The parent owns a synchronous pipe: worker threads cannot send unsolicited frames.
+    if (!pthread_main_np()) return 0;
     uint8_t request[16];
     put32(request, operation); put32(request + 4, scope);
     put32(request + 8, x); put32(request + 12, speed);
@@ -67,6 +70,7 @@ static int32_t window_callback(int32_t operation, int32_t scope, int32_t x, int3
 static void *internal_saori_callback(const void *request, int32_t count, int32_t *length) {
     if (!length) return NULL;
     *length = 0;
+    if (!pthread_main_np()) return NULL;
     if (!request || count < 0 || count > (int32_t)MAX_BYTES || saori_channel < 0) return NULL;
     if (!reply(saori_channel, 7, request, (uint32_t)count)) return NULL;
     uint8_t header[5];
@@ -91,6 +95,7 @@ void *utatane_host_saori_request(const void *request, int32_t count, int32_t *le
 // Synchronous metadata-only sideband; the requesting library thread owns the pipe.
 __attribute__((visibility("default"), used))
 void utatane_host_saori_diagnostic(int32_t phase, int32_t status, uint64_t elapsed, uint64_t bytes, const char *path) {
+    if (!pthread_main_np()) return;
     if (!saori_diagnostics_enabled || saori_channel < 0 || !path) return;
     size_t count = strnlen(path, 4097);
     if (count == 0 || count > 4096) return;
@@ -148,7 +153,15 @@ int main(int argc, char **argv) {
     if (!length || directory[length - 1] != '/') directory[length++] = '/';
     directory[length] = 0;
     if (!load(directory, (int32_t)length)) {
-        error_reply(channel, 3, "SHIORI initialization failed"); return 1;
+        // Optional allocated UTF-8 error. Older modules keep the generic message.
+        typedef void *(*LastError)(int32_t *);
+        LastError last_error = (LastError)dlsym(image, "utatane_shiori_last_error");
+        int32_t error_length = 0;
+        char *detail = last_error ? last_error(&error_length) : NULL;
+        if (detail && error_length > 0 && error_length <= 4096) reply(channel, 3, detail, (uint32_t)error_length);
+        else error_reply(channel, 3, "SHIORI initialization failed");
+        free(detail);
+        return 1;
     }
     if (!reply(channel, 0, NULL, 0)) return 1;
     for (;;) {

@@ -405,3 +405,37 @@ func `loads surfacetable development metadata without treating names as aliases`
     #expect(table.entriesByID[1]?.name == "")
     #expect(shell.resolveSurface("素", scope: 0) == nil)
 }
+
+@Test func `extensionless elements resolve image formats in order and retain paired alpha masks`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let parts = root.appending(path: "parts")
+    try FileManager.default.createDirectory(at: parts, withIntermediateDirectories: true)
+    let png = parts.appending(path: "eq.png"), mask = parts.appending(path: "eq.pna")
+    let gif = parts.appending(path: "eq.gif")
+    for file in [png, mask, gif] {
+        try Data().write(to: file)
+    }
+    let loader = ShellLoader()
+    let selected = try loader.loadElement(filename: "parts/eq", from: root)
+    #expect(selected.imageURL == png)
+    #expect(selected.alphaMaskURL == mask)
+    try FileManager.default.removeItem(at: png)
+    #expect(try loader.loadElement(filename: "parts/eq", from: root).imageURL == gif)
+    #expect(throws: (any Error).self) { try loader.loadElement(filename: "parts/eq.png", from: root) }
+}
+
+@Test func `extensionless elements reject traversal and escaping symbolic links`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let shell = root.appending(path: "shell")
+    try FileManager.default.createDirectory(at: shell, withIntermediateDirectories: true)
+    let outside = root.appending(path: "outside.png")
+    try Data().write(to: outside)
+    try FileManager.default.createSymbolicLink(at: shell.appending(path: "escape.png"), withDestinationURL: outside)
+    for name in ["../outside", "escape", "missing"] {
+        #expect(throws: (any Error).self) { try ShellLoader().loadElement(filename: name, from: shell) }
+    }
+}

@@ -178,8 +178,9 @@ pre code { padding: 0; }
 ゴーストに必要なSHIORI・SAORIが未導入なら一覧と詳細に表示されます。詳細の「導入方法を確認…」から導入の案内へ進めます。</p>
 <h3 id="use-content-コンテンツを更新する">コンテンツを更新する</h3>
 <p>SHIORI・SAORIの共通導入版は、メニューバーの「モジュール」→「モジュールカタログ…」から更新します。カタログには、このMacで使える成果物に対する導入状態を表示します。更新後、共通導入版を使っているゴーストは「機能」→「復旧操作」→「現在のゴーストを再読み込み」で新しい版を読み込んでください。ゴースト同梱のモジュールがある場合は、引き続きそちらが優先されます。
-名前・DLL名で検索し、SHIORI・SAORIの種類と導入状態で絞り込めます。更新があるモジュールは一覧の先頭に表示されます。</p>
-<p>右クリックの「ネットワーク更新」やエクスプローラから、更新情報を持つコンテンツを更新できます。エクスプローラでは個別・一括更新を扱えます。</p>
+名前・DLL名で検索し、SHIORI・SAORIの種類と導入状態で絞り込めます。更新があるモジュールは一覧の先頭に表示されます。「一括操作」で表示中の全項目かチェックした項目を選び、未導入のモジュールを一括ダウンロードしたり、更新のあるモジュールを一括更新したりできます。</p>
+<p>右クリックの「ネットワーク更新」やエクスプローラから、更新情報を持つコンテンツを更新できます。エクスプローラの「一括操作」では、表示中の全項目、チェックした項目、選択した行を対象に、更新の確認・実行、修復、一括削除ができます。複数のゴーストに必要なモジュールがある場合は、まとめて導入できます。両画面とも、チェックした項目は画面に表示されている間だけ一括操作の対象になります。</p>
+<p>「一括削除…」では削除可能な項目をまとめて確認し、macOSのゴミ箱へ移動します。更新情報のないローカルコンテンツも削除対象としてチェックできます。保護されたコンテンツの扱いは単体削除と共通です。</p>
 <p>ゴーストとバルーンの自動更新は「設定」→「ネットワーク」で有効にし、確認する日数を選びます。RSSの巡回やUtatane本体の更新とは別の設定です。</p>
 <p>古い配布元のHTTP更新も利用できますが、HTTPSと同じ通信保護はありません。信頼する配布元を使ってください。更新できない場合の確認順は<a href="#support-troubleshooting">困ったとき</a>にあります。</p>
 <h3 id="use-content-削除する">削除する</h3>
@@ -437,6 +438,8 @@ pre code { padding: 0; }
 </section>
 <section class="chapter" id="use-features"><h2>カレンダー・ニュース・拡張</h2><h3 id="use-features-カレンダー">カレンダー</h3>
 <p>右クリックの「機能」→「カレンダー」、またはメニューバーの「操作」→「カレンダー」から開きます。日付や予定を確認・編集できます。予定への反応はゴースト側の対応によって異なります。</p>
+<p><code>webcal://</code> または <code>webcals://</code> のカレンダーURLをゴーストへドロップすると、HTTPSでiCalendarを取得して購読に追加します。コピーしたURL文字列のドロップにも対応しています。同じ取得URLをもう一度ドロップすると、その購読の予定を更新します。通常のHTTPSカレンダーURLは、ゴーストの <code>install,url,...,ical</code> から追加できます。</p>
+<p>取得は既存のカレンダー購読と同じ通信設定で行い、データの上限は4MiBです。取得・解析に失敗した場合は現在の予定を維持し、対応ゴーストへ失敗を通知します。</p>
 <h3 id="use-features-rss--ヘッドライン">RSS / ヘッドライン</h3>
 <p>右クリックの「ヘッドライン」メニューを使います。RSS / Atomの取得とHEADLINE/2.0センサーを扱えます。「設定」→「ネットワーク」で自動巡回と間隔を変更します。</p>
 <p>センサーの追加・管理にはコンテンツのインストールとエクスプローラを使います。<code>config.txt</code> 形式はネイティブに扱えますが、独自のWindows DLL型センサーはWineなどの設定が必要な場合があります。</p>
@@ -655,7 +658,7 @@ pre code { padding: 0; }
 <table>
 <thead>
 <tr>
-<th>入口</th>
+<th>メニュー</th>
 <th>主な用途</th>
 </tr>
 </thead>
@@ -727,181 +730,46 @@ pre code { padding: 0; }
 </ul>
 <p>APIキー、個人情報、再配布が許可されていない辞書・コンテンツ本体は添付しないでください。</p>
 </section>
-<section class="chapter" id="support-ghosts"><h2>ゴースト動作確認情報</h2><p>「対応」と書いてあっても、全機能の完全再現ではありません。起動と基本会話を中心に見ています。</p>
-<table>
-<thead>
-<tr>
-<th>ゴースト</th>
-<th>SHIORI</th>
-<th>状況</th>
-<th>主な残りもの</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Emily/Phase4.5</td>
-<td>YAYA</td>
-<td>起動、会話、マウス反応、3キャラクター表示、メニュー画像の透過を確認</td>
-<td>確認範囲では問題報告なし。全SakuraScript・SERIKOの再現は未保証</td>
-</tr>
-<tr>
-<td>めもりーな</td>
-<td>SATORI</td>
-<td>起動、会話、SSU、システム情報をテスト済み</td>
-<td><code>exec.dll</code>、<code>proxy.dll</code>など外部処理</td>
-</tr>
-<tr>
-<td>ユグドラシルチェリィ</td>
-<td>SATORI</td>
-<td>起動、2キャラクター、シェル切り替えを確認。起動・再読込時の表示、まばたきの重なり、HTTP更新失敗を修正後、利用者確認。「閉じる」の空応答でもバルーンを閉じる処理を自動テスト確認</td>
-<td>「閉じる」の実アプリ再確認。<code>ukastream.dll</code>を使うルーレット</td>
-</tr>
-<tr>
-<td>Water Surface</td>
-<td>SATORI</td>
-<td>基本会話、キーワード取得、お気に入り登録、アンカー割り込み後の会話継続を確認</td>
-<td>ネットワーク更新は個別未確認</td>
-</tr>
-<tr>
-<td>坊ちゃんの愛馬</td>
-<td>SATORI</td>
-<td>基本会話、3キャラクター表示、アンカー、選択肢とお気に入り等のメニュー配置を確認</td>
-<td>APNGサーフェスのアニメーション再生に対応。全着せ替え・派生メニューは未確認</td>
-</tr>
-<tr>
-<td>ふくふくアフターライフ（仮）</td>
-<td>SATORI</td>
-<td>基本動作、ゴースト切り替え時の表示消去、クリック待ち終了を確認</td>
-<td>追加シェルは未確認</td>
-</tr>
-<tr>
-<td>酒の神さま</td>
-<td>SATORI</td>
-<td>起動と<code>kenonoke.dll</code>のキーワード分類をテスト済み</td>
-<td>音声系SAORI、画面効果</td>
-</tr>
-<tr>
-<td>COLORSβ</td>
-<td>KAWARI</td>
-<td>起動、シェル、クリップボードをテスト済み</td>
-<td>COLORS専用SAORIは後回し</td>
-</tr>
-<tr>
-<td>Aosora demo</td>
-<td>Aosora</td>
-<td>外部macOSモジュールで実際に起動確認済み</td>
-<td>上流変更への追従、配布方法</td>
-</tr>
-<tr>
-<td>伺かWizまゆら</td>
-<td>KAWARI(Legacy)</td>
-<td>起動、会話、部位別反応を実アプリで確認</td>
-<td>確認範囲では問題報告なし</td>
-</tr>
-<tr>
-<td>偽さくら Rebirth 2.008</td>
-<td>ese-shiori + ParticleMakoto</td>
-<td>独自辞書の復号とese-shioriの評価処理、内部会話タイマー、他ゴースト検索・会話転送、辞書・スタック保存、Materia形式のニュース読込、ParticleMakotoをネイティブ実装。起動、定期会話、初回名前入力と選択肢、ダブルクリックメニュー、単語学習と再読込をテスト済み</td>
-<td>原版独自の文章分解・再構成アルゴリズムとの完全一致、長時間の状態変化は未確認</td>
-</tr>
-<tr>
-<td>こだま</td>
-<td>忍</td>
-<td><code>shino.dll</code>を使わずネイティブ実行。起動、ランダムトーク、単語群と偽AIトーク、クリックと連続クリック、ダブルクリックメニュー、選択肢ジャンプ、状態保存をテストし、利用者がDebug版で会話を確認。SAORIは共通ネイティブ／外部モジュール経路へ接続</td>
-<td>コミュニケート相手・応答Referenceの設定、Windows操作・HWND・詳細なシステム情報、日時判定書式など。全分岐は未確認</td>
-</tr>
-<tr>
-<td>ゴス路吹雪</td>
-<td>翡翠</td>
-<td><code>hisui.dll</code>を使わずネイティブ実行。起動、時間帯分岐、自由トーク、当たり判定付きダブルクリック、メニューと選択肢、会話間隔、変数保存、設定・単語辞書、式、感情境界と<code>emotionlimiter</code>、リソース応答をテスト。別実装の<code>Makoto Basic with Select and Repeat</code>も原DLLと比較して文字列置換・話者別辞書をネイティブ実装。利用者がDebug版で表示・会話・メニュー操作を確認</td>
-<td>感情値の自動学習、実ゴーストで未確認の組み込み関数・SAORI・MAKOTO専用select / repeat記法。全機能・全分岐は未確認</td>
-</tr>
-<tr>
-<td>Yuhna-10th / girl-y_period2</td>
-<td>結奈</td>
-<td>YDF/1.07の通常・条件付きイベント、ランダム候補、Reference、話者別マウスイベント、<code>%refN</code> / <code>%sel</code>条件、名前付き選択肢分岐をネイティブ解析。<code>$i[...]</code>の会話間隔、<code>$n</code>の名前入力と<code>%username</code>、単純な変数・加算・ダイスを保存・実行。原版<code>yuhna.dll</code>をWineで実行した<code>OnBoot</code>と同じ会話、ランダムトーク、部位別クリック、間隔・名前メニューを自動テスト</td>
-<td>任意の式・関数、未観測の結奈固有命令、SAORI、編集機能。全機能・全分岐は未確認</td>
-</tr>
-<tr>
-<td>さくら</td>
-<td>Materia first</td>
-<td>対応版<code>first.dll</code>をWineなしで起動。会話、クリック、眠気・睡眠・入浴、主要メニュー、クイズ、タイピングゲームとレベル別記録保存を確認。表情復元、ヘッドラインの記事送り、固定ニュース、天気表示、メールの送信者・件名表示、視力検査の描画・入力分岐は自動テスト済み。「用事」の検索、時計合わせ、ダイス、タイマー、起動時間、ローカルIP、Todo・繰り返しNotify、語句変換、CompJapanチュートリアル、本体設定とコンテンツ変更、清掃操作とMac終了・再起動を接続</td>
-<td>追加した画面操作、現在地での天気取得、実メールサーバー、実時間の通知・タイマー満了、終了・再起動と実際の清掃操作は手動確認前。使用率グラフ、アイコン・フォントキャッシュ清掃など</td>
-</tr>
-<tr>
-<td>もす</td>
-<td>KAGARI</td>
-<td>KAGARI部分は動作可能</td>
-<td>Lua C拡張やSAORIはmacOS版を作成できた場合のみ利用可</td>
-</tr>
-</tbody></table>
-<p>FIRSTのTodo・Notifyと語句変換は、元版の専用ウィンドウの代わりに会話メニューと入力欄を使います。Todoは追加・編集・完了・削除が可能です。Notifyは<code>yyyy-MM-dd HH:mm|内容</code>または<code>10m|内容</code>の形で一回の通知を登録し、Utataneでそのゴーストが動いている間に会話で知らせます。<code>every10m|内容</code>は10分ごと、<code>daily09:00|内容</code>は現在のタイムゾーンで毎日9時に通知します。終了中に過ぎた通知は次回起動後に一回表示し、繰り返しの場合は未来の次回予定へ進めます。Notifyの「編集」で日時・内容を変更できます。「開くファイル」で絶対パスを指定すると、通知時にmacOSの既定アプリでファイルを開きます。アプリ自体の指定も可能です。<code>~/</code>はホームへ展開し、空欄で解除します。カンマ・角括弧・引用符・バックスラッシュ・<code>%</code>・制御文字を含むパスとコマンドライン引数には対応しません。存在しないファイルは開きません。元版Todo・Notifyファイルの読み込みには未対応です。各リストは100件、内容は500文字までです。</p>
-<p>FIRSTの「現在の天気」は、既存の現在地取得とOpen-Meteoの現在の天気・気温を利用します。予報の日別表示はありません。位置情報の拒否や取得失敗は会話で案内し、旧版の天気キャッシュ表示も<code>OnWeather</code>として残します。</p>
-<p>FIRSTの追加機能のセリフは、対応版の利用者DLL内の会話断片を実行時に読みます。Todo・Notifyの一覧・説明・記録応答、ダイスの結果、天気の開始・結果・取得失敗、清掃の会話が対象です。原版にない入力形式、件数制限、macOS固有の失敗理由は<code>[Utatane]</code>を付けた操作案内として表示し、ゴーストのセリフと区別します。</p>
-<p>メールチェックはPOP3の<code>TOP</code>で末尾の最大20件のヘッダを取得し、送信者・件名を表示します。本文の取得やメールの削除は行いません。TOP未対応の場合も件数・サイズを表示します。MIMEヘッダのBase64／Q形式とUTF-8、Shift_JIS、ISO-2022-JPなどを解析し、未対応の文字コードや壊れた表記は元の文字列を残します。疑似サーバーでの検証は<code>python3 Scripts/test-pop3-mail.py</code>で再実行できます。</p>
-<p>FIRSTのグロンギ語変換はかなの対応表を利用者のDLLから読みます。重力語変換はShift_JISの文字化け処理を再現し、変換できない文字がある場合は案内を返します。ダイスは<code>2d6</code>などの形式で個数と面数を指定します。</p>
-<p>清掃操作では、ごみ箱はログインユーザーのホーム内のごみ箱、最近使ったファイル一覧とメモリ解放はUtatane自身を対象にします。Finderや他のアプリの履歴は消しません。終了・再起動はゴーストの確認選択肢の後にSystem Eventsへ要求します。macOSのオートメーション許可が必要になる場合があります。アイコン・フォントキャッシュ清掃は対応操作を確定できていないため、メニューには表示しません。</p>
+<section class="chapter" id="support-ghosts"><h2>ゴースト動作確認情報</h2><p>Utataneで使える機能は、ゴーストのSHIORI、シェルの定義、外部モジュールによって異なります。同じSHIORIを使うゴーストでも、Windows固有の機能や独自SAORIに依存する部分には違いがあります。</p>
+<h3 id="support-ghosts-導入前に確認する">導入前に確認する</h3>
+<p><a href="https://utatane-validate.wmsci.com/">Utatane NAR検査</a>では、NARに含まれるSHIORIと基本的な対応状況を確認できます。実行前の目安として利用してください。導入後はエクスプローラでゴーストを選び、「互換性を検査」から不足ファイルや未対応命令を確認できます。</p>
+<p>検査結果に問題がなくても、会話の分岐や外部プログラムとの連携には実際の操作が必要です。まず次を試すと、普段の利用で困る部分を見つけやすくなります。</p>
+<ol>
+<li>起動して会話とメニュー操作を試す</li>
+<li>クリック・撫で・選択肢が反応するか確認する</li>
+<li>シェルや着せ替え、バルーンを切り替える</li>
+<li>終了して再起動し、名前や設定などの保存内容を確認する</li>
+<li>音声・ニュース・ネットワーク更新など、普段使う機能を試す</li>
+</ol>
+<h3 id="support-ghosts-shiorisaoriを確認する">SHIORI・SAORIを確認する</h3>
+<p>YAYA・里々などのmacOS用SHIORIは、モジュールカタログから導入できます。起動できない場合は「SHIORI読み込み診断」で、選択先のファイル、CPUの種類、直近の読み込み結果を確認してください。</p>
+<p>SAORIは、ゴーストが音声再生、クリップボード、外部プログラムなどを使うための追加モジュールです。macOS用の互換モジュールがある場合は、共通導入して利用できます。Windows DLLを使う機能にはWineなどの設定が必要な場合があります。</p>
+<p>詳しい選択方法、対応モジュール、必要な版は<a href="#support-engines">SHIORI・SAORIの利用</a>を参照してください。YAYA 6から5へ切り替える場合は、同ページの保存データの復元手順も確認してください。</p>
+<h3 id="support-ghosts-表示操作の対応範囲">表示・操作の対応範囲</h3>
+<p>SakuraScriptの命令、SHIORIイベント、シェルの定義については、次の表で対応内容と制約を確認できます。</p>
+<ul>
+<li><a href="https://dl.wmsci.com/utatane/docs/reference/sakurascript/">SakuraScript互換表</a></li>
+<li><a href="https://dl.wmsci.com/utatane/docs/reference/events/">SHIORIイベント互換表</a></li>
+<li><a href="https://dl.wmsci.com/utatane/docs/reference/files/">テキストファイル互換表</a></li>
+<li><a href="https://dl.wmsci.com/utatane/docs/reference/sstp/">SSTP互換表</a></li>
+</ul>
+<p>表の「対応」は、対象機能の実装状況を示します。すべてのコンテンツや操作の組み合わせでの動作保証とは異なります。表示や操作に問題がある場合は、<a href="#support-troubleshooting">トラブル対処と報告方法</a>を参照してください。</p>
+<h3 id="support-ghosts-materia付属firstを使う場合">Materia付属FIRSTを使う場合</h3>
+<p>対応版の<code>first.dll</code>を用意すると、Wineを介さずに実行できます。配置方法は<a href="https://github.com/opera7133/Utatane/blob/main/README.md">READMEの導入手順</a>を参照してください。会話・マウス操作・主要メニューに加え、Todo、通知、天気、メール確認などを利用できます。</p>
+<p>Todoと通知は会話メニュー・入力欄から操作します。通知は対象のゴーストを起動している間に表示され、繰り返しやファイルの起動も指定できます。リストは各100件、内容は500文字までです。通知時に開くファイルには絶対パスを指定し、<code>~/</code>も利用できます。コマンドライン引数や、カンマ・角括弧・引用符などを含むパスは対応範囲外です。</p>
+<p>現在の天気にはmacOSの位置情報とOpen-Meteoを利用します。メール確認はPOP3の<code>TOP</code>に対応したサーバーから、最大20件の送信者・件名を取得します。メール本文と削除操作は対象外です。元版のTodo・通知ファイルの移行は今後の対応項目です。</p>
+<p>ごみ箱の清掃はログインユーザーのホーム内を、履歴整理とメモリ解放はUtatane自身を対象にします。Macの終了・再起動にはゴーストの確認選択肢と、macOSのオートメーション許可が必要になる場合があります。</p>
 <h3 id="support-ghosts-コンテンツのネットワーク更新">コンテンツのネットワーク更新</h3>
-<p>旧来の配布サイトとの互換性のためHTTP更新を許可します。HTTPでは更新一覧とファイルのMD5照合だけでは通信経路上の改ざんを防げません。信頼する配布元を利用してください。
-HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTTPS・Sparkle署名検証を維持します。</p>
-<h3 id="support-ghosts-saori">SAORI</h3>
-<table>
-<thead>
-<tr>
-<th>モジュール</th>
-<th>状況</th>
-<th>補足</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>SSU</td>
-<td>対応</td>
-<td>SATORI同梱実装</td>
-</tr>
-<tr>
-<td><code>saori_cpuid.dll</code></td>
-<td>対応</td>
-<td>macOSの情報を返す互換実装</td>
-</tr>
-<tr>
-<td><code>kenonoke.dll</code></td>
-<td>対応</td>
-<td><code>keyword.txt</code>による分類</td>
-</tr>
-<tr>
-<td><code>textcopy2.dll</code></td>
-<td>対応</td>
-<td>macOSのクリップボードへ書き込み</td>
-</tr>
-<tr>
-<td><code>mciaudior.dll</code></td>
-<td>対応</td>
-<td>AVFoundationによる<code>load</code>、<code>play</code>、<code>loop</code>、<code>stop</code></td>
-</tr>
-<tr>
-<td><code>wmove.dll</code></td>
-<td>一部対応</td>
-<td><code>MOVETO</code>、<code>MOVETO_INSIDE</code>、<code>GET_POSITION</code>、<code>GET_DESKTOP_SIZE</code></td>
-</tr>
-<tr>
-<td><code>exec.dll</code> / <code>process.dll</code> / <code>proxy.dll</code></td>
-<td>未対応</td>
-<td>権限と安全な挙動を決めてから</td>
-</tr>
-<tr>
-<td>その他の標準SAORI DLL</td>
-<td>条件付き</td>
-<td>内蔵実装を優先し、汎用DLLホストとWineの設定時だけ実行。実DLL確認は未実施</td>
-</tr>
-</tbody></table>
-<p>実ゴーストを手元へ置く場所やテスト方法は<a href="https://dl.wmsci.com/utatane/docs/develop/build/">開発ガイド</a>と<a href="#support-engines">Native SHIORI / SAORI</a>を参照してください。</p>
-<p>表にあるネイティブSAORIは、SSUを除いてSHIORI非依存の共通レジストリにあり、ネイティブMISAKA、YAYA、SATORI、KAWARIから利用できます。SSUはSATORI同梱実装を維持しています。未知のmacOS用標準ABIモジュールとWindows DLLにも読み込み経路はありますが、Windows固有機能への依存まで吸収するものではありません。</p>
+<p>旧来の配布サイトとの互換性のため、HTTPの更新URLも利用できます。HTTPでは更新一覧とファイルのMD5照合だけでは通信経路の改ざんを防げないため、信頼できる配布元を利用してください。</p>
+<p>HTTPSの証明書検証は有効です。Utatane本体の更新にはHTTPSとSparkleの署名検証を使用します。</p>
 </section>
-<section class="chapter" id="support-engines"><h2>SHIORI・SAORIの利用</h2><p>SHIORIごとの実行方式・制約とビルド手順は、<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md">Utatane Modulesの資料</a>を参照してください。</p>
+<section class="chapter" id="support-engines"><h2>SHIORI・SAORIの利用</h2><p>SHIORIはゴーストの会話や反応を処理するエンジン、SAORIは音声・ファイル・外部サービスなどの機能を追加するモジュールです。このページでは導入、選択、問題が起きたときの診断を説明します。</p>
 <h3 id="support-engines-shioriの選択">SHIORIの選択</h3>
 <h4 id="support-engines-共通導入版と同梱版">共通導入版と同梱版</h4>
 <p>初回起動時にYAYAと里々の共通導入版をカタログから取得します。既に導入済みなら再取得せず、カタログへ接続できなくても起動できます。共通導入版の更新後、起動中のゴーストには再読み込みが必要です。カタログの「導入済み」は共通導入版の状態であり、ゴースト同梱版から切り替わったことを示しません。</p>
 <p>ゴーストの<code>shiori.macos</code>に指定されたモジュールを優先します。対応する同梱ライブラリの破損や必要な関数の欠落を検出すると、同じSHIORIの共通導入版へ切り替えます。設定の「SHIORI対応状況」でオフにできます。辞書・保存データのエラーでは切り替えません。各SHIORIの配布版は、ゴースト内、共通導入先の順に探します。<code>ese-shiori.dll</code>など、対応済みのDLL名が<code>shiori</code>にある場合、同じフォルダにdylibを置くだけでUtataneが検出します。</p>
 <p>0.2.20以降では真絵の<code>mae_corpus.txt</code>、D.N.Proxyの<code>dnproxy.ini</code>または<code>dnproxy.dll.config</code>も判別します。<code>shiori.dll</code>という汎用名でも対応する共通導入版を選べます。D.N.Proxyには別途.NET 10ランタイムが必要で、C#ソースの実行時コンパイルにはSDKが必要です。対応範囲はModulesの案内を確認してください。</p>
+<p>D.N.Proxyの.NET不足は「SHIORI読み込み診断」で確認できます。実際に使うdotnetの場所とCPU、.NET 10 runtime、ソース方式でだけ必要なSDKを表示し、「再診断」で確認し直せます。コンパイル済みDLL方式ではSDKは不要です。依存確認が通ってもC#の動作成功を保証するものではありません。詳しい起動段階のエラー表示にはModules 0.1.0-r2以降を使ってください。<code>UTATANE_DOTNET</code>を変更した場合は、アプリの起動環境へ反映して再起動してください。</p>
 <p>ゴースト内の<code>shiori.dylib</code>も探索します。蒼空などの手動導入は、共通導入先の<code>&lt;名前&gt;/lib/lib&lt;名前&gt;.dylib</code>または<code>&lt;名前&gt;/lib&lt;名前&gt;.dylib</code>を確認するため、<code>module.json</code>がなくても実行を止めません。カタログの版・更新判定にはmanifestが必要です。</p>
 <p>真絵で「話すネタが思いつかない」という台詞が繰り返される場合は、mae 0.1.0-r3以降へ更新してください。未定義の翻訳・バルーン終了イベントを発話へ置き換える問題を修正しています。ゴースト内に旧版の<code>libmae.dylib</code>がある場合はそちらが優先されるので、同梱版も置き換えてから再読み込みしてください。</p>
 <p>Windows DLLだけを持つゴーストは、辞書や設定を判別し、対応するモジュールを導入済みなら接続します。設定の「SHIORI対応状況」で判定を確認できます。動かない場合は「情報」→「SHIORI読み込み診断…」と<a href="#support-troubleshooting-%E8%A8%BA%E6%96%AD%E3%81%A8%E5%A0%B1%E5%91%8A">診断・報告の手順</a>を使ってください。</p>
@@ -910,12 +778,18 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 <h4 id="support-engines-yaya-5と6の切り替え">YAYA 5と6の切り替え</h4>
 <p>YAYAは6系を既定で使います。<code>yaya.dll</code>・<code>aya.dll</code>・<code>aya5.dll</code>のバージョン情報に関係なく、YAYA 6を選びます。6系が未導入なら導入を案内し、5系へ自動では切り替えません。<code>shiori.macos</code>の明示指定は引き続き優先します。</p>
 <p>YAYA 6を初めて読み込む前に、<code>ghost/master/</code>直下の<code>*_variable.cfg</code>を<code>Utatane-YAYA-backup/</code>へコピーします。既存のバックアップは上書きしません。ゴースト独自の保存ファイルは別途バックアップしてください。</p>
-<p>5系は互換用として導入できます。使う場合は5系の<code>libyaya.dylib</code>を<code>ghost/master/</code>へ置き、<code>descript.txt</code>に<code>shiori.macos,libyaya.dylib</code>を指定してください。6系でハッシュや入れ子の変数を保存した後に5系へ戻すと、保存内容が崩れることがあります。Utataneを終了して、切り替え前の<code>*_variable.cfg</code>をバックアップから戻してから5系を使ってください。復元するとバックアップ後の進行状況は失われます。</p>
+<p>5系は互換用として導入できます。診断画面の「共通導入版」で<code>yaya</code>を選ぶか、5系の<code>libyaya.dylib</code>をファイルから選択できます。制作者による指定には<code>descript.txt</code>の<code>shiori.macos,libyaya.dylib</code>も利用できます。6系でハッシュや入れ子の変数を保存した後に5系へ戻すと、保存内容が崩れることがあります。Utataneを終了して、切り替え前の<code>*_variable.cfg</code>をバックアップから戻してから5系を使ってください。復元するとバックアップ後の進行状況は失われます。</p>
+<h3 id="support-engines-ゴースト別のshiori選択">ゴースト別のSHIORI選択</h3>
+<p>ゴーストのメニューから「SHIORI読み込み診断…」を開き、対象ゴーストを選びます。「共通導入版」または「ファイルを選ぶ…」でmacOS用ライブラリを選び、必要に応じてSHIORIの種類を指定して「選択を保存」を押します。YAYA 5は<code>yaya</code>、YAYA 6は<code>yaya-6</code>です。ファイル名を変更したライブラリでは種類も明示できます。</p>
+<p>選択はアプリの設定へゴーストの設置先ごとに保存し、次回のSHIORI読み込みから適用します。「SHIORIを再読み込み」で起動中の主ゴースト・呼び出しゴーストへ適用できます。再読み込み時は変数を保存して現在のSHIORIを終了してから新しいSHIORIを起動します。失敗した場合は設定を修正して再読み込みで再試行できます。起動前のゴーストでは次回起動時に適用します。</p>
+<p>優先順はアプリの明示指定、ゴーストの<code>shiori.macos</code>、既存の自動判定です。自動判定では同梱ライブラリと共通導入版を探索し、環境変数による開発用指定も既存の規則で扱います。アプリの明示指定が消失した場合や、CPUの不一致・起動失敗がある場合は、その指定のエラーを表示します。「自動選択に戻す」でアプリ側の指定を解除できます。ゴーストの<code>descript.txt</code>は元の内容を維持します。</p>
+<p>YAYA 6の初回起動前には変数のバックアップを作成します。6系で保存した変数を5系へ戻す場合は、Utataneを終了し、切り替え前のバックアップを復元してから5系を起動してください。復元後の進行状況はバックアップ時点になります。</p>
+<p>SHIORIごとの実行方式や制約、開発者向けのビルド手順は、<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md">Utatane Modulesの資料</a>を参照してください。</p>
 <h3 id="support-engines-共通saoriブリッジ">共通SAORIブリッジ</h3>
 <p>通常のmacOS用SAORIはdylibです。Windows DLLをそのままmacOSへ読み込むことはありません。</p>
 <p>Utataneが提供するSAORIと対応する命令は、<a href="https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md#%E5%85%B1%E9%80%9Asaori%E3%83%96%E3%83%AA%E3%83%83%E3%82%B8">共通SAORIブリッジの一覧</a>を参照してください。独自の外部SHIORIが読み込むSAORIは、そのSHIORI側で管理します。</p>
 <h4 id="support-engines-共通導入できるsaori">共通導入できるSAORI</h4>
-<p>次の表は、このページで扱う主な共通SAORIです。<code>PlayWavSound</code>・<code>totp_saori</code>・<code>XPath</code>・<code>timebkn</code>は、0.2.19向けModulesで追加しました。本体0.2.19ではこれらの不足検出・導入案内にも対応します。</p>
+<p>主な共通SAORIと利用できる機能は次のとおりです。不足している場合は、ゴーストの起動時に導入方法を案内します。</p>
 <table>
 <thead>
 <tr>
@@ -1101,8 +975,8 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 </thead>
 <tbody><tr>
 <td><code>internal_system</code></td>
-<td><code>ListModules</code>、<code>ListFunctions</code></td>
-<td>対応しているモジュール・関数だけを返す</td>
+<td><code>ListModules</code>、<code>ListFunctions</code>、<code>Describe</code></td>
+<td>対応しているモジュール・関数と、その呼び出し方だけを返す</td>
 </tr>
 <tr>
 <td><code>internal_time</code></td>
@@ -1132,11 +1006,25 @@ HTTPSの証明書検証は無効化しません。アプリ自身の更新はHTT
 <tr>
 <td><code>internal_crypto</code></td>
 <td><code>Digest</code>、<code>HMAC</code>、<code>Compare</code></td>
-<td>Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。dataのfile入力に対応。暗号化・鍵生成等は未対応</td>
+<td>Digestはmd5/sha1/sha256/sha384/sha512/crc32/adler32、HMACはsha256/sha384/sha512。dataのfile入力に対応。暗号化・鍵生成等は未対応</td>
 </tr>
 </tbody></table>
 <h4 id="support-engines-呼び出し方法">呼び出し方法</h4>
 <p>引数・返却値の基準は<a href="https://ssp.shillest.net/ukadoc/manual/spec_saori_ex.html">UKADOCのSAORI over DirectSSTP</a>です。YAYAでは<code>FUNCTIONEX</code>または<code>LOADLIB</code>／<code>REQUESTLIB</code>、里々では<code>＠SAORI</code>による登録または<code>（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）</code>のようなモジュール名の呼び出し、華和梨では<code>$(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)</code>を使えます。通常のSAORIでは、引き続きmacOS用モジュールが必要です。</p>
+<h4 id="support-engines-関数の呼び方を照会する">関数の呼び方を照会する</h4>
+<p><code>internal_system</code>の<code>Describe</code>へモジュール名と関数名を渡すと、Utataneで使える呼び出し方を返します。名前の大文字小文字は区別しません。未知のモジュールは<code>unknown module</code>、そのモジュールにない関数は<code>unknown function</code>です。</p>
+<pre><code class="language-text">Argument0: Describe
+Argument1: internal_crypto
+Argument2: Digest
+</code></pre>
+<p><code>Result</code>は正規の関数名、<code>Value0</code>は位置引数の最大数、<code>Value1</code>は必須数、<code>Value2</code>は可変個なら<code>1</code>（固定なら<code>0</code>）、<code>Value3</code>は受け付けるオプション名のカンマ区切りです。<code>Value4</code>以降には<code>Argument1=md5|sha1|...</code>などの候補が入ります。位置引数の数は関数名の<code>Argument0</code>を含みません。形式名（<code>hex</code>等）や日時の書式名は候補に含めません。</p>
+<p>この例では最大数・必須数とも<code>2</code>、固定個、オプションは<code>data-in,out,charset,async</code>となり、アルゴリズム候補に<code>crc32</code>と<code>adler32</code>も入ります。未対応の暗号機能は候補に出しません。<code>internal_file</code>はメディア照会機能を備えるサービスでのみ一覧・照会に現れます。</p>
+<p><code>MediaInfo</code>・<code>ImageInfo</code>はパスと1〜11個のキーを受け取ります。キーの列は最初の<code>--</code>で始まるオプションで終わるので、その後ろへキーを追加することはできません。日時<code>Format</code>の省略可能な書式を飛ばしてオプションを指定する場合は、空の位置引数を置きます。</p>
+<p>契約は<a href="https://github.com/ukatech/ukadoc-spec/blob/0fc56cb0551a56e6da2f1ec3f27864b0f91076b0/spec/saori-ex/internal_system/internal_system.Describe.md">UKADOCのDescribe正本</a>に基づきます。</p>
+<h4 id="support-engines-crc32adler32の検査値">CRC32・Adler32の検査値</h4>
+<p><code>internal_crypto</code>の<code>Digest</code>へ<code>crc32</code>または<code>adler32</code>を指定できます。結果は上位から4バイトで、既定の<code>hex</code>では8文字です。例えば<code>123456789</code>のCRC32は<code>cbf43926</code>、Adler32は<code>091e01de</code>です。空入力はそれぞれ<code>00000000</code>、<code>00000001</code>になります。</p>
+<p><code>--out=HEX</code>・<code>--out=base64</code>等の共通出力形式、<code>--charset=</code>による文字列のバイト変換、<code>--data-in=file</code>による大容量ファイルの逐次処理にも対応します。<code>--async=</code>も使えます。チェックサムは暗号用のハッシュではなく、HMACのアルゴリズムとしては使えません。</p>
+<p>出力と対応範囲は<a href="https://github.com/ukatech/ukadoc-spec/blob/0fc56cb0551a56e6da2f1ec3f27864b0f91076b0/spec/saori-ex/internal_crypto/internal_crypto.Digest.md">UKADOCのDigest正本</a>を参照してください。</p>
 <h4 id="support-engines-非同期通知">非同期通知</h4>
 <p><code>--async=識別子</code>をオプションに加えると即座に204を返し、結果を<code>OnInternalSaoriComplete</code>／<code>OnInternalSaoriFailure</code>へGETで通知します。識別子が<code>On</code>で始まる場合は、その名前／末尾に<code>Failure</code>を加えた名前を使います。Reference0は識別子、1は結果または失敗理由、2はモジュール名、3は関数名、成功時の4以降はValue0以降です。終了・SHIORI再読み込み後には配送しません。同時処理は2〜4件、保留はセッションあたり64件までです。</p>
 <h4 id="support-engines-通信方式と上限">通信方式と上限</h4>
@@ -1193,10 +1081,10 @@ Diff / 2026-12-20T10:00 / 2026-12-24 / day / --tz=UTC
 <h4 id="support-engines-通常saoriの呼び出し記録">通常SAORIの呼び出し記録</h4>
 <p>「通常SAORIの呼び出しを記録」をオンにすると、SAORIカテゴリで呼び出し元のフォルダ、選択したモジュールのパス、読み込み／呼び出し／終了の状態、所要時間、応答バイト数を確認できます。通常はmacOS用dylibで、Wineが設定されている場合は本体が呼び出すWindows SAORI DLLも対象です。引数・結果本文は記録せず、初期状態はオフです。</p>
 <p>既に起動しているセッションでも、その後の要求から切り替わります。独自SHIORIや、Wine内のWindows SHIORIが直接読み込むDLLの内部呼び出しは対象外です。状態<code>1</code>／<code>0</code>は読み込み・終了の成功／失敗、呼び出しはSAORI応答コードです。本体管理の外部接続の終了など、実際の状態コードを取得できない場合は<code>unknown</code>となります。</p>
-<h4 id="support-engines-検証範囲">検証範囲</h4>
-<p>合成辞書と実ゴーストの一時コピーを使い、同期呼び出し・非同期通知・結果イベントの利用をテストしています。元の辞書・保存データは変更しません。各ゴーストの全機能や、両CPUの画面操作を保証するものではありません。</p>
+<h4 id="support-engines-問題がある場合">問題がある場合</h4>
+<p>呼び出し元のゴースト、選択したモジュール、状態コードを確認し、<a href="#support-troubleshooting">トラブル対処</a>の手順で報告してください。非同期呼び出しでは、受付時と結果通知時の両方の記録が切り分けに役立ちます。</p>
 <h3 id="support-engines-メーターシステム情報の表示">メーター・システム情報の表示</h3>
-<p>Utatane 0.2.18では、カラー合成と画像の切り抜きを使うメーター表示を改善しました。CPU・メモリ使用率と空き物理メモリの概算も取得できます。</p>
+<p>カラー合成や画像の切り抜きを使うメーター表示に対応しています。CPU・メモリ使用率と空き物理メモリの概算も取得できます。</p>
 <p>暦などのデータを外部サイトから取得する場合、表示にはゴースト側の対応も必要です。華和梨の<code>textload_charset</code>で文字コードを指定して読み込む辞書には、華和梨9.2.0以降を使用してください。9.1.0ではこの関数を利用できません。</p>
 </section>
 </main></div>

@@ -1,6 +1,7 @@
 import CryptoKit
 import Darwin
 import Foundation
+import zlib
 
 /// Incremental hashing keeps file contents out of the protocol and out of a
 /// single large allocation. File paths are resolved by the owning service.
@@ -55,6 +56,8 @@ enum InternalSaoriCrypto {
 
     static func calculate(function: String, algorithm: String, input: Input, key: Data, isCancelled: () -> Bool) throws -> Data {
         switch (function, algorithm) {
+        case ("Digest", "crc32"), ("Digest", "adler32"):
+            try checksum(algorithm: algorithm, input: input, isCancelled: isCancelled)
         case ("Digest", "md5"): try digest(Insecure.MD5.self, input: input, isCancelled: isCancelled)
         case ("Digest", "sha1"): try digest(Insecure.SHA1.self, input: input, isCancelled: isCancelled)
         case ("Digest", "sha256"): try digest(SHA256.self, input: input, isCancelled: isCancelled)
@@ -77,6 +80,22 @@ enum InternalSaoriCrypto {
                 timingsafe_bcmp(first.baseAddress, second.baseAddress, first.count) == 0
             }
         }
+    }
+
+    /// zlib's CRC-32/Adler-32 values are serialized as four bytes, most significant first.
+    private static func checksum(algorithm: String, input: Input, isCancelled: () -> Bool) throws -> Data {
+        let crc = algorithm == "crc32"
+        var value = crc ? zlib.crc32(0, nil, 0) : zlib.adler32(0, nil, 0)
+        try input.consume(isCancelled: isCancelled) { chunk in
+            chunk.withUnsafeBytes { bytes in
+                let data = bytes.bindMemory(to: Bytef.self)
+                value = crc ? zlib.crc32(value, data.baseAddress, uInt(data.count))
+                    : zlib.adler32(value, data.baseAddress, uInt(data.count))
+            }
+        }
+        guard !isCancelled() else { throw Failure("ghost required") }
+        var bigEndian = UInt32(truncatingIfNeeded: value).bigEndian
+        return withUnsafeBytes(of: &bigEndian) { Data($0) }
     }
 
     private static func digest<H: HashFunction>(_ type: H.Type, input: Input, isCancelled: () -> Bool) throws -> Data {

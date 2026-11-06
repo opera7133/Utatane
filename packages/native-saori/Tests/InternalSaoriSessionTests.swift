@@ -237,3 +237,70 @@ private func legacyHttpcHeaders(_ directory: URL, _ arguments: [String]) -> [Str
     #expect(String(decoding: noOwner.response(headers: legacyHttpcHeaders(root, ["bg", "id", "https://example.invalid/ok"]), charset: "UTF-8"), as: UTF8.self).contains("ghost required"))
     noOwner.close()
 }
+
+@Test func `Describe and checksum digests complete asynchronously with schema values and lifetime guards`() async throws {
+    let recorder = InternalEventRecorder()
+    let session = InternalSaoriSession(onEvent: recorder.record)
+    defer { session.close() }
+    for (module, arguments) in [
+        ("internal_system", ["Describe", "internal_crypto", "Digest", "--async=OnDescribe"]),
+        ("internal_crypto", ["Digest", "crc32", "123456789", "--async=OnCRC"]),
+        ("internal_crypto", ["Digest", "adler32", "123456789", "--async=OnAdler"]),
+        ("internal_system", ["Describe", "internal_crypto", "Missing", "--async=OnMissingDescription"])
+    ] {
+        #expect(String(decoding: session.response(to: asynchronousRequest(module, arguments)), as: UTF8.self).hasPrefix("SAORI/1.0 204"))
+    }
+    let events = await recorder.events(count: 4)
+    let described = try #require(events.first { $0.id == "OnDescribe" })
+    #expect(described.references[1] == "Digest")
+    #expect(described.references[4] == "2" && described.references[5] == "2" && described.references[6] == "0")
+    #expect(described.references[7] == "data-in,out,charset,async")
+    #expect(described.references[8]?.hasSuffix("|crc32|adler32") == true)
+    #expect(events.first { $0.id == "OnCRC" }?.references[1] == "cbf43926")
+    #expect(events.first { $0.id == "OnAdler" }?.references[1] == "091e01de")
+    #expect(events.first { $0.id == "OnMissingDescriptionFailure" }?.references[1] == "unknown function")
+    session.close()
+    #expect(events.allSatisfy { !$0.isCurrent })
+    #expect(String(decoding: session.response(to: asynchronousRequest("internal_crypto", ["Digest", "crc32", "abc"])), as: UTF8.self).contains("ghost required"))
+}
+
+@Test func `Describe requires both positional arguments before async and an event owner`() {
+    let session = InternalSaoriSession()
+    defer { session.close() }
+    #expect(String(decoding: session.response(to: asynchronousRequest("internal_system", ["Describe", "internal_crypto", "Digest", "--async=metadata"])), as: UTF8.self).contains("ghost required"))
+    #expect(String(decoding: session.response(to: asynchronousRequest("internal_system", ["Describe", "internal_crypto"])), as: UTF8.self).contains("invalid parameter"))
+    // A value in a positional slot remains data, even when it looks like an option.
+    #expect(String(decoding: session.response(to: asynchronousRequest("internal_system", ["Describe", "internal_crypto", "--async=literal"])), as: UTF8.self).contains("unknown function"))
+}
+
+@Test func `variadic media calls reject an async option instead of a required metadata key`() {
+    let service = InternalSaoriService(mediaReader: AsyncImageCapabilityReader())
+    let session = InternalSaoriSession(onEvent: { _ in Issue.record("Invalid calls must not be queued") }, service: service)
+    defer { session.close() }
+    for function in ["MediaInfo", "ImageInfo"] {
+        for arguments in [[function, "image.png"], [function, "image.png", "--async=OnInvalid"],
+                          [function, "image.png", "--unknown=x"],
+                          [function, "image.png", "--async=OnInvalid", "width"],
+                          [function, "image.png", "width", "--async=OnInvalid", "height"]]
+        {
+            let response = String(decoding: session.response(to: asynchronousRequest("internal_file", arguments)), as: UTF8.self)
+            #expect(response.hasPrefix("SAORI/1.0 400"))
+            #expect(response.contains("invalid parameter"))
+        }
+    }
+}
+
+@Test(arguments: ["crc32", "adler32"])
+func `checksum files complete asynchronously through the owning ghost service`(algorithm: String) async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data("abc".utf8).write(to: root.appending(path: "日本語.bin"))
+    let recorder = InternalEventRecorder()
+    let session = InternalSaoriSession(onEvent: recorder.record, service: .init(ghostDirectory: root))
+    defer { session.close() }
+    let accepted = session.response(to: asynchronousRequest("internal_crypto", ["Digest", algorithm, "日本語.bin", "--data-in=file", "--async=OnChecksumFile"]))
+    #expect(String(decoding: accepted, as: UTF8.self).hasPrefix("SAORI/1.0 204"))
+    let event = try #require(await recorder.events(count: 1).first)
+    #expect(event.references[1] == (algorithm == "crc32" ? "352441c2" : "024d0127"))
+}

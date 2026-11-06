@@ -1,6 +1,6 @@
 # SHIORI・SAORIの利用
 
-SHIORIごとの実行方式・制約とビルド手順は、[Utatane Modulesの資料](https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md)を参照してください。
+SHIORIはゴーストの会話や反応を処理するエンジン、SAORIは音声・ファイル・外部サービスなどの機能を追加するモジュールです。このページでは導入、選択、問題が起きたときの診断を説明します。
 
 ## SHIORIの選択
 
@@ -11,6 +11,8 @@ SHIORIごとの実行方式・制約とビルド手順は、[Utatane Modulesの�
 ゴーストの`shiori.macos`に指定されたモジュールを優先します。対応する同梱ライブラリの破損や必要な関数の欠落を検出すると、同じSHIORIの共通導入版へ切り替えます。設定の「SHIORI対応状況」でオフにできます。辞書・保存データのエラーでは切り替えません。各SHIORIの配布版は、ゴースト内、共通導入先の順に探します。`ese-shiori.dll`など、対応済みのDLL名が`shiori`にある場合、同じフォルダにdylibを置くだけでUtataneが検出します。
 
 0.2.20以降では真絵の`mae_corpus.txt`、D.N.Proxyの`dnproxy.ini`または`dnproxy.dll.config`も判別します。`shiori.dll`という汎用名でも対応する共通導入版を選べます。D.N.Proxyには別途.NET 10ランタイムが必要で、C#ソースの実行時コンパイルにはSDKが必要です。対応範囲はModulesの案内を確認してください。
+
+D.N.Proxyの.NET不足は「SHIORI読み込み診断」で確認できます。実際に使うdotnetの場所とCPU、.NET 10 runtime、ソース方式でだけ必要なSDKを表示し、「再診断」で確認し直せます。コンパイル済みDLL方式ではSDKは不要です。依存確認が通ってもC#の動作成功を保証するものではありません。詳しい起動段階のエラー表示にはModules 0.1.0-r2以降を使ってください。`UTATANE_DOTNET`を変更した場合は、アプリの起動環境へ反映して再起動してください。
 
 ゴースト内の`shiori.dylib`も探索します。蒼空などの手動導入は、共通導入先の`<名前>/lib/lib<名前>.dylib`または`<名前>/lib<名前>.dylib`を確認するため、`module.json`がなくても実行を止めません。カタログの版・更新判定にはmanifestが必要です。
 
@@ -28,7 +30,20 @@ YAYAは6系を既定で使います。`yaya.dll`・`aya.dll`・`aya5.dll`のバ�
 
 YAYA 6を初めて読み込む前に、`ghost/master/`直下の`*_variable.cfg`を`Utatane-YAYA-backup/`へコピーします。既存のバックアップは上書きしません。ゴースト独自の保存ファイルは別途バックアップしてください。
 
-5系は互換用として導入できます。使う場合は5系の`libyaya.dylib`を`ghost/master/`へ置き、`descript.txt`に`shiori.macos,libyaya.dylib`を指定してください。6系でハッシュや入れ子の変数を保存した後に5系へ戻すと、保存内容が崩れることがあります。Utataneを終了して、切り替え前の`*_variable.cfg`をバックアップから戻してから5系を使ってください。復元するとバックアップ後の進行状況は失われます。
+5系は互換用として導入できます。診断画面の「共通導入版」で`yaya`を選ぶか、5系の`libyaya.dylib`をファイルから選択できます。制作者による指定には`descript.txt`の`shiori.macos,libyaya.dylib`も利用できます。6系でハッシュや入れ子の変数を保存した後に5系へ戻すと、保存内容が崩れることがあります。Utataneを終了して、切り替え前の`*_variable.cfg`をバックアップから戻してから5系を使ってください。復元するとバックアップ後の進行状況は失われます。
+
+## ゴースト別のSHIORI選択
+
+ゴーストのメニューから「SHIORI読み込み診断…」を開き、対象ゴーストを選びます。「共通導入版」または「ファイルを選ぶ…」でmacOS用ライブラリを選び、必要に応じてSHIORIの種類を指定して「選択を保存」を押します。YAYA 5は`yaya`、YAYA 6は`yaya-6`です。ファイル名を変更したライブラリでは種類も明示できます。
+
+選択はアプリの設定へゴーストの設置先ごとに保存し、次回のSHIORI読み込みから適用します。「SHIORIを再読み込み」で起動中の主ゴースト・呼び出しゴーストへ適用できます。再読み込み時は変数を保存して現在のSHIORIを終了してから新しいSHIORIを起動します。失敗した場合は設定を修正して再読み込みで再試行できます。起動前のゴーストでは次回起動時に適用します。
+
+優先順はアプリの明示指定、ゴーストの`shiori.macos`、既存の自動判定です。自動判定では同梱ライブラリと共通導入版を探索し、環境変数による開発用指定も既存の規則で扱います。アプリの明示指定が消失した場合や、CPUの不一致・起動失敗がある場合は、その指定のエラーを表示します。「自動選択に戻す」でアプリ側の指定を解除できます。ゴーストの`descript.txt`は元の内容を維持します。
+
+YAYA 6の初回起動前には変数のバックアップを作成します。6系で保存した変数を5系へ戻す場合は、Utataneを終了し、切り替え前のバックアップを復元してから5系を起動してください。復元後の進行状況はバックアップ時点になります。
+
+
+SHIORIごとの実行方式や制約、開発者向けのビルド手順は、[Utatane Modulesの資料](https://github.com/opera7133/utatane-modules/blob/main/docs/native-shiori.md)を参照してください。
 
 ## 共通SAORIブリッジ
 
@@ -38,7 +53,7 @@ Utataneが提供するSAORIと対応する命令は、[共通SAORIブリッジ�
 
 ### 共通導入できるSAORI
 
-次の表は、このページで扱う主な共通SAORIです。`PlayWavSound`・`totp_saori`・`XPath`・`timebkn`は、0.2.19向けModulesで追加しました。本体0.2.19ではこれらの不足検出・導入案内にも対応します。
+主な共通SAORIと利用できる機能は次のとおりです。不足している場合は、ゴーストの起動時に導入方法を案内します。
 
 | モジュール | 対応内容 | 制限・補足 |
 | --- | --- | --- |
@@ -127,17 +142,43 @@ Utatane 0.2.17以降と次のModulesを組み合わせると、ゴーストへDL
 
 | モジュール| 対応関数 | 制限 |
 | --- | --- | --- |
-| `internal_system` | `ListModules`、`ListFunctions` | 対応しているモジュール・関数だけを返す |
+| `internal_system` | `ListModules`、`ListFunctions`、`Describe` | 対応しているモジュール・関数と、その呼び出し方だけを返す |
 | `internal_time` | `Format`、`Add`、`Diff` | エポック秒、ISO日時、HTTP IMF-fixdate。local・UTC・±18時間以内のオフセット・macOSのIANAゾーンに対応。Windows名は未対応 |
 | `internal_text` | `Normalize` | NFC、NFD、NFKC、NFKD |
 | `internal_random` | `Bytes`、`Number`、`UUID` | Bytesは1〜1024バイト、NumberはInt64の閉区間、UUIDはv4/v7 |
 | `internal_data` | `Convert`、`Compress`、`Decompress` | text、hex/HEX、base64/base64url、base32、url、bech32。圧縮・展開はgzip/zlib/deflate。brotli/zstdは未対応 |
 | `internal_file` | `MediaInfo`。0.2.20以降では`ImageInfo`、`IsImageLoadable`、`IsMediaLoadable`も対応 | 音声・画像・動画の種類とメタデータ、画像寸法、素材の読込可否。取得できる項目はmacOSの対応形式による |
-| `internal_crypto` | `Digest`、`HMAC`、`Compare` | Digestはmd5/sha1/sha256/sha384/sha512、HMACはsha256/sha384/sha512。dataのfile入力に対応。暗号化・鍵生成等は未対応 |
+| `internal_crypto` | `Digest`、`HMAC`、`Compare` | Digestはmd5/sha1/sha256/sha384/sha512/crc32/adler32、HMACはsha256/sha384/sha512。dataのfile入力に対応。暗号化・鍵生成等は未対応 |
 
 ### 呼び出し方法
 
 引数・返却値の基準は[UKADOCのSAORI over DirectSSTP](https://ssp.shillest.net/ukadoc/manual/spec_saori_ex.html)です。YAYAでは`FUNCTIONEX`または`LOADLIB`／`REQUESTLIB`、里々では`＠SAORI`による登録または`（internal_text、Normalize、NFKC、ｶﾞｲﾄﾞ）`のようなモジュール名の呼び出し、華和梨では`$(callsaori internal_text Normalize NFKC ｶﾞｲﾄﾞ)`を使えます。通常のSAORIでは、引き続きmacOS用モジュールが必要です。
+
+### 関数の呼び方を照会する
+
+`internal_system`の`Describe`へモジュール名と関数名を渡すと、Utataneで使える呼び出し方を返します。名前の大文字小文字は区別しません。未知のモジュールは`unknown module`、そのモジュールにない関数は`unknown function`です。
+
+```text
+Argument0: Describe
+Argument1: internal_crypto
+Argument2: Digest
+```
+
+`Result`は正規の関数名、`Value0`は位置引数の最大数、`Value1`は必須数、`Value2`は可変個なら`1`（固定なら`0`）、`Value3`は受け付けるオプション名のカンマ区切りです。`Value4`以降には`Argument1=md5|sha1|...`などの候補が入ります。位置引数の数は関数名の`Argument0`を含みません。形式名（`hex`等）や日時の書式名は候補に含めません。
+
+この例では最大数・必須数とも`2`、固定個、オプションは`data-in,out,charset,async`となり、アルゴリズム候補に`crc32`と`adler32`も入ります。未対応の暗号機能は候補に出しません。`internal_file`はメディア照会機能を備えるサービスでのみ一覧・照会に現れます。
+
+`MediaInfo`・`ImageInfo`はパスと1〜11個のキーを受け取ります。キーの列は最初の`--`で始まるオプションで終わるので、その後ろへキーを追加することはできません。日時`Format`の省略可能な書式を飛ばしてオプションを指定する場合は、空の位置引数を置きます。
+
+契約は[UKADOCのDescribe正本](https://github.com/ukatech/ukadoc-spec/blob/0fc56cb0551a56e6da2f1ec3f27864b0f91076b0/spec/saori-ex/internal_system/internal_system.Describe.md)に基づきます。
+
+### CRC32・Adler32の検査値
+
+`internal_crypto`の`Digest`へ`crc32`または`adler32`を指定できます。結果は上位から4バイトで、既定の`hex`では8文字です。例えば`123456789`のCRC32は`cbf43926`、Adler32は`091e01de`です。空入力はそれぞれ`00000000`、`00000001`になります。
+
+`--out=HEX`・`--out=base64`等の共通出力形式、`--charset=`による文字列のバイト変換、`--data-in=file`による大容量ファイルの逐次処理にも対応します。`--async=`も使えます。チェックサムは暗号用のハッシュではなく、HMACのアルゴリズムとしては使えません。
+
+出力と対応範囲は[UKADOCのDigest正本](https://github.com/ukatech/ukadoc-spec/blob/0fc56cb0551a56e6da2f1ec3f27864b0f91076b0/spec/saori-ex/internal_crypto/internal_crypto.Digest.md)を参照してください。
 
 ### 非同期通知
 
@@ -222,12 +263,12 @@ Diff / 2026-12-20T10:00 / 2026-12-24 / day / --tz=UTC
 
 既に起動しているセッションでも、その後の要求から切り替わります。独自SHIORIや、Wine内のWindows SHIORIが直接読み込むDLLの内部呼び出しは対象外です。状態`1`／`0`は読み込み・終了の成功／失敗、呼び出しはSAORI応答コードです。本体管理の外部接続の終了など、実際の状態コードを取得できない場合は`unknown`となります。
 
-### 検証範囲
+### 問題がある場合
 
-合成辞書と実ゴーストの一時コピーを使い、同期呼び出し・非同期通知・結果イベントの利用をテストしています。元の辞書・保存データは変更しません。各ゴーストの全機能や、両CPUの画面操作を保証するものではありません。
+呼び出し元のゴースト、選択したモジュール、状態コードを確認し、[トラブル対処](Troubleshooting.md)の手順で報告してください。非同期呼び出しでは、受付時と結果通知時の両方の記録が切り分けに役立ちます。
 
 ## メーター・システム情報の表示
 
-Utatane 0.2.18では、カラー合成と画像の切り抜きを使うメーター表示を改善しました。CPU・メモリ使用率と空き物理メモリの概算も取得できます。
+カラー合成や画像の切り抜きを使うメーター表示に対応しています。CPU・メモリ使用率と空き物理メモリの概算も取得できます。
 
 暦などのデータを外部サイトから取得する場合、表示にはゴースト側の対応も必要です。華和梨の`textload_charset`で文字コードを指定して読み込む辞書には、華和梨9.2.0以降を使用してください。9.1.0ではこの関数を利用できません。

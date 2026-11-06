@@ -76,6 +76,40 @@ struct SuspensionTests {
         #expect(clock.waitingCount == 0)
     }
 
+    @Test func `absolute active deadlines preserve partial delays across long suspension`() async throws {
+        var now = ContinuousClock.now
+        let clock = SuspensionClock(now: { now })
+        var timeline = PlaybackTimeline(startedAt: clock.elapsed)
+        let deadline = timeline.advance(by: .milliseconds(20), now: clock.elapsed)
+        now += .milliseconds(8)
+        clock.setSuspended(true)
+        var result: Bool?
+        let task = Task { result = await clock.sleep(until: deadline) }
+        defer { task.cancel(); clock.finish() }
+        try await requireEventually { clock.waitingCount == 1 }
+        now += .seconds(86400)
+        clock.setSuspended(false)
+        try await requireEventually { clock.timerCount == 1 }
+        #expect(clock.elapsed == .milliseconds(8))
+        #expect(result == nil)
+        now += .milliseconds(12)
+        clock.setSuspended(true)
+        clock.setSuspended(false)
+        await task.value
+        #expect(result == true)
+        #expect(clock.timerCount == 0)
+        #expect(timeline.advance(by: .milliseconds(20), now: clock.elapsed) == .milliseconds(40))
+    }
+
+    @Test func `cancellation and finish prevent an overdue deadline from advancing work`() async {
+        let clock = SuspensionClock()
+        let task = Task { await clock.sleep(until: .zero) }
+        task.cancel()
+        #expect(await task.value == false)
+        clock.finish()
+        #expect(await clock.sleep(until: .zero) == false)
+    }
+
     @Test func `suspended surface releases cache and resumes the same animation`() async throws {
         let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

@@ -2,9 +2,7 @@ import UtataneCore
 import UtataneRuntime
 import UtataneSakuraScript
 
-public protocol SakuraScriptTranslator: Sendable {
-    func translate(_ script: SakuraScript) -> SakuraScript
-}
+public typealias SakuraScriptTranslator = PersonalityScriptTranslator
 
 public struct TranslatingPersonalityEngine: PersonalityEngine {
     private let base: any PersonalityEngine
@@ -22,6 +20,10 @@ public struct TranslatingPersonalityEngine: PersonalityEngine {
     public func response(for event: GhostEvent) async throws -> PersonalityResponse {
         let response = try await base.response(for: event)
         return PersonalityResponse(script: response.script.map(translate), references: response.references)
+    }
+
+    public func updateRequestStatus(_ status: String) async {
+        await base.updateRequestStatus(status)
     }
 
     public func shutdown() async {

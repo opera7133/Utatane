@@ -681,6 +681,14 @@ func `anchor response interrupts and then resumes the script that contains it`()
         balloonWindowController: balloonController
     )
     let balloon = makeBalloon(directory: directory)
+    var anchorReady: CheckedContinuation<Void, Never>?
+    defer { anchorReady?.resume(); player.cancel() }
+    player.configurePlayback(characterDelayMilliseconds: 20, postDialogueDismissalMilliseconds: 60000)
+    player.onEmbeddedNotification = { id, _ in
+        if id == "AnchorReady" {
+            await withCheckedContinuation { anchorReady = $0 }
+        }
+    }
     player.onAnchorSelectEx = { _, _, _ in
         player.interrupt(
             with: SakuraScript(rawValue: #"\C\1アンカー応答\e"#),
@@ -690,16 +698,17 @@ func `anchor response interrupts and then resumes the script that contains it`()
     }
 
     player.play(
-        SakuraScript(rawValue: #"\0\_a[keyword,keyword,KW]語\_a後続のセリフが最後まで流れる\e"#),
+        SakuraScript(rawValue: #"\0\_a[keyword,keyword,KW]語\_a\![notify,AnchorReady]後続のセリフが最後まで流れる\e"#),
         balloon: balloon,
         characterDelayMilliseconds: 20
     )
     try await requireEventually {
-        balloonController.textAndLinks(for: 0)?.1.isEmpty == false
+        anchorReady != nil && balloonController.textAndLinks(for: 0)?.1.isEmpty == false
     }
     let link = try #require(balloonController.textAndLinks(for: 0)?.1.first)
     balloonController.onLinkActivate?(link, "語")
     balloonController.onLinkClick?(link.id, link.arguments)
+    anchorReady?.resume(); anchorReady = nil
     let expected = "語後続のセリフが最後まで流れる"
     try await requireEventually {
         balloonController.textAndLinks(for: 0)?.0 == expected

@@ -75,7 +75,8 @@ struct ModuleCatalogView: View {
     let mode: Mode
     var installedGhosts: [InstalledGhost] = []
     @Environment(\.dismissWindow) private var dismissWindow
-    @State private var catalog: SignedModuleCatalog?
+    @State private var source: (client: SignedModuleCatalogClient, catalog: SignedModuleCatalog)?
+    @State private var checkedIDs: Set<String> = []
     @State private var search = ""
     @State private var kind = "all"
     @State private var stateFilter = "all"
@@ -87,6 +88,10 @@ struct ModuleCatalogView: View {
     @State private var detailModule: SignedModuleCatalog.Module?
     @AppStorage(ModuleCatalogConfiguration.customIndexURLKey) private var customIndexURL = ""
     @AppStorage(ModuleCatalogConfiguration.customPublicKeyKey) private var customPublicKey = ""
+
+    private var catalog: SignedModuleCatalog? {
+        source?.catalog
+    }
 
     private var modules: [SignedModuleCatalog.Module] {
         (catalog?.modules ?? []).filter { module in
@@ -166,6 +171,10 @@ struct ModuleCatalogView: View {
                 }
             }
 
+            if mode == .catalog, catalog != nil {
+                batchControls(modules)
+            }
+
             if ModuleCatalogConfiguration.client == nil {
                 ContentUnavailableView("カタログを利用できない", systemImage: "network.slash",
                                        description: Text("配布先と署名鍵が設定されていない。"))
@@ -211,7 +220,7 @@ struct ModuleCatalogView: View {
             }
             HStack {
                 Button("再読み込み") { Task { await reload() } }
-                    .disabled(isLoading || ModuleCatalogConfiguration.client == nil)
+                    .disabled(isLoading || !installingIDs.isEmpty || ModuleCatalogConfiguration.client == nil)
                 Spacer()
                 if mode == .initialSelection {
                     Button(catalog == nil ? "導入済みのモジュールで続ける" : "選択したモジュールを導入") {
@@ -225,34 +234,88 @@ struct ModuleCatalogView: View {
         .padding(mode == .settings ? 0 : 22)
         .frame(minWidth: mode == .settings ? 0 : 650,
                minHeight: mode == .settings ? 300 : (mode == .initialSelection ? 480 : 540))
-        .task(id: customIndexURL + customPublicKey) { await reload() }
+        .task(id: [customIndexURL, customPublicKey]) {
+            checkedIDs.removeAll()
+            detailModule = nil
+            await reload()
+        }
         .onChange(of: installedGhosts.map(\.id)) { _, _ in selectInstalledGhostModules() }
         .onChange(of: installedGhosts, initial: true) { _, _ in
             selectInstalledGhostModules()
         }
         .sheet(item: $detailModule) { module in
-            ModuleCatalogDetailView(module: module, indexURL: ModuleCatalogConfiguration.client?.indexURL) {
+            ModuleCatalogDetailView(module: module, indexURL: source?.client.indexURL, isInstalling: !installingIDs.isEmpty) {
                 detailModule = nil
                 Task { await install(module.id) }
             }
         }
     }
 
+    private func batchControls(_ visible: [SignedModuleCatalog.Module]) -> some View {
+        let eligible = visible.filter { canBatchInstall($0, state: ModuleCatalogInventory().state(for: $0)) }
+        let checked = eligible.filter { checkedIDs.contains($0.id) }
+        let visibleIDs = Set(eligible.map(\.id))
+        return HStack {
+            Text("チェックした項目（表示中）")
+            Text(checked.count, format: .number)
+            Spacer()
+            if !installingIDs.isEmpty {
+                ProgressView().controlSize(.small)
+                Text("導入中…")
+            }
+            Menu("一括操作") {
+                Button("表示中の対象をすべてチェック") { checkedIDs.formUnion(visibleIDs) }
+                    .disabled(checked.count == eligible.count)
+                Button("表示中のチェックを解除") { checkedIDs.subtract(visibleIDs) }
+                    .disabled(checked.isEmpty)
+                Divider()
+                Menu("チェックした項目（表示中）") { batchActions(checked) }
+                    .disabled(checked.isEmpty)
+                Menu("表示中の全項目") { batchActions(eligible) }
+                    .disabled(eligible.isEmpty)
+            }
+            .fixedSize()
+            .disabled(isLoading || !installingIDs.isEmpty || eligible.isEmpty)
+        }
+    }
+
+    private func batchActions(_ modules: [SignedModuleCatalog.Module]) -> some View {
+        let inventory = ModuleCatalogInventory()
+        let downloads = modules.filter { inventory.state(for: $0) == .notInstalled }.map(\.id)
+        let updates = modules.filter { inventory.state(for: $0) == .updateAvailable }.map(\.id)
+        return Group {
+            Button("一括ダウンロード") { Task { await installBatch(downloads) } }
+                .disabled(downloads.isEmpty)
+            Button("一括更新") { Task { await installBatch(updates) } }
+                .disabled(updates.isEmpty)
+        }
+    }
+
+    private func canBatchInstall(_ module: SignedModuleCatalog.Module, state: ModuleCatalogState) -> Bool {
+        (module.kinds == ["shiori"] || module.kinds == ["saori"]) && (state == .notInstalled || state == .updateAvailable)
+    }
+
     private func moduleRow(_ module: SignedModuleCatalog.Module) -> some View {
-        HStack(spacing: 14) {
-            if mode == .initialSelection {
+        let state = ModuleCatalogInventory().state(for: module)
+        return HStack(spacing: 14) {
+            if mode == .catalog || mode == .initialSelection {
+                let isSetup = mode == .initialSelection
+                let selection = isSetup ? $selectedIDs : $checkedIDs
                 Toggle(isOn: Binding(
-                    get: { selectedIDs.contains(module.id) },
+                    get: { selection.wrappedValue.contains(module.id) },
                     set: { enabled in
                         if enabled {
-                            selectedIDs.insert(module.id)
+                            selection.wrappedValue.insert(module.id)
                         } else {
-                            selectedIDs.remove(module.id)
+                            selection.wrappedValue.remove(module.id)
                         }
                     }
-                )) { EmptyView() }
+                )) { Text(module.displayName) }
+                    .toggleStyle(.checkbox)
                     .labelsHidden()
-                    .disabled(module.id == "yaya-6" || module.id == "satori")
+                    .disabled(!installingIDs.isEmpty || (isSetup
+                            ? module.id == "yaya-6" || module.id == "satori"
+                            : !canBatchInstall(module, state: state)))
             }
             VStack(alignment: .leading, spacing: 3) {
                 Button(module.displayName) { detailModule = module }
@@ -275,9 +338,9 @@ struct ModuleCatalogView: View {
                 }
             }
             Spacer()
-            Text(stateTitle(ModuleCatalogInventory().state(for: module)))
+            Text(stateTitle(state))
                 .font(.caption.weight(.medium))
-                .foregroundStyle(ModuleCatalogInventory().state(for: module) == .updateAvailable
+                .foregroundStyle(state == .updateAvailable
                     ? Color.orange : Color.secondary)
             Button { detailModule = module } label: {
                 Image(systemName: "info.circle")
@@ -285,12 +348,11 @@ struct ModuleCatalogView: View {
             .buttonStyle(.borderless)
             .help("詳細を表示")
             if mode != .initialSelection {
-                let state = ModuleCatalogInventory().state(for: module)
                 if state == .notInstalled || state == .updateAvailable {
                     Button(installingIDs.contains(module.id) ? "導入中…" : installedLabel(state)) {
                         Task { await install(module.id) }
                     }
-                    .disabled(installingIDs.contains(module.id))
+                    .disabled(!installingIDs.isEmpty)
                 }
             }
         }
@@ -318,17 +380,25 @@ struct ModuleCatalogView: View {
     }
 
     private func reload() async {
-        guard let client = ModuleCatalogConfiguration.client else { return }
         isLoading = true
-        catalog = nil
+        source = nil
         successMessage = nil
-        defer { isLoading = false }
+        defer {
+            if !Task.isCancelled {
+                isLoading = false
+            }
+        }
+        guard let client = ModuleCatalogConfiguration.client else { return }
         do {
-            catalog = try await client.fetch()
+            let catalog = try await client.fetch()
+            try Task.checkCancellation()
+            source = (client, catalog)
             selectInstalledGhostModules()
             errorMessage = nil
         } catch {
-            errorMessage = ModuleCatalogFailureMessage.describe(error)
+            if !Task.isCancelled {
+                errorMessage = ModuleCatalogFailureMessage.describe(error)
+            }
         }
     }
 
@@ -354,15 +424,39 @@ struct ModuleCatalogView: View {
     }
 
     private func install(_ id: String) async {
-        guard let client = ModuleCatalogConfiguration.client else { return }
-        installingIDs.insert(id)
-        defer { installingIDs.remove(id) }
+        await performInstall([id]) { manager, catalog in
+            _ = try await manager.install(moduleID: id, catalog: catalog)
+        }
+    }
+
+    private func installBatch(_ ids: [String]) async {
+        await performInstall(ids) { manager, catalog in
+            _ = try await manager.install(moduleIDs: ids, catalog: catalog)
+        }
+    }
+
+    private func performInstall(
+        _ ids: [String],
+        operation: (ModuleCatalogManager, SignedModuleCatalog) async throws -> Void
+    ) async {
+        guard !ids.isEmpty, installingIDs.isEmpty, !isLoading, let source else { return }
+        installingIDs = Set(ids)
+        errorMessage = nil
+        successMessage = nil
+        defer {
+            // Keep any failed or unprocessed items checked so the batch can be retried.
+            let inventory = ModuleCatalogInventory()
+            checkedIDs.subtract(source.catalog.modules.filter {
+                installingIDs.contains($0.id) && inventory.state(for: $0) == .current
+            }.map(\.id))
+            installingIDs.removeAll()
+        }
         do {
-            _ = try await ModuleCatalogManager(client: client).install(moduleID: id)
-            errorMessage = nil
+            try await operation(ModuleCatalogManager(client: source.client), source.catalog)
             successMessage = String(localized: "導入した。共通版を使用中のゴーストは再読み込みすると反映される。ゴースト同梱版は優先される。")
         } catch {
-            errorMessage = "\(id): \(ModuleCatalogFailureMessage.describe(error))"
+            let message = ModuleCatalogFailureMessage.describe(error)
+            errorMessage = ids.count == 1 && !(error is ModuleBatchInstallFailure) ? "\(ids[0]): \(message)" : message
         }
     }
 
@@ -493,6 +587,7 @@ struct ModuleCatalogSourceSettingsView: View {
 private struct ModuleCatalogDetailView: View {
     let module: SignedModuleCatalog.Module
     let indexURL: URL?
+    let isInstalling: Bool
     let onInstall: () -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -531,6 +626,7 @@ private struct ModuleCatalogDetailView: View {
                         onInstall()
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(isInstalling)
                 } else if state == .unsupportedPlatform {
                     Text("このMacでは利用不可").foregroundStyle(.secondary)
                 }

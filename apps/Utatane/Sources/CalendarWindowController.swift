@@ -287,6 +287,19 @@ final class CalendarWindowController: NSWindowController, ObservableObject {
         storeURL.deletingLastPathComponent().appending(path: "Subscriptions")
     }
 
+    func subscribe(from calendarURL: URL) async throws {
+        let name = calendarURL.host ?? calendarURL.absoluteString
+        onCalendarEvent?("OnSchedulesenseBegin", [0: name, 1: calendarURL.absoluteString])
+        do {
+            let url = try CalendarSubscriptionURL.normalized(calendarURL)
+            let data = try await NetworkFetchClient(maximumBytes: 4 * 1024 * 1024).fetch(url)
+            try subscribe(url: url, data: data)
+        } catch {
+            onCalendarEvent?("OnSchedulesenseFailure", [0: error.localizedDescription, 1: name])
+            throw error
+        }
+    }
+
     func subscribe(url: URL, data: Data) throws {
         guard let source = String(data: data, encoding: .utf8) else { throw CocoaError(.fileReadCorruptFile) }
         var imported = try ICalendarCodec().decode(source)

@@ -148,8 +148,18 @@ import Testing
 
     #expect(model.selectedEntry == nil)
     #expect(model.selectedEntries == [first, second, noUpdate])
-    #expect(model.selectedUpdateEntries == [first, second])
-    #expect(model.visibleUpdateEntries == [first, second])
+    #expect(model.visibleBatchEntries == [first, second])
+    #expect(model.checkedBatchEntries.isEmpty)
+
+    model.checkedIDs = [second.id, first.id]
+    model.selection = [noUpdate.id]
+    #expect(model.checkedBatchEntries == [first, second])
+    model.searchText = "First"
+    #expect(model.checkedBatchEntries == [first])
+    model.searchText = ""
+    #expect(model.checkedBatchEntries == [first, second])
+    model.update(entries: [first, noUpdate])
+    #expect(model.checkedIDs == [first.id])
 }
 
 @MainActor
@@ -169,4 +179,20 @@ import Testing
 
     #expect(model.validationReports[entry.id]?.errorCount == 1)
     #expect(!model.validatingEntryIDs.contains(entry.id))
+}
+
+@Test @MainActor func `removable local content participates in checked batches without update support`() {
+    let removable = ContentExplorerEntry(kind: .ghost, name: "Local", directory: URL(filePath: "/tmp/Ghosts/local"), removalContainer: URL(filePath: "/tmp/Ghosts"), canUpdate: false)
+    let protected = ContentExplorerEntry(kind: .ghost, name: "Bundled", directory: URL(filePath: "/tmp/Bundled/ghost"), canUpdate: false)
+    let hidden = ContentExplorerEntry(kind: .balloon, name: "Balloon", directory: URL(filePath: "/tmp/Balloons/a"), removalContainer: URL(filePath: "/tmp/Balloons"))
+    let model = ContentExplorerModel()
+    model.update(entries: [removable, protected, hidden], preferredKind: .ghost)
+    model.checkedIDs = [removable.id, protected.id, hidden.id]
+    #expect(model.visibleBatchEntries == [removable])
+    #expect(model.checkedBatchEntries == [removable])
+    model.searchText = "Bundled"
+    #expect(model.checkedBatchEntries.isEmpty)
+    model.searchText = ""
+    model.update(entries: [protected, hidden])
+    #expect(!model.checkedIDs.contains(removable.id))
 }

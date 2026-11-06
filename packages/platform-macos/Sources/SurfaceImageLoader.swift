@@ -125,15 +125,29 @@ struct SurfaceImageLoader {
     /// another full surface for every meter, digit or animation layer.
     func composite(base: NSImage, layers: [CompositeLayer]) -> NSImage {
         guard !layers.isEmpty else { return base }
-        guard frameCount(of: base) == 1, layers.allSatisfy({
-            !$0.clipsToBaseAlpha && [.sourceOver, .destinationOver, .copy].contains($0.operation) && frameCount(of: $0.image) == 1
-        }) else {
+        guard frameCount(of: base) == 1, layers.allSatisfy({ frameCount(of: $0.image) == 1 }) else {
             return layers.reduce(base) { image, layer in
                 composite(base: image, overlay: layer.image, x: layer.x, y: layer.y,
                           operation: layer.operation, clipsToBaseAlpha: layer.clipsToBaseAlpha)
             }
         }
-        return rasterizedImage(size: base.size) {
+        var result = base
+        var start = layers.startIndex
+        for index in layers.indices {
+            let layer = layers[index]
+            guard layer.clipsToBaseAlpha || ![NSCompositingOperation.sourceOver, .destinationOver, .copy].contains(layer.operation) else { continue }
+            if start < index {
+                result = compositeStatic(base: result, layers: layers[start ..< index])
+            }
+            result = composite(base: result, overlay: layer.image, x: layer.x, y: layer.y,
+                               operation: layer.operation, clipsToBaseAlpha: layer.clipsToBaseAlpha)
+            start = index + 1
+        }
+        return start < layers.endIndex ? compositeStatic(base: result, layers: layers[start...]) : result
+    }
+
+    private func compositeStatic(base: NSImage, layers: ArraySlice<CompositeLayer>) -> NSImage {
+        rasterizedImage(size: base.size) {
             base.draw(in: NSRect(origin: .zero, size: base.size))
             for layer in layers {
                 layer.image.draw(in: NSRect(x: CGFloat(layer.x), y: base.size.height - CGFloat(layer.y) - layer.image.size.height,

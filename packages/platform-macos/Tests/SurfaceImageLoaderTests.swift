@@ -588,3 +588,40 @@ func `fast color effects preserve the holes used by interpolated meters`() throw
     let empty = loader.applyingDrawingOptions(to: source, clipping: SurfaceRect(left: 5, top: 0, right: 6, bottom: 1), alpha: 255)
     #expect(empty.colorAtCenter()?.alphaComponent == 0)
 }
+
+@Test @MainActor func `batched overlay runs preserve clipped blend order and transparent holes`() throws {
+    func image(_ color: NSColor, width: Int = 4) throws -> NSImage {
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: width, pixelsHigh: 4, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: width * 4, bitsPerPixel: 32))
+        for y in 0 ..< 4 {
+            for x in 0 ..< width {
+                bitmap.setColor(color, atX: x, y: y)
+            }
+        }
+        let result = NSImage(size: NSSize(width: width, height: 4)); result.addRepresentation(bitmap); return result
+    }
+    let base = try image(.clear)
+    let layers: [SurfaceImageLoader.CompositeLayer] = try [
+        .init(image: image(.red, width: 2), x: 0, y: 0, operation: .sourceOver, clipsToBaseAlpha: false),
+        .init(image: image(.green, width: 1), x: 1, y: 0, operation: .sourceOver, clipsToBaseAlpha: false),
+        .init(image: image(.gray), x: 0, y: 0, operation: .darken, clipsToBaseAlpha: true),
+        .init(image: image(.blue, width: 1), x: 0, y: 0, operation: .sourceOver, clipsToBaseAlpha: false),
+        .init(image: image(.white, width: 1), x: 1, y: 0, operation: .destinationOver, clipsToBaseAlpha: false)
+    ]
+    let loader = SurfaceImageLoader()
+    let expected = layers.reduce(base) { loader.composite(base: $0, overlay: $1.image, x: $1.x, y: $1.y, operation: $1.operation, clipsToBaseAlpha: $1.clipsToBaseAlpha) }
+    let actual = loader.composite(base: base, layers: layers)
+    let actualData = try #require(actual.tiffRepresentation)
+    let expectedData = try #require(expected.tiffRepresentation)
+    let a = try #require(NSBitmapImageRep(data: actualData))
+    let b = try #require(NSBitmapImageRep(data: expectedData))
+    for y in 0 ..< 4 {
+        for x in 0 ..< 4 {
+            let first = try #require(a.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+            let second = try #require(b.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+            #expect(abs(first.alphaComponent - second.alphaComponent) < 0.01)
+            #expect(abs(first.redComponent - second.redComponent) < 0.01)
+            #expect(abs(first.greenComponent - second.greenComponent) < 0.01)
+            #expect(abs(first.blueComponent - second.blueComponent) < 0.01)
+        }
+    }
+}

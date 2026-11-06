@@ -219,6 +219,10 @@ public final class SurfaceWindowController {
     }
 
     /// Cache suspension is independent of fullscreen/startup visibility.
+    func cachedRegionBytes(scope: Int) -> Int {
+        characters[scope]?.cachedRegionBytes ?? 0
+    }
+
     func cachedImageCount(scope: Int) -> Int {
         characters[scope]?.cachedImageCount ?? 0
     }
@@ -1322,14 +1326,34 @@ private final class CharacterSurfaceController {
     private var nijigenerateDragValue = (x: 0.0, y: 0.0)
     private var nijigenerateReactionParameters: [String: Double] = [:]
     private var nijigenerateParameterValues: [String: Double] = [:]
-    private var shell: ShellDefinition?
-    private var baseSurfaceID: Int?
+    private var shell: ShellDefinition? {
+        didSet { rebuildAnimationIndex() }
+    }
+
+    private var baseSurfaceID: Int? {
+        didSet { rebuildAnimationIndex() }
+    }
+
+    private var animationsByID: [Int: SurfaceAnimation] = [:]
+    private var exclusiveAnimations: [SurfaceAnimation] = []
+
+    private func rebuildAnimationIndex() {
+        let animations = currentSurfaceDefinition?.animations ?? []
+        animationsByID = Dictionary(animations.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        exclusiveAnimations = animations.filter { isExclusive($0) }
+    }
+
     private var surfaceBaseImage: NSImage?
     private var baseImage: NSImage?
     private let renderedLayerCache = SurfaceImageCache()
     private let animationClock = SuspensionClock()
+    private var animationFrameClocks: [Int: SuspensionClock] = [:]
     var cachedImageCount: Int {
         renderedLayerCache.count
+    }
+
+    var cachedRegionBytes: Int {
+        imageView?.cachedRegionBytes ?? 0
     }
 
     private var persistentAnimationLayers: [Int: PersistentAnimationLayer] = [:]
@@ -1864,10 +1888,12 @@ private final class CharacterSurfaceController {
     func pauseAnimation(id: Int) {
         guard animationTasks[id] != nil else { return }
         pausedAnimationIDs.insert(id)
+        animationFrameClocks[id]?.setSuspended(true)
     }
 
     func resumeAnimation(id: Int) {
         pausedAnimationIDs.remove(id)
+        animationFrameClocks[id]?.setSuspended(animationClock.isSuspended)
     }
 
     func waitForAnimation(id: Int) async {
@@ -1953,6 +1979,7 @@ private final class CharacterSurfaceController {
             let id = UUID()
             scriptAnimationTasks[id] = Task { [weak self] in
                 guard let self else { return }
+                var timeline = PlaybackTimeline(startedAt: animationClock.elapsed)
                 repeat {
                     for frame in frames {
                         guard await animationClock.waitUntilActive() else { return }
@@ -1970,7 +1997,8 @@ private final class CharacterSurfaceController {
                             clipsToBaseAlpha: method == "overlayfast"
                         )
                         redrawActiveAnimationFrames()
-                        guard await animationClock.sleep(for: .milliseconds(max(1, frame.durationMilliseconds))) else { return }
+                        let deadline = timeline.advance(by: .milliseconds(max(1, frame.durationMilliseconds)), now: animationClock.elapsed)
+                        guard await animationClock.sleep(until: deadline) else { return }
                     }
                 } while repeats && !Task.isCancelled
                 scriptAnimationTasks[id] = nil
@@ -2003,7 +2031,7 @@ private final class CharacterSurfaceController {
         id: Int,
         minimumFrameDurationMilliseconds: Int
     ) -> Task<Void, Never>? {
-        guard let animation = currentSurfaceDefinition?.animations.first(where: { $0.id == id }) else {
+        guard let animation = animationsByID[id] else {
             return nil
         }
         guard !isBlockedByExclusiveAnimation(id) else { return nil }
@@ -2014,6 +2042,10 @@ private final class CharacterSurfaceController {
             }
         }
         animationTasks[id]?.cancel()
+        animationFrameClocks[id]?.finish()
+        let frameClock = SuspensionClock()
+        frameClock.setSuspended(animationClock.isSuspended || pausedAnimationIDs.contains(id))
+        animationFrameClocks[id] = frameClock
         animationOwners[id] = nil
         animationBaseExclusions[id] = nil
         activeAnimationScales[id] = nil
@@ -2029,20 +2061,23 @@ private final class CharacterSurfaceController {
             await run(
                 animation,
                 minimumFrameDurationMilliseconds: minimumFrameDurationMilliseconds,
-                excludedAnimationIDs: excludedAnimationIDs
+                excludedAnimationIDs: excludedAnimationIDs,
+                frameClock: frameClock
             )
             guard animationGenerations[id] == generation else { return }
             activeAnimationFrames[id] = nil
             animationBaseExclusions[id] = nil
             activeAnimationScales[id] = nil
             activeAnimationPatternOrders[id] = nil
+            frameClock.finish()
+            animationFrameClocks[id] = nil
             animationTasks[id] = nil
             animationOwners[id] = nil
             animationGenerations[id] = nil
             if currentAnimationID == id {
                 currentAnimationID = animationTasks.keys.sorted().last
             }
-            redrawActiveAnimationFrames()
+            scheduleAnimationRedraw()
             refreshAnimationScale()
         }
         animationTasks[id] = task
@@ -2151,7 +2186,7 @@ private final class CharacterSurfaceController {
     private func applyInstantPersistentAnimation(id: Int) -> Bool {
         guard let shell,
               surfaceBaseImage != nil,
-              let animation = currentSurfaceDefinition?.animations.first(where: { $0.id == id }),
+              let animation = animationsByID[id],
               animation.patterns.count == 1,
               let pattern = animation.patterns.first,
               pattern.waitMilliseconds == 0,
@@ -2210,6 +2245,10 @@ private final class CharacterSurfaceController {
             task.cancel()
         }
         animationTasks.removeAll()
+        for clock in animationFrameClocks.values {
+            clock.finish()
+        }
+        animationFrameClocks.removeAll()
         animationGenerations.removeAll()
         animationOwners.removeAll()
         activeAnimationFrames.removeAll()
@@ -2377,6 +2416,10 @@ private final class CharacterSurfaceController {
 
     func setSuspended(_ suspended: Bool) {
         animationClock.setSuspended(suspended)
+        imageView?.setRegionCacheSuspended(suspended)
+        for (id, clock) in animationFrameClocks {
+            clock.setSuspended(suspended || pausedAnimationIDs.contains(id))
+        }
         if suspended {
             imageView?.cancelDrag()
             renderedLayerCache.removeAll()
@@ -2690,6 +2733,7 @@ private final class CharacterSurfaceController {
         let frameCount = max(1, max(0, drag.restoreMilliseconds) / 16)
         nijigenerateDragTask = Task { [weak self] in
             guard let self else { return }
+            var timeline = PlaybackTimeline(startedAt: animationClock.elapsed)
             for frame in 1 ... frameCount {
                 guard !Task.isCancelled else { return }
                 let remaining = 1 - Double(frame) / Double(frameCount)
@@ -2697,7 +2741,8 @@ private final class CharacterSurfaceController {
                 nijigenerateDragValue = value
                 _ = setNijigenerateParameter(drag.parameter, valueX: value.x, valueY: value.y)
                 if frame < frameCount {
-                    guard await animationClock.sleep(for: .milliseconds(16)) else { return }
+                    let deadline = timeline.advance(by: .milliseconds(16), now: animationClock.elapsed)
+                    guard await animationClock.sleep(until: deadline) else { return }
                 }
             }
             guard !Task.isCancelled else { return }
@@ -2725,6 +2770,7 @@ private final class CharacterSurfaceController {
             .merging(nijigenerateParameterValues) { _, current in current }
         let duration = max(0, durationMilliseconds)
         let frameCount = max(1, duration / 16)
+        var timeline = PlaybackTimeline(startedAt: animationClock.elapsed)
         for frame in 1 ... frameCount {
             guard !Task.isCancelled else { return }
             let progress = Double(frame) / Double(frameCount)
@@ -2737,7 +2783,8 @@ private final class CharacterSurfaceController {
                 _ = setNijigenerateParameter(name, valueX: value, valueY: 0)
             }
             if frame < frameCount {
-                guard await animationClock.sleep(for: .milliseconds(16)) else { return }
+                let deadline = timeline.advance(by: .milliseconds(16), now: animationClock.elapsed)
+                guard await animationClock.sleep(until: deadline) else { return }
             }
         }
     }
@@ -2913,6 +2960,7 @@ private final class CharacterSurfaceController {
         imageView.cursorDefinitions = shell.cursorDefinitions[scope] ?? []
         imageView.tooltipDefinitions = shell.tooltips[scope] ?? [:]
         imageView.shellDirectory = shell.directory
+        imageView.setRegionCacheSuspended(animationClock.isSuspended)
         imageView.setCollisionMode(collisionMode.enabled, showsNames: collisionMode.showsNames)
         imageView.onMouseClick = { [weak self] region in
             self?.onMouseClick?(region)
@@ -3284,9 +3332,14 @@ private final class CharacterSurfaceController {
 
         schedulerTask = Task { [weak self] in
             var elapsedSeconds: [Int: Int] = [:]
+            guard let clock = self?.animationClock else { return }
+            var deadline = clock.elapsed + .seconds(1)
             while !Task.isCancelled {
-                guard let clock = self?.animationClock, await clock.sleep(for: .seconds(1)),
-                      let self else { return }
+                guard await clock.sleep(until: deadline), let self else { return }
+                deadline += .seconds(1)
+                if deadline < clock.elapsed {
+                    deadline = clock.elapsed + .seconds(1)
+                }
                 let ready = animations.filter { animation in
                     let components = Set((animation.interval ?? "").lowercased().split(separator: "+").map(String.init))
                     elapsedSeconds[animation.id, default: 0] += 1
@@ -3334,7 +3387,8 @@ private final class CharacterSurfaceController {
     private func run(
         _ animation: SurfaceAnimation,
         minimumFrameDurationMilliseconds: Int = 0,
-        excludedAnimationIDs: Set<Int>
+        excludedAnimationIDs: Set<Int>,
+        frameClock: SuspensionClock
     ) async {
         guard !Task.isCancelled, let shell,
               imageView != nil
@@ -3348,8 +3402,9 @@ private final class CharacterSurfaceController {
         } else {
             animation.patterns
         }
+        var timeline = PlaybackTimeline(startedAt: frameClock.elapsed)
         for pattern in patterns {
-            guard await animationClock.waitUntilActive() else { return }
+            guard await frameClock.waitUntilActive() else { return }
             activeAnimationPatternOrders[animation.id] = pattern.order
             let offset = animationOffsets[animation.id] ?? SurfacePoint(x: 0, y: 0)
             let method = pattern.method.lowercased()
@@ -3357,7 +3412,8 @@ private final class CharacterSurfaceController {
             if method == "import", let fileName = pattern.fileName {
                 guard await waitForAnimationFrame(
                     milliseconds: max(pattern.waitMilliseconds, minimumFrameDurationMilliseconds),
-                    animationID: animation.id
+                    clock: frameClock,
+                    timeline: &timeline
                 ) else { return }
                 do {
                     let url = try shellLoader.loadAnimation(filename: fileName, from: shell.directory)
@@ -3370,9 +3426,12 @@ private final class CharacterSurfaceController {
                         clipsToBaseAlpha: false
                     ))
                     scheduleAnimationRedraw()
+                    // Imported media must retain its full playback duration after decoding.
+                    timeline = PlaybackTimeline(startedAt: frameClock.elapsed)
                     guard await waitForAnimationFrame(
                         milliseconds: imported.durationMilliseconds,
-                        animationID: animation.id
+                        clock: frameClock,
+                        timeline: &timeline
                     ) else { return }
                     activeAnimationFrames[animation.id] = nil
                     scheduleAnimationRedraw()
@@ -3447,28 +3506,18 @@ private final class CharacterSurfaceController {
 
             guard await waitForAnimationFrame(
                 milliseconds: max(pattern.waitMilliseconds, minimumFrameDurationMilliseconds),
-                animationID: animation.id
+                clock: frameClock,
+                timeline: &timeline
             ) else { return }
         }
     }
 
-    private func waitForAnimationFrame(milliseconds: Int, animationID: Int) async -> Bool {
-        var remainingMilliseconds = milliseconds
-        while remainingMilliseconds > 0 {
-            guard await animationClock.waitUntilActive() else { return false }
-            if pausedAnimationIDs.contains(animationID) {
-                do {
-                    try await Task.sleep(for: .milliseconds(20))
-                } catch {
-                    return false
-                }
-                continue
-            }
-            let interval = min(remainingMilliseconds, 20)
-            guard await animationClock.sleep(for: .milliseconds(interval)) else { return false }
-            remainingMilliseconds -= interval
-        }
-        return await animationClock.waitUntilActive()
+    private func waitForAnimationFrame(milliseconds: Int, clock: SuspensionClock,
+                                       timeline: inout PlaybackTimeline) async -> Bool
+    {
+        guard milliseconds > 0 else { return await clock.waitUntilActive() }
+        let deadline = timeline.advance(by: .milliseconds(milliseconds), now: clock.elapsed)
+        return await clock.sleep(until: deadline)
     }
 
     private func startControlledAnimations(_ ids: some Sequence<Int>, sourceID: Int) {
@@ -3483,11 +3532,8 @@ private final class CharacterSurfaceController {
     }
 
     private func isBlockedByExclusiveAnimation(_ animationID: Int) -> Bool {
-        animationTasks.keys.contains { activeID in
-            guard activeID != animationID,
-                  let active = currentSurfaceDefinition?.animations.first(where: { $0.id == activeID }),
-                  isExclusive(active)
-            else { return false }
+        exclusiveAnimations.contains { active in
+            guard active.id != animationID, animationTasks[active.id] != nil else { return false }
             return active.exclusiveAnimationIDs?.contains(animationID) ?? true
         }
     }
@@ -3619,8 +3665,7 @@ private final class SurfaceImageView: NSImageView {
     var shellDirectory: URL? {
         didSet {
             guard shellDirectory != oldValue else { return }
-            regionBitmapCache.removeAll()
-            missingRegionURLs.removeAll()
+            regionMaskCache.removeAll()
         }
     }
 
@@ -3662,8 +3707,15 @@ private final class SurfaceImageView: NSImageView {
     }
 
     private var collisionMode = (enabled: false, showsNames: true)
-    private var regionBitmapCache: [URL: NSBitmapImageRep] = [:]
-    private var missingRegionURLs: Set<URL> = []
+    private let regionMaskCache = SurfaceRegionMaskCache()
+    var cachedRegionBytes: Int {
+        regionMaskCache.estimatedBytes
+    }
+
+    func setRegionCacheSuspended(_ suspended: Bool) {
+        regionMaskCache.setSuspended(suspended)
+    }
+
     private var hoveredRegion: String?
     private var lastStrokePoint: NSPoint?
     private var lastStrokeRegion: String?
@@ -3769,10 +3821,8 @@ private final class SurfaceImageView: NSImageView {
 
     private func collisionPath(_ collision: SurfaceCollision) -> NSBezierPath {
         if case let .region(filename, red, green, blue, inverted) = collision.shape,
-           let bitmap = regionBitmap(filename: filename),
-           let bounds = regionPixelBounds(
-               bitmap: bitmap, red: red, green: green, blue: blue, inverted: inverted
-           )
+           let mask = regionMask(filename: filename, red: red, green: green, blue: blue),
+           let bounds = mask.bounds(inverted: inverted)
         {
             let first = collisionPoint(x: bounds.minX, y: bounds.minY)
             let second = collisionPoint(x: bounds.maxX + 1, y: bounds.maxY + 1)
@@ -4097,10 +4147,7 @@ private final class SurfaceImageView: NSImageView {
     }
 
     private func webURL(from draggingInfo: any NSDraggingInfo) -> URL? {
-        guard let value = draggingInfo.draggingPasteboard.string(forType: .URL),
-              let url = URL(string: value), !url.isFileURL
-        else { return nil }
-        return url
+        SurfaceDropPayload.webURL(from: draggingInfo.draggingPasteboard)
     }
 
     private func droppedText(from draggingInfo: any NSDraggingInfo) -> String? {
@@ -4299,14 +4346,11 @@ private final class SurfaceImageView: NSImageView {
         guard case let .region(filename, red, green, blue, inverted) = collision.shape else {
             return collision.contains(x: x, y: y)
         }
-        guard let bitmap = regionBitmap(filename: filename),
-              x >= 0, y >= 0, x < bitmap.pixelsWide, y < bitmap.pixelsHigh
-        else { return false }
-        let matches = pixel(bitmap, x: x, y: y, matchesRed: red, green: green, blue: blue)
-        return inverted ? !matches : matches
+        return regionMask(filename: filename, red: red, green: green, blue: blue)?
+            .contains(x: x, y: y, inverted: inverted) ?? false
     }
 
-    private func regionBitmap(filename: String) -> NSBitmapImageRep? {
+    private func regionMask(filename: String, red: Int, green: Int, blue: Int) -> SurfaceRegionMask? {
         guard let shellDirectory else { return nil }
         let normalized = filename
             .replacingOccurrences(of: "\\", with: "/")
@@ -4315,81 +4359,7 @@ private final class SurfaceImageView: NSImageView {
         let url = shellDirectory.appending(path: normalized, directoryHint: .notDirectory)
             .standardizedFileURL.resolvingSymlinksInPath()
         guard url.path.hasPrefix(root.path + "/") else { return nil }
-        if let cached = regionBitmapCache[url] {
-            return cached
-        }
-        guard !missingRegionURLs.contains(url),
-              let data = try? Data(contentsOf: url),
-              let image = NSImage(data: data),
-              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
-        else {
-            missingRegionURLs.insert(url)
-            return nil
-        }
-        guard let bitmap = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: cgImage.width,
-            pixelsHigh: cgImage.height,
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bitmapFormat: [],
-            bytesPerRow: cgImage.width * 4,
-            bitsPerPixel: 32
-        ), let context = NSGraphicsContext(bitmapImageRep: bitmap)
-        else {
-            missingRegionURLs.insert(url)
-            return nil
-        }
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height)).draw(
-            in: NSRect(x: 0, y: 0, width: cgImage.width, height: cgImage.height)
-        )
-        context.flushGraphics()
-        NSGraphicsContext.restoreGraphicsState()
-        bitmap.size = NSSize(width: cgImage.width, height: cgImage.height)
-        regionBitmapCache[url] = bitmap
-        return bitmap
-    }
-
-    private func regionPixelBounds(
-        bitmap: NSBitmapImageRep,
-        red: Int,
-        green: Int,
-        blue: Int,
-        inverted: Bool
-    ) -> (minX: Int, minY: Int, maxX: Int, maxY: Int)? {
-        var result: (minX: Int, minY: Int, maxX: Int, maxY: Int)?
-        for y in 0 ..< bitmap.pixelsHigh {
-            for x in 0 ..< bitmap.pixelsWide {
-                let matches = pixel(bitmap, x: x, y: y, matchesRed: red, green: green, blue: blue)
-                guard inverted ? !matches : matches else { continue }
-                if let bounds = result {
-                    result = (min(bounds.minX, x), min(bounds.minY, y), max(bounds.maxX, x), max(bounds.maxY, y))
-                } else {
-                    result = (x, y, x, y)
-                }
-            }
-        }
-        return result
-    }
-
-    private func pixel(
-        _ bitmap: NSBitmapImageRep,
-        x: Int,
-        y: Int,
-        matchesRed red: Int,
-        green: Int,
-        blue: Int
-    ) -> Bool {
-        guard let pixels = bitmap.bitmapData else { return false }
-        let offset = y * bitmap.bytesPerRow + x * 4
-        return Int(pixels[offset]) == red
-            && Int(pixels[offset + 1]) == green
-            && Int(pixels[offset + 2]) == blue
+        return regionMaskCache.mask(url: url, red: red, green: green, blue: blue)
     }
 
     private func buttonNumber(_ event: NSEvent) -> Int {
@@ -4434,6 +4404,22 @@ enum SurfaceMouseGesturePolicy {
 }
 
 enum SurfaceDropPayload {
+    static func webURL(from pasteboard: NSPasteboard) -> URL? {
+        if let value = pasteboard.string(forType: .URL),
+           let url = URL(string: value), !url.isFileURL
+        {
+            return url
+        }
+        // Calendar links copied as plain text have the same drop behavior as URL objects.
+        if let value = pasteboard.string(forType: .string),
+           let url = URL(string: value.trimmingCharacters(in: .whitespacesAndNewlines)),
+           ["webcal", "webcals"].contains(url.scheme?.lowercased() ?? "")
+        {
+            return url
+        }
+        return nil
+    }
+
     static func narURLs(from urls: [URL]) -> [URL] {
         archiveURLs(from: urls)
     }

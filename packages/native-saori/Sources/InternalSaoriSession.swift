@@ -87,13 +87,20 @@ public final class InternalSaoriSession: @unchecked Sendable {
             return legacyHttpc.response(headers: headers, charset: charset)
         }
         guard lines.first == "EXECUTE SAORI/1.0", let module = headers["module"].flatMap(InternalSaoriService.moduleName),
-              let function = headers["argument0"], let count = InternalSaoriService.positionalCount(module: module, function: function) else { return service.response(to: data) }
+              let function = headers["argument0"] else { return service.response(to: data) }
+        let positionalArguments = (1 ..< 256).prefix(while: { headers["argument\($0)"] != nil }).compactMap { headers["argument\($0)"] }
+        guard let count = InternalSaoriService.positionalCount(module: module, function: function, arguments: positionalArguments) else { return service.response(to: data) }
         let asyncArguments = headers.compactMap { key, value -> (Int, String)? in
             guard key.hasPrefix("argument"), let index = Int(key.dropFirst(8)), index > count,
                   value.lowercased().hasPrefix("--async=") else { return nil }
             return (index, String(value.dropFirst(8)))
         }
         guard !asyncArguments.isEmpty else { return service.response(to: data) }
+        if let definition = InternalSaoriCatalog.function(module: module, name: function), definition.variable {
+            guard (definition.required ... definition.maximum).contains(count),
+                  positionalArguments.dropFirst(count).allSatisfy({ $0.hasPrefix("--") })
+            else { return error("invalid parameter", charset: charset) }
+        }
         guard let (_, identifier) = asyncArguments.max(by: { $0.0 < $1.0 }),
               !identifier.isEmpty, !identifier.contains("\r"), !identifier.contains("\n") else { return error("invalid parameter", charset: charset) }
         guard onEvent != nil else { return error("ghost required", charset: charset) }

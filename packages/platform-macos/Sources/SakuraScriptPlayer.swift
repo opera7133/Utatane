@@ -849,7 +849,7 @@ public final class SakuraScriptPlayer {
         var balloonOffsetScopes: Set<Int> = []
         var balloonOffsetsByScope: [Int: (x: SakuraScriptBalloonCoordinate, y: SakuraScriptBalloonCoordinate)] = [:]
         var currentCharacterDelayMilliseconds = characterDelayMilliseconds
-        var preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
+        var preciseWaitStartedAt = ContinuousClock.now
         var isSerikoTalkEnabled = true
         var pendingSameLineRightTabByScope: [Int: Int] = [:]
         var voiceMode = SakuraScriptVoiceMode.defaultValue
@@ -1103,6 +1103,7 @@ public final class SakuraScriptPlayer {
                     if !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         revealPresentation()
                     }
+                    var characterTimeline = PlaybackTimeline(startedAt: suspensionClock.elapsed)
                     for (characterIndex, character) in text.enumerated() {
                         guard !Task.isCancelled else { return }
                         let targetScopes = synchronizedScopes?.sorted() ?? [scope]
@@ -1136,7 +1137,10 @@ public final class SakuraScriptPlayer {
                                 ?? location.range.upperBound
                         }
                         if !fastForwardRequested, !isQuickSection {
-                            try await sleep(milliseconds: currentCharacterDelayMilliseconds)
+                            if currentCharacterDelayMilliseconds > 0 {
+                                let deadline = characterTimeline.advance(by: .milliseconds(currentCharacterDelayMilliseconds), now: suspensionClock.elapsed)
+                                guard await suspensionClock.sleep(until: deadline) else { return }
+                            }
                         }
                     }
                     fastForwardRequested = false
@@ -1489,10 +1493,10 @@ public final class SakuraScriptPlayer {
                     Self.signaledSyncObjects.remove(name)
                 case let .syncObjectWait(name, timeoutMilliseconds):
                     finishRenderingBatch()
-                    let startedAt = ProcessInfo.processInfo.systemUptime
+                    let startedAt = ContinuousClock.now
                     while !Self.signaledSyncObjects.contains(name) {
                         if let timeoutMilliseconds,
-                           Int((ProcessInfo.processInfo.systemUptime - startedAt) * 1000) >= timeoutMilliseconds
+                           startedAt.duration(to: .now) >= .milliseconds(timeoutMilliseconds)
                         {
                             break
                         }
@@ -1523,12 +1527,12 @@ public final class SakuraScriptPlayer {
                     finishRenderingBatch()
                     revealPresentation()
                     if let milliseconds {
-                        let elapsed = Int((ProcessInfo.processInfo.systemUptime - preciseWaitStartedAt) * 1000)
-                        if elapsed < milliseconds {
-                            try await sleep(milliseconds: milliseconds - elapsed)
+                        let deadline = preciseWaitStartedAt + .milliseconds(milliseconds)
+                        if deadline > .now {
+                            try await Task.sleep(until: deadline, clock: .continuous)
                         }
                     } else {
-                        preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
+                        preciseWaitStartedAt = ContinuousClock.now
                     }
                 case let .waitForClick(clearOnResume):
                     finishRenderingBatch()
@@ -1544,7 +1548,7 @@ public final class SakuraScriptPlayer {
                     isWaitingForClick = false
                     balloonWindowController.setWaitingForClick(false, scope: scope)
                     scope = 0
-                    preciseWaitStartedAt = ProcessInfo.processInfo.systemUptime
+                    preciseWaitStartedAt = ContinuousClock.now
                     if clearOnResume {
                         balloonWindowController.hideAll()
                         activatedScopes.removeAll()
@@ -2109,21 +2113,30 @@ public final class SakuraScriptPlayer {
         eventTimers[id] = nil
         guard milliseconds > 0 else { return }
         eventTimers[id] = Task { [weak self] in
+            let interval = Duration.milliseconds(milliseconds)
+            var deadline = ContinuousClock.now + interval
             repeat {
                 do {
-                    try await Task.sleep(for: .milliseconds(milliseconds))
+                    try await Task.sleep(until: deadline, clock: .continuous)
                 } catch {
                     return
                 }
                 guard let self, !Task.isCancelled else { return }
                 if reflectsResponse {
-                    if let response = await onEmbeddedEvent?(id, arguments) {
+                    if let response = await onEmbeddedEvent?(id, arguments), !Task.isCancelled {
                         play(response, balloon: balloon)
                     }
                 } else {
                     await onEmbeddedNotification?(id, arguments)
                 }
+                deadline += interval
+                if deadline < .now {
+                    deadline = .now + interval
+                }
             } while repeats && !Task.isCancelled
+            guard !Task.isCancelled else {
+                return
+            }
             self?.eventTimers[id] = nil
         }
     }
@@ -2141,15 +2154,24 @@ public final class SakuraScriptPlayer {
         eventTimers[timerKey] = nil
         guard milliseconds > 0 else { return }
         eventTimers[timerKey] = Task { [weak self] in
+            let interval = Duration.milliseconds(milliseconds)
+            var deadline = ContinuousClock.now + interval
             repeat {
                 do {
-                    try await Task.sleep(for: .milliseconds(milliseconds))
+                    try await Task.sleep(until: deadline, clock: .continuous)
                 } catch {
                     return
                 }
                 guard let self, !Task.isCancelled else { return }
                 await onOtherEvent?(target, id, arguments, reflectsResponse)
+                deadline += interval
+                if deadline < .now {
+                    deadline = .now + interval
+                }
             } while repeats && !Task.isCancelled
+            guard !Task.isCancelled else {
+                return
+            }
             self?.eventTimers[timerKey] = nil
         }
     }
@@ -2168,19 +2190,28 @@ public final class SakuraScriptPlayer {
         eventTimers[timerKey] = nil
         guard milliseconds > 0 else { return }
         eventTimers[timerKey] = Task { [weak self] in
+            let interval = Duration.milliseconds(milliseconds)
+            var deadline = ContinuousClock.now + interval
             repeat {
                 do {
-                    try await Task.sleep(for: .milliseconds(milliseconds))
+                    try await Task.sleep(until: deadline, clock: .continuous)
                 } catch {
                     return
                 }
                 guard let self, !Task.isCancelled else { return }
                 if let response = await onPluginEvent?(target, id, arguments, reflectsResponse),
-                   reflectsResponse
+                   reflectsResponse, !Task.isCancelled
                 {
                     play(response, balloon: balloon)
                 }
+                deadline += interval
+                if deadline < .now {
+                    deadline = .now + interval
+                }
             } while repeats && !Task.isCancelled
+            guard !Task.isCancelled else {
+                return
+            }
             self?.eventTimers[timerKey] = nil
         }
     }

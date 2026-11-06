@@ -101,6 +101,10 @@ public struct ContentExplorerEntry: Identifiable, Sendable, Equatable {
     public var hasUpdateAction: Bool {
         updateURL != nil || resolvesUpdateURLDynamically
     }
+
+    var hasBatchAction: Bool {
+        hasUpdateAction || !missingModuleNames.isEmpty || removalContainer != nil
+    }
 }
 
 @MainActor
@@ -110,12 +114,14 @@ final class ContentExplorerModel {
     var selectedKind: ContentExplorerKind = .ghost
     var searchText = ""
     var selection: Set<String> = []
+    var checkedIDs: Set<String> = []
     var updateStatus: String?
     var isUpdating = false
     var validatingEntryIDs: Set<String> = []
     var validationReports: [String: ContentValidationReport] = [:]
     var onActivate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onInstallModules: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
+    var onInstallModulesForEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)?
     var onCheckUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onUpdate: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
     var onCheckUpdates: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)?
@@ -123,6 +129,7 @@ final class ContentExplorerModel {
     var onRepairEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)?
     var onCancelUpdate: (@MainActor @Sendable () -> Void)?
     var onRemove: (@MainActor @Sendable (ContentExplorerEntry) -> Void)?
+    var onRemoveEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)?
 
     var filteredEntries: [ContentExplorerEntry] {
         entries.filter { entry in
@@ -145,12 +152,12 @@ final class ContentExplorerModel {
         filteredEntries.filter { selection.contains($0.id) }
     }
 
-    var visibleUpdateEntries: [ContentExplorerEntry] {
-        filteredEntries.filter(\.hasUpdateAction)
+    var visibleBatchEntries: [ContentExplorerEntry] {
+        filteredEntries.filter(\.hasBatchAction)
     }
 
-    var selectedUpdateEntries: [ContentExplorerEntry] {
-        selectedEntries.filter(\.hasUpdateAction)
+    var checkedBatchEntries: [ContentExplorerEntry] {
+        visibleBatchEntries.filter { checkedIDs.contains($0.id) }
     }
 
     func validate(_ entry: ContentExplorerEntry) {
@@ -181,6 +188,7 @@ final class ContentExplorerModel {
             selectedKind = availableKind
         }
         selection.formIntersection(Set(entries.map(\.id)))
+        checkedIDs.formIntersection(Set(entries.filter(\.hasBatchAction).map(\.id)))
         if selectedEntries.isEmpty {
             selection = Set(filteredEntries.first.map { [$0.id] } ?? [])
         }
@@ -218,10 +226,13 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         onUpdateEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)? = nil,
         onRepairEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)? = nil,
         onCancelUpdate: (@MainActor @Sendable () -> Void)? = nil,
+        onInstallModulesForEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)? = nil,
+        onRemoveEntries: (@MainActor @Sendable ([ContentExplorerEntry]) -> Void)? = nil,
         onRemove: @escaping @MainActor @Sendable (ContentExplorerEntry) -> Void
     ) {
         model.onActivate = onActivate
         model.onInstallModules = onInstallModules
+        model.onInstallModulesForEntries = onInstallModulesForEntries
         model.onCheckUpdate = onCheckUpdate
         model.onUpdate = onUpdate
         model.onCheckUpdates = onCheckUpdates
@@ -229,6 +240,7 @@ public final class ContentExplorerWindowController: NSObject, NSWindowDelegate {
         model.onRepairEntries = onRepairEntries
         model.onCancelUpdate = onCancelUpdate
         model.onRemove = onRemove
+        model.onRemoveEntries = onRemoveEntries
         model.update(entries: entries, preferredKind: preferredKind)
         if let window {
             window.makeKeyAndOrderFront(nil)
@@ -305,51 +317,8 @@ private struct ContentExplorerView: View {
 
             Divider()
 
-            if !model.visibleUpdateEntries.isEmpty {
-                HStack(spacing: 10) {
-                    Text("⌘クリックで複数選択")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    if model.isUpdating {
-                        if let updateStatus = model.updateStatus {
-                            Text(updateStatus)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                        Button("中止") {
-                            model.onCancelUpdate?()
-                        }
-                    } else {
-                        Menu("一括操作") {
-                            if !model.selectedUpdateEntries.isEmpty {
-                                Button("選択項目の更新を確認") {
-                                    model.onCheckUpdates?(model.selectedUpdateEntries)
-                                }
-                                Button("選択項目を更新") {
-                                    model.onUpdateEntries?(model.selectedUpdateEntries)
-                                }
-                                Button("選択項目を修復") {
-                                    model.onRepairEntries?(model.selectedUpdateEntries)
-                                }
-                                Divider()
-                            }
-                            Button("表示中の全項目の更新を確認") {
-                                model.onCheckUpdates?(model.visibleUpdateEntries)
-                            }
-                            Button("表示中の全項目を更新") {
-                                model.onUpdateEntries?(model.visibleUpdateEntries)
-                            }
-                            Button("表示中の全項目を修復") {
-                                model.onRepairEntries?(model.visibleUpdateEntries)
-                            }
-                        }
-                    }
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-
+            if model.isUpdating || !model.visibleBatchEntries.isEmpty {
+                batchControls
                 Divider()
             }
 
@@ -360,6 +329,19 @@ private struct ContentExplorerView: View {
                     } else {
                         List(model.filteredEntries, selection: $model.selection) { entry in
                             HStack(spacing: 8) {
+                                Toggle(isOn: Binding(
+                                    get: { model.checkedIDs.contains(entry.id) },
+                                    set: { enabled in
+                                        if enabled {
+                                            model.checkedIDs.insert(entry.id)
+                                        } else {
+                                            model.checkedIDs.remove(entry.id)
+                                        }
+                                    }
+                                )) { Text(entry.name) }
+                                    .toggleStyle(.checkbox)
+                                    .labelsHidden()
+                                    .disabled(!entry.hasBatchAction || model.isUpdating)
                                 Image(systemName: entry.kind.systemImage)
                                     .foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 2) {
@@ -395,6 +377,63 @@ private struct ContentExplorerView: View {
 
                 detailView(model.selectedEntries)
                     .frame(minWidth: 300, maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    private var batchControls: some View {
+        let visible = model.visibleBatchEntries
+        let checked = model.checkedBatchEntries
+        let selected = model.selectedEntries.filter(\.hasBatchAction)
+        let visibleIDs = Set(visible.map(\.id))
+        return HStack(spacing: 10) {
+            Text("チェックした項目（表示中）")
+            Text(checked.count, format: .number)
+            Spacer()
+            if model.isUpdating {
+                if let updateStatus = model.updateStatus {
+                    Text(updateStatus)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Button("中止") { model.onCancelUpdate?() }
+            } else {
+                Menu("一括操作") {
+                    Button("表示中の対象をすべてチェック") { model.checkedIDs.formUnion(visibleIDs) }
+                        .disabled(checked.count == visible.count)
+                    Button("表示中のチェックを解除") { model.checkedIDs.subtract(visibleIDs) }
+                        .disabled(checked.isEmpty)
+                    Divider()
+                    Menu("チェックした項目（表示中）") { batchActions(checked) }
+                        .disabled(checked.isEmpty)
+                    Menu("表示中の全項目") { batchActions(visible) }
+                    Menu("選択した行") { batchActions(selected) }
+                        .disabled(selected.isEmpty)
+                }
+                .fixedSize()
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+    }
+
+    private func batchActions(_ entries: [ContentExplorerEntry]) -> some View {
+        let checks = entries.filter(\.hasUpdateAction)
+        let updates = checks.filter(\.canUpdate)
+        let missing = entries.filter { !$0.missingModuleNames.isEmpty }
+        let removable = entries.filter { $0.removalContainer != nil }
+        return Group {
+            Button("更新を確認") { model.onCheckUpdates?(checks) }
+                .disabled(checks.isEmpty || model.onCheckUpdates == nil)
+            Button("一括更新") { model.onUpdateEntries?(updates) }
+                .disabled(updates.isEmpty || model.onUpdateEntries == nil)
+            Button("一括修復") { model.onRepairEntries?(updates) }
+                .disabled(updates.isEmpty || model.onRepairEntries == nil)
+            Button("一括削除…", role: .destructive) { model.onRemoveEntries?(removable) }
+                .disabled(removable.isEmpty || model.onRemoveEntries == nil)
+            if let install = model.onInstallModulesForEntries, !missing.isEmpty {
+                Button("必要なモジュールをまとめて導入…") { install(missing) }
             }
         }
     }
@@ -480,6 +519,7 @@ private struct ContentExplorerView: View {
                             }
                             .disabled(!entry.canUpdate)
                         }
+                        .disabled(model.isUpdating)
                     }
                     Button(entry.activationTitle) {
                         model.onActivate?(entry)
@@ -493,7 +533,7 @@ private struct ContentExplorerView: View {
             ContentUnavailableView(
                 "\(entries.count)項目を選択中",
                 systemImage: "checklist",
-                description: Text("上の一括操作から確認、更新、修復ができる。")
+                description: Text("上の一括操作から確認、更新、修復、削除ができる。")
             )
         } else {
             ContentUnavailableView(

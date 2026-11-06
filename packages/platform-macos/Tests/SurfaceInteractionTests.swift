@@ -145,8 +145,8 @@ func `balloons follow their surface while preserving independent balloon movemen
 
 @Suite(.serialized)
 struct SurfaceDragTests {
-    @Test @MainActor
-    func `image color collision regions drive mouse events`() throws {
+    @Test(arguments: [1.0, 2.0]) @MainActor
+    func `image color collision regions drive mouse events`(scale: Double) throws {
         let (defaults, positionStore) = makePositionStore()
         defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
         let directory = FileManager.default.temporaryDirectory.appending(path: "utatane-region-\(UUID().uuidString)")
@@ -182,6 +182,7 @@ struct SurfaceDragTests {
             surfaces: [0: SurfaceDefinition(id: 0, collisions: collisions, animations: [])]
         )
         let controller = SurfaceWindowController(positionStore: positionStore)
+        controller.setDisplayScale(scale)
         controller.setPlacement(locksToDesktopBottom: false, keepsOnScreen: false)
         try controller.show(shell: shell, scope: 0, surfaceID: 0)
         defer { controller.hideAll() }
@@ -196,14 +197,36 @@ struct SurfaceDragTests {
             }
         }
 
-        let redPoint = NSPoint(x: window.frame.minX + 5, y: window.frame.maxY - 5)
+        let redPoint = NSPoint(x: window.frame.minX + 5 * CGFloat(scale), y: window.frame.maxY - 5 * CGFloat(scale))
         try view.mouseDown(with: surfaceDragEvent(.leftMouseDown, pointer: redPoint, window: window))
         try view.mouseUp(with: surfaceDragEvent(.leftMouseUp, pointer: redPoint, window: window))
-        let bluePoint = NSPoint(x: window.frame.minX + 5, y: window.frame.maxY - 15)
+        let bluePoint = NSPoint(x: window.frame.minX + 5 * CGFloat(scale), y: window.frame.maxY - 15 * CGFloat(scale))
         try view.mouseDown(with: surfaceDragEvent(.leftMouseDown, pointer: bluePoint, window: window))
         try view.mouseUp(with: surfaceDragEvent(.leftMouseUp, pointer: bluePoint, window: window))
 
         #expect(clicks == ["Red", "NotRed"])
+        #expect(controller.cachedRegionBytes(scope: 0) == 50)
+        controller.setSuspended(true)
+        #expect(controller.cachedRegionBytes(scope: 0) == 0)
+        controller.setSuspended(false)
+        try view.mouseDown(with: surfaceDragEvent(.leftMouseDown, pointer: redPoint, window: window))
+        try view.mouseUp(with: surfaceDragEvent(.leftMouseUp, pointer: redPoint, window: window))
+        #expect(clicks.last == "Red")
+        #expect(controller.cachedRegionBytes(scope: 0) == 50)
+        // Reload the same shell path after the mask on disk changes.
+        for y in 0 ..< 20 {
+            for x in 0 ..< 20 {
+                bitmap.setColor(blue, atX: x, y: y)
+            }
+        }
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: directory.appending(path: "hit.png"))
+        try controller.show(shell: shell, scope: 0, surfaceID: 0)
+        let reloaded = try #require(window.contentView)
+        #expect(controller.cachedRegionBytes(scope: 0) == 0)
+        let point = NSPoint(x: window.frame.minX + 5 * CGFloat(scale), y: window.frame.maxY - 5 * CGFloat(scale))
+        try reloaded.mouseDown(with: surfaceDragEvent(.leftMouseDown, pointer: point, window: window))
+        try reloaded.mouseUp(with: surfaceDragEvent(.leftMouseUp, pointer: point, window: window))
+        #expect(clicks.last == "NotRed")
     }
 
     @Test @MainActor

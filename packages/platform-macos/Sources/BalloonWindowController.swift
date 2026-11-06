@@ -1930,14 +1930,14 @@ private final class ObservingClipView: NSClipView {
 private final class AnimatedBalloonImageView: NSImageView {
     let imageSize: NSSize
     private let images: [NSImage]
-    private let intervalNanoseconds: UInt64
+    private let interval: Duration
     private var animationTask: Task<Void, Never>?
     private var imageIndex = 0
 
     init(images: [NSImage], intervalMilliseconds: Int) {
         self.images = images
         imageSize = images.first?.size ?? .zero
-        intervalNanoseconds = UInt64(max(50, intervalMilliseconds)) * 1_000_000
+        interval = .milliseconds(max(50, intervalMilliseconds))
         super.init(frame: .zero)
         image = images.first
     }
@@ -1952,12 +1952,17 @@ private final class AnimatedBalloonImageView: NSImageView {
         animationTask = nil
         isHidden = !enabled
         guard enabled, images.count > 1 else { return }
-        animationTask = Task { @MainActor [weak self, intervalNanoseconds] in
+        animationTask = Task { @MainActor [weak self, interval] in
+            var deadline = ContinuousClock.now + interval
             while !Task.isCancelled {
-                try? await Task.sleep(nanoseconds: intervalNanoseconds)
+                do { try await Task.sleep(until: deadline, clock: .continuous) } catch { return }
                 guard !Task.isCancelled, let self else { return }
                 imageIndex = (imageIndex + 1) % images.count
                 image = images[imageIndex]
+                deadline += interval
+                if deadline < .now {
+                    deadline = .now + interval
+                }
             }
         }
     }

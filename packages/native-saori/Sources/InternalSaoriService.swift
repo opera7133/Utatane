@@ -6,15 +6,7 @@ import UtataneCore
 /// callback, not a TCP/HTTP or Windows WM_COPYDATA endpoint.
 public struct InternalSaoriService: Sendable {
     public static let maximumBytes = 8 * 1024 * 1024
-    private static let functions = [
-        "internal_system": ["ListModules", "ListFunctions"],
-        "internal_text": ["Normalize"],
-        "internal_time": ["Format", "Add", "Diff"],
-        "internal_random": ["Bytes", "Number", "UUID"],
-        "internal_data": ["Convert", "Compress", "Decompress"],
-        "internal_crypto": ["Digest", "HMAC", "Compare"],
-        "internal_file": ["MediaInfo", "ImageInfo", "IsImageLoadable", "IsMediaLoadable"]
-    ]
+    private static let functions = InternalSaoriCatalog.modules.mapValues { $0.map(\.name) }
 
     private let now: @Sendable () -> Date
     private let ghostDirectory: URL?
@@ -125,38 +117,18 @@ public struct InternalSaoriService: Sendable {
         return data
     }
 
-    static func positionalCount(module: String, function: String) -> Int? {
-        guard let function = functions[module]?.first(where: { $0.caseInsensitiveCompare(function) == .orderedSame }) else { return nil }
-        switch (module, function) {
-        case ("internal_system", "ListModules"), ("internal_random", "UUID"): return 0
-        case ("internal_system", "ListFunctions"), ("internal_random", "Bytes"), ("internal_data", "Convert"): return 1
-        case ("internal_file", "IsImageLoadable"), ("internal_file", "IsMediaLoadable"): return 1
-        case ("internal_time", "Format"), ("internal_text", _), ("internal_random", "Number"), ("internal_crypto", "Digest"), ("internal_crypto", "Compare"), ("internal_data", _), ("internal_file", _): return 2
-        default: return 3
+    static func positionalCount(module: String, function: String, arguments: [String]? = nil) -> Int? {
+        guard let definition = InternalSaoriCatalog.function(module: module, name: function) else { return nil }
+        if let arguments {
+            return definition.positionalCount(arguments: arguments)
         }
+        return definition.variable ? definition.required : definition.maximum
     }
 
     private func execute(module: String, function: String, arguments: [String], validatesOnly: Bool, isCancelled: () -> Bool) throws -> (String, [String]) {
-        let count: Int
-        let allowed: Set<String>
-        switch (module, function) {
-        case ("internal_file", "IsImageLoadable"), ("internal_file", "IsMediaLoadable"): count = 1; allowed = []
-        case ("internal_file", _): count = 2 + arguments.dropFirst(2).prefix(while: { !$0.hasPrefix("--") }).count; allowed = []
-        case ("internal_system", "ListModules"): count = 0; allowed = []
-        case ("internal_system", "ListFunctions"): count = 1; allowed = []
-        case ("internal_time", "Format"): count = 2; allowed = ["tz"]
-        case ("internal_time", _): count = 3; allowed = ["tz"]
-        case ("internal_text", _): count = 2; allowed = []
-        case ("internal_random", "Bytes"): count = 1; allowed = ["out"]
-        case ("internal_random", "Number"): count = 2; allowed = []
-        case ("internal_random", "UUID"): count = 0; allowed = ["version"]
-        case ("internal_data", "Convert"): count = 1; allowed = ["in", "data-in", "out", "charset", "hrp"]
-        case ("internal_data", "Compress"): count = 2; allowed = ["data-in", "out", "charset", "level"]
-        case ("internal_data", _): count = 2; allowed = ["data-in", "out", "charset"]
-        case ("internal_crypto", "Compare"): count = 2; allowed = ["a-in", "b-in", "charset"]
-        case ("internal_crypto", "Digest"): count = 2; allowed = ["data-in", "out", "charset"]
-        default: count = 3; allowed = ["key-in", "data-in", "out", "charset"]
-        }
+        guard let definition = InternalSaoriCatalog.function(module: module, name: function) else { throw Failure("unknown function") }
+        let count = definition.positionalCount(arguments: arguments)
+        let allowed = Set(definition.options)
         var arguments = arguments
         if module == "internal_time", function == "Format", arguments.count == 1 {
             arguments.append("")
@@ -173,7 +145,7 @@ public struct InternalSaoriService: Sendable {
             guard allowed.contains(key) else { throw Failure("invalid parameter") }
             options[key] = String(value[value.index(after: separator)...])
         }
-        if module == "internal_file", !["IsImageLoadable", "IsMediaLoadable"].contains(function), !(2 ... 12).contains(positional.count) {
+        if definition.variable, !(definition.required ... definition.maximum).contains(positional.count) {
             throw Failure("invalid parameter")
         }
         if validatesOnly {
@@ -212,6 +184,12 @@ public struct InternalSaoriService: Sendable {
         case "internal_time":
             return try (InternalSaoriTime.execute(function, arguments: arguments, now: now()), [])
         case "internal_system":
+            if function == "Describe" {
+                let module = positional[0].lowercased()
+                guard availableFunctions[module] != nil else { throw Failure("unknown module") }
+                guard let described = InternalSaoriCatalog.function(module: module, name: positional[1]) else { throw Failure("unknown function") }
+                return (described.name, described.descriptionValues)
+            }
             let list: [String]
             if function == "ListModules" {
                 list = availableFunctions.keys.sorted()

@@ -1,4 +1,5 @@
 import Foundation
+import UtataneCore
 import UtataneNativeSaori
 import UtataneShiori
 
@@ -11,6 +12,22 @@ public final class NativeShioriSession: Sendable {
 
     private let backend: Backend
     private let queue = DispatchQueue(label: "dev.utatane.native-shiori")
+
+    public convenience init(directoryURL: URL, selectedModule: GhostShioriSelection,
+                            stateDirectoryURL: URL? = nil,
+                            saoriCaller: (any NativeSaoriCalling)? = nil,
+                            saoriRootURL: URL? = nil,
+                            onInternalSaoriEvent: (@Sendable (InternalSaoriEvent) -> Void)? = nil,
+                            internalSaoriMediaReader: (any InternalSaoriMediaReading)? = nil,
+                            hostURL: URL = NativeShioriProcessSession.defaultHostURL) throws
+    {
+        try self.init(directoryURL: directoryURL, moduleURL: selectedModule.validatedModuleURL(),
+                      selectedKind: selectedModule.kind, stateDirectoryURL: stateDirectoryURL,
+                      saoriCaller: saoriCaller, saoriRootURL: saoriRootURL,
+                      moduleResolver: .init(environment: [:], allowsFallback: false),
+                      onInternalSaoriEvent: onInternalSaoriEvent, internalSaoriMediaReader: internalSaoriMediaReader,
+                      hostURL: hostURL)
+    }
 
     public convenience init(directoryURL: URL, moduleURL: URL,
                             stateDirectoryURL: URL? = nil,
@@ -61,6 +78,8 @@ public final class NativeShioriSession: Sendable {
             ))
         } else {
             let kind = selectedKind ?? ConventionalShioriKind(libraryFilename: moduleURL.lastPathComponent)
+                ?? ShioriCatalog.identify(masterDirectory: directoryURL, declaredModuleFilename: moduleURL.lastPathComponent)
+                .flatMap { $0.id.rawValue == "dnproxy" ? .dnproxy : nil }
             if kind == .yaya6 {
                 try YayaSaveBackup.prepare(in: directoryURL)
             }
@@ -78,11 +97,20 @@ public final class NativeShioriSession: Sendable {
                 },
                 canRecover: { ($0 as? NativeShioriProcessError)?.canRecoverByLoadingAnotherModule == true }
             ) { url in
-                try NativeShioriProcessSession(
+                var selectedEnvironment = environment
+                var startupTimeout: TimeInterval = 30
+                if kind == .dnproxy {
+                    let diagnostic = DNProxyPreflight().inspect(directoryURL: directoryURL, moduleURL: url)
+                    guard diagnostic.status == .ready else { throw diagnostic }
+                    selectedEnvironment["UTATANE_DOTNET"] = diagnostic.dotnetURL?.path
+                    startupTimeout = diagnostic.requiresSDK ? 135 : 30
+                }
+                return try NativeShioriProcessSession(
                     directoryURL: directoryURL, moduleURL: url, diagnostics: saoriDiagnostics, hostURL: hostURL,
+                    startupTimeout: startupTimeout,
                     internalSaoriMediaReader: internalSaoriMediaReader,
                     onInternalSaoriEvent: onInternalSaoriEvent,
-                    additionalEnvironment: environment
+                    additionalEnvironment: selectedEnvironment
                 )
             })
         }

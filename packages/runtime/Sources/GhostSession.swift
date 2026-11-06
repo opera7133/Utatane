@@ -9,6 +9,7 @@ public actor GhostSession {
     }
 
     private var personalityEngine: (any PersonalityEngine)?
+    private var scriptTranslators: [any PersonalityScriptTranslator]
     private let variableStore: GhostVariableStore?
     private let logStore: AppLogStore?
     private let ghostName: String?
@@ -17,12 +18,14 @@ public actor GhostSession {
 
     public init(
         personalityEngine: any PersonalityEngine,
+        scriptTranslators: [any PersonalityScriptTranslator] = [],
         variableStore: GhostVariableStore? = nil,
         logStore: AppLogStore? = nil,
         ghostName: String? = nil,
         requestStatus: @escaping @Sendable () async -> String = { "" }
     ) {
         self.personalityEngine = personalityEngine
+        self.scriptTranslators = scriptTranslators
         self.variableStore = variableStore
         self.logStore = logStore
         self.ghostName = ghostName
@@ -53,7 +56,8 @@ public actor GhostSession {
         await personalityEngine.updateRequestStatus(requestStatus())
         logRequest(event)
         do {
-            let response = try await personalityEngine.response(for: event)
+            let rawResponse = try await personalityEngine.response(for: event)
+            let response = PersonalityResponse(script: rawResponse.script.map(translate), references: rawResponse.references)
             logResponse(event: event, response: response)
             if case .notification = event {
                 return nil
@@ -68,6 +72,7 @@ public actor GhostSession {
     public func stop(reason: GhostStopReason = .close) async throws -> SakuraScript? {
         guard state == .running else { return nil }
         state = .stopped
+        defer { scriptTranslators.removeAll() }
         guard let personalityEngine else { return nil }
         if reason == .silent {
             await personalityEngine.shutdown()
@@ -128,6 +133,7 @@ public actor GhostSession {
     public func shutdown() async {
         guard state == .running else { return }
         state = .stopped
+        scriptTranslators.removeAll()
         await personalityEngine?.shutdown()
         personalityEngine = nil
     }
@@ -147,6 +153,17 @@ public actor GhostSession {
         self.personalityEngine = personalityEngine
     }
 
+    /// Replacing converters never loads, unloads or resets the SHIORI engine.
+    /// Keep the chain while SHIORI is unloaded so its later load is independent.
+    public func setScriptTranslators(_ translators: [any PersonalityScriptTranslator]) {
+        guard state != .stopped else { return }
+        scriptTranslators = translators
+    }
+
+    private func translate(_ script: SakuraScript) -> SakuraScript {
+        scriptTranslators.reduce(script) { $1.translate($0) }
+    }
+
     public func variable(forKey key: String) async throws -> String? {
         try await variableStore?.value(forKey: key)
     }
@@ -160,7 +177,7 @@ public actor GhostSession {
         await personalityEngine.updateRequestStatus(requestStatus())
         logRequest(event)
         do {
-            let script = try await personalityEngine.handle(event: event)
+            let script = try await personalityEngine.handle(event: event).map(translate)
             logResponse(event: event, response: PersonalityResponse(script: script))
             if case .notification = event {
                 return nil

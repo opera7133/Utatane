@@ -75,7 +75,9 @@ private func makeSpectrumWave() throws -> URL {
     var frames: [[Int: String]] = []
     player.onSpectrum = { frames.append($0) }
     try await player.execute(.play(file: url.path, loop: true, options: ["--volume=100", "--spectrum=50", "--spectrum-bands=31"]))
-    try await requireEventually { frames.count >= 5 }
+    // The complete AppKit suite can congest MainActor during CoreAudio startup.
+    // This wait checks delivery; cadence performance is measured separately.
+    try await requireEventually(timeout: .seconds(60)) { frames.count >= 5 }
     #expect(player.outputVolume == 0)
     let frame = try #require(frames.last)
     #expect(frame[0] == url.path)
@@ -276,4 +278,103 @@ func `spectrum mono frequency and gain agree with calibrated sine levels`(sample
     #expect(frames.count == 1)
     #expect(frames.first?[4]?.split(separator: "\u{1}").allSatisfy { $0 == "0" } == true)
     #expect(player.propertyValue(for: "currentghost.sound.index(0).pause") == "1")
+}
+
+private actor DelayedSpectrumWorker: SoundSpectrumAnalyzing {
+    private var first: CheckedContinuation<SoundSpectrumFrame, Never>?
+    private var requests = 0
+    private let onRequest: @MainActor @Sendable () -> Void
+
+    init(onRequest: @escaping @MainActor @Sendable () -> Void) {
+        self.onRequest = onRequest
+    }
+
+    func analyze(url _: URL, position _: Double, bands: Int) async -> SoundSpectrumFrame {
+        requests += 1
+        if requests == 1 {
+            return await withCheckedContinuation { continuation in
+                first = continuation
+                Task { await onRequest() }
+            }
+        }
+        return SoundSpectrumFrame(channels: 2, levels: Array(repeating: 11, count: 2 + bands))
+    }
+
+    func release() {
+        first?.resume(returning: SoundSpectrumFrame(channels: 2, levels: Array(repeating: 99, count: 33)))
+        first = nil
+    }
+}
+
+@Test(arguments: ["pause", "stop", "suspend", "seek", "reload", "disable", "loop"])
+@MainActor func `pending spectrum analysis allows controls and never publishes an obsolete frame`(action: String) async throws {
+    let url = try makeSpectrumWave()
+    defer { try? FileManager.default.removeItem(at: url) }
+    var started = false
+    let worker = DelayedSpectrumWorker { started = true }
+    let player = SakuraScriptSoundPlayer(makeSpectrumWorker: { worker })
+    player.isMuted = true
+    defer { player.discard() }
+    var frames: [[Int: String]] = []
+    player.onSpectrum = { frame in
+        #expect(frame[2] != "99\u{1}99")
+        frames.append(frame)
+    }
+    try await player.execute(.play(file: url.path, loop: true, options: ["--spectrum=20", "--spectrum-bands=31"]))
+    try await requireEventually { started }
+    // The worker is still blocked here. Every control must complete on MainActor.
+    switch action {
+    case "pause": try await player.execute(.pause)
+    case "stop": try await player.execute(.stop)
+    case "suspend": player.setSuspended(true)
+    case "loop": player.handlePlaybackFinished(successfully: true)
+    case "seek": try await player.execute(.option(file: nil, options: ["--seektime=1000"]))
+    case "reload": try await player.execute(.load(file: url.path, options: []))
+    default: try await player.execute(.option(file: nil, options: ["--spectrum=0"]))
+    }
+    await worker.release()
+    switch action {
+    case "pause": try await player.execute(.resume)
+    case "suspend": player.setSuspended(false)
+    case "seek", "loop": break
+    default: try await player.execute(.play(file: url.path, loop: true, options: ["--spectrum=20", "--spectrum-bands=31"]))
+    }
+    try await requireEventually { frames.contains { $0[2] == "11\u{1}11" } }
+}
+
+@Test func `spectrum scratch buffers clear between silent partial and full windows`() throws {
+    let url = try makeSpectrumSignal { _, index in index < 4800 ? 0 : 0.5 * sin(2 * .pi * 1000 * Float(index) / 48000) }
+    defer { try? FileManager.default.removeItem(at: url) }
+    let analyzer = try SoundSpectrumAnalyzer(url: url)
+    for bands in [31, 0, 5, 15, 10, 31] {
+        #expect(try analyzer.levels(at: 0.5, bands: bands)[0] > 80)
+        #expect(try analyzer.levels(at: 0.02, bands: bands).allSatisfy { $0 == 0 })
+        #expect(try analyzer.levels(at: 0, bands: bands).allSatisfy { $0 == 0 })
+    }
+}
+
+@Test(arguments: [1, 4])
+@MainActor func `independent sound players deliver calibrated frames at a twenty millisecond cadence`(count: Int) async throws {
+    let url = try makeSpectrumWave()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let players = (0 ..< count).map { _ in SakuraScriptSoundPlayer() }
+    defer { players.forEach { $0.discard() } }
+    var frames = [Int](repeating: 0, count: count)
+    for (index, player) in players.enumerated() {
+        player.isMuted = true
+        player.onSpectrum = { frame in
+            let levels = (frame[2] ?? "").split(separator: "\u{1}").compactMap { Int($0) }
+            #expect(levels.count == 2)
+            #expect(levels.allSatisfy { (0 ... 100).contains($0) })
+            // The live graph also reports its initial TimePitch latency and loop gaps.
+            // Require calibrated signal frames from every source after that silence.
+            if levels.count == 2, levels[0] > 85, levels[0] < 95,
+               levels[1] > 75, levels[1] < 85
+            {
+                frames[index] += 1
+            }
+        }
+        try await player.execute(.play(file: url.path, loop: true, options: ["--spectrum=20", "--spectrum-bands=31"]))
+    }
+    try await requireEventually { frames.allSatisfy { $0 >= 5 } }
 }

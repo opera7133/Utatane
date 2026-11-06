@@ -2,8 +2,7 @@
 
 ゴーストの設定や配布に使うテキストファイルについて、Utataneが読み取る項目と、実際の動作に使う項目をまとめています。項目の基準はUKADOCです。
 
-調査日: 2026-09-21
-調査対象: [UKADOC](https://ssp.shillest.net/ukadoc/manual/)とUtatane本番Swiftコード・テスト
+基準: [UKADOC](https://ssp.shillest.net/ukadoc/manual/)の設定ファイル仕様
 
 ## 判定
 
@@ -13,7 +12,7 @@
 | 🟡 | ファイルは読み込むが、未使用の項目・構文・挙動が残ります |
 | ❌ | ファイルまたは対応する本体機能が未実装 |
 
-設定を読み取るだけでは「対応」にしません。その値が表示や動作に反映されることを判定の基準にしています。
+「対応」は、設定値を読み取り、該当する機能で利用できることを示します。部分対応の項目は、備考で利用できる範囲を確認してください。
 
 ## 全体
 
@@ -135,7 +134,7 @@ UKADOCの定義項目・キーワードは137。現在の対応範囲は次の�
 | --- | --- | --- |
 | surface選択 | ✅ | 単一ID、範囲、列挙、`!`による除外、`surface.append`を解析し、定義の追加・上書きへ反映 |
 | alias | ✅ | sakura、kero、char scopeの名前からsurface ID候補を選び、`\s[識別子]`の解決に利用 |
-| element | 🟡 | `--clipping,左,上,右,下`と`--alpha,0〜255`に対応。切り抜き時は静止画像として描画します。`--source`・`--scaling`は未対応。PNG／APNG／GIF／WebPとPNA、base・overlay系・asisに対応。elementでは適用外の描画メソッドをSSP同様overlayとして扱います。`seriko.use_self_alpha,1`ではアルファチャンネルのない画像を左上色透過へフォールバックし、`full`では全面を不透明として扱います。アニメーション画像はフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つ画像同士の合成後も再生情報を維持します |
+| element | 🟡 | 拡張子を省略した画像名はPNG→APNG→GIF→WebPの順で探索します。 `--clipping,左,上,右,下`と`--alpha,0〜255`に対応。切り抜き時は静止画像として描画します。`--source`・`--scaling`は未対応。PNG／APNG／GIF／WebPとPNA、base・overlay系・asisに対応。elementでは適用外の描画メソッドをSSP同様overlayとして扱います。`seriko.use_self_alpha,1`ではアルファチャンネルのない画像を左上色透過へフォールバックし、`full`では全面を不透明として扱います。アニメーション画像はフレーム時間・合成・破棄方式を含めて再生し、PNA適用後、element合成後、異なるフレーム周期を持つ画像同士の合成後も再生情報を維持します |
 | collision | ✅ | 矩形とcollisionex rect／ellipse／circle／polygon／regionを実際のマウス判定に利用。regionはShell内の画像にある指定RGB色、または反転指定時は指定色以外の画素を判定領域にします |
 | animation基本 | 🟡 | name、interval文字列、pattern、wait、座標。複数animationを独立したTaskとレイヤー状態で並行再生し、base・overlay系・asis・moveと各種制御を反映 |
 | interval | 🟡 | runonce、sometimes、rarely、random、periodic、always、talk（文字数指定を含む）、starttalk、endtalk、yen-e、bindを実行。neverは自動実行しない定義として機能 |

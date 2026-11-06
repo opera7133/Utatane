@@ -24,7 +24,7 @@ public final class SuspensionClock {
         timers.count
     }
 
-    var elapsed: Duration {
+    public var elapsed: Duration {
         origin.duration(to: pausedAt ?? now()) - pausedDuration
     }
 
@@ -77,12 +77,21 @@ public final class SuspensionClock {
     }
 
     public func sleep(for duration: Duration) async -> Bool {
-        let deadline = elapsed + max(.zero, duration)
+        await sleep(until: elapsed + max(.zero, duration))
+    }
+
+    /// Deadline in active elapsed time; suspension preserves the remaining delay.
+    public func sleep(until deadline: Duration) async -> Bool {
         while await waitUntilActive() {
             let remaining = deadline - elapsed
-            guard remaining > .zero else { return true }
+            guard remaining > .zero else {
+                // Overdue sequences must still allow cancellation and other UI work.
+                await Task.yield()
+                return await waitUntilActive()
+            }
             let id = UUID()
-            let timer = Task { try await Task.sleep(for: remaining) }
+            let wake = ContinuousClock.now + remaining
+            let timer = Task { try await Task.sleep(until: wake, clock: .continuous) }
             timers[id] = timer
             await withTaskCancellationHandler {
                 _ = try? await timer.value

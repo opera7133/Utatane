@@ -11,6 +11,11 @@ public struct PersonalityResponse: Sendable, Equatable {
     }
 }
 
+/// A session-owned script conversion stage, independent of the personality engine lifetime.
+public protocol PersonalityScriptTranslator: Sendable {
+    func translate(_ script: SakuraScript) -> SakuraScript
+}
+
 /// Produces SakuraScript for an event. Built-in dialogue, YAYA, and SHIORI are adapters of this API.
 public protocol PersonalityEngine: Sendable {
     func handle(event: GhostEvent) async throws -> SakuraScript?

@@ -72,6 +72,7 @@ final class CalledGhostRuntime {
     var onError: ((Error) -> Void)?
     var onCommunication: ((String, String) -> Void)?
     var onNarDrop: (([URL]) -> Void)?
+    var onCalendarURLDrop: ((URL) async throws -> Void)?
     var onWallpaperDrop: ((URL) async -> Bool)?
     var onOpenUsageGraph: (() -> Void)?
     var onOpenMessenger: (() -> Void)?
@@ -103,6 +104,7 @@ final class CalledGhostRuntime {
         selectionStore: ContentSelectionStore,
         defaultBalloonDirectoryName: String?,
         personalityEngine: any PersonalityEngine,
+        scriptTranslators: [any PersonalityScriptTranslator] = [],
         characterDelayMilliseconds: Int,
         dialogueDismissalMilliseconds: Int,
         speechSynthesisEnabled: Bool,
@@ -192,6 +194,7 @@ final class CalledGhostRuntime {
         )
         session = GhostSession(
             personalityEngine: personalityEngine,
+            scriptTranslators: scriptTranslators,
             variableStore: GhostVariableStore(fileURL: ContentRoot.variableStoreURL(for: ghost)),
             logStore: .shared,
             ghostName: ghost.name,
@@ -933,7 +936,12 @@ final class CalledGhostRuntime {
             self?.onTalkPlayback?(phase, script, context)
         }
         surfaceController.onMouseEvent = { [weak self] event in
-            guard let self, !player.isTimeCritical else { return }
+            guard let self else { return }
+            if event.kind == .down {
+                AppLogStore.shared.debug("Surface mouse down: scope=\(event.scope), region=\(event.region ?? "(none)"), x=\(event.x), y=\(event.y), timecritical=\(player.isTimeCritical)",
+                                         category: "Input", ghostName: ghost.name)
+            }
+            guard !player.isTimeCritical else { return }
             dispatchMouseEvent(event)
         }
         surfaceController.onMouseGesture = { [weak self] event in
@@ -1472,11 +1480,12 @@ final class CalledGhostRuntime {
     }
 
     private func handleURLDrop(scope: Int, url: URL) {
-        let plannedAction = url.pathExtension.caseInsensitiveCompare("nar") == .orderedSame ? "nar" : "unknown"
+        let isCalendar = CalendarSubscriptionURL.matches(url)
+        let plannedAction = isCalendar ? "ical" : (url.pathExtension.caseInsensitiveCompare("nar") == .orderedSame ? "nar" : "unknown")
         let queryReferences = [
             0: url.absoluteString,
             1: String(scope),
-            2: FileDropEventRouter.mimeType(url),
+            2: isCalendar ? "text/calendar" : FileDropEventRouter.mimeType(url),
             3: plannedAction
         ]
         Task {
@@ -1487,6 +1496,11 @@ final class CalledGhostRuntime {
                 )), let script = response.script {
                     player.play(script, balloon: balloon)
                     forwardCommunication(response)
+                    return
+                }
+                if isCalendar {
+                    guard let onCalendarURLDrop else { throw CocoaError(.featureUnsupported) }
+                    try await onCalendarURLDrop(url)
                     return
                 }
                 guard plannedAction == "nar" else { return }

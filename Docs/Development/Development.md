@@ -38,9 +38,9 @@ mise run check
 
 ### テストの方針
 
-テスト件数を増やすこと自体は目標にしません。通信形式、互換仕様、保存データ、安全境界と、実際に起きた不具合の回帰確認を優先します。単純なプロパティ代入や、実装と同じ条件分岐をテスト側でも繰り返すだけの確認は追加しません。
+変更した機能について、通信形式、互換仕様、保存データと、修正した不具合を中心にテストします。パーサーや再生処理など複数のモジュールにまたがる場合は、それぞれが担う処理と、組み合わせたときの結果を確認してください。
 
-パーサー、再生処理、画面制御の複数層を通る機能は、それぞれの責務だけを確認します。同じ結果を各層で重複して固定しないでください。同じ形式の入力を並べる場合は、引数付きテストへまとめます。
+同じ形式の入力は引数付きテストにまとめると、確認対象が分かりやすくなります。
 
 非同期処理の完了待ちには、テスト用の`requireEventually`を使います。一定時間の`Task.sleep`だけで完了を決めつけると、負荷の高いCIで不安定になります。アニメーション時間やタイムアウトそのものを検査する場合だけ、経過時間をテスト条件に含めます。
 
@@ -69,7 +69,7 @@ kagariとLuaのビルド・配布検証はUtatane Modules側で行います。
 ## コード構成
 
 ```text
-apps/Utatane/              SwiftUIアプリ、状態管理、設定・カレンダー・音声UI、各モジュールの結線
+apps/Utatane/              SwiftUIアプリ、状態管理、設定・カレンダー・音声UI、各モジュールの組み合わせ
 packages/Package.swift     Swift Package「UtataneKit」のProduct・Target・依存定義
 packages/core/             共有データ型、ゴーストイベント、プロパティ、ログ保存
 packages/runtime/          ゴーストセッション、人格エンジン、会話カタログ、変数保存
@@ -91,7 +91,7 @@ packages/shiori/external/  macOS外部SHIORIとWine上のWindows DLLへの接続
 packages/mcp-server/       Utatane操作用のstdio MCPサーバー
 ```
 
-`packages/`は[Package.swift](../../packages/Package.swift)を持つ単一のSwift Packageです。機能ごとのディレクトリをTargetとして登録し、依存方向と公開Productをこのファイルで管理します。パーサーや本体処理は各モジュールへ置き、SwiftUIアプリ固有の結線は`apps/Utatane`、再利用するmacOS表示・再生処理は`platform-macos`へ分けます。SHIORIの共通電文、FIRST専用実装、外部モジュール接続は`packages/shiori`内で管理します。
+`packages/`は[Package.swift](../../packages/Package.swift)を持つ単一のSwift Packageです。機能ごとのディレクトリをTargetとして登録し、依存方向と公開Productをこのファイルで管理します。パーサーや本体処理は各モジュールへ置き、SwiftUIアプリ固有の処理は`apps/Utatane`、再利用するmacOS表示・再生処理は`platform-macos`へ分けます。SHIORIの共通電文、FIRST専用実装、外部モジュール接続は`packages/shiori`内で管理します。
 
 周辺のビルド・調査用コードは次の場所にあります。
 
@@ -118,7 +118,7 @@ swift run --package-path packages utatane-validate --json "/path/to/ghost"
 
 開発用パレットの「内蔵SAORI」には、関数の単体テストと、実際のホストから呼ばれた内蔵SAORIのメタデータ記録があります。応答や制限は[SHIORI・SAORIの利用](../Support/Native-SHIORI.md#日時計算と開発用の確認)を参照してください。「更新チェックのみ」と仮想時刻は既存の開発ツールから使えます。仮想時刻が変更するのは時計イベント・予定通知で、SHIORI自身の時計やinternal_timeのnowはOSの時刻のままです。
 
-実ゴーストの辞書を通す検証は、ローカル導入済みのゴーストと、改修版のYAYA 5/6・里々・華和梨のuniversal dylibを指定して実行します。元ファイルを変更せず、一時コピーへ検証用イベントを追加します。配布素材はテストfixtureとしてリポジトリへ追加しません。
+実ゴーストの辞書を通す検証は、ローカル導入済みのゴーストと、改修版のYAYA 5/6・里々・華和梨のuniversal dylibを指定して実行します。元ファイルを変更せず、一時コピーへ検証用イベントを追加します。配布素材はテスト用データとしてリポジトリへ追加しません。
 
 ```sh
 UTATANE_REAL_SAORI_GHOST_ROOT="$PWD/Content/Local/Ghosts" \

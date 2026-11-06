@@ -1,10 +1,10 @@
 # Utatane対応ガイド（ゴースト・SHIORI・SAORI制作者向け）
 
-Utataneで動くコンテンツを新しく作る場合と、SSPなどで動いている既存コンテンツを対応させる場合の入口をまとめます。Utatane専用形式へ作り直す必要はありません。まず一般的な伺かのディレクトリ構成と電文を保ち、macOSで実行できない部分だけを切り分けてください。
+Utataneで動くコンテンツを新しく作る場合と、SSPなどで動いている既存コンテンツを対応させる場合の手順をまとめます。Utatane専用形式へ作り直す必要はありません。まず一般的な伺かのディレクトリ構成と電文を保ち、macOSで実行できない部分だけを切り分けてください。
 
-Utataneは開発中で、SSPの全機能を再現しているわけではありません。対応の有無は[ゴースト互換状況](../Support/Compatibility.md)、[Native SHIORI / SAORI](../Support/Native-SHIORI.md)、[UKADOC互換表](../Reference/UKADOC-Text-File-Compatibility.md)から確認できます。
+Utataneは開発中で、SSPの全機能を再現しているわけではありません。対応の有無は[互換性の確認](../Support/Compatibility.md)、[Native SHIORI / SAORI](../Support/Native-SHIORI.md)、[UKADOC互換表](../Reference/UKADOC-Text-File-Compatibility.md)から確認できます。
 
-## 最初に選ぶ経路
+## 作るものに合わせて進める
 
 | 作るもの | 新規に作る場合 | SSP向けの既存資産がある場合 |
 | --- | --- | --- |
@@ -67,6 +67,26 @@ Windows DLL、EXE、COM、レジストリ、Windowsのウィンドウハンド�
 Wineは利用者側の追加設定が必要です。通常の会話までWineを必須にする前に、内蔵実装で動く範囲を確認してください。
 
 SSPとUtataneで応答を変える必要がある場合でも、まず実際に異なる項目だけに限定してください。OS判定、HWND、プロセス操作などは互換値や未対応値になることがあります。共通のSHIORIイベントとSakuraScriptで済む処理は共通化します。
+
+## 音声のEQとスペクトラム
+
+`\![sound,play/load/option,...]`で、音声ごとのグラフィックEQを指定できます。
+
+```text
+\![sound,play,bgm.wav,--eq=0:0:-6:0:0,--eq-preamp=-3,--spectrum=50,--spectrum-bands=5]
+\![sound,option,--eq=0:0:3:0:0]
+\![sound,option,--eq=,--eq-preamp=0]
+```
+
+`--eq=`は低い帯域から順に、5・10・15・31個のゲインをコロンで区切ります。整数・小数を受け付け、各値は±24dBに丸めます。空なら帯域を0dBへ戻します。5・10・15・31個の有限な数値を受け付け、それ以外の指定では現在の設定を保ちます。`--eq-preamp=`は別の全体ゲインで、同じく±24dB、既定は0です。帯域を戻してもpreampは保持されるので、両方戻す場合は上の例のように指定します。
+
+帯域の中心周波数は[UKADOCの固定表](https://github.com/ukatech/ukadoc-spec/blob/0fc56cb0551a56e6da2f1ec3f27864b0f91076b0/list/sakura-script/sound/notes_sound_spectrum.md)に合わせています。中心で指定のゲインになるよう隣接帯域の重なりを補正します。Utataneではナイキスト周波数の90%以上にあるEQ帯域は無効です。全帯域0dBでは入力波形をそのまま使います。
+
+再生中の変更は約10msかけて移ります。EQ設定はその音声だけに適用し、停止・終了後に再生し直すと既定値へ戻ります。一時停止中の変更やシークでは待機状態を保持します。
+
+`OnSoundSpectrum`の解析位置はEQ・preamp・volumeの処理後、左右balanceの処理前です。再生経路が実際に処理した波形を使います。1つのゴーストでは従来どおり単一音声を保持し、複数ゴーストの設定と解析はそれぞれ独立します。
+
+音声のオプション全体は[UKADOCの正本](https://github.com/ukatech/ukadoc-spec/blob/0fc56cb0551a56e6da2f1ec3f27864b0f91076b0/list/sakura-script/sound/notes_sound.md)を参照してください。CD再生や動画ウィンドウなどの制限は[対応表](../Reference/UKADOC-SakuraScript-Compatibility.md)にあります。
 
 ## SHIORIを対応させる
 

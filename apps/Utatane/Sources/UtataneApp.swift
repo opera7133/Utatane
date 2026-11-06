@@ -370,6 +370,7 @@ private struct UtataneRootView: View {
     private let recycleBinSampler = MacOSRecycleBinSampler()
     private let nowPlayingReader = MacOSNowPlayingReader()
     private let desktopWallpaperSampler = SystemDesktopWallpaperSampler()
+    @State private var isRemovingContentExplorerEntries = false
     @State private var isTransitioningGhost = false
     @State private var isClosingCurrentGhost = false
     @State private var isHiddenForFullScreenApp = false
@@ -1583,11 +1584,12 @@ private struct UtataneRootView: View {
             return
         }
         guard let session, let balloon else { return }
-        let plannedAction = url.pathExtension.caseInsensitiveCompare("nar") == .orderedSame ? "nar" : "unknown"
+        let isCalendar = CalendarSubscriptionURL.matches(url)
+        let plannedAction = isCalendar ? "ical" : (url.pathExtension.caseInsensitiveCompare("nar") == .orderedSame ? "nar" : "unknown")
         let queryReferences = [
             0: url.absoluteString,
             1: String(scope),
-            2: FileDropEventRouter.mimeType(url),
+            2: isCalendar ? "text/calendar" : FileDropEventRouter.mimeType(url),
             3: plannedAction
         ]
         Task {
@@ -1598,6 +1600,10 @@ private struct UtataneRootView: View {
                 )), let script = response.script {
                     scriptPlayer.play(script, balloon: balloon)
                     forwardCommunication(from: currentGhost, response: response)
+                    return
+                }
+                if isCalendar {
+                    try await calendarWindowController.subscribe(from: url)
                     return
                 }
                 guard plannedAction == "nar" else { return }
@@ -2331,6 +2337,10 @@ private struct UtataneRootView: View {
                 lastClickedRegion = "scope \(scope): \(region ?? "範囲外")"
             }
             surfaceWindowController.onMouseEvent = { event in
+                if event.kind == .down {
+                    AppLogStore.shared.debug("Surface mouse down: scope=\(event.scope), region=\(event.region ?? "(none)"), x=\(event.x), y=\(event.y), timecritical=\(scriptPlayer.isTimeCritical)",
+                                             category: "Input", ghostName: currentGhost?.name)
+                }
                 guard !scriptPlayer.isTimeCritical else { return }
                 if case .click = event.kind {
                     lastClickedRegion = "scope \(event.scope): \(event.region ?? "範囲外")"
@@ -2913,8 +2923,10 @@ private struct UtataneRootView: View {
                 await sntpCoordinator?.correct()
             }
 
+            let translators = initialMakotoTranslators(for: ghost)
             let ghostSession = try GhostSession(
                 personalityEngine: personalityEngine(for: ghost),
+                scriptTranslators: translators,
                 variableStore: GhostVariableStore(fileURL: ContentRoot.variableStoreURL(for: ghost)),
                 logStore: .shared,
                 ghostName: ghost.name,
@@ -3085,10 +3097,7 @@ private struct UtataneRootView: View {
         "utatane.ghost.hasBooted." + Data(ghost.rootDirectory.standardizedFileURL.path.utf8).base64EncodedString()
     }
 
-    private func personalityEngine(
-        for ghost: InstalledGhost,
-        includesMakoto: Bool = true
-    ) throws -> any PersonalityEngine {
+    private func personalityEngine(for ghost: InstalledGhost) throws -> any PersonalityEngine {
         let base: any PersonalityEngine
         do {
             base = try basePersonalityEngine(for: ghost)
@@ -3097,22 +3106,23 @@ private struct UtataneRootView: View {
             shioriInitializationResults[ghost.id] = "\(Date().formatted()): FAILED — \(error.localizedDescription)"
             throw error
         }
-        let masterDirectory = ghost.rootDirectory.appending(
-            path: "ghost/master",
-            directoryHint: .isDirectory
-        )
-        var translators: [any SakuraScriptTranslator] = []
-        if includesMakoto {
-            if ParticleMakotoTranslator.supports(masterDirectoryURL: masterDirectory) {
-                translators.append(ParticleMakotoTranslator())
-            }
-            if BasicMakotoTranslator.supports(masterDirectoryURL: masterDirectory),
-               let translator = try? BasicMakotoTranslator(masterDirectoryURL: masterDirectory)
-            {
-                translators.append(translator)
-            }
+        return base
+    }
+
+    private func initialMakotoTranslators(for ghost: InstalledGhost) -> [any SakuraScriptTranslator] {
+        guard !makotoDisabledGhostIDs.contains(ghost.id) else { return [] }
+        do {
+            return try makotoTranslators(for: ghost)
+        } catch {
+            showError(error.localizedDescription)
+            return []
         }
-        return translators.isEmpty ? base : TranslatingPersonalityEngine(base: base, translators: translators)
+    }
+
+    private func makotoTranslators(for ghost: InstalledGhost) throws -> [any SakuraScriptTranslator] {
+        try MakotoTranslatorLoader().load(from: ghost.rootDirectory.appending(
+            path: "ghost/master", directoryHint: .isDirectory
+        ))
     }
 
     private func selectStartupGhost() {
@@ -3148,6 +3158,19 @@ private struct UtataneRootView: View {
         let stateDirectory = ContentRoot.variableStoreURL(for: ghost).deletingLastPathComponent()
         let saoriRoot = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appending(path: "Utatane/NativeSaori", directoryHint: .isDirectory)
+        if let selection = try GhostShioriSelectionStore().selection(for: ghost.id) {
+            let module = try selection.validatedModuleURL()
+            reportInternalSaoriCompatibility(module)
+            return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
+                NativeShioriSession(
+                    directoryURL: masterDirectory, selectedModule: selection,
+                    stateDirectoryURL: stateDirectory,
+                    saoriCaller: nativeSaoriRegistry(for: masterDirectory), saoriRootURL: saoriRoot,
+                    onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id),
+                    internalSaoriMediaReader: MacOSMediaInfoReader()
+                )
+            ))
+        }
         if winePreferredGhostIDs.contains(ghost.id.standardizedFileURL),
            let dll = ContentRoot.shioriModuleURL(for: ghost), dll.pathExtension.lowercased() == "dll",
            let configuration = ContentRoot.windowsDLLConfiguration(for: dll, charset: ghost.charset ?? "Shift_JIS")
@@ -4187,7 +4210,10 @@ private struct UtataneRootView: View {
                     : (currentGhost?.rootDirectory.appending(path: "ghost/master").appending(path: filePath) ?? URL(fileURLWithPath: filePath))
                 installNar(from: fileURL)
             case let .url(urlString, type):
-                guard let downloadURL = URL(string: urlString), isWebURL(downloadURL) else { return }
+                guard let sourceURL = URL(string: urlString),
+                      let downloadURL = CalendarSubscriptionURL.matches(sourceURL)
+                      ? try? CalendarSubscriptionURL.normalized(sourceURL) : sourceURL,
+                      isWebURL(downloadURL) else { return }
                 Task {
                     do {
                         if type?.lowercased() == "homeurl" {
@@ -4547,10 +4573,7 @@ private struct UtataneRootView: View {
             if loads {
                 guard await !(targetSession.isPersonalityEngineLoaded) else { return }
                 do {
-                    let engine = try personalityEngine(
-                        for: ghost,
-                        includesMakoto: !makotoDisabledGhostIDs.contains(ghost.id)
-                    )
+                    let engine = try personalityEngine(for: ghost)
                     await targetSession.loadPersonalityEngine(engine)
                 } catch {
                     showError(error.localizedDescription)
@@ -4559,16 +4582,14 @@ private struct UtataneRootView: View {
                 await targetSession.unloadPersonalityEngine()
             }
         case .makoto:
-            if loads {
-                makotoDisabledGhostIDs.remove(ghost.id)
-            } else {
-                makotoDisabledGhostIDs.insert(ghost.id)
-            }
-            guard await targetSession.isPersonalityEngineLoaded else { return }
-            await targetSession.unloadPersonalityEngine()
             do {
-                let engine = try personalityEngine(for: ghost, includesMakoto: loads)
-                await targetSession.loadPersonalityEngine(engine)
+                let translators = try loads ? makotoTranslators(for: ghost) : []
+                await targetSession.setScriptTranslators(translators)
+                if loads {
+                    makotoDisabledGhostIDs.remove(ghost.id)
+                } else {
+                    makotoDisabledGhostIDs.insert(ghost.id)
+                }
             } catch {
                 showError(error.localizedDescription)
             }
@@ -4577,17 +4598,15 @@ private struct UtataneRootView: View {
 
     private func reloadScriptComponents(calledRuntime: CalledGhostRuntime? = nil) async {
         guard let ghost = calledRuntime?.ghost ?? currentGhost,
-              let targetSession = calledRuntime?.session ?? session,
-              await targetSession.isPersonalityEngineLoaded
+              let targetSession = calledRuntime?.session ?? session
         else { return }
 
-        _ = try? await targetSession.handle(event: SHIORIEventFactory.destroy(isReload: true))
+        if await targetSession.isPersonalityEngineLoaded {
+            _ = try? await targetSession.handle(event: SHIORIEventFactory.destroy(isReload: true))
+        }
         await targetSession.unloadPersonalityEngine()
         do {
-            let engine = try personalityEngine(
-                for: ghost,
-                includesMakoto: !makotoDisabledGhostIDs.contains(ghost.id)
-            )
+            let engine = try personalityEngine(for: ghost)
             await targetSession.loadPersonalityEngine(engine)
             _ = try? await targetSession.handle(event: SHIORIEventFactory.initialize(isReload: true))
         } catch {
@@ -5610,6 +5629,17 @@ private struct UtataneRootView: View {
         shioriDiagnosticsController?.close()
         let controller = SHIORIDiagnosticsWindowController(
             targets: shioriDiagnosticTargets(), selectedID: menuGhost(for: target)?.id.path,
+            saveSelection: { id, path, kind in
+                guard let ghost = model.ghosts.first(where: { $0.id.path == id }) else { return }
+                try GhostShioriSelectionStore().set(path.map { GhostShioriSelection(modulePath: $0, kindID: kind) }, for: ghost.id)
+            },
+            reloadSelection: { id in
+                if let runtime = calledGhosts.values.first(where: { $0.ghost.id.path == id }) {
+                    await reloadScriptComponents(calledRuntime: runtime)
+                } else if currentGhost?.id.path == id {
+                    await reloadScriptComponents()
+                }
+            },
             refresh: {
                 if let client = ModuleCatalogConfiguration.client {
                     diagnosticModuleCatalog = try? await client.fetch()
@@ -5649,11 +5679,35 @@ private struct UtataneRootView: View {
                     }
                 }
             }
+            var userSelection: GhostShioriSelection?
+            var selectionError = ""
+            do {
+                userSelection = try GhostShioriSelectionStore().selection(for: ghost.id)
+                if let userSelection {
+                    module = URL(fileURLWithPath: userSelection.modulePath)
+                }
+            } catch { selectionError = "Selection error: \(error.localizedDescription)" }
+            let sharedResolver = UtataneModuleResolver(environment: [:], allowsFallback: false)
+            let choices = ConventionalShioriKind.allCases.compactMap { kind -> SHIORIModuleChoice? in
+                guard let url = try? sharedResolver.moduleURL(for: kind) else { return nil }
+                return SHIORIModuleChoice(path: url.path, kind: kind.rawValue)
+            }
+            var additionalInspection: (@Sendable () -> String)?
+            if userSelection?.kind == .dnproxy || (userSelection == nil && descriptor?.id.rawValue == "dnproxy"),
+               userSelection != nil || !winePreferredGhostIDs.contains(ghost.id.standardizedFileURL),
+               module.flatMap({ ConventionalShioriKind(libraryFilename: $0.lastPathComponent) }).map({ $0 == .dnproxy }) ?? true
+            {
+                let selectedModule = module
+                additionalInspection = { DNProxyPreflight().inspect(directoryURL: master, moduleURL: selectedModule).report }
+            }
             return SHIORIDiagnosticTarget(
                 id: ghost.id.path, name: ghost.name, selectedFilename: ghost.shioriFilename,
                 macOSOverride: ghost.shioriMacOSFilename, moduleURL: module,
-                runtimeResult: shioriInitializationResults[ghost.id] ?? "No startup attempt in this app session.",
-                moduleRequirementsReport: ghostModuleDiagnosticReport(for: ghost, library: module)
+                runtimeResult: selectionError + (shioriInitializationResults[ghost.id] ?? "No startup attempt in this app session."),
+                selectionPath: userSelection?.modulePath, selectionKind: userSelection?.kind?.rawValue,
+                availableModules: choices, kindIDs: ConventionalShioriKind.allCases.map(\.rawValue),
+                moduleRequirementsReport: ghostModuleDiagnosticReport(for: ghost, library: module),
+                additionalInspection: additionalInspection
             )
         }
     }
@@ -5664,7 +5718,9 @@ private struct UtataneRootView: View {
         var lines = ["SHIORI / SAORI requirements:"]
         do { _ = try GhostModuleDeclaration.read(from: master) }
         catch { lines.append("ERROR: Invalid or unreadable utatane-modules.json: \(error)") }
+        let hasSelection = (try? GhostShioriSelectionStore().selection(for: ghost.id)) != nil
         let pending = GhostModuleRequirements().unresolved(for: ghost, applicationSupportURL: support, catalog: diagnosticModuleCatalog)
+            .filter { !hasSelection || $0.kind.lowercased() != "shiori" }
         let plan = diagnosticModuleCatalog.map { ModuleInstallPlan(moduleIDs: pending.map(\.id), catalog: $0, inventory: .init(applicationSupportURL: support), requiredKinds: Dictionary(pending.map { ($0.id, $0.kind) }, uniquingKeysWith: { first, _ in first })) }
         for requirement in pending {
             let resolution = plan?.moduleIDs.contains(requirement.id) == true ? String(localized: "まとめて導入できる")
@@ -6331,6 +6387,7 @@ private struct UtataneRootView: View {
                 title: ghost.name,
                 identifier: ghost.id.path
             )
+            let translators = initialMakotoTranslators(for: ghost)
             let runtime = try CalledGhostRuntime(
                 ghost: ghost,
                 balloons: installedBalloons,
@@ -6338,6 +6395,7 @@ private struct UtataneRootView: View {
                 selectionStore: selectionStore,
                 defaultBalloonDirectoryName: networkSettings.defaultBalloonDirectoryName,
                 personalityEngine: personalityEngine(for: ghost),
+                scriptTranslators: translators,
                 characterDelayMilliseconds: networkSettings.characterDelayMilliseconds,
                 dialogueDismissalMilliseconds: networkSettings.dialogueDismissalSeconds * 1000,
                 speechSynthesisEnabled: networkSettings.speechSynthesisEnabled,
@@ -6354,6 +6412,7 @@ private struct UtataneRootView: View {
             runtime.currentDate = { DeveloperVirtualClock.date(realDate: Date(), offset: developerVirtualTimeOffset) }
             runtime.onError = { showError($0.localizedDescription) }
             runtime.onNarDrop = { installNars(from: $0) }
+            runtime.onCalendarURLDrop = { try await calendarWindowController.subscribe(from: $0) }
             runtime.onWallpaperDrop = { url in await changeDesktopWallpaper(to: url) }
             runtime.onOpenMessenger = { ipMessengerWindowController.showMessenger() }
             runtime.onOpenUsageGraph = { usageWindowController.show(ghosts: model.ghosts) }
@@ -8489,10 +8548,19 @@ private struct UtataneRootView: View {
                 return false
             }
         }
+        var explicitlySelected = Set<URL>()
+        do {
+            for ghost in ghosts where try GhostShioriSelectionStore().selection(for: ghost.id) != nil {
+                explicitlySelected.insert(ghost.id)
+            }
+        } catch { showError(error.localizedDescription); return false }
         func unresolved(_ catalog: SignedModuleCatalog? = nil) -> [GhostModuleRequirement] {
             var seen = Set<String>()
-            return ghosts.flatMap { scanner.unresolved(for: $0, applicationSupportURL: supportURL, catalog: catalog) }
-                .filter { seen.insert($0.kind + ":" + $0.id).inserted }
+            return ghosts.flatMap { ghost in
+                scanner.unresolved(for: ghost, applicationSupportURL: supportURL, catalog: catalog)
+                    .filter { !explicitlySelected.contains(ghost.id) || $0.kind.lowercased() != "shiori" }
+            }
+            .filter { seen.insert($0.kind + ":" + $0.id).inserted }
         }
         let needsDiscovery = diagnosticModuleCatalog == nil && ghosts.contains { scanner.needsCatalogDiscovery(for: $0, applicationSupportURL: supportURL) }
         guard !unresolved(diagnosticModuleCatalog).isEmpty || needsDiscovery else { return true }
@@ -8653,6 +8721,8 @@ private struct UtataneRootView: View {
             onUpdateEntries: requestContentExplorerUpdates,
             onRepairEntries: requestContentExplorerRepairs,
             onCancelUpdate: cancelContentExplorerUpdates,
+            onInstallModulesForEntries: requestContentExplorerBatchModuleInstallation,
+            onRemoveEntries: requestContentExplorerBatchRemoval,
             onRemove: requestContentExplorerRemoval
         )
     }
@@ -8842,6 +8912,39 @@ private struct UtataneRootView: View {
         }
     }
 
+    private func requestContentExplorerBatchModuleInstallation(_ entries: [ContentExplorerEntry]) {
+        let directories = Set(entries.map(\.directory))
+        let ghosts = model.ghosts.filter { directories.contains($0.id) }
+        guard !ghosts.isEmpty else { return }
+        Task {
+            _ = await offerMissingModules(for: ghosts)
+            refreshContentExplorer()
+        }
+    }
+
+    private func requestContentExplorerBatchRemoval(_ requested: [ContentExplorerEntry]) {
+        guard !isTransitioningGhost, !isRemovingContentExplorerEntries else { return }
+        let current = Dictionary(uniqueKeysWithValues: contentExplorerEntries().map { ($0.id, $0) })
+        var seen = Set<String>()
+        let entries = requested.compactMap { current[$0.id] }
+            .filter { $0.removalContainer != nil && seen.insert($0.id).inserted }
+            .sorted { lhs, rhs in
+                let left = lhs.directory == currentGhost?.rootDirectory ? 2 : (lhs.isActive ? 1 : 0)
+                let right = rhs.directory == currentGhost?.rootDirectory ? 2 : (rhs.isActive ? 1 : 0)
+                return left == right ? lhs.id < rhs.id : left < right
+            }
+        guard !entries.isEmpty,
+              alertController.confirmContentRemoval(name: entries.map(\.name).joined(separator: "\n"),
+                                                    kind: entries[0].kind.title) else { return }
+        isRemovingContentExplorerEntries = true
+        Task {
+            defer { isRemovingContentExplorerEntries = false }
+            for entry in entries {
+                await removeContentExplorerEntry(entry, asksConfirmation: false)
+            }
+        }
+    }
+
     private func requestContentExplorerRemoval(_ entry: ContentExplorerEntry) {
         Task { await removeContentExplorerEntry(entry, asksConfirmation: true) }
     }
@@ -8888,26 +8991,31 @@ private struct UtataneRootView: View {
         let candidates = entries.filter { entry in
             entry.hasUpdateAction && (operation == .check || entry.canUpdate)
         }
-        guard !candidates.isEmpty else { return }
-        let targets: [ContentUpdateTarget]
-        do {
-            var resolvedTargets: [ContentUpdateTarget] = []
-            for entry in candidates {
-                try await resolvedTargets.append(contentUpdateTarget(for: entry))
-            }
-            targets = resolvedTargets
-        } catch {
-            showError(error.localizedDescription)
-            return
-        }
+        guard !isUpdatingContent, !candidates.isEmpty else { return }
 
         isUpdatingContent = true
         contentExplorerController.setUpdateState(isUpdating: true, status: "準備中…")
-        let statusToken = statusWindowController.show("\(targets.count)項目を処理中…")
+        let statusToken = statusWindowController.show("\(candidates.count)項目を処理中…")
         defer {
             isUpdatingContent = false
             contentExplorerController.setUpdateState(isUpdating: false)
             statusWindowController.hide(token: statusToken)
+        }
+
+        let targets: [ContentUpdateTarget]
+        do {
+            var resolvedTargets: [ContentUpdateTarget] = []
+            for entry in candidates {
+                try Task.checkCancellation()
+                try await resolvedTargets.append(contentUpdateTarget(for: entry))
+            }
+            try Task.checkCancellation()
+            targets = resolvedTargets
+        } catch is CancellationError {
+            return
+        } catch {
+            showError(error.localizedDescription)
+            return
         }
 
         if operation != .check, candidates.contains(where: { $0.kind == .plugin }) {

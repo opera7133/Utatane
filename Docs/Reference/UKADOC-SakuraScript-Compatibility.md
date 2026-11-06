@@ -2,9 +2,7 @@
 
 SakuraScriptの命令について、Utataneで使える範囲とSSPとの差をまとめた対応表です。[UKADOC](https://ssp.shillest.net/ukadoc/manual/)の項目を基準にしています。
 
-この表は2026-09-21時点のソースコードを基にしています。各節の調査日と備考で、確認した範囲を確認してください。実機で未確認の項目は「対応」に含めません。
-
-初回照合では、構文違いを個別に数えて359件のSakuraScript項目を対象にしました。その後追加された`dumpballoon`と`textareabox`も追記し、同じ実装経路を使う構文を150行に分類しています。集計と行数はCIで検査します。
+使いたい命令の行で、対応する引数やmacOS固有の制約を確認してください。表は実装に合わせて更新しています。
 
 ## 判定
 
@@ -15,9 +13,7 @@ SakuraScriptの命令について、Utataneで使える範囲とSSPとの差を�
 | ❌ | 未実装。現在は `unknown` として無視されるか、文字列として扱われます |
 | ➖ | macOS では意味が薄い、危険、または別機能として設計判断が必要 |
 
-命令を読み取れるだけでは「対応」にしません。読み取りから再生までつながり、メインゴーストと呼び出したゴーストなど、必要な場面で動くことを確認します。
-
-対応を進める際は、各項目を「✅」または理由付きの「➖」にすることを目指します。macOSで実現できない機能やSSP固有の画面、安全な代替方法を用意できない機能は、理由を明記します。
+✅は主要な構文と処理に対応していることを示します。ゴースト固有の使い方や、複数の命令を組み合わせた表示については、対象コンテンツでの確認も必要です。
 
 ## SakuraScript
 
@@ -60,9 +56,9 @@ UKADOC分類行数: 150
 | `\![set,alpha,...]` | ✅ | scope別の0〜100指定、上限クランプ、負値で値を維持した再描画、`--time`・旧位置引数によるアニメーション、`--wait`に対応 |
 | effect / effect2 / filter | ➖ | SSPのWindows用サーフェスエフェクトプラグインを呼ぶ命令。互換プラグイン実行基盤がmacOSにないため対象外 |
 | `\4`, `\5` | ✅ | `\4`（他キャラから離れる方向への一定移動）と `\5`（他キャラとの隣接位置への接近移動）に対応 |
-| `\![move]`, `\![moveasync]` | 🟡 | 同期・非同期移動、スコープ番号・me・screen・primaryscreen・globalの基準、base-offset／move-offsetのleft・right・top・bottom・center・baseに対応。新旧引数、Y下向き座標とfixをテスト済み。非同期移動の`cancel`、sticky-window追従、`--option=ignore-sticky-window`を自動テスト済み。実画面での再確認と他ゴーストの名前による基準は未対応 |
+| `\![move]`, `\![moveasync]` | 🟡 | 同期・非同期移動、スコープ番号・me・screen・primaryscreen・globalの基準、base-offset／move-offsetのleft・right・top・bottom・center・baseに対応。旧形式の引数、Y下向きの座標とfixにも対応。非同期移動の`cancel`、sticky-window追従、`--option=ignore-sticky-window`に対応。他ゴーストの名前による基準指定は未対応 |
 | `\![set/reset,position...]` | ✅ | `set,position,x,y,scope`で指定scopeをスクリーン座標へ移動してドラッグ固定し、`reset,position`で全scopeの固定を解除 |
-| `\![set/reset,zorder...]` | 🟡 | surfaceスコープの前後関係を左から手前の順として保持。複数グループ、サーフェス更新・再表示・シェル再読み込み後の維持とresetによる解除をテスト済み。balloonを含む個別ウィンドウ指定は未対応 |
+| `\![set/reset,zorder...]` | 🟡 | surfaceスコープの前後関係を左から手前の順として保持。複数グループ、サーフェス更新・再表示・シェル再読み込み後の維持とresetによる解除に対応。balloonを含む個別ウィンドウ指定は未対応 |
 | `\![set/reset,sticky-window...]` | ✅ | `\![set,sticky-window,スコープ...]` による複数キャラクターウィンドウの連動ドラッグ移動と、`\![reset,sticky-window]` による解除に対応 |
 | `\![execute,resetwindowpos]` | ✅ | 保存済みの全scopeのサーフェス・バルーン位置を消去し、表示中ウィンドウを初期配置へ戻します |
 | `\![vanishbymyself]` | ✅ | 現在のゴーストを安全に終了してmacOSのゴミ箱へ移動。切り替え先ゴースト名と`--option=query`による確認画面にも対応 |
@@ -81,7 +77,7 @@ UKADOC分類行数: 150
 | `\_l[x,y]`／`\_l[x]` | ✅ | ピクセル・em・lh・%と`@`相対指定を解釈し、文字描画範囲左上を基準に配置。Xだけの旧来形、右タブとして使う同一行の左右分割、AppKit縦書きレイアウトにも同じ座標モデルを反映 |
 | `\C` | ✅ | スクリプト先頭では直前の表示内容・リンク・装飾を維持してscope 0から追記。途中では全scopeを消去。Playerテストで確認 |
 | `\![set,autoscroll,...]` | ✅ | `disable` / `enable` をスコープ単位で反映 |
-| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset、配置、下部marker、受信数表示を実装。`@`付きoffsetはShell／surface固有offsetへ加算し、`@`なしは置換。ドラッグ量を別に保存して加算し、終端のoffset解除後も保持。相対／絶対指定と復帰をテスト済み。実ゴーストでの操作・切り替え中の復帰確認待ち |
+| `\![set,balloonoffset/balloonalign/balloonmarker/balloonnum,...]` | 🟡 | scope別のoffset、配置、下部marker、受信数表示を実装。`@`付きoffsetはShell／surface固有offsetへ加算し、`@`なしは置換。ドラッグ量を別に保存して加算し、終端のoffset解除後も保持。相対／絶対指定と復帰に対応。実ゴーストでの操作・切り替え中の復帰確認待ち |
 | `\![set,balloontimeout,...]` | ✅ | 表示完了後のバルーン消去時間を指定。0以下で無効、選択肢タイムアウトとの競合は早い方を採用 |
 | `\![set,balloonwait,...]` | ✅ | 倍率・百分率・`ms` 絶対値に対応し、スクリプト終了時に復帰 |
 | `\![set,serikotalk,true/false]` | ✅ | 文字表示中に現在surfaceのSERIKO `talk` intervalを駆動。明示アニメーションとは競合させず、スクリプトごとにtrueへリセット |
@@ -169,7 +165,7 @@ UKADOC分類行数: 150
 
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\8[file]`, `\_v[file]`, `\_V`, `\![sound,...]` | 🟡 | `\8` / `\_v`（非同期音声再生）、`\_V`（音声再生完了待ち）、`\![sound,...]`（play/load/loop/wait/pause/resume/stop/option）に対応。volume、balance、rate、seektime、spectrum（間隔・帯域数・ピーク保持）に対応。音声波形からOnSoundSpectrumと再生位置を通知。AVFoundation対応音声の相対パス・絶対パスとWindows式区切りに対応。CD・動画ウィンドウは未対応 |
+| `\8[file]`, `\_v[file]`, `\_V`, `\![sound,...]` | 🟡 | `\8` / `\_v`（非同期音声再生）、`\_V`（音声再生完了待ち）、`\![sound,...]`（play/load/loop/wait/pause/resume/stop/option）に対応。volume、balance、rate、seektime、eq（5/10/15/31帯域）・eq-preamp、spectrum（間隔・帯域数・ピーク保持）に対応。音量・EQ適用後、balance適用前の波形からOnSoundSpectrumと再生位置を通知。AVFoundation対応音声の相対パス・絶対パスとWindows式区切りに対応。CD・動画ウィンドウは未対応 |
 
 ### 外部UI・入力
 
@@ -215,16 +211,16 @@ UKADOC分類行数: 150
 | `\![cancel,http/http-get/ical,...]` | ✅ | 特定URLまたは全実行中のHTTP・iCalendarリクエストをキャンセル |
 | `\![execute,extractarchive/compressarchive,...]` | 🟡 | ghost/master配下に限定してZIP展開・圧縮を実行し、結果またはエラーコードをイベント通知。パストラバーサル・シンボリックリンクを拒否。SSP管理下の他フォルダと暗号化方式の完全互換は未対応 |
 | dumpballoon | 🟡 | 現在の描画内容をPNGへ出力。非表示の保持内容、等倍サイズ、位置／名前付き引数、prefix、完了イベント、--hideのballoonmarker／balloonnumに対応。hide指定時は再描画禁止中の保留内容も別ビューで描き直し、表示中のビューは変更しない。イベント指定時も出力完了を待つ。バックグラウンド出力は未対応で、実バルーンとの画素照合は未確認 |
-| dumpsurface | 🟡 | ディレクトリ／scope／surface／prefix／event（async）／fromzeroの名前付き引数と位置引数の混在にも対応。animation指定で基本的なbase・overlay・move・clear等を連番PNGへ出力。別アニメーションの開始・停止や動画・拡縮パターン、イベント指定時のバックグラウンド出力は未対応。ゴースト配下へのPNG出力、scope、surface ID／範囲／除外指定、`__system_surface_all__`／`__system_surface_defined__`、prefix、イベント完了時の成功件数に対応。element・初期bind合成の負座標領域を保持し、ゼロ位置切り出し指定時だけ0,0で切り抜く。入れ子の合成とPNG画素をテスト済み。合成範囲を拡張する時の上限は各辺16,384px・計16,777,216画素。実シェルでの各合成方式の照合待ち |
+| dumpsurface | 🟡 | ディレクトリ／scope／surface／prefix／event（async）／fromzeroの名前付き引数と位置引数の混在にも対応。animation指定で基本的なbase・overlay・move・clear等を連番PNGへ出力。別アニメーションの開始・停止や動画・拡縮パターン、イベント指定時のバックグラウンド出力は未対応。ゴースト配下へのPNG出力、scope、surface ID／範囲／除外指定、`__system_surface_all__`／`__system_surface_defined__`、prefix、イベント完了時の成功件数に対応。element・初期bind合成の負座標領域を保持し、ゼロ位置切り出し指定時だけ0,0で切り抜く。入れ子の合成とPNG画素に対応。合成範囲を拡張する時の上限は各辺16,384px・計16,777,216画素。実シェルでの各合成方式の照合待ち |
 | `\![execute,install,path/url,...]` | 🟡 | ローカルNARとURL指定のNAR・feed・homeurl・ical・ssfに対応。feed／icalは購読先を保存し、icalは起動時と1時間ごとに再取得。SSFはversion 1.0のghost・script・script_nowait・waitを実行（UTF-8／Shift_JIS）。自動判別は内容と拡張子による。全MIME・ドラッグ対象との照合は未対応 |
 | ping / nslookup | 🟡 | macOSのping・DNSキャッシュ照会へ接続。host/eventとpingのcount/size/timeout/ttl/df/data、応答単位progress、完了・失敗イベントに対応。macOS `ping`の制約によりdataは先頭16バイトのパターンを指定サイズまで繰り返します |
 | createnar / createupdatedata | 🟡 | `createupdatedata`は引数省略時にルートとghost/masterへupdates2.dau／updates.txtを生成。出力ファイル指定はghost/master基準で、.dauはDAU、それ以外はテキスト形式。自身の出力は一覧から除外し、明示指定時は標準ファイルを変更しない。`createnar`は引数なしで保存先を選び、実行元ゴーストをNAR化する。スクリプトが任意の絶対パスへ直接書き出す動作は安全のため制限 |
 | emptyrecyclebin | ✅ | ユーザーの`~/.Trash`を空にし、実行元と他ゴーストへ前後の件数・容量・成否を通知 |
 | create shortcut | ➖ | Windowsショートカット固有のためmacOSでは対象外 |
 | passive / induction / select / collision mode | 🟡 | passive／induction、collision表示に加え、selectrectの全画面矩形選択と開始・終了・マウス・キャンセル通知に対応。メニュー・DnD・更新・最小化・終了等の全制限は未実装 |
-| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | 旧`reloadsurface`、surface、shell、balloon、ghost、shiori、makoto、表示中のaigraphを実装。shellは実行中のスクリプトと予約イベントを維持して読み直す（Playerテストで確認）。`reload,descript`は全体指定とghost／shell／balloon／headline／plugin／calendar.skinの対象指定に対応する。SHIORIとMAKOTOは結合された人格エンジンを再生成する。language／calendar.pluginは未対応 |
+| reload surface/descript/shiori/makoto/shell/balloon/ghost/aigraph | 🟡 | 旧`reloadsurface`、surface、shell、balloon、ghost、shiori、makoto、表示中のaigraphを実装。shellは実行中のスクリプトと予約イベントを維持して読み直す（Playerテストで確認）。`reload,descript`は全体指定とghost／shell／balloon／headline／plugin／calendar.skinの対象指定に対応する。`reload,shiori`はMAKOTOの設定を保ってSHIORIだけを再生成し、`reload,makoto`は変換規則だけを読み直す（SHIORIのメモリ状態は維持）。language／calendar.pluginは未対応 |
 | `\![unload/load,shiori]` | ✅ | 実行中の人格エンジンを解放し、load時にゴースト設定から再生成。unload中はイベントに応答しない |
-| `\![unload/load,makoto]` | 🟡 | MAKOTO変換を外した／含めた人格エンジンへ切り替える。切り替え時にSHIORIも再生成される点はSSPと異なる |
+| `\![unload/load,makoto]` | 🟡 | 対応する内蔵MAKOTO変換だけを解除／読み込みする。SHIORIのメモリ変数・SAORI状態を維持し、SHIORIの停止中も設定できる。読み込み失敗時は現在の変換を維持する。任意のWindows用MAKOTO DLLは実行しない |
 | `\![set,shioridebugmode,true/false]` | ✅ | 開発用パレットのSHIORIリクエスト画面を表示／非表示にする。Utataneは通常時もSHIORI通信をログへ記録する |
 | `\_u`, `\_m` | ✅ | 16進・10進のUCS-2／ASCIIコードを文字へ変換。範囲外とサロゲートは拒否しParserテストで確認 |
 | `\&[ID]` | ✅ | amp・apos・gt・lt・nbsp・quotに加え、yen・cent・pound・euro・copy・reg・trade・deg・plusmn・sup1-3・frac・times・divide・half_solidus・bull・hellip・矢印等の主要HTML/XML実体参照に対応 |
@@ -253,7 +249,7 @@ SakuraScript以外の仕様について、対応を進める領域をまとめ�
 | SHIORI Resource | 🟡 | 主要なシステム・ゴースト・シェル・バルーン・メニュー・サイト情報を実装。完全な照会表は未作成 |
 | SHIORI/3.0 | 🟡 | GET/NOTIFY、Reference、Charset、Valueなど基本モデルあり。全ヘッダー・ステータス未照合 |
 | SSTP/1.x | ✅ | localhost Socket／HTTPのportable coreを実装。SEND、NOTIFY、COMMUNICATE、EXECUTE、GIVE、ゴースト指定、IfGhost、nobreak、情報取得・Cookie・Property・Archive系commandに対応。詳細は[UKADOC-SSTP-Compatibility.md](UKADOC-SSTP-Compatibility.md) |
-| SAORI/1.0 | 🟡 | 改修版SHIORI経由の内蔵SAORI（機能一覧・正規化・乱数・日時計算・データ変換・gzip/zlib/deflate・MediaInfo・ファイルのDigest/HMAC・Compare）と非同期イベントを実装。Windows名のタイムゾーン、暗号化等は未対応。SSU等の既存ネイティブ互換も維持。Windows Direct SSTP互換ではない |
+| SAORI/1.0 | 🟡 | 改修版SHIORI経由の内蔵SAORI（機能一覧・Describeによる引数/候補の照会・正規化・乱数・日時計算・データ変換・gzip/zlib/deflate・MediaInfo・CRC32/Adler32を含む文字列/ファイルのDigest・HMAC・Compare）と非同期イベントを実装。Windows名のタイムゾーン、暗号化等は未対応。SSU等の既存ネイティブ互換も維持。Windows Direct SSTP互換ではない |
 | HEADLINE/2.0 | 🟡 | native `config.txt` とWine DLL fallback。全応答差異は未照合 |
 | DLL規格 | 🟡 | SHIORIはnative実装と限定Wine経路。一般Windows DLLは対象外 |
 | FMO / MUTEX | 🟡 | SSTP `GetFMO`で起動中ゴーストの名前・パス・サーフェスを公開。Windows共有メモリ・MUTEX・HWND互換は対象外 |

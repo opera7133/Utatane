@@ -24,6 +24,8 @@ private struct ModulePackageManifest: Decodable {
 
 /// Installs a catalog ZIP into a managed root such as NativeShiori or NativeSaori.
 public struct ModulePackageInstaller: Sendable {
+    private static let replacementLock = NSLock()
+
     public init() {}
 
     @discardableResult
@@ -129,20 +131,23 @@ public struct ModulePackageInstaller: Sendable {
 
         let destination = root.appending(path: module.id, directoryHint: .isDirectory)
         let backup = root.appending(path: ".backup-\(UUID().uuidString)", directoryHint: .isDirectory)
-        let hadPrevious = manager.fileExists(atPath: destination.path)
-        if hadPrevious {
-            try manager.moveItem(at: destination, to: backup)
-        }
-        do {
-            try manager.moveItem(at: package, to: destination)
-        } catch {
+        // Catalog, settings, and ghost setup can all install to the same root.
+        try Self.replacementLock.withLock {
+            let hadPrevious = manager.fileExists(atPath: destination.path)
             if hadPrevious {
-                try? manager.moveItem(at: backup, to: destination)
+                try manager.moveItem(at: destination, to: backup)
             }
-            throw error
-        }
-        if hadPrevious {
-            try? manager.removeItem(at: backup)
+            do {
+                try manager.moveItem(at: package, to: destination)
+            } catch {
+                if hadPrevious {
+                    try? manager.moveItem(at: backup, to: destination)
+                }
+                throw error
+            }
+            if hadPrevious {
+                try? manager.removeItem(at: backup)
+            }
         }
         return destination
     }
