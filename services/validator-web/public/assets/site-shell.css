@@ -1,0 +1,21 @@
+/* Shared appearance: keep in sync with Utatane Modules site/site-shell.css
+   and Utatane services/validator-web/public/assets/site-shell.css. */
+.site-header, .site-footer { background: #fff; color: #6c6872; }
+.site-header { border-bottom: 1px solid #d9d6de; }
+.site-footer { margin-top: auto; border-top: 1px solid #d9d6de; font-size: 12px; }
+.site-shell { width: min(1040px, calc(100% - 32px)); margin-inline: auto; }
+.site-header .site-shell, .site-footer .site-shell { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding-block: 18px; }
+.site-header .site-brand { color: #25232a; font-size: 18px; font-weight: 700; text-decoration: none; white-space: nowrap; }
+.site-nav { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; }
+.site-nav a { color: #513d88; text-decoration: none; line-height: 1.6; }
+.site-header .site-nav { font-size: 14px; }
+.site-nav a:hover { text-decoration: underline; text-underline-offset: 4px; }
+.site-nav a[aria-current="page"] { color: #25232a; font-weight: 650; text-decoration: underline; text-decoration-color: #6550a0; text-decoration-thickness: 2px; text-underline-offset: 6px; }
+.site-footer p { margin: 0; line-height: 1.7; }
+.site-footer .site-shell { align-items: flex-start; padding-block: 24px; }
+.site-footer strong { color: #25232a; }
+.site-header a:focus-visible, .site-footer a:focus-visible { outline: 2px solid #6550a0; outline-offset: 4px; }
+@media (max-width: 640px) {
+  .site-header .site-shell, .site-footer .site-shell { align-items: flex-start; flex-direction: column; gap: 12px; }
+  .site-nav { gap: 10px 16px; }
+}

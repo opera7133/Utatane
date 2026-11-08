@@ -1,150 +1,47 @@
 # Utatane / 転寝
 
-Utataneは、伺かをmacOSで動かすための本体アプリです。
+Utataneは、伺かのゴーストをmacOSで動かすためのアプリです。
 
-[公式サイト](https://dl.wmsci.com/utatane/) · [NAR検査](https://utatane-validate.wmsci.com/) · [SHIORI・SAORIカタログ](https://dl.wmsci.com/utatane/modules/)
+[公式サイト・ダウンロード](https://dl.wmsci.com/utatane/) · [使い方](https://dl.wmsci.com/utatane/docs/) · [変更履歴](CHANGELOG.md)
 
-![Utatane スクリーンショット](Design/SampleScreenShot.png)
-
-現在も開発を続けており、既存ゴーストとの互換性を順次広げています。対応する機能や利用条件は、[互換性の確認](Docs/Support/Compatibility.md)と各機能の案内を参照してください。
-
-対応言語: 日本語 / English / 简体中文 / 繁体中文 / 한국어
-
-## 主な機能
-
-### ゴーストの表示と会話
-
-- ゴースト、シェル、バルーンの読み込みと切り替え
-- 複数キャラクター、サーフェス、SERIKOアニメーションの表示
-- ゴーストとバルーンを、全ゴースト共通またはゴーストごとの1枚のウィンドウへまとめるウィンドウモード
-- 独立ウィンドウまたはウィンドウモード内で表示できる、サーフェス画像付きの発話履歴
-- SakuraScriptによる会話、選択肢、リンクの再生
-- クリック、ダブルクリック、撫で、ホイールなどのマウス操作
-- 複数ゴーストの呼び出しとコミュニケーション
-- キャラクターとバルーンの位置、選択中のシェルとバルーンをゴーストごとに保存
-- キャラクターのドラッグ中は半透明になり、座標と移動量を表示（バルーンも追従）
-
-### インストールと設定
-
-- NARのファイル選択、ドラッグ＆ドロップ、Finderからの「このアプリケーションで開く」によるインストール
-- 展開済みSSPフォルダからのゴーストとバルーンの取り込み
-- ゴースト、シェル、バルーン、ヘッドライン、プラグインを検索し、切り替え・更新・安全なアンインストールやREADME・配布元の表示ができるコンテンツエクスプローラ
-- シェルとバルーンの個別倍率、連動倍率、バルーン文字倍率
-- 通常シェルと併用できるnijigenerateパペット表示、視線追従、表情・マウス反応・ドラッグ操作
-- シェルの画面下固定と画面端補正をゴーストごとに切り替え
-- 前回のゴースト、起動時選択、ランダムの3種類の起動方法
-- システム設定に従う／ライト／ダークの外観切り替え
-- ゴースト起動やシェル切り替えに時間がかかる場合の進行表示
-
-### ゴーストの実行と連携
-
-- YAYA、里々、華和梨などのSHIORIを使うゴーストの実行。対応するモジュールと制約は[SHIORI・SAORIの利用](Docs/Support/Native-SHIORI.md)を参照
-- 韓国語助詞トランスレータ`ParticleMakoto`と`Makoto Basic with Select and Repeat`のネイティブ実行
-- カタログから導入できる`saori_cpuid`、`kenonoke`、`textcopy2`、`mciaudior`、`wmove`のネイティブSAORI互換
-- ゴースト別のSHIORI選択・解除と、読み込み診断
-- コンテンツエクスプローラから行うゴースト、シェル、バルーン、ヘッドライン、プラグインの個別・一括ネットワーク更新。ゴーストとバルーンは設定した日数ごとの自動更新にも対応
-- SSTP over HTTP、RSS / Atom、HEADLINE/2.0
-- 同じLAN上のSSP・IP Messengerとのメンバー発見、平文メッセージ送受信、受信SakuraScriptの安全な表示再生
-- `config.txt`形式のHEADLINEセンサーをネイティブ実行し、独自Windows DLLはWineへフォールバック
-- Materiaの「さくら」をWineなしで実行
-- プラグインの利用（ネイティブ対応SHIORIおよびmacOS向けにビルドされたdylibを使用するプラグインのみ）
-- カレンダーの予定表示・編集と、iCalendar URLからの購読
-- macOS標準音声、各種macOS対応ローカルエンジン、OpenAI、ElevenLabs、Aivis Cloud API、Azure Speech、Google Cloud TTS、AITalk WebAPI、CoeFont Cloudによる発話の読み上げと、macOS標準の音声認識
-
-<details>
-<summary>実験的な機能</summary>
-
-- 利用者がビルドした蒼空のmacOS用モジュールを外部から読み込めます
-- OpenAI Realtime APIまたは互換APIへ接続するリアルタイム音声会話
-- ゴーストのAI連携
-
-詳しくは[Native SHIORI / SAORI](Docs/Support/Native-SHIORI.md)を参照してください。
-
-</details>
-
-## 互換性について
-
-Windows向けのDLLやexeを使用するコンテンツは、対応するmacOS用モジュール、またはWineの設定が必要です。SakuraScript・SERIKO・着せ替えなどの対応範囲は、[各互換表](Docs/README.md)で確認できます。
-
-ゴーストごとに使う命令や外部モジュールが異なるため、まず起動・会話・メニュー操作を試してください。表示や動作で困った場合は[トラブル対処](Docs/Support/Troubleshooting.md)を参照してください。
+![Utataneのスクリーンショット](Design/SampleScreenShot.png)
 
 ## インストール
 
-1. [公式サイト](https://dl.wmsci.com/utatane/)のダウンロードボタンからmacOS版を取得する。[Releases](https://github.com/opera7133/Utatane/releases)では、`Utatane-macOS.dmg`があればそちらを選ぶ。ZIPのみの版では、公証済みの追加ZIPがあればそちらを選ぶ
-2. DMGを開き、`Utatane.app`を隣のApplicationsへドラッグする。ZIPの場合は展開して「アプリケーション」フォルダへ移動する
-3. Utataneを起動する
+1. [公式サイト](https://dl.wmsci.com/utatane/)からmacOS版をダウンロードする
+2. DMGを開き、`Utatane.app`をApplicationsへドラッグする。ZIPの場合は展開して「アプリケーション」フォルダへ移動する
+3. Utataneを起動し、画面の案内に従ってSHIORIモジュールを導入する
 
-初回起動時にSHIORIモジュールの導入を終えると、同梱ゴースト「りあ」と専用バルーン「Ria」を利用できます。りあは時間帯や曜日に応じた会話、マウス操作、着せ替え、短い外出、現在地の天気確認などに対応しています。
+同梱ゴースト「りあ」とバルーン「Ria」が使えます。公式配布版はDeveloper ID署名・公証済みです。過去の版は[Releases](https://github.com/opera7133/Utatane/releases)から取得できます。
 
-公式の配布版はDeveloper ID署名・公証済みです。古い未署名版を使っていてmacOSに起動を止められる場合は、まず最新の公証済み版を取得してください。
+## 主な機能
 
-## ゴーストやバルーンを追加する
+- ゴーストとの会話、選択肢、マウス操作への反応
+- シェル・バルーンの切り替え、着せ替え、アニメーション
+- 複数ゴーストの起動、ウィンドウモード、発話履歴
+- NARのインストール、SSPフォルダからの取り込み、コンテンツの更新・管理
+- YAYA・里々・華和梨などのmacOS用SHIORI、SAORI、プラグインの利用
+- 音声の読み上げ・認識、カレンダー、ヘッドライン、SSTPによる連携
 
-同梱のりあ以外にも、次の方法でゴーストやバルーンを追加できます。
+日本語・英語・簡体字中国語・繁体字中国語・韓国語に対応しています。
 
-手元のNARで使われているSHIORIと基本的な対応状況は、macOSがなくても[Utatane NAR検査](https://utatane-validate.wmsci.com/)で確認できます。
+## ゴーストを追加する
 
-- 配布されているゴーストのNARをインストールする
-- 展開済みのSSPフォルダから`ghost`と`balloon`を取り込む
-- UtataneのコンテンツフォルダをFinderで表示する
+配布されているNARをUtataneへドラッグ＆ドロップして追加できます。展開済みのSSPフォルダから、ゴーストやバルーンを取り込むこともできます。詳しくは[コンテンツの管理](Docs/Guide/Content.md)を参照してください。
 
-SSPから持ってくる場合は、SSP本体のZIPを展開して、そのフォルダを「SSPフォルダから取り込む」で選びます。同名のコンテンツがある場合は、既存の内容を保持します。
+ゴーストが使うSHIORIや外部モジュールによって、動作する範囲が異なります。Windows向けのDLLやexeを使う場合は、対応するmacOS用モジュールやWineの設定が必要です。[互換性の確認](Docs/Support/Compatibility.md)と[SHIORI・SAORIの利用](Docs/Support/Native-SHIORI.md)を確認してください。
 
-インストールしたコンテンツは次の場所に保存されます。
+## 関連リンク
 
-```text
-~/Library/Application Support/Utatane/Ghosts
-~/Library/Application Support/Utatane/Balloons
-~/Library/Application Support/Utatane/Headline
-```
-
-<details>
-<summary>元祖さくらとうにゅうを動かす</summary>
-
-これは一般のWindowsゴースト互換機能ではなく、Materia付属のfirst(さくら)専用です。Utataneはfirstのファイルを同梱していないため、正規に入手したfirstを利用者自身で用意してください。対応版の`first.dll`は実行せず、必要な会話データを起動時に読み取るのでWineは不要です。
-
-1. Utataneを一度起動し、右クリックメニューからコンテンツフォルダをFinderで開く
-2. Materiaに付属するFIRSTを、次の構成になるようコピーする
-
-   ```text
-   ~/Library/Application Support/Utatane/Ghosts/first/
-   ├── descript.txt
-   ├── ghost/master/
-   │   ├── descript.txt
-   │   ├── first.dll
-   │   └── var/first.txt（あれば初期値として参照）
-   └── shell/master/...
-   ```
-
-3. 必要なバルーンも`~/Library/Application Support/Utatane/Balloons/`へコピーする
-4. ゴースト一覧からさくらを選択する
-
-現在ネイティブ対応しているのは、Utataneが解析・検証したオリジナル版FIRSTの`first.dll`です。別版の場合は誤ったセリフを組み立てないよう起動を拒否します。配布版にはMateria用のWine互換ホストを同梱しません。
-
-ソースからのDebugビルドでは、ローカル検証データを次のように配置します。
-
-```text
-Content/Local/
-└── Ghosts/first/
-```
-
-ネイティブ経路は元の`first.dll`や`var/first.txt`を書き換えません。眠気に関係する値など、Utatane上で変化した状態は`~/Library/Application Support/Utatane/State/FIRST/`へ別保存します。現時点の対応範囲と技術的な制約は[Native SHIORI / SAORI](Docs/Support/Native-SHIORI.md)を参照してください。
-
-</details>
-
-## 詳しい使い方と開発資料
-
-- [ドキュメント一覧](Docs/README.md)
-- [Webドキュメント](https://dl.wmsci.com/utatane/docs/) / [はじめてのUtatane](Docs/Guide/Getting-Started.md)
-- [変更履歴](CHANGELOG.md)
-- [ウィンドウモード](Docs/Guide/Window-Mode.md)
-- [ゴースト・SHIORI・SAORI制作者向けUtatane対応ガイド](Docs/Creators/Content-Authoring.md)
-- [互換性の確認](Docs/Support/Compatibility.md)
+- [ドキュメント一覧](Docs/README.md)・[トラブル対処](Docs/Support/Troubleshooting.md)
+- [モジュールカタログ](https://dl.wmsci.com/utatane/modules/)：SHIORI・SAORI・プラグインの配布と導入手順
+- [NAR検査](https://utatane-validate.wmsci.com/)：NARの構成や対応状況を確認
+- [制作者向けガイド](Docs/Creators/Content-Authoring.md)・[ビルド・開発の手順](Docs/Development/Development.md)
 
 ## ライセンス
 
 Utatane本体は[MIT License](LICENSE)で公開しています。NAR検証にはIgor Pavlovによるpublic domainの[LZMAデコーダー](packages/content-validator-lzma/NOTICE.txt)も使用しています。
 
-SHIORI・SAORIの配布物とライセンスは[Utatane Modules](https://github.com/opera7133/utatane-modules)で確認できます。アプリ本体には移植済みのSHIORI・SAORIを同梱していません。
+SHIORI・SAORIの配布物とライセンスは[Utatane Modules](https://github.com/opera7133/utatane-modules)で確認できます。SHIORI・SAORIはモジュールカタログから追加できます。
 
 同梱ゴースト「りあ」のシェルには、ボトル猫さんの「p016（寝不足）」を使用しています。専用バルーン「Ria」は、ろすえんさんの「[something like Template](https://github.com/lost-nd-xxx/something_like_balloon)」を元に制作しています。詳しい規約とクレジットは、それぞれの同梱READMEを参照してください。

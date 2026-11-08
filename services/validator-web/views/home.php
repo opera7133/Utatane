@@ -32,18 +32,11 @@ $maximumMegabytes = (int) floor($config->maximumUploadBytes / 1024 / 1024);
     <meta name="twitter:image" content="https://utatane-validate.wmsci.com/assets/utatane-icon.png">
     <meta name="twitter:image:alt" content="Utataneのアプリアイコン">
     <link rel="stylesheet" href="/assets/app.css">
+    <link rel="stylesheet" href="/assets/site-shell.css">
     <script src="/assets/app.js" defer></script>
 </head>
 <body data-maximum-bytes="<?= htmlspecialchars((string) $config->maximumUploadBytes, ENT_QUOTES) ?>">
-<header class="navbar">
-    <div class="container navbar-content">
-        <a class="navbar-brand" href="/">Utatane NAR検査</a>
-        <nav class="related-links" aria-label="関連サイト">
-            <a href="https://dl.wmsci.com/utatane/" rel="external">Utatane公式サイト</a>
-            <a href="https://dl.wmsci.com/utatane/modules/" rel="external">SHIORI・SAORIカタログ</a>
-        </nav>
-    </div>
-</header>
+<?php require __DIR__ . '/header.php'; ?>
 
 <main class="container">
     <section class="intro" aria-labelledby="page-title">
@@ -137,16 +130,6 @@ $maximumMegabytes = (int) floor($config->maximumUploadBytes / 1024 / 1024);
     </section>
 </main>
 
-<footer class="site-footer">
-    <div class="container footer-content">
-        <span>wmsci.com</span>
-        <nav aria-label="関連リンク">
-            <a href="https://dl.wmsci.com/utatane/" rel="external">Utatane公式サイト</a>
-            <a href="https://dl.wmsci.com/utatane/modules/" rel="external">SHIORI・SAORIカタログ</a>
-            <a href="/licenses">ライセンス</a>
-            <a href="https://github.com/opera7133/Utatane" rel="external">ソースコード</a>
-        </nav>
-    </div>
-</footer>
+<?php require __DIR__ . '/footer.php'; ?>
 </body>
 </html>
