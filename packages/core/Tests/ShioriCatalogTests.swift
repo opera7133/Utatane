@@ -90,7 +90,7 @@ func `explicit macOS SHIORI takes priority over dictionary signatures`(filename:
     #expect(descriptor?.runtimeRequirement == .wine)
 }
 
-@Test(arguments: [("mae_corpus.txt", "mae"), ("dnproxy.ini", "dnproxy"), ("dnproxy.dll.config", "dnproxy"), ("ghost.asproj", "aosora")])
+@Test(arguments: [("konoka.ini", "konoka"), ("mae_corpus.txt", "mae"), ("dnproxy.ini", "dnproxy"), ("dnproxy.dll.config", "dnproxy"), ("ghost.asproj", "aosora")])
 func `identifies engines with generic Windows DLL names`(signature: String, expected: String) throws {
     let root = FileManager.default.temporaryDirectory.appending(path: "SHIORI 日本語 \(UUID())")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -115,4 +115,26 @@ func `identifies engines with generic Windows DLL names`(signature: String, expe
     #expect(NativeShioriLibraryLocator.declaredURL("../escape.dll", in: root) == nil)
     #expect(NativeShioriLibraryLocator.declaredURL("/tmp/escape.dll", in: root) == nil)
     #expect(NativeShioriLibraryLocator.candidates(moduleID: "../escape", nativeRoot: root).isEmpty)
+}
+
+@Test(arguments: ["xdi", "xdc"])
+func `custom Konoka DLL is recognized by its configured encrypted dictionary`(ext: String) throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try "ai.txt,e\n".write(to: root.appending(path: "custom.ini"), atomically: true, encoding: .utf8)
+    #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "custom.dll")?.id == "external-windows-shiori")
+    try Data([1]).write(to: root.appending(path: "ai.\(ext)"))
+    #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "custom.dll")?.id == "konoka")
+    #expect(ShioriCatalog.descriptor(id: "konoka")?.support == .experimental)
+}
+
+@Test func `Hitomi filename distinguishes its old Kawari dictionary format`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try Data("dict: ai.txt\n".utf8).write(to: root.appending(path: "kawari.ini"))
+    #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "HITOMI.DLL")?.id == "hitomi")
+    #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "other.dll")?.id == "kawari")
+    #expect(ShioriCatalog.descriptor(id: "hitomi")?.support == .experimental)
 }

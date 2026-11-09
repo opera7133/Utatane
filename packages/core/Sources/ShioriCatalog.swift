@@ -103,6 +103,8 @@ public enum ShioriCatalog {
         .init(id: "kagari", displayName: "kagari", moduleFilenames: ["kagari.dll"], execution: .dynamicLibrary, provisioning: .user),
         .init(id: "minato", displayName: "minato", aliases: ["湊"], moduleFilenames: ["minato.dll", "libminato.dylib"], execution: .dynamicLibrary, provisioning: .user),
         .init(id: "pasta", displayName: "pasta", aliases: [], moduleFilenames: ["pasta.dll", "libpasta.dylib"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "hitomi", displayName: "ひとみ。", aliases: ["Hitomi"], moduleFilenames: ["hitomi.dll", "libhitomi.dylib"], execution: .dynamicLibrary, provisioning: .user, support: .experimental),
+        .init(id: "konoka", displayName: "此栞", aliases: ["Konoka", "このか"], moduleFilenames: ["konoka.dll", "libkonoka.dylib"], execution: .dynamicLibrary, provisioning: .user, support: .experimental),
         .init(id: "mae", displayName: "真絵", aliases: ["MAE"], moduleFilenames: ["mae.dll", "libmae.dylib"], execution: .dynamicLibrary, provisioning: .user, support: .experimental),
         .init(id: "dnproxy", displayName: "D.N.Proxy", moduleFilenames: ["dnproxy.dll", "dnproxy_debug.dll", "libdnproxy.dylib"], execution: .dynamicLibrary, provisioning: .user, runtimeRequirement: .configuredExecutable, support: .experimental),
         .init(id: "aosora", displayName: "蒼空", aliases: ["Aosora"], moduleFilenames: ["aosora.dll"], execution: .bundledNativeModule, provisioning: .user, support: .experimental),
@@ -193,6 +195,10 @@ public enum ShioriCatalog {
             "yaya"
         } else if exists("satori_conf.txt") {
             "satori"
+        } else if exists("konoka.ini") || exists("ks_cfg.txt") || hasKonokaEncryptedConfig(masterDirectory, module: declaredModuleFilename) {
+            "konoka"
+        } else if descriptor(moduleFilename: declaredModuleFilename)?.id == "hitomi" {
+            "hitomi"
         } else if exists("kawarirc.kis") || exists("kawari.ini") {
             "kawari"
         } else if exists("mae_corpus.txt") {
@@ -225,6 +231,24 @@ public enum ShioriCatalog {
             return descriptor(id: "external-windows-shiori")
         default:
             return nil
+        }
+    }
+
+    private static func hasKonokaEncryptedConfig(_ directory: URL, module: String?) -> Bool {
+        guard let module,
+              let declared = NativeShioriLibraryLocator.declaredURL(module, in: directory) else { return false }
+        let config = declared.deletingPathExtension().appendingPathExtension("ini")
+        guard let size = try? config.resourceValues(forKeys: [.fileSizeKey]).fileSize,
+              size <= 65536, let data = try? Data(contentsOf: config),
+              let text = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .shiftJIS) else { return false }
+        return text.components(separatedBy: .newlines).contains { line in
+            let fields = line.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            guard let name = fields.first, !name.hasPrefix("#"), !name.hasPrefix("//"),
+                  let file = NativeShioriLibraryLocator.declaredURL(name, in: directory) else { return false }
+            return ["xdc", "xdi"].contains { ext in
+                let encrypted = file.deletingPathExtension().appendingPathExtension(ext)
+                return FileManager.default.fileExists(atPath: encrypted.path)
+            }
         }
     }
 }

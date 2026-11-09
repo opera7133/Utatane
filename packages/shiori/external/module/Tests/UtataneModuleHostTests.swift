@@ -171,7 +171,7 @@ struct UtataneModuleLoaderTests {
     }
 }
 
-@Test(arguments: [ConventionalShioriKind.mae, .dnproxy])
+@Test(arguments: [ConventionalShioriKind.mae, .dnproxy, .konoka, .hitomi])
 func `new conventional engines support shared and generic ghost libraries`(kind: ConventionalShioriKind) throws {
     let root = FileManager.default.temporaryDirectory.appending(path: "modules 日本語 \(UUID())")
     defer { try? FileManager.default.removeItem(at: root) }

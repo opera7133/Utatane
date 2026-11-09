@@ -15,6 +15,8 @@ public enum ConventionalShioriKind: String, Sendable, CaseIterable {
     case akari
     case kawari
     case mae
+    case hitomi
+    case konoka
     case dnproxy
 
     public var libraryFilename: String {
@@ -37,6 +39,8 @@ public enum ConventionalShioriKind: String, Sendable, CaseIterable {
         case "libakari.dylib": self = .akari
         case "libkawari.dylib": self = .kawari
         case "libmae.dylib": self = .mae
+        case "libhitomi.dylib": self = .hitomi
+        case "libkonoka.dylib": self = .konoka
         case "libdnproxy.dylib": self = .dnproxy
         default: return nil
         }
@@ -60,6 +64,8 @@ public enum ConventionalShioriKind: String, Sendable, CaseIterable {
         case "akari.dll", "libakari.dylib": self = .akari
         case "kawari.dll", "libkawari.dylib": self = .kawari
         case "mae.dll", "libmae.dylib": self = .mae
+        case "hitomi.dll", "libhitomi.dylib": self = .hitomi
+        case "konoka.dll", "libkonoka.dylib": self = .konoka
         case "dnproxy.dll", "dnproxy_debug.dll", "libdnproxy.dylib": self = .dnproxy
         default: return nil
         }
