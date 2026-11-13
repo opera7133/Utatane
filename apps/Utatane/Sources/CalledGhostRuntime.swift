@@ -1405,6 +1405,14 @@ final class CalledGhostRuntime {
         }
     }
 
+    func nativeShioriProperty(_ property: String) async -> String? {
+        if let value = player.runtimePropertyValue(for: property) {
+            return value
+        }
+        await propertySystem.register(values: MacOSPropertySnapshot.values(geometryProvider: presentationGeometry))
+        return try? await propertySystem.value(for: property)
+    }
+
     private static func propertyValues(for ghost: InstalledGhost) -> [String: String] {
         var values = [
             "currentghost.name": ghost.name,

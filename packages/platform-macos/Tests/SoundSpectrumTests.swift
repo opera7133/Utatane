@@ -145,6 +145,16 @@ func `spectrum mono frequency and gain agree with calibrated sine levels`(sample
     }
 }
 
+@Test(arguments: [44100.0, 48000.0])
+func `spectrum measures the second bass band between FFT bins`(sampleRate: Double) throws {
+    let url = try makeSpectrumSignal(sampleRate: sampleRate) { _, index in
+        Float(0.5 * sin(2 * .pi * 25 * Double(index) / sampleRate))
+    }
+    defer { try? FileManager.default.removeItem(at: url) }
+    let levels = try SoundSpectrumAnalyzer(url: url).levels(at: 0.8, bands: 31)
+    #expect(levels[2] > 50)
+}
+
 @Test func `spectrum averages opposite phase stereo before band analysis`() throws {
     let url = try makeSpectrumSignal(channels: 2) { channel, index in
         (channel == 0 ? 0.5 : -0.5) * sin(2 * .pi * 1000 * Float(index) / 48000)
@@ -377,4 +387,28 @@ private actor DelayedSpectrumWorker: SoundSpectrumAnalyzing {
         try await player.execute(.play(file: url.path, loop: true, options: ["--spectrum=20", "--spectrum-bands=31"]))
     }
     try await requireEventually { frames.allSatisfy { $0 >= 5 } }
+}
+
+@Test @MainActor func `spectrum skip busy resumes and delivers stop frame`() async throws {
+    let url = try makeSpectrumWave()
+    defer { try? FileManager.default.removeItem(at: url) }
+    let player = SakuraScriptSoundPlayer()
+    player.isMuted = true
+    defer { player.discard() }
+    var busy = true
+    var checkedBusy = false
+    var frames: [[Int: String]] = []
+    player.isScriptBusy = {
+        checkedBusy = true
+        return busy
+    }
+    player.onSpectrum = { frames.append($0) }
+    try await player.execute(.play(file: url.path, loop: true, options: ["--spectrum=20", "--spectrum-skipbusy=true"]))
+    try await requireEventually { checkedBusy }
+    #expect(frames.isEmpty)
+    busy = false
+    try await requireEventually { !frames.isEmpty }
+    busy = true
+    try await player.execute(.stop)
+    #expect(frames.last?[2] == "0\u{1}0")
 }

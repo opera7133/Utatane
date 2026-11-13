@@ -56,9 +56,9 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
         case dynamicLibrary(NativeShioriSession)
         case windowsDLL(WindowsDLLModuleProcessSession)
 
-        func request(_ message: String) async throws -> String {
+        func request(_ message: String, propertyReader: NativeShioriPropertyReader?) async throws -> String {
             switch self {
-            case let .dynamicLibrary(session): try await session.requestAsync(message)
+            case let .dynamicLibrary(session): try await session.requestAsync(message, propertyReader: propertyReader)
             case let .windowsDLL(session): try session.request(message)
             }
         }
@@ -72,6 +72,7 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
     }
 
     private let backend: Backend
+    private let propertyReader: NativeShioriPropertyReader?
     private let adapter = GhostEventShioriAdapter()
     private var requestStatus = ""
 
@@ -79,8 +80,9 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
         requestStatus = status
     }
 
-    init(backend: Backend) {
+    init(backend: Backend, propertyReader: NativeShioriPropertyReader? = nil) {
         self.backend = backend
+        self.propertyReader = propertyReader
     }
 
     func shutdown() async {
@@ -105,11 +107,11 @@ actor ExternalSHIORIPersonalityEngine: PersonalityEngine {
             context.mouseButton = mouseEvent.button
         }
         let request = adapter.request(for: event, context: context)
-        var response = try await ShioriMessageParser.parseResponse(backend.request(request.serialized()))
+        var response = try await ShioriMessageParser.parseResponse(backend.request(request.serialized(), propertyReader: propertyReader))
         if Shiori2Compatibility.shouldRetry(response),
            let legacyRequest = Shiori2Compatibility.eventRequest(from: request)
         {
-            response = try await ShioriMessageParser.parseResponse(backend.request(legacyRequest.serialized()))
+            response = try await ShioriMessageParser.parseResponse(backend.request(legacyRequest.serialized(), propertyReader: propertyReader))
         }
         guard (200 ..< 300).contains(response.statusCode) else {
             throw ExternalModuleRuntimeError.requestFailed(response.statusCode)

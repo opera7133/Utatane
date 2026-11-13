@@ -3151,6 +3151,18 @@ private struct UtataneRootView: View {
     }
 
     private func basePersonalityEngine(for ghost: InstalledGhost) throws -> any PersonalityEngine {
+        let ghostID = ghost.id
+        let propertyReader: NativeShioriPropertyReader = { property in
+            if let runtime = calledGhosts[ghostID] {
+                return await runtime.nativeShioriProperty(property)
+            }
+            guard currentGhost?.id == ghostID else { return nil }
+            if let value = scriptPlayer.runtimePropertyValue(for: property) {
+                return value
+            }
+            await registerCurrentGhostProperties()
+            return try? await propertySystem.value(for: property)
+        }
         let masterDirectory = ghost.rootDirectory.appending(
             path: "ghost/master",
             directoryHint: .isDirectory
@@ -3169,7 +3181,7 @@ private struct UtataneRootView: View {
                     onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id),
                     internalSaoriMediaReader: MacOSMediaInfoReader()
                 )
-            ))
+            ), propertyReader: propertyReader)
         }
         if winePreferredGhostIDs.contains(ghost.id.standardizedFileURL),
            let dll = ContentRoot.shioriModuleURL(for: ghost), dll.pathExtension.lowercased() == "dll",
@@ -3189,6 +3201,11 @@ private struct UtataneRootView: View {
             else {
                 throw AppError.unsupportedShiori(filename)
             }
+            if let identifier = ShioriCatalog.descriptor(moduleFilename: filename)?.id.rawValue,
+               let kind = POSIXShioriKind(rawValue: identifier)
+            {
+                return try POSIXShioriPersonalityEngine(masterDirectoryURL: masterDirectory, moduleURL: moduleURL, kind: kind)
+            }
             reportInternalSaoriCompatibility(moduleURL)
             return try ExternalSHIORIPersonalityEngine(backend: .dynamicLibrary(
                 NativeShioriSession(
@@ -3200,14 +3217,14 @@ private struct UtataneRootView: View {
                     onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id),
                     internalSaoriMediaReader: MacOSMediaInfoReader()
                 )
-            ))
+            ), propertyReader: propertyReader)
         }
         let detectedShiori = ShioriCatalog.identify(
             masterDirectory: masterDirectory,
             declaredModuleFilename: ghost.shioriFilename
         )
-        let kind = detectedShiori.flatMap { ConventionalShioriKind(shioriFilename: "\($0.id.rawValue).dll") }
-            ?? ConventionalShioriKind(shioriFilename: ghost.shioriFilename)
+        let kind = ConventionalShioriKind(shioriFilename: ghost.shioriFilename)
+            ?? detectedShiori.flatMap(ConventionalShioriKind.init(descriptor:))
         if let kind {
             let resolver = UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback)
             if let module = try resolver.moduleURL(for: kind, masterDirectoryURL: masterDirectory, declaredModuleFilename: ghost.shioriFilename) {
@@ -3222,7 +3239,7 @@ private struct UtataneRootView: View {
                         onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id),
                         internalSaoriMediaReader: MacOSMediaInfoReader()
                     )
-                ))
+                ), propertyReader: propertyReader)
             }
             throw AppError.unsupportedShiori(ghost.shioriFilename ?? kind.rawValue)
         }
@@ -3277,7 +3294,7 @@ private struct UtataneRootView: View {
                         onInternalSaoriEvent: internalSaoriEventHandler(for: ghost.id),
                         internalSaoriMediaReader: MacOSMediaInfoReader()
                     )
-                ))
+                ), propertyReader: propertyReader)
             case "dll":
                 guard let configuration = ContentRoot.windowsDLLConfiguration(
                     for: moduleURL,
@@ -5662,11 +5679,11 @@ private struct UtataneRootView: View {
             var module: URL?
             if ghost.shioriMacOSFilename != nil || winePreferredGhostIDs.contains(ghost.id.standardizedFileURL) {
                 module = ContentRoot.shioriModuleURL(for: ghost)
-            } else if let kind = descriptor.flatMap({ ConventionalShioriKind(shioriFilename: "\($0.id.rawValue).dll") }),
+            } else if let kind = ConventionalShioriKind(shioriFilename: ghost.shioriFilename) ?? descriptor.flatMap(ConventionalShioriKind.init(descriptor:)),
                       let resolved = try? UtataneModuleResolver(allowsFallback: networkSettings.allowsShioriFallback).moduleURL(for: kind, masterDirectoryURL: master, declaredModuleFilename: ghost.shioriFilename)
             {
                 module = resolved
-            } else if descriptor?.execution == .bundledNativeModule {
+            } else if descriptor?.execution == .bundledNativeModule || descriptor?.id == "kagari" {
                 let resolver = POSIXShioriModuleResolver()
                 if let kind = resolver.kind(for: master) {
                     module = resolver.moduleURL(for: kind, masterDirectoryURL: master)
@@ -7855,9 +7872,10 @@ private struct UtataneRootView: View {
                     resolver: .init(allowsFallback: allowsShioriFallback)
                 )
             case let .nativeSHIORI(nativeKind):
-                guard let kind = ConventionalShioriKind(shioriFilename: "\(nativeKind.rawValue).dll"),
-                      let module = try UtataneModuleResolver(allowsFallback: allowsShioriFallback)
-                      .moduleURL(for: kind, masterDirectoryURL: plugin.directory)
+                guard let kind = ConventionalShioriKind(shioriFilename: plugin.moduleURL.lastPathComponent)
+                    ?? ConventionalShioriKind(shioriFilename: "\(nativeKind.rawValue).dll"),
+                    let module = try UtataneModuleResolver(allowsFallback: allowsShioriFallback)
+                    .moduleURL(for: kind, masterDirectoryURL: plugin.directory, declaredModuleFilename: plugin.moduleURL.lastPathComponent)
                 else { throw NativeSHIORIPluginError.unsupportedRuntime }
                 return try DynamicLibraryPluginTransport(
                     plugin: plugin, stateDirectoryURL: ContentRoot.contentDirectory.appending(path: "State/Plugins"),

@@ -475,7 +475,7 @@ UKADOC掲載イベント数: 310
 | [`OnNotifyHolidayInfo`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnNotifyHolidayInfo) | ✅ | 起動時にOnNotifyUserInfoの直後へNOTIFY。日本の1955〜2027年の祝日名・日付・国コードを通知。国別の独自表と仮想日付に対応。未掲載年や祝日以外は通知しない。実機トークは確認待ち |
 | [`OnInternalSaoriComplete`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInternalSaoriComplete) | ✅ | 改修版SHIORIから内蔵SAORIを非同期実行した時、識別子・結果・モジュール・関数・Value列を呼び出し元へGET通知。Onで始まる識別子はその名前を使用。終了・再読込後の配送を抑止。実ゴーストの画面操作は未確認 |
 | [`OnInternalSaoriFailure`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnInternalSaoriFailure) | ✅ | 内蔵SAORIの非同期失敗を識別子・失敗理由・モジュール・関数でGET通知。Onで始まる識別子はFailureを付けた名前を使用。入力個数・オプション名の誤りは受付時に拒否。実ゴーストは未確認 |
-| [`OnSoundSpectrum`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundSpectrum) | 🟡 | AVFoundation対応音声の波形を解析し、指定間隔・0/5/10/15/31帯域・チャンネル別レベル・ピークホールド・再生位置をGET通知。停止時はゼロ、ポーズ中は通知しない。メイン・呼び出しゴーストに接続。MIDI/CD/動画やSSPとの数値の完全一致は未対応 |
+| [`OnSoundSpectrum`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnSoundSpectrum) | 🟡 | AVFoundation対応音声の波形を解析し、指定間隔・0/5/10/15/31帯域・チャンネル別レベル・ピークホールド・再生位置をGET通知。停止時はゼロ、ポーズ中は通知しない。メイン・呼び出しゴーストに接続。MIDI/CD/動画やSSPとの数値の完全一致は未対応。 `--spectrum-skipbusy=true`で再生中・再生待ちの定期通知を間引く。 |
 | [`OnTextAreaInput`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTextAreaInput) | ✅ | textareabox決定時にID・バイト値1区切りの内容・空欄・追加Referenceを通知。Onで始まるIDはそのイベントへ内容から通知。メイン・呼び出しゴーストに接続。実ゴースト操作は未確認 |
 | [`OnTextAreaInputCancel`](https://ssp.shillest.net/ukadoc/manual/list_shiori_event.html#OnTextAreaInputCancel) | ✅ | ID・timeout／close・編集中の内容・追加Referenceを通知。時間切れでも決定イベントへフォールバックしない。実ゴースト操作は未確認 |
 

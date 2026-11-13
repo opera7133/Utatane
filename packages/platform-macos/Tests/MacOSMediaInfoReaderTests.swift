@@ -174,3 +174,43 @@ private final class VideoFrameCompletion: @unchecked Sendable {
         waiting?.resume(returning: success)
     }
 }
+
+@Test @MainActor func `embedded artwork and japanese tags are available through sound properties`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2,
+                                               bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
+                                               isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+    let png = try #require(bitmap.representation(using: .png, properties: [:]))
+    let title = try #require("日本語の曲".data(using: .shiftJIS))
+    func bytes(_ number: Int, little: Bool = false) -> Data {
+        let values = (0 ..< 4).reversed().map { UInt8(truncatingIfNeeded: number >> ($0 * 8)) }
+        return little ? Data(values.reversed()) : Data(values)
+    }
+    func frame(_ name: String, _ body: Data) -> Data {
+        Data(name.utf8) + bytes(body.count) + Data([0, 0]) + body
+    }
+    let cover = Data([0]) + Data("image/png\0".utf8) + Data([3, 0]) + png
+    let frames = frame("TIT2", Data([0]) + title) + frame("APIC", cover)
+    let length = (0 ..< 4).reversed().map { UInt8((frames.count >> ($0 * 7)) & 127) }
+    let id3 = Data("ID3".utf8) + Data([3, 0, 0]) + Data(length) + frames
+    func chunk(_ name: String, _ body: Data) -> Data {
+        Data(name.utf8) + bytes(body.count, little: true) + body + Data(repeating: 0, count: body.count % 2)
+    }
+    let format = Data([1, 0, 1, 0, 64, 31, 0, 0, 128, 62, 0, 0, 2, 0, 16, 0])
+    let wave = Data("WAVE".utf8) + chunk("fmt ", format) + chunk("data", Data(repeating: 0, count: 1600)) + chunk("id3 ", id3)
+    let url = root.appending(path: "テスト(1).wav")
+    try (Data("RIFF".utf8) + bytes(wave.count, little: true) + wave).write(to: url)
+    #expect(try MacOSMediaInfoReader().read(url).values["title"] == "日本語の曲")
+
+    let player = SakuraScriptSoundPlayer()
+    defer { player.discard() }
+    try await player.execute(.load(file: url.path, options: []))
+    #expect(player.propertyValue(for: "currentghost.sound.index(0).meta.title") == "日本語の曲")
+    let path = try #require(player.propertyValue(for: "currentghost.sound(\(url.path)).meta.artwork"))
+    #expect(try Data(contentsOf: URL(filePath: path)) == png)
+    player.discard()
+    #expect(!FileManager.default.fileExists(atPath: path))
+}

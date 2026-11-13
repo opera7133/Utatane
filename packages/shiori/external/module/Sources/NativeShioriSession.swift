@@ -131,9 +131,18 @@ public final class NativeShioriSession: Sendable {
     }
 
     public func requestAsync(_ message: String) async throws -> String {
+        try await requestAsync(message, propertyReader: nil)
+    }
+
+    public func requestAsync(_ message: String, propertyReader: NativeShioriPropertyReader?) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             queue.async {
-                continuation.resume(with: Result { try self.request(message) })
+                continuation.resume(with: Result {
+                    switch self.backend {
+                    case let .bridge(session): try session.request(message)
+                    case let .process(session): try session.request(message, propertyReader: propertyReader)
+                    }
+                })
             }
         }
     }

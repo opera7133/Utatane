@@ -1,4 +1,5 @@
 import Foundation
+import UtataneCore
 
 public enum ConventionalShioriKind: String, Sendable, CaseIterable {
     case yaya
@@ -46,12 +47,16 @@ public enum ConventionalShioriKind: String, Sendable, CaseIterable {
         }
     }
 
+    public init?(descriptor: ShioriDescriptor) {
+        self.init(rawValue: descriptor.id.rawValue == "yaya" ? "yaya-6" : descriptor.id.rawValue)
+    }
+
     public init?(shioriFilename: String?) {
         let filename = shioriFilename?.replacingOccurrences(of: "\\", with: "/").split(separator: "/").last?.lowercased()
         switch filename {
         case "yaya.dll", "aya.dll", "aya5.dll": self = .yaya6
         case "libyaya.dylib": self = .yaya
-        case "libyaya-6.dylib": self = .yaya6
+        case "yaya-6.dll", "libyaya-6.dylib": self = .yaya6
         case "satori.dll", "libsatori.dylib": self = .satori
         case "misaka.dll", "libmisaka.dylib": self = .misaka
         case "minato.dll", "libminato.dylib": self = .minato

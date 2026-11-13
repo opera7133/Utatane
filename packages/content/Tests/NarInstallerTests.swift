@@ -676,3 +676,22 @@ func `bundled source directory rejects paths outside extraction root`(sourcePath
     #expect(throws: NarInstallError.self) { try NarInstaller().install(archiveURL: archive, roots: fixture.roots) }
     #expect(!FileManager.default.fileExists(atPath: fixture.roots.ghostsDirectory.appending(path: "test-ghost").path))
 }
+
+@Test(arguments: ["legacy\\", "legacy/"])
+func `installs a wrapped ZIP with a trailing directory separator`(directory: String) throws {
+    let fixture = try makeFixture()
+    defer { try? FileManager.default.removeItem(at: fixture.root) }
+    let wrapper = fixture.source.appending(path: "wrapper")
+    let master = wrapper.appending(path: "ghost/master")
+    try FileManager.default.createDirectory(at: master, withIntermediateDirectories: true)
+    try Data("name,Legacy Ghost\r\n".utf8).write(to: master.appending(path: "descript.txt"))
+    try Data("type,ghost\r\nname,Legacy Ghost\r\ndirectory,\(directory)\r\n".utf8)
+        .write(to: wrapper.appending(path: "install.txt"))
+    let archive = try makeArchive(from: fixture.source, at: fixture.root, filename: "legacy.zip")
+
+    let result = try NarInstaller().install(archiveURL: archive, roots: fixture.roots)
+
+    #expect(result.items.first?.url.lastPathComponent == "legacy")
+    #expect(FileManager.default.fileExists(atPath: fixture.roots.ghostsDirectory
+            .appending(path: "legacy/ghost/master/descript.txt").path))
+}

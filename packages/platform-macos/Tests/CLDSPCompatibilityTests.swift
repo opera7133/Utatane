@@ -44,7 +44,9 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
             try? FileManager.default.removeItem(at: master.appending(path: "var/" + name))
         }
     }
-    let usesSpectrum = try String(contentsOf: master.appending(path: "kawari_main.txt"), encoding: .shiftJIS).contains("OnSoundSpectrum :")
+    let dictionary = try String(contentsOf: master.appending(path: "kawari_main.txt"), encoding: .shiftJIS)
+    let usesSpectrum = dictionary.contains("OnSoundSpectrum :")
+    let usesDirectProperties = dictionary.contains(#"set year $(getproperty "system.year""#)
     let config = try FileHandle(forWritingTo: master.appending(path: "kawarirc.kis"))
     try config.seekToEnd()
     try config.write(contentsOf: #require("""
@@ -65,13 +67,19 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
         onInternalSaoriEvent: { event in Task { @MainActor in clock.internalEvent?(event) } },
         internalSaoriMediaReader: MacOSMediaInfoReader()
     )
+    var propertyReader: NativeShioriPropertyReader?
     @MainActor func request(_ id: String, _ references: [Int: String] = [:], method: String = "GET") async throws -> SakuraScript? {
-        let headers = [ShioriHeader(name: "Charset", value: "UTF-8"), .init(name: "SecurityLevel", value: "Local"), .init(name: "ID", value: id)]
-            + references.sorted { $0.key < $1.key }.map { ShioriHeader(name: "Reference\($0.key)", value: $0.value) }
-        let response = try await ShioriMessageParser.parseResponse(session.requestAsync(
-            ShioriRequest(method: method, headers: .init(headers)).serialized()
-        ))
-        return response.value.flatMap { $0.isEmpty ? nil : SakuraScript(rawValue: $0) }
+        let event: GhostEvent = method == "NOTIFY"
+            ? .notification(id: id, references: references)
+            : .shiori(id: id, references: references)
+        let request = GhostEventShioriAdapter().request(for: event)
+        let response = try await ShioriMessageParser.parseResponse(session.requestAsync(request.serialized(), propertyReader: propertyReader))
+        guard var value = response.value, !value.isEmpty else { return nil }
+        // Newer dictionaries prefix even the plain-text test probes with a clear command.
+        if id.hasPrefix("OnUtataneTest"), value.hasPrefix(#"\C"#) {
+            value.removeFirst(2)
+        }
+        return SakuraScript(rawValue: value)
     }
     let (defaults, positions) = makePositionStore()
     defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
@@ -131,15 +139,26 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
     }
     defer { clock.internalEvent = nil }
     let propertySystem = PropertySystem(configuration: .init(basewareName: "Utatane", basewareVersion: "test"))
-    player.onGetProperties = { event, properties in
-        #expect(event == (usesSpectrum ? "OnMainDispRefresh" : "OnMainSyncMaster"))
+    @MainActor func storedProperties() async {
         var snapshot = MacOSPropertySnapshot.values()
-        for (key, value) in ["system.year": "2026", "system.month": "10", "system.day": "19", "system.dayofweek": "1",
+        for (key, value) in ["system.year": "2026", "system.month": usesDirectProperties ? "11" : "10",
+                             "system.day": usesDirectProperties ? "13" : "19", "system.dayofweek": "1",
                              "system.hour": "14", "system.minute": "23", "system.second": String(clock.tick)]
         {
             snapshot[key] = value
         }
         await propertySystem.register(values: snapshot)
+    }
+    propertyReader = { property in
+        await storedProperties()
+        let stored = try? await propertySystem.value(for: property)
+        let value = player.runtimePropertyValue(for: property) ?? stored
+        clock.lastPropertyValues[property] = value
+        return value
+    }
+    player.onGetProperties = { event, properties in
+        #expect(event == (usesSpectrum ? "OnMainDispRefresh" : "OnMainSyncMaster"))
+        await storedProperties()
         let stored = await propertySystem.values(for: properties)
         let values = properties.enumerated().map { index, property in
             player.runtimePropertyValue(for: property) ?? stored[index]
@@ -238,7 +257,14 @@ func `native CLDSP aligns panels updates clock and renders imported and dropped 
         let digit = try #require(clock.lastPropertyValues[key]?.last)
         try expectDigit(digit, x: x, y: y)
     }
-    #expect(clock.completions == 3)
+    #expect(clock.completions == (usesDirectProperties ? 0 : 3))
+    if usesDirectProperties {
+        #expect(clock.lastPropertyValues["system.second"] == "2")
+        if FileManager.default.fileExists(atPath: master.appending(path: "var/naoj_sun_2026_11.txt").path) {
+            let almanac = try #require(try await request("OnUtataneTestAlmanac"))
+            #expect(almanac.rawValue == "614|1636|952|1914|38", "Tokyo 2026-11-13: \(almanac.rawValue)")
+        }
+    }
     if environment["UTATANE_TEST_NAOJ_LIVE"] == "1" {
         try await requireEventually { httpCompletions.contains("OnGetTimeSun") && httpCompletions.contains("OnGetTimeMoon") }
         if let script = try await request("OnSecondChange", [3: "1"]) {

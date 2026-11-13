@@ -17,7 +17,12 @@ final class SoundSpectrumAnalyzer {
     private var real: [Float]
     private var imaginary: [Float]
     private let scale: Double
-    private let bandBins: [Int: [Range<Int>]]
+    private struct Band {
+        let bins: Range<Int>
+        let fractionalBin: Double?
+    }
+
+    private let bandsByCount: [Int: [Band]]
 
     convenience init(url: URL) throws {
         let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false)
@@ -43,12 +48,16 @@ final class SoundSpectrumAnalyzer {
         let step = sampleRate / Double(size)
         let nyquist = sampleRate / 2
         let binLimit = size / 2
-        bandBins = Dictionary(uniqueKeysWithValues: [5, 10, 15, 31].map { bands in
+        bandsByCount = Dictionary(uniqueKeysWithValues: [5, 10, 15, 31].map { bands in
             (bands, Self.bandRanges(bands).map { range in
-                guard (range.lowerBound + range.upperBound) / 2 <= nyquist else { return 0 ..< 0 }
+                let center = (range.lowerBound + range.upperBound) / 2
+                guard center < nyquist else { return Band(bins: 0 ..< 0, fractionalBin: nil) }
                 let first = max(1, Int(ceil(range.lowerBound / step)))
                 let end = min(binLimit, Int(ceil(range.upperBound / step)))
-                return first ..< max(first, end)
+                let bins = first ..< max(first, end)
+                // Narrow bass bands can fall entirely between two FFT bins.
+                let fractionalBin = bins.isEmpty ? min(Double(binLimit - 1), max(1, center / step)) : nil
+                return Band(bins: bins, fractionalBin: fractionalBin)
             })
         })
     }
@@ -101,12 +110,17 @@ final class SoundSpectrumAnalyzer {
         vDSP_DFT_Execute(transform, mix, zero, &real, &imaginary)
         real.withUnsafeBufferPointer { real in
             imaginary.withUnsafeBufferPointer { imaginary in
-                for bins in bandBins[bands] ?? bandBins[10]! {
-                    var power = 0.0
-                    if !bins.isEmpty {
-                        for index in bins {
-                            power += Double(real[index] * real[index] + imaginary[index] * imaginary[index])
-                        }
+                func binPower(at index: Int) -> Double {
+                    Double(real[index] * real[index] + imaginary[index] * imaginary[index])
+                }
+                for band in bandsByCount[bands] ?? bandsByCount[10]! {
+                    let power: Double
+                    if let bin = band.fractionalBin {
+                        let lower = Int(bin)
+                        let fraction = bin - Double(lower)
+                        power = (1 - fraction) * binPower(at: lower) + fraction * binPower(at: Int(ceil(bin)))
+                    } else {
+                        power = band.bins.reduce(0) { $0 + binPower(at: $1) }
                     }
                     levels.append(Self.level(power: power * scale))
                 }

@@ -1584,3 +1584,27 @@ struct MomochiCompatibilityTests {
         #expect(controller.dressupInfo().first(where: { $0.group.id == 1000 })?.enabled == false)
     }
 }
+
+@Test @MainActor func `osuwari script moves surface with default bottom lock enabled`() async throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString, directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    try makePNG(width: 100, height: 100).write(to: root.appending(path: "surface0.png"))
+    let bounds = CGRect(x: 0, y: 0, width: 1000, height: 800)
+    let geometry = MutablePresentationGeometryProvider(screens: [
+        .init(frame: bounds, visibleFrame: bounds, bitsPerPixel: 32, scale: 1, isPrimary: true)
+    ])
+    let (defaults, store) = makePositionStore()
+    defer { defaults.removePersistentDomain(forName: defaultsSuiteName(defaults)) }
+    let surface = SurfaceWindowController(positionStore: store, geometryProvider: geometry)
+    defer { surface.resetContent() }
+    surface.setPlacement(locksToDesktopBottom: true, keepsOnScreen: true)
+    try surface.show(shell: ShellLoader().load(from: root), defaultSurfaceIDs: [0: 0])
+    let player = SakuraScriptPlayer(surfaceWindowController: surface, balloonWindowController: BalloonWindowController(),
+                                    geometryProvider: geometry)
+    let balloon = makeBalloon(directory: root)
+    await player.playAndWait(.init(rawValue: #"\![set,alignmenttodesktop,osuwari,--target=fix,--origin=bl,--y=-60]\e"#), balloon: balloon)
+    try await requireEventually { surface.windowFrame?.minY == 60 }
+    await player.playAndWait(.init(rawValue: #"\![set,alignmenttodesktop,default]\e"#), balloon: balloon)
+    try await requireEventually { surface.windowFrame?.minY == 0 }
+}

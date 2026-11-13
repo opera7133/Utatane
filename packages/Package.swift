@@ -201,7 +201,7 @@ let package = Package(
         ),
         .target(
             name: "UtataneModuleHost",
-            dependencies: ["CMisakaHostBridge", "UtataneCore", "UtataneNativeSaori", "UtataneShiori"],
+            dependencies: ["CMisakaHostBridge", "UtataneCore", "UtataneNativeSaori", "UtataneNetwork", "UtataneShiori"],
             path: "shiori/external/module/Sources"
         ),
         .testTarget(
@@ -274,7 +274,7 @@ let package = Package(
         ),
         .testTarget(
             name: "UtatanePlatformMacOSTests",
-            dependencies: ["UtataneCore", "UtatanePlatformMacOS", "UtatanePlugin", "UtataneModuleHost", "UtataneShiori"],
+            dependencies: ["UtataneContent", "UtataneCore", "UtatanePlatformMacOS", "UtatanePlugin", "UtataneModuleHost", "UtataneShiori", "UtataneShell"],
             path: "platform-macos/Tests"
         ),
         .testTarget(

@@ -16,6 +16,18 @@ public struct InstalledPlugin: Identifiable, Sendable, Equatable {
         case misaka
         case satori
         case yaya
+        case yaya6 = "yaya-6"
+        case minato
+        case pasta
+        case niseShiori = "nise-shiori"
+        case eseShiori = "ese-shiori"
+        case yuhna
+        case hisui
+        case shino
+        case mae
+        case hitomi
+        case konoka
+        case dnproxy
     }
 
     public let id: String
@@ -107,7 +119,7 @@ public struct PluginCatalog: Sendable {
         if ["kagari.dll", "libkagari.dylib", "libkagari.so"].contains(moduleURL.lastPathComponent.lowercased()) {
             return .nativeSHIORI(.kagari)
         }
-        if allowsNativeDetection, let kind = nativeSHIORIKind(
+        if allowsNativeDetection, moduleURL.pathExtension.lowercased() == "dll", let kind = nativeSHIORIKind(
             in: directory,
             declaredModuleFilename: moduleURL.lastPathComponent
         ) {
@@ -124,18 +136,10 @@ public struct PluginCatalog: Sendable {
         in directory: URL,
         declaredModuleFilename: String
     ) -> InstalledPlugin.NativeSHIORIKind? {
-        switch ShioriCatalog.identify(
+        ShioriCatalog.identify(
             masterDirectory: directory,
             declaredModuleFilename: declaredModuleFilename
-        )?.id.rawValue {
-        case "akari": .akari
-        case "kawari": .kawari
-        case "kagari": .kagari
-        case "misaka": .misaka
-        case "satori": .satori
-        case "yaya": .yaya
-        default: nil
-        }
+        ).flatMap { InstalledPlugin.NativeSHIORIKind(rawValue: $0.id.rawValue) }
     }
 
     private static func safeFile(named name: String, in root: URL, mustExist: Bool = false) -> URL? {

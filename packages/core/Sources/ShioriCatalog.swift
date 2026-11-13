@@ -97,25 +97,26 @@ public enum ShioriCatalog {
             provisioning: .ghost,
             support: .experimental
         ),
-        .init(id: "yaya", displayName: "YAYA", aliases: ["AYA", "文"], moduleFilenames: ["yaya.dll", "aya.dll", "aya5.dll"], execution: .dynamicLibrary, provisioning: .user),
-        .init(id: "satori", displayName: "里々", aliases: ["SATORI"], moduleFilenames: ["satori.dll"], execution: .dynamicLibrary, provisioning: .user),
-        .init(id: "kawari", displayName: "華和梨", aliases: ["KAWARI"], moduleFilenames: ["kawari.dll"], execution: .dynamicLibrary, provisioning: .user),
-        .init(id: "kagari", displayName: "kagari", moduleFilenames: ["kagari.dll"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "yaya", displayName: "YAYA", aliases: ["AYA", "文"], moduleFilenames: ["yaya.dll", "aya.dll", "aya5.dll", "libyaya.dylib"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "yaya-6", displayName: "YAYA 6", moduleFilenames: ["yaya-6.dll", "libyaya-6.dylib"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "satori", displayName: "里々", aliases: ["SATORI"], moduleFilenames: ["satori.dll", "libsatori.dylib"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "kawari", displayName: "華和梨", aliases: ["KAWARI"], moduleFilenames: ["kawari.dll", "libkawari.dylib"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "kagari", displayName: "kagari", moduleFilenames: ["kagari.dll", "libkagari.dylib", "libkagari.so"], execution: .dynamicLibrary, provisioning: .user),
         .init(id: "minato", displayName: "minato", aliases: ["湊"], moduleFilenames: ["minato.dll", "libminato.dylib"], execution: .dynamicLibrary, provisioning: .user),
         .init(id: "pasta", displayName: "pasta", aliases: [], moduleFilenames: ["pasta.dll", "libpasta.dylib"], execution: .dynamicLibrary, provisioning: .user),
         .init(id: "hitomi", displayName: "ひとみ。", aliases: ["Hitomi"], moduleFilenames: ["hitomi.dll", "libhitomi.dylib"], execution: .dynamicLibrary, provisioning: .user, support: .experimental),
         .init(id: "konoka", displayName: "此栞", aliases: ["Konoka", "このか"], moduleFilenames: ["konoka.dll", "libkonoka.dylib"], execution: .dynamicLibrary, provisioning: .user, support: .experimental),
         .init(id: "mae", displayName: "真絵", aliases: ["MAE"], moduleFilenames: ["mae.dll", "libmae.dylib"], execution: .dynamicLibrary, provisioning: .user, support: .experimental),
         .init(id: "dnproxy", displayName: "D.N.Proxy", moduleFilenames: ["dnproxy.dll", "dnproxy_debug.dll", "libdnproxy.dylib"], execution: .dynamicLibrary, provisioning: .user, runtimeRequirement: .configuredExecutable, support: .experimental),
-        .init(id: "aosora", displayName: "蒼空", aliases: ["Aosora"], moduleFilenames: ["aosora.dll"], execution: .bundledNativeModule, provisioning: .user, support: .experimental),
+        .init(id: "aosora", displayName: "蒼空", aliases: ["Aosora"], moduleFilenames: ["aosora.dll", "libaosora.dylib", "libaosora.so"], execution: .bundledNativeModule, provisioning: .user, support: .experimental),
         .init(id: "first", displayName: "FIRST", moduleFilenames: ["first.dll"], execution: .builtIn, provisioning: .included),
-        .init(id: "misaka", displayName: "美坂", aliases: ["MISAKA"], moduleFilenames: ["misaka.dll"], execution: .dynamicLibrary, provisioning: .user),
-        .init(id: "akari", displayName: "灯", aliases: ["AKARI"], moduleFilenames: ["akari.dll"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "misaka", displayName: "美坂", aliases: ["MISAKA"], moduleFilenames: ["misaka.dll", "libmisaka.dylib"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "akari", displayName: "灯", aliases: ["AKARI"], moduleFilenames: ["akari.dll", "libakari.dylib"], execution: .dynamicLibrary, provisioning: .user),
         .init(
             id: "ese-shiori",
             displayName: "ese-shiori",
             aliases: ["似非shiori"],
-            moduleFilenames: ["ese-shiori.dll"],
+            moduleFilenames: ["ese-shiori.dll", "libese-shiori.dylib"],
             execution: .dynamicLibrary,
             provisioning: .user
         ),
@@ -123,19 +124,19 @@ public enum ShioriCatalog {
             id: "nise-shiori",
             displayName: "偽栞",
             aliases: ["Nise Shiori"],
-            moduleFilenames: ["niseshiori.dll"],
+            moduleFilenames: ["niseshiori.dll", "libniseshiori.dylib"],
             execution: .dynamicLibrary,
             provisioning: .user
         ),
-        .init(id: "shino", displayName: "忍", aliases: ["Shino"], moduleFilenames: ["shino.dll"], execution: .dynamicLibrary, provisioning: .user),
-        .init(id: "hisui", displayName: "翡翠", aliases: ["Hisui"], moduleFilenames: ["hisui.dll"], execution: .dynamicLibrary, provisioning: .user, support: .experimental),
+        .init(id: "shino", displayName: "忍", aliases: ["Shino"], moduleFilenames: ["shino.dll", "libshino.dylib"], execution: .dynamicLibrary, provisioning: .user),
+        .init(id: "hisui", displayName: "翡翠", aliases: ["Hisui"], moduleFilenames: ["hisui.dll", "libhisui.dylib"], execution: .dynamicLibrary, provisioning: .user, support: .experimental),
         .init(
             id: "yuhna",
             displayName: "結奈",
             aliases: ["YUHNA"],
-            moduleFilenames: ["yuhna.dll"],
-            execution: .builtIn,
-            provisioning: .included,
+            moduleFilenames: ["yuhna.dll", "libyuhna.dylib"],
+            execution: .dynamicLibrary,
+            provisioning: .user,
             support: .experimental
         ),
         .init(
@@ -168,8 +169,7 @@ public enum ShioriCatalog {
         }
     }
 
-    /// Identifies dictionary based engines before falling back to the declared module name.
-    /// The order mirrors Utatane's runtime selection order where formats overlap.
+    /// Uses an explicit engine name when recognized and dictionary signatures for generic DLL names.
     public static func identify(
         masterDirectory: URL,
         declaredModuleFilename: String? = nil,
@@ -179,7 +179,7 @@ public enum ShioriCatalog {
             let url = URL(filePath: filename.replacingOccurrences(of: "\\", with: "/"))
             switch url.pathExtension.lowercased() {
             case "dylib", "so", "bundle":
-                return descriptor(id: "external-posix-shiori")
+                return descriptor(moduleFilename: filename) ?? descriptor(id: "external-posix-shiori")
             case "dll" where url.lastPathComponent.lowercased() == "shiolink.dll":
                 return descriptor(moduleFilename: "shiolink.dll")
             default:
@@ -189,7 +189,10 @@ public enum ShioriCatalog {
         let exists: (String) -> Bool = { filename in
             FileManager.default.fileExists(atPath: masterDirectory.appending(path: filename).path)
         }
-        let detectedID: ShioriIdentifier? = if exists("ai.json") {
+        let declared = descriptor(moduleFilename: declaredModuleFilename)
+        let detectedID: ShioriIdentifier? = if let declared {
+            declared.id
+        } else if exists("ai.json") {
             "ai-native"
         } else if exists("yaya.txt") || exists("yaya_config.txt") || exists("aya5.txt") || exists("aya.txt") {
             "yaya"
@@ -197,7 +200,7 @@ public enum ShioriCatalog {
             "satori"
         } else if exists("konoka.ini") || exists("ks_cfg.txt") || hasKonokaEncryptedConfig(masterDirectory, module: declaredModuleFilename) {
             "konoka"
-        } else if descriptor(moduleFilename: declaredModuleFilename)?.id == "hitomi" {
+        } else if exists("hitomi.ini") {
             "hitomi"
         } else if exists("kawarirc.kis") || exists("kawari.ini") {
             "kawari"
@@ -211,12 +214,20 @@ public enum ShioriCatalog {
             "misaka"
         } else if exists("main.amb") || exists("main.azr") || exists("akari.ini") {
             "akari"
+        } else if hasYuhnaDictionary(in: masterDirectory) {
+            "yuhna"
+        } else if exists("hisuiconf.xml") {
+            "hisui"
+        } else if exists("pasta.toml") {
+            "pasta"
+        } else if exists("config.toml"), exists("talks/main.mnt") {
+            "minato"
         } else if exists("eseai.ini") {
             "ese-shiori"
         } else {
             nil
         }
-        if let detected = detectedID.flatMap(descriptor(id:)) ?? descriptor(moduleFilename: declaredModuleFilename) {
+        if let detected = detectedID.flatMap(descriptor(id:)) {
             return detected
         }
         if NativeShioriLibraryLocator.firstExisting(in: NativeShioriLibraryLocator.candidates(
@@ -232,6 +243,15 @@ public enum ShioriCatalog {
         default:
             return nil
         }
+    }
+
+    private static func hasYuhnaDictionary(in directory: URL) -> Bool {
+        let url = directory.appending(path: "dic.ydf")
+        guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+              let file = try? FileHandle(forReadingFrom: url)
+        else { return false }
+        defer { try? file.close() }
+        return (try? file.read(upToCount: 8)) == Data("YDF/1.07".utf8)
     }
 
     private static func hasKonokaEncryptedConfig(_ directory: URL, module: String?) -> Bool {

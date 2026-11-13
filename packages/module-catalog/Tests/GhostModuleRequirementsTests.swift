@@ -173,3 +173,14 @@ func `engine discovery and manual shared installs agree with startup`(id: String
     let explicit = GhostModuleRequirements(bundledResourcesURL: nil, environment: ["UTATANE_AOSORA_MODULE": library.path])
     #expect(explicit.unresolved(for: ghost, applicationSupportURL: root).isEmpty)
 }
+
+@Test func `reports the missing Yuhna module for a ghost with a generic DLL name`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let master = root.appending(path: "ghost/master")
+    try FileManager.default.createDirectory(at: master, withIntermediateDirectories: true)
+    try Data("YDF/1.07 fixture".utf8).write(to: master.appending(path: "dic.ydf"))
+    let ghost = InstalledGhost(name: "Test", rootDirectory: root, defaultShellDirectory: root)
+    let requirements = GhostModuleRequirements(bundledResourcesURL: nil, environment: [:])
+    #expect(requirements.unresolved(for: ghost, applicationSupportURL: root).map(\.id) == ["yuhna"])
+}

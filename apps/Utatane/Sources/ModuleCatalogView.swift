@@ -418,7 +418,11 @@ struct ModuleCatalogView: View {
                 declaredModuleFilename: ghost.shioriFilename,
                 macOSModuleFilename: ghost.shioriMacOSFilename
             )?.id.rawValue else { return nil }
-            return identifier == "misaka" ? "misaka-native" : identifier
+            switch identifier {
+            case "misaka": return "misaka-native"
+            case "yaya": return "yaya-6"
+            default: return identifier
+            }
         }
         selectedIDs.formUnion(shioriIDs.filter(candidates.contains))
     }

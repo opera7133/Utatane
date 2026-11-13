@@ -26,6 +26,11 @@ public actor POSIXShioriPersonalityEngine: PersonalityEngine {
         charset = kind.charset
     }
 
+    public init(masterDirectoryURL: URL, moduleURL: URL, kind: POSIXShioriKind) throws {
+        session = try POSIXShioriSession(masterDirectoryURL: masterDirectoryURL, moduleURL: moduleURL, kind: kind)
+        charset = kind.charset
+    }
+
     public static func supports(masterDirectoryURL: URL) -> Bool {
         POSIXShioriModuleResolver().kind(for: masterDirectoryURL) != nil
     }

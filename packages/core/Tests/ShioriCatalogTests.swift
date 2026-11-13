@@ -90,7 +90,7 @@ func `explicit macOS SHIORI takes priority over dictionary signatures`(filename:
     #expect(descriptor?.runtimeRequirement == .wine)
 }
 
-@Test(arguments: [("konoka.ini", "konoka"), ("mae_corpus.txt", "mae"), ("dnproxy.ini", "dnproxy"), ("dnproxy.dll.config", "dnproxy"), ("ghost.asproj", "aosora")])
+@Test(arguments: [("konoka.ini", "konoka"), ("mae_corpus.txt", "mae"), ("dnproxy.ini", "dnproxy"), ("dnproxy.dll.config", "dnproxy"), ("ghost.asproj", "aosora"), ("hitomi.ini", "hitomi"), ("hisuiconf.xml", "hisui"), ("pasta.toml", "pasta")])
 func `identifies engines with generic Windows DLL names`(signature: String, expected: String) throws {
     let root = FileManager.default.temporaryDirectory.appending(path: "SHIORI 日本語 \(UUID())")
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -137,4 +137,17 @@ func `custom Konoka DLL is recognized by its configured encrypted dictionary`(ex
     #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "HITOMI.DLL")?.id == "hitomi")
     #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "other.dll")?.id == "kawari")
     #expect(ShioriCatalog.descriptor(id: "hitomi")?.support == .experimental)
+}
+
+@Test func `Yuhna detection checks the dictionary header and respects an explicit engine`() throws {
+    let root = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let dictionary = root.appending(path: "dic.ydf")
+    try Data("other".utf8).write(to: dictionary)
+    #expect(ShioriCatalog.identify(masterDirectory: root) == nil)
+    try Data("YDF/1.07 fixture".utf8).write(to: dictionary)
+    #expect(ShioriCatalog.identify(masterDirectory: root)?.id == "yuhna")
+    #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "shiori.dll")?.provisioning == .user)
+    #expect(ShioriCatalog.identify(masterDirectory: root, declaredModuleFilename: "kawari.dll")?.id == "kawari")
 }

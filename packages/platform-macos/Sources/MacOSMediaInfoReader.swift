@@ -71,7 +71,30 @@ public struct MacOSMediaInfoReader: InternalSaoriMediaReading {
         return result.value
     }
 
+    static func soundMetadata(_ url: URL) async -> EmbeddedAudioMetadata {
+        let embedded = await Task.detached { EmbeddedAudioMetadata.read(url) }.value
+        var result = embedded
+        let asset = AVURLAsset(url: url)
+        for item in await (try? asset.load(.metadata)) ?? [] {
+            if let key = metadataKey(item.identifier?.rawValue ?? ""), result.tags[key] == nil,
+               let text = try? await item.load(.stringValue), !text.isEmpty
+            {
+                result.tags[key] = text
+            }
+            if result.artwork == nil, item.commonKey == .commonKeyArtwork,
+               let data = try? await item.load(.dataValue), data.count <= 8 * 1024 * 1024
+            {
+                result.artwork = data
+            }
+        }
+        if let track = result.tags["track"], let number = track.split(separator: "/").first.flatMap({ Int(String($0)) }) {
+            result.tags["track"] = String(number)
+        }
+        return result
+    }
+
     private static func readAsset(_ url: URL) async -> InternalSaoriMediaInfo {
+        let embedded = EmbeddedAudioMetadata.read(url)
         let asset = AVURLAsset(url: url)
         do {
             let video = try await asset.loadTracks(withMediaType: .video)
@@ -85,7 +108,7 @@ public struct MacOSMediaInfoReader: InternalSaoriMediaReading {
                 values["width"] = String(Int(abs(size.width).rounded()))
                 values["height"] = String(Int(abs(size.height).rounded()))
                 kind = "video"
-            } else if !audio.isEmpty {
+            } else if !audio.isEmpty || !embedded.tags.isEmpty {
                 kind = "audio"
             } else {
                 return .init()
@@ -118,11 +141,14 @@ public struct MacOSMediaInfoReader: InternalSaoriMediaReading {
                 let digits = String(year.prefix(4))
                 values["year"] = digits.count == 4 && digits.utf8.allSatisfy { (48 ... 57).contains($0) } ? digits : ""
             }
+            values.merge(embedded.tags) { _, embedded in embedded }
             if let track = values["track"] {
                 values["track"] = track.split(separator: "/").first.flatMap { Int($0) }.map(String.init) ?? ""
             }
             return .init(kind: kind, values: values)
-        } catch { return .init() }
+        } catch {
+            return embedded.tags.isEmpty ? .init() : .init(kind: "audio", values: embedded.tags)
+        }
     }
 
     private static func metadataKey(_ identifier: String) -> String? {

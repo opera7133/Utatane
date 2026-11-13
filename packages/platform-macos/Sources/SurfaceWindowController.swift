@@ -109,6 +109,7 @@ public final class SurfaceWindowController {
     private var keepsOnScreen = true
     private var stayOnTop = true
     private var stickyGroups: [Set<Int>] = []
+    private var osuwariTasks: [Int: Task<Void, Never>] = [:]
     private var scriptMoves: [Int: (id: UUID, scopes: Set<Int>, task: Task<Void, Never>)] = [:]
     private var collisionMode = (enabled: false, showsNames: true)
     private var displayHandoverTracker = DisplayHandoverTracker()
@@ -190,6 +191,9 @@ public final class SurfaceWindowController {
 
     deinit {
         MainActor.assumeIsolated {
+            for task in osuwariTasks.values {
+                task.cancel()
+            }
             for move in scriptMoves.values {
                 move.task.cancel()
             }
@@ -369,7 +373,67 @@ public final class SurfaceWindowController {
     }
 
     public func setDesktopAlignment(_ alignment: SurfaceDesktopAlignment, scope: Int) {
-        characters[scope]?.setDesktopAlignment(alignment)
+        osuwariTasks.removeValue(forKey: scope)?.cancel()
+        characters[scope]?.setFollowingWindow(false)
+        if alignment == .defaultValue, let shell {
+            characters[scope]?.setDesktopAlignment(desktopAlignment(for: scope, in: shell))
+        } else {
+            characters[scope]?.setDesktopAlignment(alignment)
+        }
+    }
+
+    func startOsuwari(options: [String], scope: Int) {
+        let placement = OsuwariPlacement(options: options)
+        setDesktopAlignment(.free, scope: scope)
+        characterController(for: scope).setFollowingWindow(true)
+        for key in scriptMoves.compactMap({ $0.value.scopes.contains(scope) ? $0.key : nil }) {
+            cancelScriptMove(scope: key)
+        }
+        osuwariTasks[scope] = Task { [weak self] in
+            var previousWindow: CGWindowID?
+            while !Task.isCancelled {
+                if let self {
+                    updateOsuwari(placement, scope: scope, previousWindow: &previousWindow)
+                } else {
+                    return
+                }
+                do { try await Task.sleep(for: .milliseconds(placement.interval)) } catch { return }
+            }
+        }
+    }
+
+    private func updateOsuwari(_ placement: OsuwariPlacement, scope: Int, previousWindow: inout CGWindowID?) {
+        if isSuspended || geometryProvider.coordinateSpace != .desktop {
+            return
+        }
+        guard let frame = characters[scope]?.visibleWindowFrame else { return }
+        let followers = stickyMoveScopes(for: scope)
+        guard followers.min() == scope else { return }
+        let screens = geometryProvider.screens
+        guard let primary = geometryProvider.mainScreen else { return }
+        let window = placement.window(primaryTop: primary.frame.maxY, previousID: previousWindow)
+        previousWindow = window?.id
+        let reference = window?.frame ?? frame
+        let screen = screens.max { lhs, rhs in
+            let left = lhs.frame.intersection(reference), right = rhs.frame.intersection(reference)
+            let leftArea = left.isNull ? 0 : left.width * left.height
+            let rightArea = right.isNull ? 0 : right.width * right.height
+            return leftArea < rightArea
+        } ?? primary
+        let origin = placement.origin(size: frame.size, target: window?.frame, screen: screen, screens: screens)
+        if origin != frame.origin {
+            setScriptMoveOrigin(origin, scope: scope, followers: followers.subtracting([scope]))
+        }
+    }
+
+    private func stopOsuwari() {
+        for task in osuwariTasks.values {
+            task.cancel()
+        }
+        osuwariTasks.removeAll()
+        for character in characters.values {
+            character.setFollowingWindow(false)
+        }
     }
 
     public var windowFrame: NSRect? {
@@ -596,6 +660,7 @@ public final class SurfaceWindowController {
     }
 
     public func show(shell: ShellDefinition, defaultSurfaceIDs: [Int: Int], restoring presentation: ReloadPresentation? = nil) throws {
+        stopOsuwari()
         hideAll()
         self.shell = shell
         stickyGroups = shell.stickyWindowScopes.isEmpty ? [] : [Set(shell.stickyWindowScopes)]
@@ -609,7 +674,7 @@ public final class SurfaceWindowController {
         for (scope, surfaceID) in surfaces.sorted(by: { $0.key < $1.key }) {
             do {
                 let character = characterController(for: scope)
-                character.setDesktopAlignment(desktopAlignment(for: scope, in: shell))
+                character.setDesktopAlignment(osuwariTasks[scope] == nil ? desktopAlignment(for: scope, in: shell) : .free)
                 character.setPresentationHidden(presentationHidden || startupPresentationHidden)
                 character.setBindGroups(enabledBindGroups[scope] ?? [], redraw: false)
                 try character.show(shell: shell, surfaceID: surfaceID < 0 ? (defaultSurfaceIDs[scope] ?? 0) : surfaceID)
@@ -637,7 +702,7 @@ public final class SurfaceWindowController {
                 ?? []
         }
         let character = characterController(for: scope)
-        character.setDesktopAlignment(desktopAlignment(for: scope, in: shell))
+        character.setDesktopAlignment(osuwariTasks[scope] == nil ? desktopAlignment(for: scope, in: shell) : .free)
         character.setBindGroups(enabledBindGroups[scope] ?? [], redraw: false)
         try character.show(shell: shell, surfaceID: surfaceID)
         placeInitialWindow(for: scope)
@@ -1051,7 +1116,7 @@ public final class SurfaceWindowController {
 
         guard resolvedSurfaceID >= 0, let shell else { return }
         let character = characterController(for: scope)
-        character.setDesktopAlignment(desktopAlignment(for: scope, in: shell))
+        character.setDesktopAlignment(osuwariTasks[scope] == nil ? desktopAlignment(for: scope, in: shell) : .free)
         try character.show(shell: shell, surfaceID: resolvedSurfaceID)
         placeInitialWindow(for: scope)
         applyZOrder()
@@ -1072,6 +1137,7 @@ public final class SurfaceWindowController {
     }
 
     public func resetContent() {
+        stopOsuwari()
         for move in scriptMoves.values {
             move.task.cancel()
         }
@@ -1427,6 +1493,7 @@ private final class CharacterSurfaceController {
     private var keepsOnScreen: Bool
     private var stayOnTop = true
     private var desktopAlignment: SurfaceDesktopAlignment = .defaultValue
+    private var isFollowingWindow = false
     let dragFeedback = SurfaceDragFeedback()
     private var isDragging = false
     private(set) var isMovementLocked = false
@@ -2568,9 +2635,14 @@ private final class CharacterSurfaceController {
         applyPlacementConstraints()
     }
 
+    func setFollowingWindow(_ following: Bool) {
+        isFollowingWindow = following
+        applyPlacementConstraints()
+    }
+
     private func applyPlacementConstraints() {
-        imageView?.locksHorizontalMovement = [.left, .right].contains(desktopAlignment)
-        imageView?.locksVerticalMovement = locksToDesktopBottom
+        imageView?.locksHorizontalMovement = isFollowingWindow || [.left, .right].contains(desktopAlignment)
+        imageView?.locksVerticalMovement = isFollowingWindow || locksToDesktopBottom
             || [.top, .bottom].contains(desktopAlignment)
         item?.setPlacementPolicy(.init(
             edge: effectiveDesktopEdge,
@@ -2579,6 +2651,9 @@ private final class CharacterSurfaceController {
     }
 
     private var effectiveDesktopEdge: FloatingWindowPlacementPolicy.Edge? {
+        if isFollowingWindow {
+            return nil
+        }
         if locksToDesktopBottom {
             return .bottom
         }
@@ -2951,8 +3026,8 @@ private final class CharacterSurfaceController {
         imageView.coordinateScaleY = max(.leastNonzeroMagnitude, effectiveDisplayScale * abs(effectiveRuntimeScaleY))
         imageView.flipsHorizontally = effectiveRuntimeScaleX < 0
         imageView.flipsVertically = effectiveRuntimeScaleY < 0
-        imageView.locksHorizontalMovement = [.left, .right].contains(desktopAlignment)
-        imageView.locksVerticalMovement = locksToDesktopBottom
+        imageView.locksHorizontalMovement = isFollowingWindow || [.left, .right].contains(desktopAlignment)
+        imageView.locksVerticalMovement = isFollowingWindow || locksToDesktopBottom
             || [.top, .bottom].contains(desktopAlignment)
         imageView.isMovementLocked = isMovementLocked
         imageView.hoverDelay = interactionHoverDelay

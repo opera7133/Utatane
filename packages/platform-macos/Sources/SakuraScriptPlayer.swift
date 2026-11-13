@@ -359,6 +359,10 @@ public final class SakuraScriptPlayer {
         }
         self.postDialogueDismissalMilliseconds = postDialogueDismissalMilliseconds
         self.surfaceRestoreDelayMilliseconds = max(0, surfaceRestoreDelayMilliseconds)
+        soundPlayer.isScriptBusy = { [weak self] in
+            guard let self else { return false }
+            return playbackTask != nil || !queuedPlaybacks.isEmpty
+        }
         soundPlayer.onSpectrumEnd = { [weak self] in self?.finishPeriodicDisplay(eventID: "OnSoundSpectrum") }
         soundPlayer.onSpectrum = { [weak self] references in await self?.onSoundSpectrum?(references) }
         soundPlayer.onStop = { [weak self] file, reason in self?.onSoundStop?(file, reason) }
@@ -1288,6 +1292,8 @@ public final class SakuraScriptPlayer {
                             )
                         }
                     }
+                case let .osuwari(options):
+                    surfaceWindowController.startOsuwari(options: options, scope: scope)
                 case let .desktopAlignment(alignment):
                     let surfaceAlignment: SurfaceDesktopAlignment = switch alignment {
                     case .top: .top

@@ -62,20 +62,33 @@ public struct POSIXShioriModuleResolver: Sendable {
     }
 
     public func kind(for masterDirectoryURL: URL) -> POSIXShioriKind? {
-        let fileManager = FileManager.default
-        // Do not classify index.lua alone: tkytk and other engines also use it.
-        let descriptor = (try? String(contentsOf: masterDirectoryURL.appending(path: "descript.txt"), encoding: .utf8))
-            ?? (try? String(contentsOf: masterDirectoryURL.appending(path: "descript.txt"), encoding: .shiftJIS)) ?? ""
-        let declaresKagari = descriptor.components(separatedBy: .newlines).contains { line in
-            let pair = line.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
-            return pair.count == 2 && pair[0] == "shiori" && ["kagari.dll", "libkagari.dylib", "libkagari.so"].contains(pair[1])
+        let descriptor = (try? Data(contentsOf: masterDirectoryURL.appending(path: "descript.txt")))
+            .flatMap { LegacyTextDecoder.decode($0) } ?? ""
+        let declared = descriptor.components(separatedBy: .newlines).reduce(into: [String: String]()) { fields, line in
+            let pair = line.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+            if pair.count == 2 {
+                fields[pair[0].lowercased()] = pair[1]
+            }
         }
-        if declaresKagari || fileManager.fileExists(atPath: masterDirectoryURL.appending(path: "kagari.dll").path) {
+        let selected = ShioriCatalog.identify(
+            masterDirectory: masterDirectoryURL,
+            declaredModuleFilename: declared["shiori"],
+            macOSModuleFilename: declared["shiori.macos"]
+        )
+        if let selected {
+            switch selected.id.rawValue {
+            case "kagari": return .kagari
+            case "aosora": return .aosora
+            case "external-windows-shiori", "external-posix-shiori": break
+            default: return nil
+            }
+        }
+        guard declared["shiori.macos"] == nil else { return nil }
+        // index.lua alone is shared with other engines.
+        if FileManager.default.fileExists(atPath: masterDirectoryURL.appending(path: "kagari.dll").path) {
             return .kagari
         }
-        if fileManager.fileExists(atPath: masterDirectoryURL.appending(path: "aosora.dll").path)
-            || fileManager.fileExists(atPath: masterDirectoryURL.appending(path: "ghost.asproj").path)
-        {
+        if FileManager.default.fileExists(atPath: masterDirectoryURL.appending(path: "aosora.dll").path) {
             return .aosora
         }
         return nil
@@ -125,7 +138,7 @@ public struct POSIXShioriModuleResolver: Sendable {
             .flatMap { LegacyTextDecoder.decode($0) } ?? ""
         let declared = descriptor.components(separatedBy: .newlines).compactMap { line -> String? in
             let pair = line.split(separator: ",", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-            return pair.count == 2 && pair[0].lowercased() == "shiori" ? pair[1] : nil
+            return pair.count == 2 && ["shiori", "shiori.macos"].contains(pair[0].lowercased()) ? pair[1] : nil
         }.last
         return NativeShioriLibraryLocator.candidates(
             moduleID: kind.rawValue, masterDirectory: masterDirectoryURL, declaredFilename: declared,

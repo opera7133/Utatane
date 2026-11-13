@@ -1,5 +1,7 @@
 import AVFoundation
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 import UtataneSakuraScript
 
 @MainActor
@@ -10,6 +12,7 @@ final class SakuraScriptSoundPlayer: NSObject {
         case error
     }
 
+    var isScriptBusy: (() -> Bool)?
     var onSpectrumEnd: (() -> Void)?
     var onSpectrum: (([Int: String]) async -> Void)?
     var onStop: ((String, String) -> Void)?
@@ -27,6 +30,9 @@ final class SakuraScriptSoundPlayer: NSObject {
     private var audioPlayer: SoundAudioSource?
     private var loadedFile: String?
     private var loadedURL: URL?
+    private var metadata: EmbeddedAudioMetadata?
+    private var artworkDirectory: URL?
+    private var artworkURL: URL?
     private var requestedVolume: Float = 1
     private var hasStartedPlayback = false
     private var isPaused = false
@@ -40,6 +46,7 @@ final class SakuraScriptSoundPlayer: NSObject {
     private var spectrumInterval = 0
     private var spectrumBands = 10
     private var spectrumHold = 500
+    private var spectrumSkipBusy = false
     private var spectrumTask: Task<Void, Never>?
     private var spectrumCompletionTask: Task<Void, Never>?
     private var spectrumGeneration = UUID()
@@ -49,6 +56,12 @@ final class SakuraScriptSoundPlayer: NSObject {
     init(makeSpectrumWorker: (@Sendable () -> any SoundSpectrumAnalyzing)? = nil) {
         self.makeSpectrumWorker = makeSpectrumWorker
         super.init()
+    }
+
+    deinit {
+        if let artworkDirectory {
+            try? FileManager.default.removeItem(at: artworkDirectory)
+        }
     }
 
     private var spectrumEnvelope = SoundSpectrumEnvelope()
@@ -88,11 +101,18 @@ final class SakuraScriptSoundPlayer: NSObject {
         spectrumInterval = 0
         spectrumBands = 10
         spectrumHold = 500
+        spectrumSkipBusy = false
         lastSpectrumPosition = 0
         audioPlayer?.stop()
         audioPlayer = nil
         loadedFile = nil
         loadedURL = nil
+        metadata = nil
+        artworkURL = nil
+        if let artworkDirectory {
+            try? FileManager.default.removeItem(at: artworkDirectory)
+        }
+        artworkDirectory = nil
         hasStartedPlayback = false
         isPaused = false
         isLooping = false
@@ -137,6 +157,7 @@ final class SakuraScriptSoundPlayer: NSObject {
             isPaused = false
             isLooping = loop
             updateSpectrumTimer()
+            await loadMetadata(url)
         case let .load(file, options):
             guard let url = resolvedURL(for: file, resourceDirectory: resourceDirectory) else {
                 onError?(file, CocoaError(.fileNoSuchFile))
@@ -162,6 +183,7 @@ final class SakuraScriptSoundPlayer: NSObject {
             hasStartedPlayback = false
             isPaused = false
             isLooping = false
+            await loadMetadata(url)
         case let .option(file, options):
             guard file == nil || file == loadedFile, let audioPlayer else { return }
             let wasEnabled = spectrumInterval > 0
@@ -272,6 +294,12 @@ final class SakuraScriptSoundPlayer: NSObject {
                 if let value = Int(parts[1]) {
                     spectrumBands = [0, 5, 10, 15, 31].min(by: { abs(Double($0) - Double(value)) < abs(Double($1) - Double(value)) }) ?? 10
                 }
+            case "--spectrum-skipbusy":
+                switch parts[1].lowercased() {
+                case "true", "on", "1": spectrumSkipBusy = true
+                case "false", "off", "0": spectrumSkipBusy = false
+                default: break
+                }
             case "--spectrum-hold":
                 if let value = Int(parts[1]) {
                     spectrumHold = min(10000, max(0, value))
@@ -334,6 +362,7 @@ final class SakuraScriptSoundPlayer: NSObject {
     }
 
     private func emitSpectrum(generation: UUID) async {
+        guard !spectrumSkipBusy || isScriptBusy?() != true else { return }
         guard let audioPlayer, let loadedFile, let loadedURL, let spectrumWorker else { return }
         let position = audioPlayer.currentTime
         let bands = spectrumBands
@@ -341,6 +370,7 @@ final class SakuraScriptSoundPlayer: NSObject {
         // An actor hop can overlap pause, seek, reload, stop or a new sound.
         guard !Task.isCancelled, generation == spectrumGeneration,
               self.audioPlayer === audioPlayer, !isPaused, !isSuspended, audioPlayer.isPlaying else { return }
+        guard !spectrumSkipBusy || isScriptBusy?() != true else { return }
         let channels = frame?.channels ?? max(1, min(8, audioPlayer.numberOfChannels))
         let values = frame?.levels ?? [Double](repeating: 0, count: channels + bands)
         let result = spectrumEnvelope.update(values, at: ProcessInfo.processInfo.systemUptime, hold: Double(spectrumHold) / 1000)
@@ -391,7 +421,42 @@ final class SakuraScriptSoundPlayer: NSObject {
         case "loop": return isLooping ? "1" : "0"
         case "preload": return hasStartedPlayback ? "0" : "1"
         case "error": return ""
+        case "meta.artwork": return artworkPath()
+        case _ where field.hasPrefix("meta."): return metadata?.tags[String(field.dropFirst(5))]
         default: return nil
+        }
+    }
+
+    private func loadMetadata(_ url: URL) async {
+        guard metadata == nil else { return }
+        let loadingID = identifier
+        let result = await MacOSMediaInfoReader.soundMetadata(url)
+        guard identifier == loadingID, loadedURL == url else { return }
+        metadata = result
+    }
+
+    private func artworkPath() -> String? {
+        if let artworkURL {
+            return artworkURL.path
+        }
+        guard let bytes = metadata?.artwork,
+              let image = CGImageSourceCreateWithData(bytes as CFData, nil),
+              let identifier = CGImageSourceGetType(image), let type = UTType(identifier as String),
+              let suffix = type.preferredFilenameExtension,
+              CGImageSourceCopyPropertiesAtIndex(image, 0, nil) != nil
+        else { return nil }
+        let directory = FileManager.default.temporaryDirectory.appending(path: "utatane-artwork-\(UUID())", directoryHint: .isDirectory)
+        let url = directory.appending(path: "cover").appendingPathExtension(suffix)
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
+                                                    attributes: [.posixPermissions: 0o700])
+            try bytes.write(to: url, options: .atomic)
+            artworkDirectory = directory
+            artworkURL = url
+            return url.path
+        } catch {
+            try? FileManager.default.removeItem(at: directory)
+            return nil
         }
     }
 

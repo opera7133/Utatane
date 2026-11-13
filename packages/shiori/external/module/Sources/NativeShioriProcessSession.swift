@@ -1,6 +1,10 @@
 import Darwin
 import Foundation
+import os
 import UtataneNativeSaori
+import UtataneNetwork
+
+public typealias NativeShioriPropertyReader = @MainActor @Sendable (String) async -> String?
 
 public enum NativeShioriProcessError: LocalizedError, Sendable {
     case missingHost(URL)
@@ -167,6 +171,10 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
     }
 
     public func request(_ message: String) throws -> String {
+        try request(message, propertyReader: nil)
+    }
+
+    func request(_ message: String, propertyReader: NativeShioriPropertyReader?) throws -> String {
         guard lock.try() else { throw NativeShioriProcessError.busy }
         defer { lock.unlock() }
         guard !closed else { throw NativeShioriProcessError.ended }
@@ -176,7 +184,7 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
             let deadline = ProcessInfo.processInfo.systemUptime + timeout
             try configureDiagnostics(deadline: deadline)
             try send(command: 1, payload: payload, deadline: deadline)
-            let result = try receive(deadline: deadline)
+            let result = try receive(deadline: deadline, propertyReader: propertyReader)
             guard let text = String(data: result, encoding: .utf8) else { throw NativeShioriProcessError.invalidFrame }
             return text
         } catch {
@@ -245,7 +253,35 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
         }
     }
 
-    private func receive(deadline: TimeInterval) throws -> Data {
+    private func basewareResponse(_ payload: Data, propertyReader: NativeShioriPropertyReader?, deadline: TimeInterval) -> Data {
+        guard let request = try? SSTPServer.parse(payload),
+              request.method == "EXECUTE", request.value(for: "Command")?.lowercased() == "getproperty",
+              let property = request.value(for: "Reference0"), !property.isEmpty
+        else { return SSTPResponse(statusCode: 400, reason: "Bad Request").data }
+        guard let propertyReader else { return SSTPResponse(statusCode: 204, reason: "No Content").data }
+
+        // The child waits for the callback on its SHIORI thread. Only async requests
+        // supply a reader, so the parent main actor is free to resolve the property.
+        let result = OSAllocatedUnfairLock<String?>(initialState: nil)
+        let finished = DispatchSemaphore(value: 0)
+        let lookup = Task { @MainActor in
+            defer { finished.signal() }
+            guard !Task.isCancelled else { return }
+            let value = await propertyReader(property)
+            result.withLock { $0 = value }
+        }
+        let remaining = max(0, deadline - ProcessInfo.processInfo.systemUptime)
+        guard finished.wait(timeout: .now() + remaining) == .success else {
+            lookup.cancel()
+            return SSTPResponse(statusCode: 503, reason: "Service Unavailable").data
+        }
+        guard let value = result.withLock({ $0 }),
+              !value.utf8.contains(where: { $0 == 0 || $0 == 10 || $0 == 13 })
+        else { return SSTPResponse(statusCode: 204, reason: "No Content").data }
+        return SSTPResponse(additionalData: value).data
+    }
+
+    private func receive(deadline: TimeInterval, propertyReader: NativeShioriPropertyReader? = nil) throws -> Data {
         var diagnosticCount = 0
         var callbackCount = 0
         while true {
@@ -266,7 +302,10 @@ public final class NativeShioriProcessSession: @unchecked Sendable {
             if status == 7 {
                 callbackCount += 1
                 guard callbackCount <= 1024 else { throw NativeShioriProcessError.invalidFrame }
-                let response = internalSaoriHandler(Data(payload))
+                let data = Data(payload)
+                let response = data.starts(with: "EXECUTE SSTP/".utf8)
+                    ? basewareResponse(data, propertyReader: propertyReader, deadline: deadline)
+                    : internalSaoriHandler(data)
                 try send(command: 4, payload: response, deadline: deadline)
                 continue
             }

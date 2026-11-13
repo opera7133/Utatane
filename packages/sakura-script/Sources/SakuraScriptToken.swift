@@ -22,6 +22,7 @@ public enum SakuraScriptToken: Sendable, Equatable {
         durationMilliseconds: Int,
         waitsForCompletion: Bool
     )
+    case osuwari([String])
     case desktopAlignment(SakuraScriptDesktopAlignment)
     case resetWindowPositions
     case resetBalloonPositions

@@ -497,14 +497,17 @@ public struct NarInstaller: Sendable {
 
     private func validatedDirectoryName(_ name: String) throws -> String {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              trimmed != ".",
-              trimmed != "..",
-              !trimmed.contains("/"),
-              !trimmed.contains("\\"),
-              !trimmed.contains("\0")
+        // Legacy install.txt files may include one trailing directory separator.
+        let directory = trimmed.hasSuffix("\\") || trimmed.hasSuffix("/") ? String(trimmed.dropLast()) : trimmed
+        guard !directory.isEmpty,
+              directory != ".",
+              directory != "..",
+              !directory.contains("/"),
+              !directory.contains("\\"),
+              !directory.contains(":"),
+              !directory.contains("\0")
         else { throw NarInstallError.invalidDirectoryName(name) }
-        return trimmed
+        return directory
     }
 
     private func refreshUndeleteMask(_ value: String?) -> Set<String> {

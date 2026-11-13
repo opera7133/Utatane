@@ -42,6 +42,8 @@ UKADOC分類行数: 150
 
 ### サーフェス・アニメーション・ウィンドウ
 
+`\![set,alignmenttodesktop,osuwari,...]`は、前面ウィンドウ・画面固定・取得できるウィンドウタイトルを対象にします。四隅、位置補正、確認間隔、見切れ時の基準を設定できます。ウィンドウモード中は追尾を止め、デスクトップへ戻ると再開します。descript.txtからの起動、Windows HWND、前後関係とドラッグ許可の指定は今後の対応範囲です。
+
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
 | `\sID`, `\s[ID]` | ✅ | 数値IDに対応。UKADOCどおり括弧なしは1桁、複数桁は括弧形式。Parserテストで確認 |
@@ -163,9 +165,11 @@ UKADOC分類行数: 150
 
 ### サウンド
 
+`currentghost.sound.index(0).meta.title`などで、読み込み済みの音声の埋め込みタグを参照できます。`meta.artwork`はジャケット画像の一時ファイルのパスを返します。画像はその音声が読み込まれている間に利用できます。MP3のID3、FLAC、OggのVorbis・Opusコメント、WAVのINFO・ID3から読み、項目がなければAVFoundationの値を使います。曲名などのテキスト項目は`internal_file.MediaInfo`でも取得できます。
+
 | コマンド群 | 状況 | 備考 |
 | --- | --- | --- |
-| `\8[file]`, `\_v[file]`, `\_V`, `\![sound,...]` | 🟡 | `\8` / `\_v`（非同期音声再生）、`\_V`（音声再生完了待ち）、`\![sound,...]`（play/load/loop/wait/pause/resume/stop/option）に対応。volume、balance、rate、seektime、eq（5/10/15/31帯域）・eq-preamp、spectrum（間隔・帯域数・ピーク保持）に対応。音量・EQ適用後、balance適用前の波形からOnSoundSpectrumと再生位置を通知。AVFoundation対応音声の相対パス・絶対パスとWindows式区切りに対応。CD・動画ウィンドウは未対応 |
+| `\8[file]`, `\_v[file]`, `\_V`, `\![sound,...]` | 🟡 | `\8` / `\_v`（非同期音声再生）、`\_V`（音声再生完了待ち）、`\![sound,...]`（play/load/loop/wait/pause/resume/stop/option）に対応。volume、balance、rate、seektime、eq（5/10/15/31帯域）・eq-preamp、spectrum（間隔・帯域数・ピーク保持・再生中の通知間引き）に対応。音量・EQ適用後、balance適用前の波形からOnSoundSpectrumと再生位置を通知。AVFoundation対応音声の相対パス・絶対パスとWindows式区切りに対応。CD・動画ウィンドウは未対応 |
 
 ### 外部UI・入力
 

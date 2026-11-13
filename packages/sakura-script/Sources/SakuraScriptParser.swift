@@ -770,12 +770,15 @@ public struct SakuraScriptParser: Sendable {
                     } else if arguments.count >= 3,
                               arguments[0].lowercased() == "set",
                               ["alignmentondesktop", "alignmenttodesktop"]
-                              .contains(arguments[1].lowercased()),
-                              let alignment = SakuraScriptDesktopAlignment(
-                                  rawValue: arguments[2].lowercased()
-                              )
+                              .contains(arguments[1].lowercased())
                     {
-                        tokens.append(.desktopAlignment(alignment))
+                        if arguments[2].lowercased() == "osuwari" {
+                            tokens.append(.osuwari(Array(arguments.dropFirst(3))))
+                        } else if let alignment = SakuraScriptDesktopAlignment(rawValue: arguments[2].lowercased()) {
+                            tokens.append(.desktopAlignment(alignment))
+                        } else {
+                            tokens.append(.unknown("\\![\(argument)]"))
+                        }
                     } else if arguments.count >= 2,
                               arguments[0].lowercased() == "set",
                               arguments[1].lowercased() == "zorder"

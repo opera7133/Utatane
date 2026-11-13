@@ -1276,3 +1276,8 @@ func `parses iCalendar schedule and file watch commands`() {
         .inputBox(.init(kind: .textArea, id: "memo", timeoutMilliseconds: 1000, initialValue: "初期\u{1}値"))
     ])
 }
+
+@Test func `parses osuwari options without changing ordinary alignment`() {
+    let script = SakuraScriptParser().parse(#"\![set,alignmenttodesktop,osuwari,--target=fix,--origin=br]\![set,alignmenttodesktop,default]"#)
+    #expect(script == [.osuwari(["--target=fix", "--origin=br"]), .desktopAlignment(.defaultValue)])
+}
